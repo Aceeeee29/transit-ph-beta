@@ -1,0 +1,5 @@
+- [x] Create Route model (lib/models/route.dart)
+- [x] Update MainScreen to hold routes list and pass to HomeScreen and ContributeScreen
+- [x] Modify ContributeScreen to add route on submit
+- [x] Modify HomeScreen to implement route search and display UI
+- [ ] Test the full flow: submit route, search route, view detailed route UI
