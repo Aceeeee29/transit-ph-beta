@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/route.dart' as route_model;
+import 'route_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
@@ -85,6 +86,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                       );
                                     },
                                   ),
+                                  const SizedBox(height: 8),
+                                  if (route.startLat != null &&
+                                      route.startLng != null &&
+                                      route.endLat != null &&
+                                      route.endLng != null)
+                                    Center(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder:
+                                                  (context) => RouteMapScreen(
+                                                    route: route,
+                                                  ),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.map),
+                                        label: const Text('View Map'),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

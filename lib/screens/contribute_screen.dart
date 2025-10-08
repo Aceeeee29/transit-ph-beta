@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 
 class ContributeScreen extends StatefulWidget {
   final void Function(route_model.Route) onRouteSubmitted;
 
-  ContributeScreen({
-    super.key,
-    void Function(route_model.Route)? onRouteSubmitted,
-  }) : onRouteSubmitted = onRouteSubmitted ?? ((_) {});
+  const ContributeScreen({super.key, required this.onRouteSubmitted});
 
   @override
   State<ContributeScreen> createState() => _ContributeScreenState();
@@ -22,192 +21,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   final TextEditingController _shortDescriptionController =
       TextEditingController();
 
-  List<StepData> steps = [StepData()];
-
-  @override
-  void dispose() {
-    _startLocationController.dispose();
-    _endLocationController.dispose();
-    _shortDescriptionController.dispose();
-    for (var step in steps) {
-      step.instructionController.dispose();
-      step.detailsController.dispose();
-    }
-    super.dispose();
-  }
-
-  void _addStep() {
-    setState(() {
-      steps.add(StepData());
-    });
-  }
-
-  void _removeStep(int index) {
-    setState(() {
-      steps[index].instructionController.dispose();
-      steps[index].detailsController.dispose();
-      steps.removeAt(index);
-    });
-  }
-
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      // Create steps list
-      final routeSteps =
-          steps.map((stepData) {
-            return route_model.Step(
-              mode: stepData.mode,
-              instruction: stepData.instructionController.text,
-              details: stepData.detailsController.text,
-            );
-          }).toList();
-
-      // Create route
-      final route = route_model.Route(
-        id: DateTime.now().toString(),
-        startLocation: _startLocationController.text,
-        endLocation: _endLocationController.text,
-        shortDescription: _shortDescriptionController.text,
-        steps: routeSteps,
-      );
-
-      // Call callback to add route
-      widget.onRouteSubmitted(route);
-
-      // Show a snackbar or dialog to confirm submission
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Route submitted for review!')),
-      );
-
-      // Clear form
-      _formKey.currentState!.reset();
-      setState(() {
-        steps = [StepData()];
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Contribute a Route')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Route Details',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _startLocationController,
-                decoration: const InputDecoration(
-                  labelText: 'Starting Location (e.g., SM North EDSA)',
-                  border: OutlineInputBorder(),
-                ),
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty
-                            ? 'Please enter starting location'
-                            : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _endLocationController,
-                decoration: const InputDecoration(
-                  labelText: 'End Location (e.g., Robinsons Galleria)',
-                  border: OutlineInputBorder(),
-                ),
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty
-                            ? 'Please enter end location'
-                            : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _shortDescriptionController,
-                decoration: const InputDecoration(
-                  labelText:
-                      'Short Description (e.g., SM North to Galleria via MRT)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty
-                            ? 'Please enter short description'
-                            : null,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Steps',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: steps.length,
-                itemBuilder: (context, index) {
-                  return StepWidget(
-                    key: ValueKey(steps[index]),
-                    stepData: steps[index],
-                    onRemove: () => _removeStep(index),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: _addStep,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Step'),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Center(
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    child: Text(
-                      'Submit for Review',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class StepData {
-  String mode;
-  final TextEditingController instructionController;
-  final TextEditingController detailsController;
-
-  StepData({
-    this.mode = 'Walk',
-    TextEditingController? instructionController,
-    TextEditingController? detailsController,
-  }) : instructionController = instructionController ?? TextEditingController(),
-       detailsController = detailsController ?? TextEditingController();
-}
-
-class StepWidget extends StatelessWidget {
-  final StepData stepData;
-  final VoidCallback onRemove;
-
-  const StepWidget({super.key, required this.stepData, required this.onRemove});
+  List<LatLng> pathPoints = [];
+  List<route_model.Step> steps = [];
+  String currentMode = 'Walk';
+  String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
 
   static const List<String> modes = [
     'Walk',
@@ -219,87 +36,444 @@ class StepWidget extends StatelessWidget {
     'Ferry',
   ];
 
+  final Map<String, Color> modeColors = {
+    'Walk': Colors.green,
+    'Jeepney': Colors.blue,
+    'Bus': Colors.red,
+    'Train': Colors.purple,
+    'Tricycle': Colors.orange,
+    'FX/Van': Colors.amber,
+    'Ferry': Colors.lightBlue,
+  };
+
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _modeIcon(stepData.mode),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: stepData.mode,
-                  items:
-                      modes
-                          .map(
-                            (mode) => DropdownMenuItem(
-                              value: mode,
-                              child: Text(mode),
+  void dispose() {
+    _startLocationController.dispose();
+    _endLocationController.dispose();
+    _shortDescriptionController.dispose();
+    super.dispose();
+  }
+
+  void _onMapTap(TapPosition tapPosition, LatLng point) {
+    setState(() {
+      pathPoints.add(point);
+      if (selectionMode == 'start') {
+        selectionMode = 'step';
+        _showModeDialog();
+      } else if (selectionMode == 'step') {
+        _showStepDialog();
+      } else if (selectionMode == 'end') {
+        selectionMode = 'done';
+      }
+    });
+  }
+
+  void _showModeDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Select Transport Mode for Next Step'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children:
+                    modes
+                        .map(
+                          (mode) => ListTile(
+                            leading: Icon(
+                              _getModeIcon(mode),
+                              color: modeColors[mode],
                             ),
-                          )
-                          .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      stepData.mode = value;
-                      (context as Element).markNeedsBuild();
-                    }
-                  },
+                            title: Text(mode),
+                            onTap: () {
+                              setState(() {
+                                currentMode = mode;
+                              });
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Tap on the map to select the next point for $mode',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+          ),
+    );
+  }
+
+  void _showStepDialog() {
+    String instruction = '';
+    String details = '';
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Step: $currentMode'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  onChanged: (value) => instruction = value,
+                  decoration: const InputDecoration(
+                    labelText:
+                        'Instruction (e.g., Ride a jeep with Cubao terminal)',
+                  ),
+                  maxLines: 2,
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: onRemove,
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: (value) => details = value,
+                  decoration: const InputDecoration(
+                    labelText: 'Details (e.g., Drop off at Gateway Mall)',
+                  ),
+                  maxLines: 2,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: stepData.instructionController,
-              decoration: const InputDecoration(
-                labelText:
-                    'Instruction (e.g., Ride a jeep with Cubao terminal)',
-                border: OutlineInputBorder(),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  pathPoints.removeLast(); // Remove the point if cancel
+                },
+                child: const Text('Cancel'),
               ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: stepData.detailsController,
-              decoration: const InputDecoration(
-                labelText: 'Details (e.g., Drop off at Gateway Mall)',
-                border: OutlineInputBorder(),
+              TextButton(
+                onPressed: () {
+                  if (instruction.isNotEmpty) {
+                    setState(() {
+                      steps.add(
+                        route_model.Step(
+                          mode: currentMode,
+                          instruction: instruction,
+                          details: details,
+                        ),
+                      );
+                    });
+                  }
+                  Navigator.pop(context);
+                  _showAddAnotherStepDialog();
+                },
+                child: const Text('Save Step'),
               ),
-              maxLines: 2,
+            ],
+          ),
+    );
+  }
+
+  void _showAddAnotherStepDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Add Another Step?'),
+            content: Text(
+              'You have added ${steps.length} steps. Add more or finish the route?',
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showModeDialog();
+                },
+                child: const Text('Add Another Step'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    selectionMode = 'end';
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tap on the map to select the end point'),
+                    ),
+                  );
+                },
+                child: const Text('Finish Route'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _submit() {
+    if (pathPoints.length < 2 ||
+        steps.isEmpty ||
+        _startLocationController.text.isEmpty ||
+        _endLocationController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Need start/end locations, at least one step, and points on map',
+          ),
         ),
+      );
+      return;
+    }
+
+    if (_formKey.currentState!.validate()) {
+      final route = route_model.Route(
+        id: DateTime.now().toString(),
+        startLocation: _startLocationController.text,
+        endLocation: _endLocationController.text,
+        shortDescription:
+            _shortDescriptionController.text.isEmpty
+                ? 'Custom route with ${steps.length} steps'
+                : _shortDescriptionController.text,
+        steps: steps,
+        startLat: pathPoints.first.latitude,
+        startLng: pathPoints.first.longitude,
+        endLat: pathPoints.last.latitude,
+        endLng: pathPoints.last.longitude,
+        pathPoints: pathPoints,
+      );
+
+      widget.onRouteSubmitted(route);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Route submitted for review!')),
+      );
+
+      // Reset form
+      setState(() {
+        pathPoints = [];
+        steps = [];
+        selectionMode = 'start';
+        _startLocationController.clear();
+        _endLocationController.clear();
+        _shortDescriptionController.clear();
+      });
+    }
+  }
+
+  IconData _getModeIcon(String mode) {
+    switch (mode) {
+      case 'Walk':
+        return Icons.directions_walk;
+      case 'Jeepney':
+      case 'Bus':
+        return Icons.directions_bus;
+      case 'Train':
+        return Icons.train;
+      case 'Tricycle':
+        return Icons.two_wheeler;
+      case 'FX/Van':
+        return Icons.directions_car;
+      case 'Ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_walk;
+    }
+  }
+
+  List<Polyline> get polylines {
+    List<Polyline> polylines = [];
+    for (int i = 0; i < steps.length; i++) {
+      final step = steps[i];
+      final color = modeColors[step.mode] ?? Colors.blue;
+      final startIdx = i;
+      final endIdx = i + 1;
+      if (endIdx < pathPoints.length) {
+        polylines.add(
+          Polyline(
+            points: [pathPoints[startIdx], pathPoints[endIdx]],
+            color: color,
+            strokeWidth: 4.0,
+          ),
+        );
+      }
+    }
+    // Connect last step to end if more points
+    if (steps.length < pathPoints.length - 1) {
+      polylines.add(
+        Polyline(
+          points: [pathPoints[steps.length], pathPoints.last],
+          color: Colors.grey,
+          strokeWidth: 3.0,
+        ),
+      );
+    }
+    return polylines;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Contribute a Route')),
+      body: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: const LatLng(12.8797, 121.7740),
+                    initialZoom: 6.0,
+                    minZoom: 5.0,
+                    maxZoom: 18.0,
+                    cameraConstraint: CameraConstraint.contain(
+                      bounds: LatLngBounds(
+                        const LatLng(4.5, 116.0),
+                        const LatLng(21.5, 127.0),
+                      ),
+                    ),
+                    onTap: _onMapTap,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.app.transitph_beta',
+                    ),
+                    MarkerLayer(
+                      markers:
+                          pathPoints.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final point = entry.value;
+                            IconData icon = Icons.location_on;
+                            Color color = Colors.green;
+                            if (index == 0) {
+                              icon = Icons.location_on;
+                              color = Colors.green; // Start
+                            } else if (index == pathPoints.length - 1) {
+                              icon = Icons.flag;
+                              color = Colors.red; // End
+                            } else {
+                              // Intermediate for steps
+                              final stepIndex = index - 1;
+                              if (stepIndex < steps.length) {
+                                final stepMode = steps[stepIndex].mode;
+                                icon = _getModeIcon(stepMode);
+                                color = modeColors[stepMode] ?? Colors.blue;
+                              } else {
+                                icon = Icons.location_on;
+                                color = Colors.grey;
+                              }
+                            }
+                            return Marker(
+                              point: point,
+                              child: Icon(icon, color: color, size: 40),
+                            );
+                          }).toList(),
+                    ),
+                    PolylineLayer(polylines: polylines),
+                  ],
+                ),
+                Positioned(
+                  top: 50,
+                  left: 0,
+                  right: 0,
+                  child: Text(
+                    _getInstructionText(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _startLocationController,
+                    decoration: const InputDecoration(
+                      labelText:
+                          'Starting Location (tap map to select or type)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator:
+                        (value) =>
+                            value == null || value.isEmpty
+                                ? 'Please select or enter starting location'
+                                : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _endLocationController,
+                    decoration: const InputDecoration(
+                      labelText: 'End Location (tap map to select or type)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator:
+                        (value) =>
+                            value == null || value.isEmpty
+                                ? 'Please select or enter end location'
+                                : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _shortDescriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Short Description (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Steps added: ${steps.length}'),
+                  const SizedBox(height: 16),
+                  if (selectionMode == 'done')
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _submit,
+                        child: const Text('Submit for Review'),
+                      ),
+                    ),
+                  if (selectionMode != 'done')
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            pathPoints.clear();
+                            steps.clear();
+                            selectionMode = 'start';
+                            _startLocationController.clear();
+                            _endLocationController.clear();
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('Reset Route'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _modeIcon(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return const Icon(Icons.directions_walk, color: Colors.green);
-      case 'Jeepney':
-        return const Icon(Icons.directions_bus, color: Colors.blue);
-      case 'Bus':
-        return const Icon(Icons.directions_bus_filled, color: Colors.red);
-      case 'Train':
-        return const Icon(Icons.train, color: Colors.purple);
-      case 'Tricycle':
-        return const Icon(Icons.pedal_bike, color: Colors.orange);
-      case 'FX/Van':
-        return const Icon(Icons.directions_car, color: Colors.amber);
-      case 'Ferry':
-        return const Icon(Icons.directions_boat, color: Colors.lightBlue);
+  String _getInstructionText() {
+    switch (selectionMode) {
+      case 'start':
+        return 'Tap on the map to select the starting point';
+      case 'step':
+        return 'Tap to select next point for $currentMode';
+      case 'end':
+        return 'Tap to select the end point';
       default:
-        return const Icon(Icons.directions_walk, color: Colors.green);
+        return '';
     }
   }
 }
