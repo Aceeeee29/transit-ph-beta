@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter/services.dart';
 import '../models/route.dart' as route_model;
 
 class ContributeScreen extends StatefulWidget {
@@ -14,17 +15,96 @@ class ContributeScreen extends StatefulWidget {
 
 class _ContributeScreenState extends State<ContributeScreen> {
   final _formKey = GlobalKey<FormState>();
+  final MapController _mapController = MapController();
 
   final TextEditingController _startLocationController =
       TextEditingController();
   final TextEditingController _endLocationController = TextEditingController();
   final TextEditingController _shortDescriptionController =
       TextEditingController();
+  final TextEditingController _etaController = TextEditingController();
 
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
+  String? selectedRegion;
+
+  // Philippine regions with approximate boundaries
+  final Map<String, LatLngBounds> philippineRegions = {
+    'Philippines': LatLngBounds(
+      const LatLng(4.5, 116.0),
+      const LatLng(21.5, 127.0),
+    ),
+    'Region I – Ilocos Region': LatLngBounds(
+      const LatLng(15.5, 119.5),
+      const LatLng(18.5, 121.0),
+    ),
+    'Region II – Cagayan Valley': LatLngBounds(
+      const LatLng(16.0, 121.0),
+      const LatLng(19.0, 122.5),
+    ),
+    'Region III – Central Luzon': LatLngBounds(
+      const LatLng(14.5, 120.0),
+      const LatLng(16.0, 121.5),
+    ),
+    'Region IV-A – CALABARZON': LatLngBounds(
+      const LatLng(13.5, 120.5),
+      const LatLng(15.0, 122.0),
+    ),
+    'MIMAROPA Region (Region IV-B)': LatLngBounds(
+      const LatLng(8.5, 117.0),
+      const LatLng(14.0, 122.0),
+    ),
+    'Region V – Bicol Region': LatLngBounds(
+      const LatLng(12.5, 122.5),
+      const LatLng(14.5, 124.5),
+    ),
+    'Region VI – Western Visayas': LatLngBounds(
+      const LatLng(9.5, 121.5),
+      const LatLng(12.0, 123.5),
+    ),
+    'Region VII – Central Visayas': LatLngBounds(
+      const LatLng(9.0, 123.0),
+      const LatLng(11.5, 124.5),
+    ),
+    'Region VIII – Eastern Visayas': LatLngBounds(
+      const LatLng(10.0, 124.0),
+      const LatLng(13.0, 126.0),
+    ),
+    'Region IX – Zamboanga Peninsula': LatLngBounds(
+      const LatLng(6.5, 121.5),
+      const LatLng(9.0, 123.5),
+    ),
+    'Region X – Northern Mindanao': LatLngBounds(
+      const LatLng(7.5, 123.5),
+      const LatLng(9.5, 126.0),
+    ),
+    'Region XI – Davao Region': LatLngBounds(
+      const LatLng(5.5, 125.0),
+      const LatLng(8.0, 127.0),
+    ),
+    'Region XII – SOCCSKSARGEN': LatLngBounds(
+      const LatLng(5.0, 124.0),
+      const LatLng(8.0, 125.5),
+    ),
+    'Region XIII – Caraga': LatLngBounds(
+      const LatLng(8.0, 125.5),
+      const LatLng(10.5, 127.0),
+    ),
+    'NCR – National Capital Region': LatLngBounds(
+      const LatLng(14.4, 120.9),
+      const LatLng(14.8, 121.2),
+    ),
+    'CAR – Cordillera Administrative Region': LatLngBounds(
+      const LatLng(16.0, 120.0),
+      const LatLng(18.5, 121.5),
+    ),
+    'BARMM – Bangsamoro Autonomous Region in Muslim Mindanao': LatLngBounds(
+      const LatLng(5.0, 119.0),
+      const LatLng(7.5, 122.0),
+    ),
+  };
 
   static const List<String> modes = [
     'Walk',
@@ -51,6 +131,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _startLocationController.dispose();
     _endLocationController.dispose();
     _shortDescriptionController.dispose();
+    _etaController.dispose();
     super.dispose();
   }
 
@@ -66,6 +147,31 @@ class _ContributeScreenState extends State<ContributeScreen> {
         selectionMode = 'done';
       }
     });
+  }
+
+  void _onRegionChanged(String? region) {
+    if (region != null && philippineRegions.containsKey(region)) {
+      final bounds = philippineRegions[region]!;
+
+      // Special handling for Philippines - reset to initial view
+      if (region == 'Philippines') {
+        _mapController.move(const LatLng(12.8797, 121.7740), 6.0);
+      } else if (region == 'MIMAROPA Region (Region IV-B)') {
+        // Special handling for MIMAROPA - use move instead of fitCamera
+        final center = LatLng(
+          (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
+          (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
+        );
+        _mapController.move(center, 7.0);
+      } else {
+        _mapController.fitCamera(
+          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(20)),
+        );
+      }
+      setState(() {
+        selectedRegion = region;
+      });
+    }
   }
 
   void _showModeDialog() {
@@ -235,6 +341,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         endLat: pathPoints.last.latitude,
         endLng: pathPoints.last.longitude,
         pathPoints: pathPoints,
+        eta: _etaController.text.isEmpty ? null : _etaController.text,
       );
 
       widget.onRouteSubmitted(route);
@@ -251,6 +358,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _startLocationController.clear();
         _endLocationController.clear();
         _shortDescriptionController.clear();
+        _etaController.clear();
       });
     }
   }
@@ -315,6 +423,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
             child: Stack(
               children: [
                 FlutterMap(
+                  mapController: _mapController,
                   options: MapOptions(
                     initialCenter: const LatLng(12.8797, 121.7740),
                     initialZoom: 6.0,
@@ -369,7 +478,43 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   ],
                 ),
                 Positioned(
-                  top: 50,
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 200,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: DropdownButton<String>(
+                      value: selectedRegion,
+                      hint: const Text('Select Region'),
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      items:
+                          philippineRegions.keys.map((region) {
+                            return DropdownMenuItem<String>(
+                              value: region,
+                              child: Text(
+                                region,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            );
+                          }).toList(),
+                      onChanged: _onRegionChanged,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 80,
                   left: 0,
                   right: 0,
                   child: Text(
@@ -378,6 +523,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black,
+                          offset: Offset(1, 1),
+                          blurRadius: 2,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -425,6 +578,26 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     ),
                     maxLines: 2,
                   ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _etaController,
+                    decoration: const InputDecoration(
+                      labelText: 'Estimated Time of Arrival (ETA) in minutes',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter estimated time of arrival';
+                      }
+                      final intValue = int.tryParse(value);
+                      if (intValue == null || intValue <= 0) {
+                        return 'Please enter a valid positive number';
+                      }
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 16),
                   Text('Steps added: ${steps.length}'),
                   const SizedBox(height: 16),
@@ -447,6 +620,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
                             selectionMode = 'start';
                             _startLocationController.clear();
                             _endLocationController.clear();
+                            _shortDescriptionController.clear();
+                            _etaController.clear();
                           });
                         },
                         style: ElevatedButton.styleFrom(

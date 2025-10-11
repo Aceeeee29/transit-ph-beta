@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/route.dart' as route_model;
 import 'route_map_screen.dart';
 
@@ -15,23 +18,34 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _startController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
 
+  String _weatherTemp = '';
+  String _weatherCondition = '';
+  String _precipitation = '';
+  String _humidity = '';
+  bool _isLoadingWeather = true;
+  bool _isStorm = false;
+  double? _currentLat, _currentLng;
+
   void _findRoute() {
     final start = _startController.text.trim().toLowerCase();
     final destination = _destinationController.text.trim().toLowerCase();
 
-    if (start.isEmpty || destination.isEmpty) {
+    if (destination.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both starting point and destination'),
-        ),
+        const SnackBar(content: Text('Please enter a destination')),
       );
       return;
     }
 
     final matchedRoutes =
         widget.routes.where((route) {
-          return route.startLocation.toLowerCase().contains(start) &&
-              route.endLocation.toLowerCase().contains(destination);
+          final matchesDestination = route.endLocation.toLowerCase().contains(
+            destination,
+          );
+          final matchesStart =
+              start.isEmpty ||
+              route.startLocation.toLowerCase().contains(start);
+          return matchesDestination && matchesStart;
         }).toList();
 
     showDialog(
@@ -125,6 +139,128 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _getWeather();
+  }
+
+  Future<void> _getWeather() async {
+    setState(() {
+      _isLoadingWeather = true;
+    });
+
+    try {
+      // Request location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission denied')),
+          );
+          setState(() {
+            _isLoadingWeather = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied forever')),
+        );
+        setState(() {
+          _isLoadingWeather = false;
+        });
+        return;
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _currentLat = position.latitude;
+        _currentLng = position.longitude;
+      });
+
+      // Fetch weather from OpenMeteo
+      final url = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current_weather=true&hourly=precipitation,relative_humidity_2m&timezone=Asia/Manila',
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final currentWeather = data['current_weather'];
+        final hourly = data['hourly'];
+        setState(() {
+          _weatherTemp = '${currentWeather['temperature']}°C';
+          final code = currentWeather['weathercode'];
+          _weatherCondition = _getWeatherDescription(code);
+          _precipitation =
+              hourly != null && hourly['precipitation'] != null
+                  ? '${hourly['precipitation'][0] ?? 0} mm'
+                  : '0 mm';
+          _humidity =
+              hourly != null && hourly['relative_humidity_2m'] != null
+                  ? '${hourly['relative_humidity_2m'][0] ?? 0}%'
+                  : '0%';
+          _isStorm = code >= 95;
+          _isLoadingWeather = false;
+        });
+      } else {
+        throw Exception('Failed to load weather');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error getting weather: $e')));
+      setState(() {
+        _isLoadingWeather = false;
+      });
+    }
+  }
+
+  String _getWeatherDescription(int code) {
+    switch (code) {
+      case 0:
+        return 'Clear sky';
+      case 1:
+      case 2:
+      case 3:
+        return 'Mainly clear';
+      case 45:
+      case 48:
+        return 'Fog';
+      case 51:
+      case 53:
+      case 55:
+        return 'Drizzle';
+      case 61:
+      case 63:
+      case 65:
+        return 'Rain';
+      case 71:
+      case 73:
+      case 75:
+        return 'Snow';
+      case 80:
+      case 81:
+      case 82:
+        return 'Showers';
+      case 95:
+      case 96:
+      case 99:
+        return 'Thunderstorm';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  @override
   void dispose() {
     _startController.dispose();
     _destinationController.dispose();
@@ -173,7 +309,58 @@ class _HomeScreenState extends State<HomeScreen> {
               'Your community guide to Philippine transit.',
               style: TextStyle(fontSize: 16, color: Colors.black54),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+            if (_isLoadingWeather)
+              const Center(child: CircularProgressIndicator())
+            else if (_weatherTemp.isNotEmpty)
+              Column(
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.wb_sunny, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Current Weather: $_weatherCondition, $_weatherTemp, Precipitation: $_precipitation, Humidity: $_humidity',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_isStorm)
+                    Card(
+                      color: Colors.red.shade100,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.warning, color: Colors.red),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Storm Warning: Severe weather expected. Plan accordingly.',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 16),
             Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -188,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       controller: _startController,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.location_on_outlined),
-                        hintText: 'Starting from...',
+                        hintText: 'Starting from... (optional)',
                       ),
                     ),
                     const SizedBox(height: 16),
