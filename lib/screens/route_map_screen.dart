@@ -433,6 +433,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       body: Column(
         children: [
           Expanded(
+            flex: 2,
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
@@ -463,107 +464,109 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.route.eta != null)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.access_time, color: Colors.blue),
-                          const SizedBox(width: 8),
-                          Text(
-                            'ETA: ${widget.route.eta} minutes',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                Text(
-                  'Route Steps (${widget.route.steps.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                ...widget.route.steps.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final step = entry.value;
-                  final points =
-                      widget.route.pathPoints.isNotEmpty
-                          ? widget.route.pathPoints
-                          : [
-                            LatLng(
-                              widget.route.startLat ?? 0,
-                              widget.route.startLng ?? 0,
-                            ),
-                            LatLng(
-                              widget.route.endLat ?? 0,
-                              widget.route.endLng ?? 0,
-                            ),
-                          ];
-                  final startPoint =
-                      idx < points.length ? points[idx] : points.first;
-                  final endPoint =
-                      idx + 1 < points.length ? points[idx + 1] : points.last;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        _getModeIcon(step.mode),
-                        color:
-                            [
-                              Colors.green,
-                              Colors.blue,
-                              Colors.red,
-                              Colors.purple,
-                              Colors.orange,
-                              Colors.amber,
-                              Colors.lightBlue,
-                            ][idx % 7],
-                      ),
-                      title: Text(step.mode),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(step.instruction),
-                          if (step.details.isNotEmpty) ...[
-                            const SizedBox(height: 4),
+          Expanded(
+            flex: 1,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ListView(
+                children: [
+                  if (widget.route.eta != null)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time, color: Colors.blue),
+                            const SizedBox(width: 8),
                             Text(
-                              step.details,
-                              style: const TextStyle(fontSize: 12),
+                              'ETA: ${widget.route.eta} minutes',
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-                if (_routeReports.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Recent Reports',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  ..._routeReports.map(
-                    (report) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: Icon(_getReportIcon(report.type)),
-                        title: Text(report.type),
-                        subtitle: Text(
-                          '${report.description ?? ''}\n${_formatTime(report.timestamp)}',
                         ),
                       ),
                     ),
+                  Text(
+                    'Route Steps (${widget.route.steps.length})',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  const SizedBox(height: 8),
+                  ...widget.route.steps.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final step = entry.value;
+                    final points =
+                        widget.route.pathPoints.isNotEmpty
+                            ? widget.route.pathPoints
+                            : [
+                              LatLng(
+                                widget.route.startLat ?? 0,
+                                widget.route.startLng ?? 0,
+                              ),
+                              LatLng(
+                                widget.route.endLat ?? 0,
+                                widget.route.endLng ?? 0,
+                              ),
+                            ];
+                    final startPoint =
+                        idx < points.length ? points[idx] : points.first;
+                    final endPoint =
+                        idx + 1 < points.length ? points[idx + 1] : points.last;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Icon(
+                          _getModeIcon(step.mode),
+                          color:
+                              [
+                                Colors.green,
+                                Colors.blue,
+                                Colors.red,
+                                Colors.purple,
+                                Colors.orange,
+                                Colors.amber,
+                                Colors.lightBlue,
+                              ][idx % 7],
+                        ),
+                        title: Text(step.mode),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(step.instruction),
+                            if (step.details.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                step.details,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  if (_routeReports.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Recent Reports',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    ..._routeReports.map(
+                      (report) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: Icon(_getReportIcon(report.type)),
+                          title: Text(report.type),
+                          subtitle: Text(
+                            '${report.description ?? ''}\n${_formatTime(report.timestamp)}',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ],
