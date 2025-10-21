@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:convert';
 import '../models/route.dart' as route_model;
+import '../services/gamification_service.dart';
+import '../widgets/notification_overlay.dart';
 
 class RouteMapScreen extends StatefulWidget {
   final route_model.Route route;
@@ -20,6 +22,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   final MapController _mapController = MapController();
   Position? _currentPosition;
   List<route_model.Report> _routeReports = [];
+  List<String> _pendingNotifications = [];
+  bool _showNotificationOverlay = false;
 
   static const Map<String, List<String>> reportCategories = {
     'Traffic-Related': [
@@ -238,6 +242,22 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
     _routeReports.add(report);
     await _saveReports();
+
+    // Award points for reporting
+    final user = await GamificationService.loadUser();
+    await GamificationService.earnPoints(user, 10);
+    final unlockedItems = await GamificationService.incrementReportsSubmitted(
+      user,
+    );
+
+    // Show achievement notifications
+    if (unlockedItems.isNotEmpty) {
+      setState(() {
+        _pendingNotifications = unlockedItems;
+        _showNotificationOverlay = true;
+      });
+    }
+
     setState(() {});
     Navigator.pop(context);
     ScaffoldMessenger.of(
@@ -284,6 +304,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         15.0,
       );
     }
+  }
+
+  void _onNotificationsDismissed() {
+    setState(() {
+      _showNotificationOverlay = false;
+      _pendingNotifications.clear();
+    });
   }
 
   List<Polyline> get polylines {
@@ -418,163 +445,179 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       (points.first.longitude + points.last.longitude) / 2,
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          '${widget.route.startLocation} to ${widget.route.endLocation}',
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.report_problem),
-            onPressed: _showReportDialog,
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: Text(
+              '${widget.route.startLocation} to ${widget.route.endLocation}',
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.report_problem),
+                onPressed: _showReportDialog,
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: 13.0,
-                minZoom: 5.0,
-                maxZoom: 18.0,
-                cameraConstraint: CameraConstraint.contain(
-                  bounds: LatLngBounds(
-                    const LatLng(
-                      4.5,
-                      116.0,
-                    ), // Southwest corner (Mindanao area)
-                    const LatLng(
-                      21.5,
-                      127.0,
-                    ), // Northeast corner (Batanes + eastern sea)
+          body: Column(
+            children: [
+              Expanded(
+                flex: 2,
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 13.0,
+                    minZoom: 5.0,
+                    maxZoom: 18.0,
+                    cameraConstraint: CameraConstraint.contain(
+                      bounds: LatLngBounds(
+                        const LatLng(
+                          4.5,
+                          116.0,
+                        ), // Southwest corner (Mindanao area)
+                        const LatLng(
+                          21.5,
+                          127.0,
+                        ), // Northeast corner (Batanes + eastern sea)
+                      ),
+                    ),
                   ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.app.transitph_beta',
+                    ),
+                    MarkerLayer(markers: markers),
+                    PolylineLayer(polylines: polylines),
+                  ],
                 ),
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.app.transitph_beta',
-                ),
-                MarkerLayer(markers: markers),
-                PolylineLayer(polylines: polylines),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ListView(
-                children: [
-                  if (widget.route.eta != null)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.access_time, color: Colors.blue),
-                            const SizedBox(width: 8),
-                            Text(
-                              'ETA: ${widget.route.eta} minutes',
-                              style: Theme.of(context).textTheme.titleMedium,
+              Expanded(
+                flex: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ListView(
+                    children: [
+                      if (widget.route.eta != null)
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.access_time,
+                                  color: Colors.blue,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'ETA: ${widget.route.eta} minutes',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  Text(
-                    'Route Steps (${widget.route.steps.length})',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  ...widget.route.steps.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final step = entry.value;
-                    final points =
-                        widget.route.pathPoints.isNotEmpty
-                            ? widget.route.pathPoints
-                            : [
-                              LatLng(
-                                widget.route.startLat ?? 0,
-                                widget.route.startLng ?? 0,
-                              ),
-                              LatLng(
-                                widget.route.endLat ?? 0,
-                                widget.route.endLng ?? 0,
-                              ),
-                            ];
-                    final startPoint =
-                        idx < points.length ? points[idx] : points.first;
-                    final endPoint =
-                        idx + 1 < points.length ? points[idx + 1] : points.last;
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: Icon(
-                          _getModeIcon(step.mode),
-                          color:
-                              [
-                                Colors.green,
-                                Colors.blue,
-                                Colors.red,
-                                Colors.purple,
-                                Colors.orange,
-                                Colors.amber,
-                                Colors.lightBlue,
-                              ][idx % 7],
-                        ),
-                        title: Text(step.mode),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(step.instruction),
-                            if (step.details.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                step.details,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                  if (_routeReports.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Recent Reports',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    ..._routeReports.map(
-                      (report) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Icon(_getReportIcon(report.type)),
-                          title: Text(report.type),
-                          subtitle: Text(
-                            '${report.description ?? ''}\n${_formatTime(report.timestamp)}',
                           ),
                         ),
+                      Text(
+                        'Route Steps (${widget.route.steps.length})',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    ),
-                  ],
-                ],
+                      const SizedBox(height: 8),
+                      ...widget.route.steps.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final step = entry.value;
+                        final points =
+                            widget.route.pathPoints.isNotEmpty
+                                ? widget.route.pathPoints
+                                : [
+                                  LatLng(
+                                    widget.route.startLat ?? 0,
+                                    widget.route.startLng ?? 0,
+                                  ),
+                                  LatLng(
+                                    widget.route.endLat ?? 0,
+                                    widget.route.endLng ?? 0,
+                                  ),
+                                ];
+                        final startPoint =
+                            idx < points.length ? points[idx] : points.first;
+                        final endPoint =
+                            idx + 1 < points.length
+                                ? points[idx + 1]
+                                : points.last;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: Icon(
+                              _getModeIcon(step.mode),
+                              color:
+                                  [
+                                    Colors.green,
+                                    Colors.blue,
+                                    Colors.red,
+                                    Colors.purple,
+                                    Colors.orange,
+                                    Colors.amber,
+                                    Colors.lightBlue,
+                                  ][idx % 7],
+                            ),
+                            title: Text(step.mode),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(step.instruction),
+                                if (step.details.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    step.details,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      if (_routeReports.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          'Recent Reports',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ..._routeReports.map(
+                          (report) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: Icon(_getReportIcon(report.type)),
+                              title: Text(report.type),
+                              subtitle: Text(
+                                '${report.description ?? ''}\n${_formatTime(report.timestamp)}',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _centerOnCurrentLocation,
-        child: const Icon(Icons.my_location),
-      ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: _centerOnCurrentLocation,
+            child: const Icon(Icons.my_location),
+          ),
+        ),
+        if (_showNotificationOverlay)
+          NotificationOverlay(
+            notifications: _pendingNotifications,
+            onAllDismissed: _onNotificationsDismissed,
+          ),
+      ],
     );
   }
 }

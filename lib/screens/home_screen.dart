@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/route.dart' as route_model;
 import 'route_map_screen.dart';
+import '../services/gamification_service.dart';
+import '../widgets/notification_overlay.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
@@ -26,7 +28,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isStorm = false;
   double? _currentLat, _currentLng;
 
-  void _findRoute() {
+  List<String> _pendingNotifications = [];
+  bool _showNotificationOverlay = false;
+
+  void _findRoute() async {
     final start = _startController.text.trim().toLowerCase();
     final destination = _destinationController.text.trim().toLowerCase();
 
@@ -35,6 +40,21 @@ class _HomeScreenState extends State<HomeScreen> {
         const SnackBar(content: Text('Please enter a destination')),
       );
       return;
+    }
+
+    // Award points for searching
+    final user = await GamificationService.loadUser();
+    await GamificationService.earnPoints(user, 10);
+    final unlockedItems = await GamificationService.incrementRoutesSearched(
+      user,
+    );
+
+    // Show achievement notifications
+    if (unlockedItems.isNotEmpty) {
+      setState(() {
+        _pendingNotifications = unlockedItems;
+        _showNotificationOverlay = true;
+      });
     }
 
     final matchedRoutes =
@@ -288,131 +308,147 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _onNotificationsDismissed() {
+    setState(() {
+      _showNotificationOverlay = false;
+      _pendingNotifications.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            Text(
-              'TransitPH',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Your community guide to Philippine transit.',
-              style: TextStyle(fontSize: 16, color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            if (_isLoadingWeather)
-              const Center(child: CircularProgressIndicator())
-            else if (_weatherTemp.isNotEmpty)
-              Column(
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.wb_sunny, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Current Weather: $_weatherCondition, $_weatherTemp, Precipitation: $_precipitation, Humidity: $_humidity',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+    return Stack(
+      children: [
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 24),
+                Text(
+                  'TransitPH',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
                   ),
-                  if (_isStorm)
-                    Card(
-                      color: Colors.red.shade100,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.warning, color: Colors.red),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Storm Warning: Severe weather expected. Plan accordingly.',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.red,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Your community guide to Philippine transit.',
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+                const SizedBox(height: 16),
+                if (_isLoadingWeather)
+                  const Center(child: CircularProgressIndicator())
+                else if (_weatherTemp.isNotEmpty)
+                  Column(
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.wb_sunny, color: Colors.orange),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Current Weather: $_weatherCondition, $_weatherTemp, Precipitation: $_precipitation, Humidity: $_humidity',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
+                      if (_isStorm)
+                        Card(
+                          color: Colors.red.shade100,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.warning, color: Colors.red),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Storm Warning: Severe weather expected. Plan accordingly.',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 6,
+                  shadowColor: Colors.black12,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _startController,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.location_on_outlined),
+                            hintText: 'Starting from... (optional)',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _destinationController,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.location_on_outlined),
+                            hintText: 'Going to...',
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _findRoute,
+                            icon: const Icon(Icons.arrow_forward),
+                            label: const Text('Find Route'),
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-            const SizedBox(height: 16),
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 6,
-              shadowColor: Colors.black12,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _startController,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.location_on_outlined),
-                        hintText: 'Starting from... (optional)',
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _destinationController,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.location_on_outlined),
-                        hintText: 'Going to...',
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _findRoute,
-                        icon: const Icon(Icons.arrow_forward),
-                        label: const Text('Find Route'),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 32),
+                const Text(
+                  'New to the area?',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Help build our database by contributing a route you know!',
+                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
-            const Text(
-              'New to the area?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Help build our database by contributing a route you know!',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
-      ),
+        if (_showNotificationOverlay)
+          NotificationOverlay(
+            notifications: _pendingNotifications,
+            onAllDismissed: _onNotificationsDismissed,
+          ),
+      ],
     );
   }
 }

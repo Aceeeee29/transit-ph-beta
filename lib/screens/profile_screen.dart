@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'settings_screen.dart';
+import '../services/gamification_service.dart';
+import '../models/user.dart';
+import '../models/achievement.dart';
+import '../models/badge.dart' as badge_model;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -9,8 +13,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String userName = 'N/A';
-  String userEmail = 'N/A';
+  User? user;
   final List<Contribution> contributions = const [];
 
   final TextEditingController _editNameController = TextEditingController();
@@ -18,7 +21,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _editNameController.text = userName;
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    user = await GamificationService.loadUser();
+    setState(() {});
+    _editNameController.text = user?.name ?? 'N/A';
   }
 
   @override
@@ -45,13 +54,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  userName =
+              onPressed: () async {
+                if (user != null) {
+                  user!.name =
                       _editNameController.text.trim().isEmpty
                           ? 'N/A'
                           : _editNameController.text.trim();
-                });
+                  await GamificationService.saveUser(user!);
+                  setState(() {});
+                }
                 Navigator.of(context).pop();
               },
               child: const Text('Save'),
@@ -68,6 +79,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
@@ -80,8 +95,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 MaterialPageRoute(
                   builder:
                       (context) => SettingsScreen(
-                        userName: userName,
-                        userEmail: userEmail,
+                        userName: user!.name,
+                        userEmail: user!.email,
                       ),
                 ),
               );
@@ -96,7 +111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CircleAvatar(
               radius: 40,
               child: Text(
-                userName.isNotEmpty ? userName[0] : '',
+                user!.name.isNotEmpty ? user!.name[0] : '',
                 style: const TextStyle(
                   fontSize: 40,
                   fontWeight: FontWeight.bold,
@@ -108,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  userName,
+                  user!.name,
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -123,8 +138,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              userEmail,
+              user!.email,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Level ${user!.level}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: (user!.points % 100) / 100,
+                      backgroundColor: Colors.grey.shade300,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${user!.points} / ${user!.nextLevelPoints} points to next level',
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Column(
+                  children: [
+                    Text(
+                      '${user!.routesContributed}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text('Routes Contributed'),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Text(
+                      '${user!.routesSearched}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text('Routes Searched'),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Text(
+                      '${user!.reportsSubmitted}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text('Reports Submitted'),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -134,29 +219,120 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 24),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'My Contributions',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: contributions.length,
-                      itemBuilder: (context, index) {
-                        final contribution = contributions[index];
-                        return ContributionCard(contribution: contribution);
-                      },
+              child: DefaultTabController(
+                length: 3,
+                child: Column(
+                  children: [
+                    const TabBar(
+                      tabs: [
+                        Tab(text: 'Achievements'),
+                        Tab(text: 'Badges'),
+                        Tab(text: 'Contributions'),
+                      ],
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _buildAchievementsTab(),
+                          _buildBadgesTab(),
+                          _buildContributionsTab(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAchievementsTab() {
+    return FutureBuilder<List<Achievement>>(
+      future: GamificationService.loadAchievements(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final achievements = snapshot.data!;
+        return ListView.builder(
+          itemCount: achievements.length,
+          itemBuilder: (context, index) {
+            final achievement = achievements[index];
+            final isUnlocked = user!.achievements.contains(achievement.id);
+            return Card(
+              color: isUnlocked ? Colors.green.shade50 : Colors.grey.shade100,
+              child: ListTile(
+                leading: Text(
+                  achievement.icon,
+                  style: const TextStyle(fontSize: 30),
+                ),
+                title: Text(
+                  achievement.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isUnlocked ? Colors.green : Colors.grey,
+                  ),
+                ),
+                subtitle: Text(achievement.description),
+                trailing:
+                    isUnlocked
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : const Icon(Icons.lock, color: Colors.grey),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBadgesTab() {
+    return FutureBuilder<List<badge_model.Badge>>(
+      future: GamificationService.loadBadges(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final badges = snapshot.data!;
+        return ListView.builder(
+          itemCount: badges.length,
+          itemBuilder: (context, index) {
+            final badge = badges[index];
+            final isUnlocked = user!.badges.contains(badge.id);
+            return Card(
+              color: isUnlocked ? Colors.blue.shade50 : Colors.grey.shade100,
+              child: ListTile(
+                leading: Text(badge.icon, style: const TextStyle(fontSize: 30)),
+                title: Text(
+                  badge.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isUnlocked ? Colors.blue : Colors.grey,
+                  ),
+                ),
+                subtitle: Text(badge.description),
+                trailing:
+                    isUnlocked
+                        ? const Icon(Icons.verified, color: Colors.blue)
+                        : const Icon(Icons.lock, color: Colors.grey),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildContributionsTab() {
+    return ListView.builder(
+      itemCount: contributions.length,
+      itemBuilder: (context, index) {
+        final contribution = contributions[index];
+        return ContributionCard(contribution: contribution);
+      },
     );
   }
 }

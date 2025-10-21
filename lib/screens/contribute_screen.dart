@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/services.dart';
 import '../models/route.dart' as route_model;
+import '../services/gamification_service.dart';
+import '../widgets/notification_overlay.dart';
 
 class ContributeScreen extends StatefulWidget {
   final void Function(route_model.Route) onRouteSubmitted;
@@ -29,6 +31,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
   String? selectedRegion;
+
+  List<String> _pendingNotifications = [];
+  bool _showNotificationOverlay = false;
 
   // Philippine regions with approximate boundaries
   final Map<String, LatLngBounds> philippineRegions = {
@@ -311,7 +316,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  void _submit() {
+  void _submit() async {
     if (pathPoints.length < 2 ||
         steps.isEmpty ||
         _startLocationController.text.isEmpty ||
@@ -345,6 +350,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
       );
 
       widget.onRouteSubmitted(route);
+
+      // Award points for contributing
+      final user = await GamificationService.loadUser();
+      await GamificationService.earnPoints(user, 50);
+      final unlockedItems =
+          await GamificationService.incrementRoutesContributed(user);
+
+      // Show achievement notifications
+      if (unlockedItems.isNotEmpty) {
+        setState(() {
+          _pendingNotifications = unlockedItems;
+          _showNotificationOverlay = true;
+        });
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Route submitted for review!')),
@@ -413,229 +432,249 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return polylines;
   }
 
+  void _onNotificationsDismissed() {
+    setState(() {
+      _showNotificationOverlay = false;
+      _pendingNotifications.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Contribute a Route')),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: const LatLng(12.8797, 121.7740),
-                    initialZoom: 6.0,
-                    minZoom: 5.0,
-                    maxZoom: 18.0,
-                    cameraConstraint: CameraConstraint.contain(
-                      bounds: LatLngBounds(
-                        const LatLng(4.5, 116.0),
-                        const LatLng(21.5, 127.0),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(title: const Text('Contribute a Route')),
+          body: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: const LatLng(12.8797, 121.7740),
+                        initialZoom: 6.0,
+                        minZoom: 5.0,
+                        maxZoom: 18.0,
+                        cameraConstraint: CameraConstraint.contain(
+                          bounds: LatLngBounds(
+                            const LatLng(4.5, 116.0),
+                            const LatLng(21.5, 127.0),
+                          ),
+                        ),
+                        onTap: _onMapTap,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName:
+                              'com.example.app.transitph_beta',
+                        ),
+                        MarkerLayer(
+                          markers:
+                              pathPoints.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final point = entry.value;
+                                IconData icon = Icons.location_on;
+                                Color color = Colors.green;
+                                if (index == 0) {
+                                  icon = Icons.location_on;
+                                  color = Colors.green; // Start
+                                } else if (index == pathPoints.length - 1) {
+                                  icon = Icons.flag;
+                                  color = Colors.red; // End
+                                } else {
+                                  // Intermediate for steps
+                                  final stepIndex = index - 1;
+                                  if (stepIndex < steps.length) {
+                                    final stepMode = steps[stepIndex].mode;
+                                    icon = _getModeIcon(stepMode);
+                                    color = modeColors[stepMode] ?? Colors.blue;
+                                  } else {
+                                    icon = Icons.location_on;
+                                    color = Colors.grey;
+                                  }
+                                }
+                                return Marker(
+                                  point: point,
+                                  child: Icon(icon, color: color, size: 40),
+                                );
+                              }).toList(),
+                        ),
+                        PolylineLayer(polylines: polylines),
+                      ],
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        width: 200,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: DropdownButton<String>(
+                          value: selectedRegion,
+                          hint: const Text('Select Region'),
+                          isExpanded: true,
+                          underline: const SizedBox(),
+                          items:
+                              philippineRegions.keys.map((region) {
+                                return DropdownMenuItem<String>(
+                                  value: region,
+                                  child: Text(
+                                    region,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                );
+                              }).toList(),
+                          onChanged: _onRegionChanged,
+                        ),
                       ),
                     ),
-                    onTap: _onMapTap,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.app.transitph_beta',
+                    Positioned(
+                      top: 80,
+                      left: 0,
+                      right: 0,
+                      child: Text(
+                        _getInstructionText(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black,
+                              offset: Offset(1, 1),
+                              blurRadius: 2,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    MarkerLayer(
-                      markers:
-                          pathPoints.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final point = entry.value;
-                            IconData icon = Icons.location_on;
-                            Color color = Colors.green;
-                            if (index == 0) {
-                              icon = Icons.location_on;
-                              color = Colors.green; // Start
-                            } else if (index == pathPoints.length - 1) {
-                              icon = Icons.flag;
-                              color = Colors.red; // End
-                            } else {
-                              // Intermediate for steps
-                              final stepIndex = index - 1;
-                              if (stepIndex < steps.length) {
-                                final stepMode = steps[stepIndex].mode;
-                                icon = _getModeIcon(stepMode);
-                                color = modeColors[stepMode] ?? Colors.blue;
-                              } else {
-                                icon = Icons.location_on;
-                                color = Colors.grey;
-                              }
-                            }
-                            return Marker(
-                              point: point,
-                              child: Icon(icon, color: color, size: 40),
-                            );
-                          }).toList(),
-                    ),
-                    PolylineLayer(polylines: polylines),
                   ],
                 ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    width: 200,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: DropdownButton<String>(
-                      value: selectedRegion,
-                      hint: const Text('Select Region'),
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      items:
-                          philippineRegions.keys.map((region) {
-                            return DropdownMenuItem<String>(
-                              value: region,
-                              child: Text(
-                                region,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            );
-                          }).toList(),
-                      onChanged: _onRegionChanged,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 80,
-                  left: 0,
-                  right: 0,
-                  child: Text(
-                    _getInstructionText(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black,
-                          offset: Offset(1, 1),
-                          blurRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _startLocationController,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Starting Location (tap map to select or type)',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator:
-                        (value) =>
-                            value == null || value.isEmpty
-                                ? 'Please select or enter starting location'
-                                : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _endLocationController,
-                    decoration: const InputDecoration(
-                      labelText: 'End Location (tap map to select or type)',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator:
-                        (value) =>
-                            value == null || value.isEmpty
-                                ? 'Please select or enter end location'
-                                : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _shortDescriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Short Description (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _etaController,
-                    decoration: const InputDecoration(
-                      labelText: 'Estimated Time of Arrival (ETA) in minutes',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter estimated time of arrival';
-                      }
-                      final intValue = int.tryParse(value);
-                      if (intValue == null || intValue <= 0) {
-                        return 'Please enter a valid positive number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Steps added: ${steps.length}'),
-                  const SizedBox(height: 16),
-                  if (selectionMode == 'done')
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _submit,
-                        child: const Text('Submit for Review'),
-                      ),
-                    ),
-                  if (selectionMode != 'done')
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            pathPoints.clear();
-                            steps.clear();
-                            selectionMode = 'start';
-                            _startLocationController.clear();
-                            _endLocationController.clear();
-                            _shortDescriptionController.clear();
-                            _etaController.clear();
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        child: const Text('Reset Route'),
-                      ),
-                    ),
-                ],
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _startLocationController,
+                        decoration: const InputDecoration(
+                          labelText:
+                              'Starting Location (tap map to select or type)',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator:
+                            (value) =>
+                                value == null || value.isEmpty
+                                    ? 'Please select or enter starting location'
+                                    : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _endLocationController,
+                        decoration: const InputDecoration(
+                          labelText: 'End Location (tap map to select or type)',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator:
+                            (value) =>
+                                value == null || value.isEmpty
+                                    ? 'Please select or enter end location'
+                                    : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _shortDescriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Short Description (optional)',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _etaController,
+                        decoration: const InputDecoration(
+                          labelText:
+                              'Estimated Time of Arrival (ETA) in minutes',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter estimated time of arrival';
+                          }
+                          final intValue = int.tryParse(value);
+                          if (intValue == null || intValue <= 0) {
+                            return 'Please enter a valid positive number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Steps added: ${steps.length}'),
+                      const SizedBox(height: 16),
+                      if (selectionMode == 'done')
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submit,
+                            child: const Text('Submit for Review'),
+                          ),
+                        ),
+                      if (selectionMode != 'done')
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                pathPoints.clear();
+                                steps.clear();
+                                selectionMode = 'start';
+                                _startLocationController.clear();
+                                _endLocationController.clear();
+                                _shortDescriptionController.clear();
+                                _etaController.clear();
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            child: const Text('Reset Route'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        if (_showNotificationOverlay)
+          NotificationOverlay(
+            notifications: _pendingNotifications,
+            onAllDismissed: _onNotificationsDismissed,
+          ),
+      ],
     );
   }
 
