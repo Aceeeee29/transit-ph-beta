@@ -1,0 +1,98 @@
+[
+  {
+    "id": "route1",
+    "startLocation": "Makati City",
+    "endLocation": "Quezon City",
+    "shortDescription": "Via EDSA - Main route from Makati to QC",
+    "steps": [
+      {
+        "mode": "Jeepney",
+        "instruction": "Take jeepney from Makati to EDSA",
+        "details": "Ride jeepney with 'EDSA' sign"
+      },
+      {
+        "mode": "Bus",
+        "instruction": "Transfer to bus at EDSA",
+        "details": "Take bus going to Quezon City"
+      }
+    ],
+    "startLat": 14.5547,
+    "startLng": 121.0244,
+    "endLat": 14.6760,
+    "endLng": 121.0437,
+    "pathPoints": [
+      {"lat": 14.5547, "lng": 121.0244},
+      {"lat": 14.6150, "lng": 121.0340},
+      {"lat": 14.6760, "lng": 121.0437}
+    ],
+    "eta": "45",
+    "reports": [],
+    "views": 25,
+    "upvotes": 12,
+    "downvotes": 2
+  },
+  {
+    "id": "route2",
+    "startLocation": "Manila",
+    "endLocation": "Pasay City",
+    "shortDescription": "Short trip via Taft Avenue",
+    "steps": [
+      {
+        "mode": "Walk",
+        "instruction": "Walk to Taft Avenue",
+        "details": "5 minute walk to main road"
+      },
+      {
+        "mode": "Bus",
+        "instruction": "Take bus to Pasay",
+        "details": "Any bus going south"
+      }
+    ],
+    "startLat": 14.5995,
+    "startLng": 120.9842,
+    "endLat": 14.5378,
+    "endLng": 120.9939,
+    "pathPoints": [
+      {"lat": 14.5995, "lng": 120.9842},
+      {"lat": 14.5687, "lng": 120.9890},
+      {"lat": 14.5378, "lng": 120.9939}
+    ],
+    "eta": "20",
+    "reports": [],
+    "views": 18,
+    "upvotes": 8,
+    "downvotes": 1
+  },
+  {
+    "id": "route3",
+    "startLocation": "Cebu City",
+    "endLocation": "Mandaue City",
+    "shortDescription": "Cross Mactan Bridge",
+    "steps": [
+      {
+        "mode": "Walk",
+        "instruction": "Walk to bridge entrance",
+        "details": "Follow signs to Mactan Bridge"
+      },
+      {
+        "mode": "Walk",
+        "instruction": "Cross the bridge",
+        "details": "Pedestrian lane available"
+      }
+    ],
+    "startLat": 10.3157,
+    "startLng": 123.8854,
+    "endLat": 10.3236,
+    "endLng": 123.9436,
+    "pathPoints": [
+      {"lat": 10.3157, "lng": 123.8854},
+      {"lat": 10.3197, "lng": 123.9145},
+      {"lat": 10.3236, "lng": 123.9436}
+    ],
+    "eta": "15",
+    "reports": [],
+    "views": 32,
+    "upvotes": 15,
+    "downvotes": 3
+  }
+]

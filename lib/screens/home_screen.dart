@@ -44,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Award points for searching
     final user = await GamificationService.loadUser();
-    await GamificationService.earnPoints(user, 10);
     final unlockedItems = await GamificationService.incrementRoutesSearched(
       user,
     );
@@ -103,6 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                     style: const TextStyle(
                                       fontStyle: FontStyle.italic,
                                       fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Views: ${route.views} | Upvotes: ${route.upvotes} | Downvotes: ${route.downvotes}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -315,12 +322,23 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _voteRoute(route_model.Route route, bool isUpvote) {
+    setState(() {
+      if (isUpvote) {
+        route.upvotes++;
+      } else {
+        route.downvotes++;
+      }
+    });
+    // In a real app, persist this to a database
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Column(
               children: [
@@ -430,6 +448,66 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 32),
                 const Text(
+                  'Routes you may like',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount:
+                        widget.routes.length > 5 ? 5 : widget.routes.length,
+                    itemBuilder: (context, index) {
+                      final route = widget.routes[index];
+                      return Card(
+                        margin: const EdgeInsets.only(right: 16),
+                        child: Container(
+                          width: 250,
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${route.startLocation} to ${route.endLocation}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                route.shortDescription,
+                                style: const TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) =>
+                                              RouteMapScreen(route: route),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.map),
+                                label: const Text('View'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
                   'New to the area?',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
@@ -439,6 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontSize: 14, color: Colors.black54),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

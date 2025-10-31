@@ -148,8 +148,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _showModeDialog();
       } else if (selectionMode == 'step') {
         _showStepDialog();
-      } else if (selectionMode == 'end') {
-        selectionMode = 'done';
       }
     });
   }
@@ -259,17 +257,15 @@ class _ContributeScreenState extends State<ContributeScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  if (instruction.isNotEmpty) {
-                    setState(() {
-                      steps.add(
-                        route_model.Step(
-                          mode: currentMode,
-                          instruction: instruction,
-                          details: details,
-                        ),
-                      );
-                    });
-                  }
+                  setState(() {
+                    steps.add(
+                      route_model.Step(
+                        mode: currentMode,
+                        instruction: instruction,
+                        details: details,
+                      ),
+                    );
+                  });
                   Navigator.pop(context);
                   _showAddAnotherStepDialog();
                 },
@@ -301,13 +297,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    selectionMode = 'end';
+                    selectionMode = 'done';
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tap on the map to select the end point'),
-                    ),
-                  );
                 },
                 child: const Text('Finish Route'),
               ),
@@ -317,15 +308,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   void _submit() async {
-    if (pathPoints.length < 2 ||
-        steps.isEmpty ||
-        _startLocationController.text.isEmpty ||
-        _endLocationController.text.isEmpty) {
+    if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Need start/end locations, at least one step, and points on map',
-          ),
+          content: Text('Need at least start and end points on map'),
         ),
       );
       return;
@@ -334,8 +320,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (_formKey.currentState!.validate()) {
       final route = route_model.Route(
         id: DateTime.now().toString(),
-        startLocation: _startLocationController.text,
-        endLocation: _endLocationController.text,
+        startLocation:
+            _startLocationController.text.isEmpty
+                ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
+                : _startLocationController.text,
+        endLocation:
+            _endLocationController.text.isEmpty
+                ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
+                : _endLocationController.text,
         shortDescription:
             _shortDescriptionController.text.isEmpty
                 ? 'Custom route with ${steps.length} steps'
@@ -353,7 +345,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
       // Award points for contributing
       final user = await GamificationService.loadUser();
-      await GamificationService.earnPoints(user, 50);
       final unlockedItems =
           await GamificationService.incrementRoutesContributed(user);
 
@@ -472,6 +463,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           userAgentPackageName:
                               'com.example.app.transitph_beta',
                         ),
+                        PolylineLayer(polylines: polylines),
                         MarkerLayer(
                           markers:
                               pathPoints.asMap().entries.map((entry) {
@@ -503,7 +495,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                                 );
                               }).toList(),
                         ),
-                        PolylineLayer(polylines: polylines),
                       ],
                     ),
                     Positioned(
@@ -579,11 +570,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                               'Starting Location (tap map to select or type)',
                           border: OutlineInputBorder(),
                         ),
-                        validator:
-                            (value) =>
-                                value == null || value.isEmpty
-                                    ? 'Please select or enter starting location'
-                                    : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -592,11 +578,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           labelText: 'End Location (tap map to select or type)',
                           border: OutlineInputBorder(),
                         ),
-                        validator:
-                            (value) =>
-                                value == null || value.isEmpty
-                                    ? 'Please select or enter end location'
-                                    : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -612,23 +593,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
                         controller: _etaController,
                         decoration: const InputDecoration(
                           labelText:
-                              'Estimated Time of Arrival (ETA) in minutes',
+                              'Estimated Time of Arrival (ETA) in minutes (optional)',
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter estimated time of arrival';
-                          }
-                          final intValue = int.tryParse(value);
-                          if (intValue == null || intValue <= 0) {
-                            return 'Please enter a valid positive number';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 16),
                       Text('Steps added: ${steps.length}'),
@@ -684,8 +655,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         return 'Tap on the map to select the starting point';
       case 'step':
         return 'Tap to select next point for $currentMode';
-      case 'end':
-        return 'Tap to select the end point';
+      case 'done':
+        return 'Route complete! Fill in the details below and submit.';
       default:
         return '';
     }

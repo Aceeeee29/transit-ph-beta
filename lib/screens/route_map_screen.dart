@@ -24,6 +24,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   List<route_model.Report> _routeReports = [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
+  bool? _userVote; // true for upvote, false for downvote, null for no vote
 
   static const Map<String, List<String>> reportCategories = {
     'Traffic-Related': [
@@ -74,6 +75,17 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     super.initState();
     _initLocation();
     _loadReports();
+    _incrementViews();
+  }
+
+  Future<void> _incrementViews() async {
+    // Increment views for this route
+    // Assuming routes are stored in a file or service, update the views count
+    // For now, we'll just update the widget's route if possible
+    // In a real app, this would be persisted to a database
+    setState(() {
+      widget.route.views++;
+    });
   }
 
   Future<void> _initLocation() async {
@@ -245,7 +257,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     // Award points for reporting
     final user = await GamificationService.loadUser();
-    await GamificationService.earnPoints(user, 10);
     final unlockedItems = await GamificationService.incrementReportsSubmitted(
       user,
     );
@@ -312,6 +323,28 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       _pendingNotifications.clear();
     });
   }
+
+  void _vote(bool isUpvote) {
+    if (_userVote != null) {
+      // User has already voted, don't allow another vote
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You have already voted on this route')),
+      );
+      return;
+    }
+
+    setState(() {
+      _userVote = isUpvote;
+      if (isUpvote) {
+        widget.route.upvotes++;
+      } else {
+        widget.route.downvotes++;
+      }
+    });
+    // In a real app, persist this to a database
+  }
+
+  // Favorites functionality removed
 
   List<Polyline> get polylines {
     final Map<String, Color> modeColors = {
@@ -381,8 +414,24 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           icon = Icons.location_on;
           color = Colors.green; // Start
         } else if (index == points.length - 1) {
-          icon = Icons.flag;
-          color = Colors.red; // End
+          // Use the icon of the last step for the end point
+          if (widget.route.steps.isNotEmpty) {
+            final lastStepMode = widget.route.steps.last.mode;
+            icon = _getModeIcon(lastStepMode);
+            color =
+                [
+                  Colors.green,
+                  Colors.blue,
+                  Colors.red,
+                  Colors.purple,
+                  Colors.orange,
+                  Colors.amber,
+                  Colors.lightBlue,
+                ][widget.route.steps.length % 7]; // Use step count for color
+          } else {
+            icon = Icons.flag;
+            color = Colors.red; // Fallback if no steps
+          }
         } else {
           // Intermediate for steps
           final stepIndex = index - 1;
@@ -453,9 +502,33 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               '${widget.route.startLocation} to ${widget.route.endLocation}',
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.report_problem),
-                onPressed: _showReportDialog,
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _userVote == true
+                          ? Icons.arrow_upward
+                          : Icons.arrow_upward,
+                      color: _userVote == true ? Colors.green : null,
+                    ),
+                    onPressed: _userVote == null ? () => _vote(true) : null,
+                  ),
+                  Text('${widget.route.upvotes}'),
+                  IconButton(
+                    icon: Icon(
+                      _userVote == false
+                          ? Icons.arrow_downward
+                          : Icons.arrow_downward,
+                      color: _userVote == false ? Colors.red : null,
+                    ),
+                    onPressed: _userVote == null ? () => _vote(false) : null,
+                  ),
+                  Text('${widget.route.downvotes}'),
+                  IconButton(
+                    icon: const Icon(Icons.report_problem),
+                    onPressed: _showReportDialog,
+                  ),
+                ],
               ),
             ],
           ),
@@ -568,12 +641,18 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(step.instruction),
+                                Text(
+                                  step.instruction,
+                                  softWrap: true,
+                                  overflow: TextOverflow.visible,
+                                ),
                                 if (step.details.isNotEmpty) ...[
                                   const SizedBox(height: 4),
                                   Text(
                                     step.details,
                                     style: const TextStyle(fontSize: 12),
+                                    softWrap: true,
+                                    overflow: TextOverflow.visible,
                                   ),
                                 ],
                               ],

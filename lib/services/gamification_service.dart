@@ -55,12 +55,6 @@ class GamificationService {
     await prefs.setString(_badgesKey, jsonEncode(encoded));
   }
 
-  static Future<void> earnPoints(User user, int points) async {
-    user.points += points;
-    user.level = (user.points / 100).floor() + 1;
-    await saveUser(user);
-  }
-
   static Future<List<String>> incrementRoutesSearched(User user) async {
     user.routesSearched++;
     await saveUser(user);
@@ -78,6 +72,8 @@ class GamificationService {
     await saveUser(user);
     return await checkAchievements(user, 'reported');
   }
+
+  // Favorites functionality removed
 
   static Future<List<String>> checkAchievements(
     User user,
@@ -97,8 +93,6 @@ class GamificationService {
         achievements[achievements.indexOf(
           rookieAchievement,
         )] = rookieAchievement.copyWith(isUnlocked: true);
-        user.points += 100;
-        user.level = (user.points / 100).floor() + 1;
         user.achievements.add('rookie_commuter');
         unlockedItems.add('Achievement: Rookie Commuter');
         updated = true;
@@ -112,8 +106,6 @@ class GamificationService {
         achievements[achievements.indexOf(
           masterAchievement,
         )] = masterAchievement.copyWith(isUnlocked: true);
-        user.points += 750;
-        user.level = (user.points / 100).floor() + 1;
         user.achievements.add('metro_master');
         unlockedItems.add('Achievement: Metro Master');
         updated = true;
@@ -138,8 +130,6 @@ class GamificationService {
         achievements[achievements.indexOf(
           pioneerAchievement,
         )] = pioneerAchievement.copyWith(isUnlocked: true);
-        user.points += 500;
-        user.level = (user.points / 100).floor() + 1;
         user.achievements.add('route_pioneer');
         unlockedItems.add('Achievement: Route Pioneer');
         updated = true;
