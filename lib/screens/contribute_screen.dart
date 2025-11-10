@@ -525,20 +525,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
                             if (pathPoints.isNotEmpty)
                               Marker(
                                 point: pathPoints.first,
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.green,
-                                  size: 40,
-                                ),
+                                child: const Icon(Icons.location_on, color: Colors.green, size: 40),
                               ),
                             if (pathPoints.length > 1)
                               Marker(
                                 point: pathPoints.last,
-                                child: const Icon(
-                                  Icons.flag,
-                                  color: Colors.red,
-                                  size: 40,
-                                ),
+                                child: const Icon(Icons.flag, color: Colors.red, size: 40),
                               ),
                           ],
                         ),

@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import '../models/route.dart' as route_model;
@@ -25,6 +26,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool? _userVote; // true for upvote, false for downvote, null for no vote
+  List<LatLng> _pathPoints = [];
 
   static const Map<String, List<String>> reportCategories = {
     'Traffic-Related': [
@@ -76,6 +78,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _initLocation();
     _loadReports();
     _incrementViews();
+    _generatePathPoints();
   }
 
   Future<void> _incrementViews() async {
@@ -324,6 +327,37 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     });
   }
 
+  void _generatePathPoints() {
+    if (widget.route.pathPoints.isNotEmpty) {
+      _pathPoints = List.from(widget.route.pathPoints);
+      return;
+    }
+
+    final start = LatLng(
+      widget.route.startLat ?? 0,
+      widget.route.startLng ?? 0,
+    );
+    final end = LatLng(widget.route.endLat ?? 0, widget.route.endLng ?? 0);
+
+    if (widget.route.steps.isEmpty) {
+      _pathPoints = [start, end];
+      return;
+    }
+
+    // Generate points by interpolating between start and end
+    // Number of segments = number of steps + 1
+    final numSegments = widget.route.steps.length + 1;
+    final latStep = (end.latitude - start.latitude) / numSegments;
+    final lngStep = (end.longitude - start.longitude) / numSegments;
+
+    _pathPoints = [];
+    for (int i = 0; i <= numSegments; i++) {
+      final lat = start.latitude + latStep * i;
+      final lng = start.longitude + lngStep * i;
+      _pathPoints.add(LatLng(lat, lng));
+    }
+  }
+
   void _vote(bool isUpvote) {
     if (_userVote != null) {
       // User has already voted, don't allow another vote
@@ -346,142 +380,59 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   // Favorites functionality removed
 
+  final Map<String, Color> modeColors = {
+    'Walk': Colors.green,
+    'Jeepney': Colors.blue,
+    'Bus': Colors.red,
+    'Train': Colors.purple,
+    'Tricycle': Colors.orange,
+    'FX/Van': Colors.amber,
+    'Ferry': Colors.lightBlue,
+  };
+
   List<Polyline> get polylines {
-    final Map<String, Color> modeColors = {
-      'Walk': Colors.green,
-      'Jeepney': Colors.blue,
-      'Bus': Colors.red,
-      'Train': Colors.purple,
-      'Tricycle': Colors.orange,
-      'FX/Van': Colors.amber,
-      'Ferry': Colors.lightBlue,
-    };
-
-    List<Polyline> polylines = [];
-    final points =
-        widget.route.pathPoints.isNotEmpty
-            ? widget.route.pathPoints
-            : [
-              LatLng(widget.route.startLat ?? 0, widget.route.startLng ?? 0),
-              LatLng(widget.route.endLat ?? 0, widget.route.endLng ?? 0),
-            ];
-
-    for (int i = 0; i < widget.route.steps.length; i++) {
-      final step = widget.route.steps[i];
-      final color = modeColors[step.mode] ?? Colors.blue;
-      final startIdx = i;
-      final endIdx = i + 1;
-      if (endIdx < points.length) {
-        // Add border (background) polyline for better visibility
-        polylines.add(
-          Polyline(
-            points: [points[startIdx], points[endIdx]],
-            color: Colors.black.withOpacity(0.5),
-            strokeWidth: 8.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
-          ),
-        );
-        // Add main polyline on top
-        polylines.add(
-          Polyline(
-            points: [points[startIdx], points[endIdx]],
-            color: color,
-            strokeWidth: 6.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
-          ),
-        );
-      }
-    }
-    // Connect last step to end if more points
-    if (widget.route.steps.length < points.length - 1) {
-      // Add border for connecting line
-      polylines.add(
-        Polyline(
-          points: [points[widget.route.steps.length], points.last],
-          color: Colors.black.withOpacity(0.5),
-          strokeWidth: 7.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-      );
-      // Add main connecting line
-      polylines.add(
-        Polyline(
-          points: [points[widget.route.steps.length], points.last],
-          color: Colors.grey,
-          strokeWidth: 5.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-      );
-    }
-    return polylines;
+    if (_pathPoints.length < 2) return [];
+    return [
+      Polyline(
+        points: _pathPoints,
+        color: Colors.black.withOpacity(0.5),
+        strokeWidth: 8.0,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+      ),
+      Polyline(
+        points: _pathPoints,
+        color: Colors.blue,
+        strokeWidth: 6.0,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+      ),
+    ];
   }
 
   List<Marker> get markers {
     List<Marker> routeMarkers = [];
-    final points =
-        widget.route.pathPoints.isNotEmpty
-            ? widget.route.pathPoints
-            : [
-              LatLng(widget.route.startLat ?? 0, widget.route.startLng ?? 0),
-              LatLng(widget.route.endLat ?? 0, widget.route.endLng ?? 0),
-            ];
+    final points = _pathPoints;
 
-    routeMarkers.addAll(
-      points.asMap().entries.map((entry) {
-        final index = entry.key;
-        final point = entry.value;
-        IconData icon = Icons.location_on;
-        Color color = Colors.green;
-        if (index == 0) {
-          icon = Icons.location_on;
-          color = Colors.green; // Start
-        } else if (index == points.length - 1) {
-          // Use the icon of the last step for the end point
-          if (widget.route.steps.isNotEmpty) {
-            final lastStepMode = widget.route.steps.last.mode;
-            icon = _getModeIcon(lastStepMode);
-            color =
-                [
-                  Colors.green,
-                  Colors.blue,
-                  Colors.red,
-                  Colors.purple,
-                  Colors.orange,
-                  Colors.amber,
-                  Colors.lightBlue,
-                ][widget.route.steps.length % 7]; // Use step count for color
-          } else {
-            icon = Icons.flag;
-            color = Colors.red; // Fallback if no steps
-          }
-        } else {
-          // Intermediate for steps
-          final stepIndex = index - 1;
-          if (stepIndex < widget.route.steps.length) {
-            final stepMode = widget.route.steps[stepIndex].mode;
-            icon = _getModeIcon(stepMode);
-            color =
-                [
-                  Colors.green,
-                  Colors.blue,
-                  Colors.red,
-                  Colors.purple,
-                  Colors.orange,
-                  Colors.amber,
-                  Colors.lightBlue,
-                ][stepIndex % 7]; // Fallback colors if needed
-          } else {
-            icon = Icons.location_on;
-            color = Colors.grey;
-          }
-        }
-        return Marker(point: point, child: Icon(icon, color: color, size: 40));
-      }),
-    );
+    // Add start marker
+    if (points.isNotEmpty) {
+      routeMarkers.add(
+        Marker(
+          point: points.first,
+          child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+        ),
+      );
+    }
+
+    // Add end marker
+    if (points.length > 1) {
+      routeMarkers.add(
+        Marker(
+          point: points.last,
+          child: const Icon(Icons.flag, color: Colors.red, size: 40),
+        ),
+      );
+    }
 
     // Add current location marker
     if (_currentPosition != null) {
@@ -501,23 +452,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final points =
-        widget.route.pathPoints.isNotEmpty
-            ? widget.route.pathPoints
-            : [
-              LatLng(
-                widget.route.startLat ?? 12.8797,
-                widget.route.startLng ?? 121.7740,
-              ),
-              LatLng(
-                widget.route.endLat ?? 12.8797,
-                widget.route.endLng ?? 121.7740,
-              ),
-            ];
-
     final center = LatLng(
-      (points.first.latitude + points.last.latitude) / 2,
-      (points.first.longitude + points.last.longitude) / 2,
+      (_pathPoints.first.latitude + _pathPoints.last.latitude) / 2,
+      (_pathPoints.first.longitude + _pathPoints.last.longitude) / 2,
     );
 
     return Stack(
