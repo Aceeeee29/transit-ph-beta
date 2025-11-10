@@ -51,7 +51,7 @@ class _NotificationOverlayState extends State<NotificationOverlay> {
 
           // Parse notification string (format: "Type: Name")
           final parts = notification.split(': ');
-          final type = parts[0]; // "Achievement" or "Badge"
+          final type = parts[0]; // Achievement or Badge
           final name = parts.length > 1 ? parts[1] : notification;
 
           return Positioned(

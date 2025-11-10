@@ -372,22 +372,48 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       final startIdx = i;
       final endIdx = i + 1;
       if (endIdx < points.length) {
+        // Add border (background) polyline for better visibility
+        polylines.add(
+          Polyline(
+            points: [points[startIdx], points[endIdx]],
+            color: Colors.black.withOpacity(0.5),
+            strokeWidth: 8.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+        );
+        // Add main polyline on top
         polylines.add(
           Polyline(
             points: [points[startIdx], points[endIdx]],
             color: color,
-            strokeWidth: 4.0,
+            strokeWidth: 6.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
           ),
         );
       }
     }
     // Connect last step to end if more points
     if (widget.route.steps.length < points.length - 1) {
+      // Add border for connecting line
+      polylines.add(
+        Polyline(
+          points: [points[widget.route.steps.length], points.last],
+          color: Colors.black.withOpacity(0.5),
+          strokeWidth: 7.0,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ),
+      );
+      // Add main connecting line
       polylines.add(
         Polyline(
           points: [points[widget.route.steps.length], points.last],
           color: Colors.grey,
-          strokeWidth: 3.0,
+          strokeWidth: 5.0,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
         ),
       );
     }

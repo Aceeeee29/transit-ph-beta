@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
 import '../widgets/notification_overlay.dart';
@@ -28,6 +30,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
+  List<int> stepBoundaries = [];
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
   String? selectedRegion;
@@ -140,16 +143,60 @@ class _ContributeScreenState extends State<ContributeScreen> {
     super.dispose();
   }
 
-  void _onMapTap(TapPosition tapPosition, LatLng point) {
-    setState(() {
-      pathPoints.add(point);
-      if (selectionMode == 'start') {
+  void _onMapTap(TapPosition tapPosition, LatLng point) async {
+    if (selectionMode == 'start') {
+      setState(() {
+        pathPoints.add(point);
         selectionMode = 'step';
         _showModeDialog();
-      } else if (selectionMode == 'step') {
+      });
+    } else if (selectionMode == 'step') {
+      // Try to get route from OpenRouteService
+      if (pathPoints.isNotEmpty) {
+        final lastPoint = pathPoints.last;
+        try {
+          final routePoints = await _getRouteFromAPI(lastPoint, point);
+          if (routePoints.isNotEmpty) {
+            setState(() {
+              pathPoints.addAll(routePoints);
+            });
+          } else {
+            // Fallback to straight line if API fails
+            setState(() {
+              pathPoints.add(point);
+            });
+          }
+        } catch (e) {
+          // Fallback to straight line if API fails
+          setState(() {
+            pathPoints.add(point);
+          });
+        }
         _showStepDialog();
       }
-    });
+    }
+  }
+
+  Future<List<LatLng>> _getRouteFromAPI(LatLng start, LatLng end) async {
+    const String apiKey =
+        'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI4YWQ4ZGE2ZWQ3MDRhYjVhY2FlMWZmMWE0MWZkMjIxIiwiaCI6Im11cm11cjY0In0='; // Provided API key
+    final url = Uri.parse(
+      'https://api.openrouteservice.org/v2/directions/driving-car?api_key=$apiKey&start=${start.longitude},${start.latitude}&end=${end.longitude},${end.latitude}',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final coordinates =
+            data['features'][0]['geometry']['coordinates'] as List;
+        return coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
+      } else {
+        throw Exception('Failed to fetch route');
+      }
+    } catch (e) {
+      throw e;
+    }
   }
 
   void _onRegionChanged(String? region) {
@@ -265,6 +312,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                         details: details,
                       ),
                     );
+                    stepBoundaries.add(pathPoints.length - 1);
                   });
                   Navigator.pop(context);
                   _showAddAnotherStepDialog();
@@ -364,6 +412,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       setState(() {
         pathPoints = [];
         steps = [];
+        stepBoundaries = [];
         selectionMode = 'start';
         _startLocationController.clear();
         _endLocationController.clear();
@@ -398,27 +447,34 @@ class _ContributeScreenState extends State<ContributeScreen> {
     for (int i = 0; i < steps.length; i++) {
       final step = steps[i];
       final color = modeColors[step.mode] ?? Colors.blue;
-      final startIdx = i;
-      final endIdx = i + 1;
-      if (endIdx < pathPoints.length) {
+      final startIdx = (i == 0) ? 0 : stepBoundaries[i - 1];
+      final endIdx =
+          (i < stepBoundaries.length)
+              ? stepBoundaries[i]
+              : pathPoints.length - 1;
+      if (endIdx > startIdx) {
+        final stepPoints = pathPoints.sublist(startIdx, endIdx + 1);
+        // Add border (background) polyline for better visibility
         polylines.add(
           Polyline(
-            points: [pathPoints[startIdx], pathPoints[endIdx]],
+            points: stepPoints,
+            color: Colors.black.withOpacity(0.5),
+            strokeWidth: 8.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+        );
+        // Add main polyline on top
+        polylines.add(
+          Polyline(
+            points: stepPoints,
             color: color,
-            strokeWidth: 4.0,
+            strokeWidth: 6.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
           ),
         );
       }
-    }
-    // Connect last step to end if more points
-    if (steps.length < pathPoints.length - 1) {
-      polylines.add(
-        Polyline(
-          points: [pathPoints[steps.length], pathPoints.last],
-          color: Colors.grey,
-          strokeWidth: 3.0,
-        ),
-      );
     }
     return polylines;
   }
@@ -465,35 +521,26 @@ class _ContributeScreenState extends State<ContributeScreen> {
                         ),
                         PolylineLayer(polylines: polylines),
                         MarkerLayer(
-                          markers:
-                              pathPoints.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final point = entry.value;
-                                IconData icon = Icons.location_on;
-                                Color color = Colors.green;
-                                if (index == 0) {
-                                  icon = Icons.location_on;
-                                  color = Colors.green; // Start
-                                } else if (index == pathPoints.length - 1) {
-                                  icon = Icons.flag;
-                                  color = Colors.red; // End
-                                } else {
-                                  // Intermediate for steps
-                                  final stepIndex = index - 1;
-                                  if (stepIndex < steps.length) {
-                                    final stepMode = steps[stepIndex].mode;
-                                    icon = _getModeIcon(stepMode);
-                                    color = modeColors[stepMode] ?? Colors.blue;
-                                  } else {
-                                    icon = Icons.location_on;
-                                    color = Colors.grey;
-                                  }
-                                }
-                                return Marker(
-                                  point: point,
-                                  child: Icon(icon, color: color, size: 40),
-                                );
-                              }).toList(),
+                          markers: [
+                            if (pathPoints.isNotEmpty)
+                              Marker(
+                                point: pathPoints.first,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.green,
+                                  size: 40,
+                                ),
+                              ),
+                            if (pathPoints.length > 1)
+                              Marker(
+                                point: pathPoints.last,
+                                child: const Icon(
+                                  Icons.flag,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
