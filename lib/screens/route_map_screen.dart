@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import '../models/route.dart' as route_model;
@@ -333,11 +332,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       return;
     }
 
-    final start = LatLng(
-      widget.route.startLat ?? 0,
-      widget.route.startLng ?? 0,
-    );
-    final end = LatLng(widget.route.endLat ?? 0, widget.route.endLng ?? 0);
+    if (widget.route.startLat == null ||
+        widget.route.startLng == null ||
+        widget.route.endLat == null ||
+        widget.route.endLng == null) {
+      _pathPoints = [];
+      return;
+    }
+
+    final start = LatLng(widget.route.startLat!, widget.route.startLng!);
+    final end = LatLng(widget.route.endLat!, widget.route.endLng!);
 
     if (widget.route.steps.isEmpty) {
       _pathPoints = [start, end];
@@ -345,8 +349,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
 
     // Generate points by interpolating between start and end
-    // Number of segments = number of steps + 1
-    final numSegments = widget.route.steps.length + 1;
+    // Number of segments = number of steps
+    final numSegments = widget.route.steps.length;
     final latStep = (end.latitude - start.latitude) / numSegments;
     final lngStep = (end.longitude - start.longitude) / numSegments;
 
@@ -392,22 +396,98 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   List<Polyline> get polylines {
     if (_pathPoints.length < 2) return [];
-    return [
-      Polyline(
-        points: _pathPoints,
-        color: Colors.black.withOpacity(0.5),
-        strokeWidth: 8.0,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-      ),
-      Polyline(
-        points: _pathPoints,
-        color: Colors.blue,
-        strokeWidth: 6.0,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-      ),
-    ];
+    if (widget.route.steps.isEmpty) {
+      return [
+        Polyline(
+          points: _pathPoints,
+          color: Colors.black,
+          strokeWidth: 8.0,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ),
+        Polyline(
+          points: _pathPoints,
+          color: Colors.blue,
+          strokeWidth: 6.0,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ),
+      ];
+    }
+    if (widget.route.stepBoundaries.isNotEmpty) {
+      // New logic for routes with stepBoundaries
+      List<Polyline> polys = [];
+      for (int i = 0; i < widget.route.steps.length; i++) {
+        final step = widget.route.steps[i];
+        final color = modeColors[step.mode] ?? Colors.blue;
+        final startIdx = (i == 0) ? 0 : widget.route.stepBoundaries[i - 1];
+        final endIdx =
+            (i < widget.route.stepBoundaries.length)
+                ? widget.route.stepBoundaries[i]
+                : _pathPoints.length - 1;
+        if (endIdx > startIdx) {
+          final stepPoints = _pathPoints.sublist(startIdx, endIdx + 1);
+          polys.add(
+            Polyline(
+              points: stepPoints,
+              color: Colors.black,
+              strokeWidth: 8.0,
+              strokeCap: StrokeCap.round,
+              strokeJoin: StrokeJoin.round,
+            ),
+          );
+          polys.add(
+            Polyline(
+              points: stepPoints,
+              color: color,
+              strokeWidth: 6.0,
+              strokeCap: StrokeCap.round,
+              strokeJoin: StrokeJoin.round,
+            ),
+          );
+        }
+      }
+      return polys;
+    } else {
+      // Compute even boundaries for routes without stepBoundaries
+      int totalPoints = _pathPoints.length;
+      int numSteps = widget.route.steps.length;
+      List<int> boundaries = [];
+      for (int i = 1; i < numSteps; i++) {
+        boundaries.add((i * (totalPoints - 1) / numSteps).round());
+      }
+      // Use the same logic as new routes
+      List<Polyline> polys = [];
+      for (int i = 0; i < widget.route.steps.length; i++) {
+        final step = widget.route.steps[i];
+        final color = modeColors[step.mode] ?? Colors.blue;
+        final startIdx = (i == 0) ? 0 : boundaries[i - 1];
+        final endIdx =
+            (i < boundaries.length) ? boundaries[i] : _pathPoints.length - 1;
+        if (endIdx > startIdx) {
+          final stepPoints = _pathPoints.sublist(startIdx, endIdx + 1);
+          polys.add(
+            Polyline(
+              points: stepPoints,
+              color: Colors.black,
+              strokeWidth: 8.0,
+              strokeCap: StrokeCap.round,
+              strokeJoin: StrokeJoin.round,
+            ),
+          );
+          polys.add(
+            Polyline(
+              points: stepPoints,
+              color: color,
+              strokeWidth: 6.0,
+              strokeCap: StrokeCap.round,
+              strokeJoin: StrokeJoin.round,
+            ),
+          );
+        }
+      }
+      return polys;
+    }
   }
 
   List<Marker> get markers {
@@ -499,34 +579,78 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             children: [
               Expanded(
                 flex: 2,
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: center,
-                    initialZoom: 13.0,
-                    minZoom: 5.0,
-                    maxZoom: 18.0,
-                    cameraConstraint: CameraConstraint.contain(
-                      bounds: LatLngBounds(
-                        const LatLng(
-                          4.5,
-                          116.0,
-                        ), // Southwest corner (Mindanao area)
-                        const LatLng(
-                          21.5,
-                          127.0,
-                        ), // Northeast corner (Batanes + eastern sea)
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: center,
+                        initialZoom: 10.0,
+                        minZoom: 5.0,
+                        maxZoom: 18.0,
+                        cameraConstraint: CameraConstraint.contain(
+                          bounds: LatLngBounds(
+                            const LatLng(
+                              4.5,
+                              116.0,
+                            ), // Southwest corner (Mindanao area)
+                            const LatLng(
+                              21.5,
+                              127.0,
+                            ), // Northeast corner (Batanes + eastern sea)
+                          ),
+                        ),
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName:
+                              'com.example.app.transitph_beta',
+                        ),
+                        MarkerLayer(markers: markers),
+                        PolylineLayer(polylines: polylines),
+                      ],
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children:
+                              modeColors.entries.map((entry) {
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 16,
+                                      height: 16,
+                                      color: entry.value,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      entry.key,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                        ),
                       ),
                     ),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.app.transitph_beta',
-                    ),
-                    MarkerLayer(markers: markers),
-                    PolylineLayer(polylines: polylines),
                   ],
                 ),
               ),
@@ -589,16 +713,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                           child: ListTile(
                             leading: Icon(
                               _getModeIcon(step.mode),
-                              color:
-                                  [
-                                    Colors.green,
-                                    Colors.blue,
-                                    Colors.red,
-                                    Colors.purple,
-                                    Colors.orange,
-                                    Colors.amber,
-                                    Colors.lightBlue,
-                                  ][idx % 7],
+                              color: modeColors[step.mode] ?? Colors.blue,
                             ),
                             title: Text(step.mode),
                             subtitle: Column(

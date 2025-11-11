@@ -195,7 +195,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         throw Exception('Failed to fetch route');
       }
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
@@ -386,6 +386,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         endLat: pathPoints.last.latitude,
         endLng: pathPoints.last.longitude,
         pathPoints: pathPoints,
+        stepBoundaries: stepBoundaries,
         eta: _etaController.text.isEmpty ? null : _etaController.text,
       );
 
@@ -525,12 +526,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
                             if (pathPoints.isNotEmpty)
                               Marker(
                                 point: pathPoints.first,
-                                child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.green,
+                                  size: 40,
+                                ),
                               ),
                             if (pathPoints.length > 1)
                               Marker(
                                 point: pathPoints.last,
-                                child: const Icon(Icons.flag, color: Colors.red, size: 40),
+                                child: const Icon(
+                                  Icons.flag,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
                               ),
                           ],
                         ),
@@ -622,23 +631,33 @@ class _ContributeScreenState extends State<ContributeScreen> {
                       TextFormField(
                         controller: _shortDescriptionController,
                         decoration: const InputDecoration(
-                          labelText: 'Short Description (optional)',
+                          labelText: 'Short Description',
                           border: OutlineInputBorder(),
                         ),
                         maxLines: 2,
+                        validator:
+                            (value) =>
+                                value?.isEmpty ?? true
+                                    ? 'Short description is required'
+                                    : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _etaController,
                         decoration: const InputDecoration(
                           labelText:
-                              'Estimated Time of Arrival (ETA) in minutes (optional)',
+                              'Estimated Time of Arrival (ETA) in minutes',
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
+                        validator:
+                            (value) =>
+                                value?.isEmpty ?? true
+                                    ? 'ETA is required'
+                                    : null,
                       ),
                       const SizedBox(height: 16),
                       Text('Steps added: ${steps.length}'),
@@ -648,7 +667,21 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: _submit,
-                            child: const Text('Submit for Review'),
+                            child: const Text(
+                              'Submit for Review',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                         ),
                       if (selectionMode != 'done')
@@ -659,6 +692,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                               setState(() {
                                 pathPoints.clear();
                                 steps.clear();
+                                stepBoundaries.clear();
                                 selectionMode = 'start';
                                 _startLocationController.clear();
                                 _endLocationController.clear();
@@ -668,8 +702,19 @@ class _ContributeScreenState extends State<ContributeScreen> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
-                            child: const Text('Reset Route'),
+                            child: const Text(
+                              'Reset Route',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ),
                     ],

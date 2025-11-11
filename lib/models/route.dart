@@ -13,6 +13,7 @@ class Route {
   final List<LatLng> pathPoints;
   final String? eta;
   final List<Report> reports;
+  final List<int> stepBoundaries;
   int views;
   int upvotes;
   int downvotes;
@@ -30,6 +31,7 @@ class Route {
     this.pathPoints = const [],
     this.eta,
     this.reports = const [],
+    this.stepBoundaries = const [],
     this.views = 0,
     this.upvotes = 0,
     this.downvotes = 0,
@@ -59,6 +61,7 @@ class Route {
           pathPoints
               .map((p) => {'lat': p.latitude, 'lng': p.longitude})
               .toList(),
+      'stepBoundaries': stepBoundaries,
       'eta': eta,
       'reports':
           reports
@@ -100,6 +103,9 @@ class Route {
           (json['pathPoints'] as List)
               .map((p) => LatLng(p['lat'], p['lng']))
               .toList(),
+      stepBoundaries:
+          (json['stepBoundaries'] as List?)?.map((b) => b as int).toList() ??
+              [],
       eta: json['eta'],
       reports:
           (json['reports'] as List)

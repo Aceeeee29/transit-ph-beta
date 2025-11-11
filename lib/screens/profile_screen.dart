@@ -122,11 +122,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  user!.name,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    user!.name,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -140,6 +144,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               user!.email,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             const SizedBox(height: 12),
 
@@ -156,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text('Routes Contributed'),
+                    const Text('Contributed'),
                   ],
                 ),
                 Column(
@@ -168,7 +174,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text('Routes Searched'),
+                    const Text('Searched'),
                   ],
                 ),
                 Column(
@@ -180,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text('Reports Submitted'),
+                    const Text('Submitted'),
                   ],
                 ),
               ],
@@ -188,8 +194,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: _logout,
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
+              icon: const Icon(Icons.logout, color: Colors.white),
+              label: const Text(
+                'Logout',
+                style: TextStyle(color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue, // button color
+                foregroundColor: Colors.white, // splash/hover color
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             Expanded(

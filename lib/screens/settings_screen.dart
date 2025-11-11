@@ -89,7 +89,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onPressed: () {
                             // TODO: Implement Edit Profile functionality
                           },
-                          child: const Text('Edit Profile'),
+                          child: const Text(
+                            'Edit Profile',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -324,19 +338,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onPressed: () {
                               // TODO: Open Privacy Policy
                             },
-                            child: const Text('Privacy Policy'),
+                            child: const Text(
+                              'Privacy Policy',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                           ElevatedButton(
                             onPressed: () {
                               // TODO: Open Terms of Service
                             },
-                            child: const Text('Terms of Service'),
+                            child: const Text(
+                              'Terms of Service',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                           ElevatedButton(
                             onPressed: () {
                               // TODO: Open Contact Support
                             },
-                            child: const Text('Contact Support'),
+                            child: const Text(
+                              'Contact Support',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                         ],
                       ),

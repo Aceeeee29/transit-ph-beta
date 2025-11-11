@@ -66,7 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Removed _buildGoogleSignInButton and _buildDivider methods as part of removing the "or" part
 
-
   Widget _buildUserLoginForm() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,7 +100,18 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: _login,
             child: const Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
-              child: Text('Sign in', style: TextStyle(fontSize: 16)),
+              child: Text(
+                'Sign in',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ),
@@ -164,7 +174,18 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: _login,
             child: const Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
-              child: Text('Sign in', style: TextStyle(fontSize: 16)),
+              child: Text('Sign in', style: TextStyle(fontSize: 16, color: Colors.white)),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ),
@@ -217,7 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                       const SizedBox(height: 24),
-                
+
                       ToggleButtons(
                         isSelected: [
                           _loginType == LoginType.user,
