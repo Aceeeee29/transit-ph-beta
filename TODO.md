@@ -1,0 +1,9 @@
+- [x] Update lib/models/post.dart: Add ModerationStatus enum and moderationStatus field
+- [x] Update lib/models/user.dart: Add UserRole enum, role field, and isBanned bool
+- [x] Create lib/models/feedback.dart: New model for feedbacks
+- [x] Create lib/services/moderation_service.dart: Service for moderation actions
+- [x] Create lib/screens/moderator_screen.dart: UI for moderation
+- [x] Update lib/screens/feed_screen.dart: Filter to approved posts only
+- [x] Update lib/screens/main_screen.dart: Replace AdminScreen with ModeratorScreen
+- [x] Update lib/screens/login_screen.dart: Change Admin to Moderator
+- [x] Update post creation in feed_screen.dart: Set status to pending
