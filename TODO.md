@@ -1,0 +1,5 @@
+- [x] Add flutter_dotenv dependency to pubspec.yaml
+- [x] Create .env file with API key
+- [x] Add .env to .gitignore
+- [x] Update lib/config.dart to load API key from .env
+- [ ] Test that the app builds and API key is loaded correctly
