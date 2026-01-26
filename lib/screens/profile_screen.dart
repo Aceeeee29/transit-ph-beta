@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'settings_screen.dart';
 import '../services/gamification_service.dart';
-import '../models/user.dart';
+import '../models/user.dart' as gamification_user;
 import '../models/achievement.dart';
 import '../models/badge.dart' as badge_model;
 
@@ -13,7 +14,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  User? user;
+  gamification_user.User? user;
   final List<Contribution> contributions = const [];
 
   final TextEditingController _editNameController = TextEditingController();
@@ -73,8 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _logout() {
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  void _logout() async {
+    await firebase_auth.FirebaseAuth.instance.signOut();
+    // AuthGate will handle navigation to login
   }
 
   @override

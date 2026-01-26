@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
 import '../models/post.dart';
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
 import '../services/post_actions_service.dart';
+import '../security/security_manager.dart';
 
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
@@ -126,7 +128,14 @@ class _FeedScreenState extends State<FeedScreen>
               ],
             ),
             const SizedBox(height: 8),
-            Text(post.content, style: const TextStyle(fontSize: 16)),
+            Linkify(
+              onOpen: (link) async {
+                await SecurityManager.openLink(context, link.url);
+              },
+              text: post.content,
+              style: const TextStyle(fontSize: 16),
+              linkStyle: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [

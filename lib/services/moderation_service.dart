@@ -58,6 +58,10 @@ class ModerationService {
 
   // Get post by id
   static Post? getPost(String id) {
-    return postsNotifier.value.firstWhere((p) => p.id == id);
+    try {
+      return postsNotifier.value.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 }

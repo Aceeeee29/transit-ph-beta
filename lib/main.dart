@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
-import 'screens/login_screen.dart';
 
 /// Resets gamification data on app start.
 Future<void> resetGamificationData() async {
@@ -53,7 +57,7 @@ ThemeData buildTheme() {
 
 /// App routes configuration.
 final Map<String, WidgetBuilder> appRoutes = {
-  '/': (context) => const LoginScreen(),
+  '/': (context) => const AuthGate(),
   '/main': (context) {
     final args = ModalRoute.of(context)!.settings.arguments;
     final isAdmin = args is bool ? args : false;
@@ -64,9 +68,15 @@ final Map<String, WidgetBuilder> appRoutes = {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   await dotenv.load();
 
-  await resetGamificationData();
+  if (kDebugMode) {
+    await resetGamificationData();
+  }
 
   runApp(const TransitPHApp());
 }

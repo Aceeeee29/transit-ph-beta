@@ -22,29 +22,35 @@ class _MainScreenState extends State<MainScreen> {
   List<Post> posts = [];
   List<route_model.Route> routes = [];
 
-  late List<Widget> _screens;
-  late List<NavigationDestination> _destinations;
-
   @override
   void initState() {
     super.initState();
     ModerationService.postsNotifier.value = posts;
-    _screens = [
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screens = <Widget>[
       HomeScreen(routes: routes),
       FeedScreen(
         posts: posts,
-        onPostCreated: (post) => setState(() { posts.add(post); ModerationService.postsNotifier.value = List.from(posts); }),
-      ),
-      ContributeScreen(
-        onRouteSubmitted: (route) {
+        onPostCreated: (post) {
           setState(() {
-            routes.add(route);
+            posts.add(post);
+            ModerationService.postsNotifier.value = List.from(posts);
           });
         },
       ),
+      ContributeScreen(
+        onRouteSubmitted: (route) {
+          setState(() => routes.add(route));
+        },
+      ),
       const ProfileScreen(),
+      if (widget.isAdmin) const ModeratorScreen(),
     ];
-    _destinations = [
+
+    final destinations = [
       const NavigationDestination(
         icon: Icon(Icons.search_outlined),
         selectedIcon: Icon(Icons.search),
@@ -65,35 +71,20 @@ class _MainScreenState extends State<MainScreen> {
         selectedIcon: Icon(Icons.person),
         label: 'Profile',
       ),
-    ];
-    if (widget.isAdmin) {
-      _screens = List<Widget>.from(_screens);
-      _destinations = List<NavigationDestination>.from(_destinations);
-      _screens.add(const ModeratorScreen());
-      _destinations.add(
+      if (widget.isAdmin)
         const NavigationDestination(
           icon: Icon(Icons.shield_outlined),
           selectedIcon: Icon(Icons.shield),
           label: 'Moderator',
         ),
-      );
-    }
-  }
+    ];
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: _onItemTapped,
-        destinations: _destinations,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: destinations,
       ),
     );
   }

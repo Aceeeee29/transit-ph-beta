@@ -143,7 +143,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   Future<void> _saveReports() async {
     try {
-      final file = File('reports.json');
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/reports.json');
       Map<String, dynamic> allReports = {};
       if (await file.exists()) {
         final contents = await file.readAsString();
