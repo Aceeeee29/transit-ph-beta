@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'signup_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? _errorMessage;
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
+  bool _isGoogleLoading = false;
 
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -46,6 +51,66 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _errorMessage = null;
+      _isGoogleLoading = true;
+    });
+
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      // Sign out to force account selection every time
+      await googleSignIn.signOut();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        setState(() {
+          _isGoogleLoading = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Check if user document exists, if not create it
+      try {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
+        if (!userDoc.exists) {
+          await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+            'uid': userCredential.user!.uid,
+            'email': userCredential.user!.email,
+            'role': 'user',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          print('Created user document for Google user: ${userCredential.user!.uid}');
+        } else {
+          print('User document already exists for Google user: ${userCredential.user!.uid}');
+        }
+      } catch (firestoreError) {
+        print('Failed to create/check user document: $firestoreError');
+        // Continue anyway, AuthGate will handle missing document
+      }
+
+      // AuthGate will handle navigation based on role
+    } catch (e) {
+      print('Google sign-in error: $e');
+      setState(() {
+        _errorMessage = 'Failed to sign in with Google: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isGoogleLoading = false;
       });
     }
   }
@@ -133,12 +198,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 4),
                       TextField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
-                          border: OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
-                        obscureText: true,
+                        obscureText: !_isPasswordVisible,
                       ),
                       const SizedBox(height: 16),
                       if (_errorMessage != null)
@@ -172,11 +247,47 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      const Row(
+                        children: [
+                          Expanded(child: Divider()),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Text('or'),
+                          ),
+                          Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isGoogleLoading ? null : _signInWithGoogle,
+                          icon: _isGoogleLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.g_mobiledata, size: 20),
+                          label: const Text('Continue with Google'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: Colors.grey),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Center(
                         child: TextButton(
                           onPressed: () {
-                            // TODO: Implement forgot password
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                            );
                           },
                           child: const Text('Forgot password?'),
                         ),

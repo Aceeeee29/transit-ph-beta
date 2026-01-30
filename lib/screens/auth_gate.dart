@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
+import 'email_verification_screen.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -10,7 +11,7 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance.idTokenChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -21,9 +22,20 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          // User is signed in, check role
+          final user = snapshot.data!;
+          print('User signed in: ${user.uid}, email: ${user.email}, emailVerified: ${user.emailVerified}');
+          // Check if email is verified (skip for Google sign-in users)
+          final isGoogleUser = user.providerData.any((provider) => provider.providerId == 'google.com');
+          print('Is Google user: $isGoogleUser');
+          if (!user.emailVerified && !isGoogleUser) {
+            print('Redirecting to email verification');
+            return EmailVerificationScreen(user: user);
+          }
+          print('Email verified or Google user, proceeding to role check');
+
+          // User is signed in and verified, check role
           return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(snapshot.data!.uid).get(),
+            future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
             builder: (context, userSnapshot) {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const Scaffold(
@@ -47,7 +59,7 @@ class AuthGate extends StatelessWidget {
                 return MainScreen(isAdmin: isAdmin);
               } else {
                 // User document doesn't exist, sign out
-                print('User document does not exist for UID: ${snapshot.data!.uid}');
+                print('User document does not exist for UID: ${user.uid}');
                 FirebaseAuth.instance.signOut();
                 return const LoginScreen();
               }

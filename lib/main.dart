@@ -16,7 +16,7 @@ Future<void> resetGamificationData() async {
   await prefs.remove('badges_data');
 }
 
-/// Builds the app's theme data.
+/// app's theme data.
 ThemeData buildTheme() {
   return ThemeData(
     colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue.shade700),

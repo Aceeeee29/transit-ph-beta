@@ -16,11 +16,62 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String? _errorMessage;
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+
+  // Common passwords to block
+  final List<String> _commonPasswords = [
+    'password',
+    '123456',
+    '123456789',
+    'qwerty',
+    'abc123',
+    'password123',
+    'admin',
+    'letmein',
+    'welcome',
+    'monkey',
+    '1234567890',
+    'iloveyou',
+    'princess',
+    'rockyou',
+    '1234567',
+    '12345678',
+    'password1',
+    '123123',
+    'football',
+    'baseball',
+  ];
+
+  bool _isStrongPassword(String password) {
+    if (password.length < 8) return false;
+    if (_commonPasswords.contains(password.toLowerCase())) return false;
+
+    bool hasUpper = password.contains(RegExp(r'[A-Z]'));
+    bool hasLower = password.contains(RegExp(r'[a-z]'));
+    bool hasNumber = password.contains(RegExp(r'[0-9]'));
+    bool hasSymbol = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+
+    int categories = 0;
+    if (hasUpper) categories++;
+    if (hasLower) categories++;
+    if (hasNumber) categories++;
+    if (hasSymbol) categories++;
+
+    return categories >= 2;
+  }
 
   Future<void> _signup() async {
     if (_passwordController.text != _confirmPasswordController.text) {
       setState(() {
         _errorMessage = 'Passwords do not match';
+      });
+      return;
+    }
+
+    if (!_isStrongPassword(_passwordController.text)) {
+      setState(() {
+        _errorMessage = 'Password must be at least 8-16 characters long and contain at least 2 of the following: uppercase letters, lowercase letters, numbers, symbols. Common passwords are not allowed.';
       });
       return;
     }
@@ -35,6 +86,15 @@ class _SignupScreenState extends State<SignupScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      // Send email verification
+      try {
+        await userCredential.user!.sendEmailVerification();
+        print('Verification email sent to ${userCredential.user!.email}');
+      } catch (verificationError) {
+        print('Failed to send verification email: $verificationError');
+        // Continue anyway, as user can resend later
+      }
 
       // Create user document in Firestore
       try {
@@ -128,24 +188,44 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 4),
                 TextField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Password',
-                    prefixIcon: Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    ),
+                    border: const OutlineInputBorder(),
                   ),
-                  obscureText: true,
+                  obscureText: !_isPasswordVisible,
                 ),
                 const SizedBox(height: 12),
                 const Text('Confirm Password'),
                 const SizedBox(height: 4),
                 TextField(
                   controller: _confirmPasswordController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Confirm Password',
-                    prefixIcon: Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                        });
+                      },
+                    ),
+                    border: const OutlineInputBorder(),
                   ),
-                  obscureText: true,
+                  obscureText: !_isConfirmPasswordVisible,
                 ),
                 const SizedBox(height: 16),
                 if (_errorMessage != null)
