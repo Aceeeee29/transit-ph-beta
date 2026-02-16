@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/user.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user.dart' as app_user;
 import '../models/achievement.dart';
 import '../models/badge.dart';
 
@@ -9,16 +11,105 @@ class GamificationService {
   static const String _achievementsKey = 'achievements_data';
   static const String _badgesKey = 'badges_data';
 
-  static Future<User> loadUser() async {
+  /// Get the current user's UID from Firebase Auth
+  static String? _getCurrentUserUid() {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    return user?.uid;
+  }
+
+  /// Load user data from Firestore
+  static Future<app_user.User> loadUser() async {
+    final uid = _getCurrentUserUid();
+    
+    if (uid != null) {
+      try {
+        final docSnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+
+        if (docSnapshot.exists) {
+          final data = docSnapshot.data() as Map<String, dynamic>;
+          return app_user.User(
+            name: data['name'] ?? 'User',
+            email: data['email'] ?? '',
+            userCategory: data['userCategory'],
+            badges: List<String>.from(data['badges'] ?? []),
+            achievements: List<String>.from(data['achievements'] ?? []),
+            routesContributed: data['routesContributed'] ?? 0,
+            routesSearched: data['routesSearched'] ?? 0,
+            reportsSubmitted: data['reportsSubmitted'] ?? 0,
+            role: app_user.UserRole.values.firstWhere(
+              (e) => e.name == data['role'],
+              orElse: () => app_user.UserRole.user,
+            ),
+            isBanned: data['isBanned'] ?? false,
+          );
+        } else {
+          // Create a new user document in Firestore if it doesn't exist
+          final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
+          final newUser = app_user.User(
+            name: firebaseUser?.displayName ?? firebaseUser?.email?.split('@').first ?? 'User',
+            email: firebaseUser?.email ?? '',
+          );
+          
+          // Save to Firestore
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .set(newUser.toJson());
+          
+          return newUser;
+        }
+      } catch (e) {
+        print('Error loading user from Firestore: $e');
+      }
+    }
+    
+    // Fallback to SharedPreferences if Firebase Auth is not available
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(_userKey);
     if (userJson != null) {
-      return User.fromJson(jsonDecode(userJson));
+      return app_user.User.fromJson(jsonDecode(userJson));
     }
-    return User(name: 'User', email: 'user@example.com');
+    return app_user.User(name: 'User', email: 'user@example.com');
   }
 
-  static Future<void> saveUser(User user) async {
+  /// Save user data to Firestore
+  static Future<void> saveUser(app_user.User user) async {
+    final uid = _getCurrentUserUid();
+    
+    if (uid != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .update(user.toJson());
+        
+        // Also save to SharedPreferences as backup
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userKey, jsonEncode(user.toJson()));
+        return;
+      } catch (e) {
+        print('Error saving user to Firestore: $e');
+        // If update fails (document might not exist), try to set it
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .set(user.toJson());
+          
+          // Also save to SharedPreferences as backup
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_userKey, jsonEncode(user.toJson()));
+          return;
+        } catch (e2) {
+          print('Error creating user document in Firestore: $e2');
+        }
+      }
+    }
+    
+    // Fallback to SharedPreferences if Firebase Auth is not available
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userKey, jsonEncode(user.toJson()));
   }
@@ -55,19 +146,19 @@ class GamificationService {
     await prefs.setString(_badgesKey, jsonEncode(encoded));
   }
 
-  static Future<List<String>> incrementRoutesSearched(User user) async {
+  static Future<List<String>> incrementRoutesSearched(app_user.User user) async {
     user.routesSearched++;
     await saveUser(user);
     return await checkAchievements(user, 'searched');
   }
 
-  static Future<List<String>> incrementRoutesContributed(User user) async {
+  static Future<List<String>> incrementRoutesContributed(app_user.User user) async {
     user.routesContributed++;
     await saveUser(user);
     return await checkAchievements(user, 'contributed');
   }
 
-  static Future<List<String>> incrementReportsSubmitted(User user) async {
+  static Future<List<String>> incrementReportsSubmitted(app_user.User user) async {
     user.reportsSubmitted++;
     await saveUser(user);
     return await checkAchievements(user, 'reported');
@@ -76,7 +167,7 @@ class GamificationService {
   // Favorites functionality removed
 
   static Future<List<String>> checkAchievements(
-    User user,
+    app_user.User user,
     String action,
   ) async {
     final achievements = await loadAchievements();

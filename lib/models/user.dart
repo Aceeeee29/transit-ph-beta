@@ -3,6 +3,7 @@ enum UserRole { user, moderator }
 class User {
   String name;
   String email;
+  String? userCategory;
   List<String> badges;
   List<String> achievements;
   int routesContributed;
@@ -14,6 +15,7 @@ class User {
   User({
     required this.name,
     required this.email,
+    this.userCategory,
     this.badges = const [],
     this.achievements = const [],
     this.routesContributed = 0,
@@ -27,6 +29,7 @@ class User {
     return {
       'name': name,
       'email': email,
+      'userCategory': userCategory,
       'badges': badges,
       'achievements': achievements,
       'routesContributed': routesContributed,
@@ -41,6 +44,7 @@ class User {
     return User(
       name: json['name'] ?? 'N/A',
       email: json['email'] ?? 'N/A',
+      userCategory: json['userCategory'],
       badges: List<String>.from(json['badges'] ?? []),
       achievements: List<String>.from(json['achievements'] ?? []),
       routesContributed: json['routesContributed'] ?? 0,

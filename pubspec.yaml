@@ -53,6 +53,11 @@ dependencies:
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
   google_sign_in: ^6.1.0
+  image_picker: ^1.0.7
+  flutter_sound: ^9.2.13
+  record: ^6.0.0
+  audio_session: ^0.1.18
+  flutter_animate: ^4.5.0
 
 dev_dependencies:
   flutter_test:

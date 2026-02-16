@@ -1,14 +1,23 @@
-# TODO: Add Google Login
+# Contribute Screen Improvements - Implementation Tracking
 
-## Completed Steps
-- [x] Add google_sign_in package to pubspec.yaml
-- [x] Modify login_screen.dart to include Google sign-in button and logic
-- [x] Implement _signInWithGoogle method with Firebase authentication and Firestore user creation
-- [x] Run flutter pub get to install dependencies
-- [x] Run flutter analyze to check for errors (no new errors introduced)
+## 1. Better Onboarding Flow
+- [x] Implement tutorial overlay on first use
+- [x] Create animated demonstration of adding route steps
+- [x] Add "Example Route" button to load pre-defined route
 
-## Next Steps
-- [ ] Configure Firebase project for Google sign-in (add Google as sign-in provider in Firebase Console)
-- [ ] Test the Google login functionality on device/emulator
-- [ ] Ensure SHA-1 certificate fingerprint is added to Firebase for Android
-- [ ] Test on iOS if applicable (add reversed client ID to Info.plist)
+## 2. Enhanced Map Interaction
+- [x] Implement undo/redo buttons in map controls
+- [x] Show distance/ETA preview during route drawing
+- [x] Add snap-to-road functionality
+- [x] Implement route preview before submission
+
+## 3. Improved Form UX
+- [ ] Replace expandable panel with stepper widget
+- [x] Add photo upload for landmarks
+- [x] Implement voice notes for instructions (simulated)
+- [ ] Add drag-to-reorder functionality for steps
+
+## 4. Additional Improvements
+- [x] Add validation for overlapping points
+- [x] Implement intuitive UI for selecting transport modes
+- [x] Add visual feedback during route creation

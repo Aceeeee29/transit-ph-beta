@@ -1,0 +1,187 @@
+import 'package:latlong2/latlong.dart' show LatLng, Distance, LengthUnit;
+import 'dart:math' as math;
+
+class RouteMetricsService {
+  static const double _walkingSpeedKmh = 5.0; // Average walking speed in km/h
+  static const double _jeepneySpeedKmh = 20.0; // Average jeepney speed in km/h
+  static const double _busSpeedKmh = 25.0; // Average bus speed in km/h
+  static const double _trainSpeedKmh = 40.0; // Average train speed in km/h
+  static const double _tricycleSpeedKmh = 15.0; // Average tricycle speed in km/h
+  static const double _vanSpeedKmh = 30.0; // Average FX/Van speed in km/h
+  static const double _ferrySpeedKmh = 20.0; // Average ferry speed in km/h
+  
+  /// Calculate the total distance of a route in kilometers
+  static double calculateRouteDistance(List<LatLng> points) {
+    if (points == null || points.isEmpty) return 0;
+    if (points.length < 2) {
+      // If only one point, return 0 but don't error
+      return 0;
+    }
+    
+    double totalDistance = 0;
+    final Distance distanceCalculator = Distance();
+    
+    for (int i = 0; i < points.length - 1; i++) {
+      final point1 = points[i];
+      final point2 = points[i + 1];
+      if (point1 != null && point2 != null) {
+        final dist = distanceCalculator.as(
+          LengthUnit.Kilometer,
+          point1,
+          point2,
+        );
+        totalDistance += dist;
+      }
+    }
+    
+    return totalDistance;
+  }
+  
+  /// Calculate the estimated time of arrival (ETA) in minutes
+  static int calculateEta(List<LatLng> points, List<String> modes, List<int> stepBoundaries) {
+    if (points == null || points.length < 2 || modes == null || modes.isEmpty) return 0;
+    
+    double totalMinutes = 0;
+    final Distance distanceCalculator = const Distance();
+    
+    // Calculate ETA for each step
+    for (int i = 0; i < modes.length; i++) {
+      final startIdx = (i == 0) ? 0 : (stepBoundaries != null && i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
+      final endIdx = (stepBoundaries != null && i < stepBoundaries.length) ? stepBoundaries[i] : points.length - 1;
+      
+      if (endIdx > startIdx) {
+        double stepDistance = 0;
+        for (int j = startIdx; j < endIdx && j + 1 < points.length; j++) {
+          if (points[j] != null && points[j + 1] != null) {
+            stepDistance += distanceCalculator.as(
+              LengthUnit.Kilometer,
+              points[j],
+              points[j + 1],
+            );
+          }
+        }
+        
+        // Convert distance to time based on mode of transport
+        final speedKmh = _getSpeedForMode(modes[i]);
+        final hours = stepDistance / speedKmh;
+        totalMinutes += hours * 60;
+      }
+    }
+    
+    // Add waiting time for transfers (2 minutes per transfer)
+    if (modes.length > 1) {
+      totalMinutes += (modes.length - 1) * 2;
+    }
+    
+    return totalMinutes.ceil();
+  }
+  
+  /// Get the average speed for a given mode of transport
+  static double _getSpeedForMode(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'walk':
+        return _walkingSpeedKmh;
+      case 'jeepney':
+        return _jeepneySpeedKmh;
+      case 'bus':
+        return _busSpeedKmh;
+      case 'train':
+        return _trainSpeedKmh;
+      case 'tricycle':
+        return _tricycleSpeedKmh;
+      case 'fx/van':
+        return _vanSpeedKmh;
+      case 'ferry':
+        return _ferrySpeedKmh;
+      default:
+        return _walkingSpeedKmh;
+    }
+  }
+  
+  /// Format distance for display
+  static String formatDistance(double distanceKm) {
+    if (distanceKm < 1) {
+      // Convert to meters for short distances
+      final meters = (distanceKm * 1000).round();
+      return '$meters m';
+    } else {
+      // Round to one decimal place for kilometers
+      final km = (distanceKm * 10).round() / 10;
+      return '$km km';
+    }
+  }
+  
+  /// Format ETA for display
+  static String formatEta(int minutes) {
+    if (minutes < 60) {
+      return '$minutes min';
+    } else {
+      final hours = minutes ~/ 60;
+      final mins = minutes % 60;
+      return '$hours h ${mins > 0 ? '$mins min' : ''}';
+    }
+  }
+  
+  /// Calculate the fare estimate based on distance and mode
+  static String calculateFareEstimate(List<LatLng> points, List<String> modes, List<int> stepBoundaries) {
+    if (points == null || points.length < 2 || modes == null || modes.isEmpty) return 'PHP 0';
+    
+    double totalFare = 0;
+    final Distance distanceCalculator = const Distance();
+    
+    // Calculate fare for each step
+    for (int i = 0; i < modes.length; i++) {
+      final startIdx = (i == 0) ? 0 : (stepBoundaries != null && i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
+      final endIdx = (stepBoundaries != null && i < stepBoundaries.length) ? stepBoundaries[i] : points.length - 1;
+      
+      if (endIdx > startIdx) {
+        double stepDistance = 0;
+        for (int j = startIdx; j < endIdx && j + 1 < points.length; j++) {
+          if (points[j] != null && points[j + 1] != null) {
+            stepDistance += distanceCalculator.as(
+              LengthUnit.Kilometer,
+              points[j],
+              points[j + 1],
+            );
+          }
+        }
+        
+        // Calculate fare based on mode and distance
+        totalFare += _calculateFareForMode(modes[i], stepDistance);
+      }
+    }
+    
+    // Round to nearest peso
+    final roundedFare = totalFare.round();
+    return 'PHP $roundedFare';
+  }
+  
+  /// Calculate fare for a specific mode and distance
+  static double _calculateFareForMode(String mode, double distanceKm) {
+    switch (mode.toLowerCase()) {
+      case 'walk':
+        return 0; // Walking is free
+      case 'jeepney':
+        // Base fare + additional per km
+        return 11.0 + math.max(0, distanceKm - 4) * 1.5;
+      case 'bus':
+        // Base fare + additional per km
+        return 15.0 + distanceKm * 2.0;
+      case 'train':
+        // Base fare + additional per station (approx 1.5km per station)
+        final stations = math.max(1, (distanceKm / 1.5).ceil());
+        return 15.0 + (stations - 1) * 5.0;
+      case 'tricycle':
+        // Base fare + additional per km
+        return 20.0 + distanceKm * 5.0;
+      case 'fx/van':
+        // Base fare + additional per km
+        return 25.0 + distanceKm * 2.5;
+      case 'ferry':
+        // Base fare + additional per km
+        return 30.0 + distanceKm * 3.0;
+      default:
+        return 0;
+    }
+  }
+}

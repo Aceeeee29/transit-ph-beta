@@ -12,6 +12,8 @@ class Route {
   final double? endLng;
   final List<LatLng> pathPoints;
   final String? eta;
+  final String? price;
+  final String? schedule;
   final List<Report> reports;
   final List<int> stepBoundaries;
   int views;
@@ -30,6 +32,8 @@ class Route {
     this.endLng,
     this.pathPoints = const [],
     this.eta,
+    this.price,
+    this.schedule,
     this.reports = const [],
     this.stepBoundaries = const [],
     this.views = 0,
@@ -107,6 +111,8 @@ class Route {
           (json['stepBoundaries'] as List?)?.map((b) => b as int).toList() ??
               [],
       eta: json['eta'],
+      price: json['price'],
+      schedule: json['schedule'],
       reports:
           (json['reports'] as List)
               .map(

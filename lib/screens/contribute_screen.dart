@@ -5,7 +5,14 @@ import 'package:flutter/services.dart';
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
+import '../services/route_history_service.dart';
+import '../services/media_service.dart';
+import '../services/tutorial_service.dart';
 import '../widgets/notification_overlay.dart';
+import '../widgets/map_controls.dart';
+import '../widgets/route_preview.dart';
+import '../widgets/route_form_stepper.dart';
+import '../widgets/tutorial_overlay.dart';
 
 class ContributeScreen extends StatefulWidget {
   final void Function(route_model.Route) onRouteSubmitted;
@@ -19,6 +26,7 @@ class ContributeScreen extends StatefulWidget {
 class _ContributeScreenState extends State<ContributeScreen> {
   final _formKey = GlobalKey<FormState>();
   final MapController _mapController = MapController();
+  final RouteHistoryService _historyService = RouteHistoryService();
 
   final TextEditingController _startLocationController =
       TextEditingController();
@@ -26,6 +34,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
   final TextEditingController _shortDescriptionController =
       TextEditingController();
   final TextEditingController _etaController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _scheduleController = TextEditingController();
 
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
@@ -33,10 +43,16 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
   String? selectedRegion;
+  bool _showRoutePreview = false;
 
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool _isFormExpanded = false;
+  bool _snapToRoadEnabled = true;
+  
+  // Tutorial state
+  bool _showTutorial = false;
+  final Map<String, GlobalKey> _targetKeys = {};
 
   // Philippine regions with approximate boundaries
   final Map<String, LatLngBounds> philippineRegions = {
@@ -135,11 +151,66 @@ class _ContributeScreenState extends State<ContributeScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _initializeTargetKeys();
+    _checkTutorialStatus();
+  }
+
+  void _initializeTargetKeys() {
+    _targetKeys['map'] = GlobalKey();
+    _targetKeys['mode_selector'] = GlobalKey();
+    _targetKeys['step_form'] = GlobalKey();
+    _targetKeys['finish_button'] = GlobalKey();
+    _targetKeys['route_form'] = GlobalKey();
+    _targetKeys['media_buttons'] = GlobalKey();
+    _targetKeys['preview_button'] = GlobalKey();
+    _targetKeys['submit_button'] = GlobalKey();
+  }
+
+  Future<void> _checkTutorialStatus() async {
+    final hasSeenTutorial = await TutorialService.hasSeenContributeTutorial();
+    if (!hasSeenTutorial && mounted) {
+      setState(() {
+        _showTutorial = true;
+      });
+    }
+  }
+
+  void _onTutorialComplete() async {
+    await TutorialService.markContributeTutorialAsSeen();
+    if (mounted) {
+      setState(() {
+        _showTutorial = false;
+      });
+    }
+  }
+
+  void _loadExampleRoute() {
+    final exampleRoute = TutorialService.getExampleRoute();
+    setState(() {
+      pathPoints = List<LatLng>.from(exampleRoute.pathPoints);
+      steps = List<route_model.Step>.from(exampleRoute.steps);
+      stepBoundaries = List<int>.from(exampleRoute.stepBoundaries);
+      _startLocationController.text = exampleRoute.startLocation;
+      _endLocationController.text = exampleRoute.endLocation;
+      _shortDescriptionController.text = exampleRoute.shortDescription;
+      _etaController.text = exampleRoute.eta ?? '';
+      _priceController.text = exampleRoute.price ?? '';
+      _scheduleController.text = exampleRoute.schedule ?? '';
+      selectionMode = 'done';
+    });
+    _saveToHistory();
+  }
+
+  @override
   void dispose() {
     _startLocationController.dispose();
     _endLocationController.dispose();
     _shortDescriptionController.dispose();
     _etaController.dispose();
+    _priceController.dispose();
+    _scheduleController.dispose();
     super.dispose();
   }
 
@@ -151,27 +222,35 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _showModeDialog();
       });
     } else if (selectionMode == 'step') {
-      // Try to get route from OpenRouteService
       if (pathPoints.isNotEmpty) {
         final lastPoint = pathPoints.last;
-        try {
-          final routePoints = await RoutingService.getRoute(lastPoint, point, currentMode);
-          if (routePoints.isNotEmpty) {
-            setState(() {
-              pathPoints.addAll(routePoints);
-            });
-          } else {
-            // Fallback to straight line if API fails
-            setState(() {
-              pathPoints.add(point);
-            });
+        
+        if (_snapToRoadEnabled) {
+          // Try to get route from OpenRouteService with snap-to-road
+          try {
+            final routePoints = await RoutingService.getRoute(lastPoint, point, currentMode);
+            if (routePoints.isNotEmpty) {
+              setState(() {
+                pathPoints.addAll(routePoints);
+              });
+              _showStepDialog();
+              return;
+            }
+          } catch (e) {
+            // If snap-to-road fails, we'll fall back to straight line
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Snap-to-road failed, using straight line instead'),
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
-        } catch (e) {
-          // Fallback to straight line if API fails
-          setState(() {
-            pathPoints.add(point);
-          });
         }
+        
+        // Either snap-to-road is disabled or it failed, use straight line
+        setState(() {
+          pathPoints.add(point);
+        });
         _showStepDialog();
       }
     }
@@ -368,6 +447,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         pathPoints: pathPoints,
         stepBoundaries: stepBoundaries,
         eta: _etaController.text.isEmpty ? null : _etaController.text,
+        price: _priceController.text.isEmpty ? null : _priceController.text,
+        schedule: _scheduleController.text.isEmpty ? null : _scheduleController.text,
       );
 
       widget.onRouteSubmitted(route);
@@ -399,6 +480,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _endLocationController.clear();
         _shortDescriptionController.clear();
         _etaController.clear();
+        _priceController.clear();
+        _scheduleController.clear();
       });
     }
   }
@@ -467,12 +550,172 @@ class _ContributeScreenState extends State<ContributeScreen> {
     });
   }
 
+  void _onUndo() {
+    final previousState = _historyService.undo();
+    if (previousState != null) {
+      setState(() {
+        pathPoints = previousState.pathPoints;
+        steps = previousState.steps;
+        stepBoundaries = previousState.stepBoundaries;
+      });
+    }
+  }
+
+  void _onRedo() {
+    final nextState = _historyService.redo();
+    if (nextState != null) {
+      setState(() {
+        pathPoints = nextState.pathPoints;
+        steps = nextState.steps;
+        stepBoundaries = nextState.stepBoundaries;
+      });
+    }
+  }
+
+  void _onReset() {
+    setState(() {
+      pathPoints = [];
+      steps = [];
+      stepBoundaries = [];
+      selectionMode = 'start';
+      _startLocationController.clear();
+      _endLocationController.clear();
+      _shortDescriptionController.clear();
+      _etaController.clear();
+      _priceController.clear();
+      _scheduleController.clear();
+    });
+    _historyService.clear();
+  }
+
+  void _onPreviewRoute() {
+    if (pathPoints.length < 2 || steps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Need at least start, end points and one step')),
+      );
+      return;
+    }
+
+    final route = route_model.Route(
+      id: DateTime.now().toString(),
+      startLocation: _startLocationController.text.isEmpty
+          ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
+          : _startLocationController.text,
+      endLocation: _endLocationController.text.isEmpty
+          ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
+          : _endLocationController.text,
+      shortDescription: _shortDescriptionController.text.isEmpty
+          ? 'Custom route with ${steps.length} steps'
+          : _shortDescriptionController.text,
+      steps: steps,
+      startLat: pathPoints.first.latitude,
+      startLng: pathPoints.first.longitude,
+      endLat: pathPoints.last.latitude,
+      endLng: pathPoints.last.longitude,
+      pathPoints: pathPoints,
+      stepBoundaries: stepBoundaries,
+      eta: _etaController.text.isEmpty ? null : _etaController.text,
+      price: _priceController.text.isEmpty ? null : _priceController.text,
+      schedule: _scheduleController.text.isEmpty ? null : _scheduleController.text,
+    );
+
+    setState(() {
+      _showRoutePreview = true;
+    });
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RoutePreview(
+          route: route,
+          onEdit: () {
+            Navigator.pop(context);
+            setState(() {
+              _showRoutePreview = false;
+            });
+          },
+          onSubmit: () {
+            Navigator.pop(context);
+            _submit();
+          },
+        ),
+      ),
+    );
+  }
+
+  void _onStepsChanged(List<route_model.Step> updatedSteps) {
+    setState(() {
+      steps = updatedSteps;
+    });
+    _saveToHistory();
+  }
+
+  void _onStepReordered(int oldIndex, int newIndex) {
+    setState(() {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final step = steps.removeAt(oldIndex);
+      steps.insert(newIndex, step);
+      
+      // Update step boundaries
+      if (stepBoundaries.isNotEmpty) {
+        final boundary = stepBoundaries.removeAt(oldIndex);
+        stepBoundaries.insert(newIndex, boundary);
+      }
+    });
+    _saveToHistory();
+  }
+
+  void _onStepDeleted(int index) {
+    setState(() {
+      steps.removeAt(index);
+      if (index < stepBoundaries.length) {
+        stepBoundaries.removeAt(index);
+      }
+    });
+    _saveToHistory();
+  }
+  
+  void _onSnapToRoadToggled(bool enabled) {
+    setState(() {
+      _snapToRoadEnabled = enabled;
+    });
+    
+    // Show a snackbar to inform the user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(enabled 
+          ? 'Snap to road enabled - routes will follow roads' 
+          : 'Snap to road disabled - routes will use straight lines'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _saveToHistory() {
+    _historyService.addState(
+      List<LatLng>.from(pathPoints),
+      List<route_model.Step>.from(steps),
+      List<int>.from(stepBoundaries),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Scaffold(
-          appBar: AppBar(title: const Text('Contribute a Route')),
+          appBar: AppBar(
+            title: const Text('Contribute a Route'),
+            actions: [
+              if (selectionMode == 'done')
+                IconButton(
+                  icon: const Icon(Icons.preview),
+                  tooltip: 'Preview Route',
+                  onPressed: _onPreviewRoute,
+                ),
+            ],
+          ),
           body: SafeArea(
             child: Stack(
               children: [
@@ -524,6 +767,26 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     ),
                   ],
                 ),
+                
+                // Map Controls
+                Positioned(
+                  top: 70,
+                  left: 20,
+                  child: MapControls(
+                    historyService: _historyService,
+                    pathPoints: pathPoints,
+                    steps: steps,
+                    stepBoundaries: stepBoundaries,
+                    selectionMode: selectionMode,
+                    currentMode: currentMode,
+                    onUndo: _onUndo,
+                    onRedo: _onRedo,
+                    onReset: _onReset,
+                    onPreview: _onPreviewRoute,
+                    onSnapToRoadToggled: _onSnapToRoadToggled,
+                    snapToRoadEnabled: _snapToRoadEnabled,
+                  ),
+                ),
                 // Region Selector Overlay
                 Positioned(
                   top: 10,
@@ -565,14 +828,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   ),
                 ),
 
-                // Expandable Form Container
+                // Form Stepper Container
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    height: _isFormExpanded ? MediaQuery.of(context).size.height * 0.5 : 32,
+                    height: _isFormExpanded ? MediaQuery.of(context).size.height * 0.6 : 32,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -611,119 +874,22 @@ class _ContributeScreenState extends State<ContributeScreen> {
                         ),
                         if (_isFormExpanded)
                           Expanded(
-                            child: SingleChildScrollView(
+                            child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               child: Form(
                                 key: _formKey,
-                                child: Column(
-                                  children: [
-                                    TextFormField(
-                                      controller: _startLocationController,
-                                      decoration: const InputDecoration(
-                                        labelText:
-                                            'Starting Location (tap map to select or type)',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _endLocationController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'End Location (tap map to select or type)',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _shortDescriptionController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Short Description',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      maxLines: 2,
-                                      validator:
-                                          (value) =>
-                                              value?.isEmpty ?? true
-                                                  ? 'Short description is required'
-                                                  : null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _etaController,
-                                      decoration: const InputDecoration(
-                                        labelText:
-                                            'Estimated Time of Arrival (ETA) in minutes',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.digitsOnly,
-                                      ],
-                                      validator:
-                                          (value) =>
-                                              value?.isEmpty ?? true
-                                                  ? 'ETA is required'
-                                                  : null,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text('Steps added: ${steps.length}'),
-                                    const SizedBox(height: 5),
-                                    if (selectionMode == 'done')
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          onPressed: _submit,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.blue,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Submit for Review',
-                                            style: TextStyle(color: Colors.white),
-                                          ),
-                                        ),
-                                      ),
-                                    if (selectionMode != 'done')
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              pathPoints.clear();
-                                              steps.clear();
-                                              stepBoundaries.clear();
-                                              selectionMode = 'start';
-                                              _startLocationController.clear();
-                                              _endLocationController.clear();
-                                              _shortDescriptionController.clear();
-                                              _etaController.clear();
-                                            });
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Reset Route',
-                                            style: TextStyle(color: Colors.white),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                child: RouteFormStepper(
+                                  formKey: _formKey,
+                                  startLocationController: _startLocationController,
+                                  endLocationController: _endLocationController,
+                                  shortDescriptionController: _shortDescriptionController,
+                                  etaController: _etaController,
+                                  priceController: _priceController,
+                                  scheduleController: _scheduleController,
+                                  steps: steps,
+                                  onSubmit: _submit,
+                                  onReset: _onReset,
+                                  selectionMode: selectionMode,
                                 ),
                               ),
                             ),
@@ -740,6 +906,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
           NotificationOverlay(
             notifications: _pendingNotifications,
             onAllDismissed: _onNotificationsDismissed,
+          ),
+        if (_showTutorial)
+          TutorialOverlay(
+            steps: TutorialService.getContributeTutorialSteps(),
+            targetKeys: _targetKeys,
+            onComplete: _onTutorialComplete,
+            onExampleRouteRequested: _loadExampleRoute,
           ),
       ],
     );
