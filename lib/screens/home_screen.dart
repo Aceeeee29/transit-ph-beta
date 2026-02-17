@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isDetectingLocation = false;
 
   // Search filters
-  Set<String> _selectedModes = {};
+  final Set<String> _selectedModes = {};
 
   // Bookmarks
   Set<String> _bookmarkedRouteIds = {};

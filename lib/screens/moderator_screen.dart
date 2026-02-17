@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/post.dart';
-import '../models/user.dart';
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
 

@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter/services.dart';
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
-import '../services/media_service.dart';
 import '../services/tutorial_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/map_controls.dart';
@@ -17,8 +15,13 @@ import '../widgets/tutorial_overlay.dart';
 
 class ContributeScreen extends StatefulWidget {
   final void Function(route_model.Route) onRouteSubmitted;
+  final route_model.Route? routeToEdit;
 
-  const ContributeScreen({super.key, required this.onRouteSubmitted});
+  const ContributeScreen({
+    super.key,
+    required this.onRouteSubmitted,
+    this.routeToEdit,
+  });
 
   @override
   State<ContributeScreen> createState() => _ContributeScreenState();
@@ -154,6 +157,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
     super.initState();
     _initializeTargetKeys();
     _checkTutorialStatus();
+    _loadRouteToEdit();
+  }
+
+  void _loadRouteToEdit() {
+    if (widget.routeToEdit != null) {
+      final route = widget.routeToEdit!;
+      setState(() {
+        pathPoints = List<LatLng>.from(route.pathPoints);
+        steps = List<route_model.Step>.from(route.steps);
+        stepBoundaries = List<int>.from(route.stepBoundaries);
+        _startLocationController.text = route.startLocation;
+        _endLocationController.text = route.endLocation;
+        _shortDescriptionController.text = route.shortDescription;
+        _scheduleController.text = route.schedule ?? '';
+        selectionMode = 'done';
+      });
+      _saveToHistory();
+    }
   }
 
   void _initializeTargetKeys() {
@@ -439,7 +460,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       );
 
       final route = route_model.Route(
-        id: DateTime.now().toString(),
+        id: widget.routeToEdit?.id ?? DateTime.now().toString(),
         startLocation:
             _startLocationController.text.isEmpty
                 ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
@@ -463,38 +484,48 @@ class _ContributeScreenState extends State<ContributeScreen> {
         price: fare,
         schedule:
             _scheduleController.text.isEmpty ? null : _scheduleController.text,
+        contributorId: widget.routeToEdit?.contributorId,
       );
 
       widget.onRouteSubmitted(route);
 
-      // Award points for contributing
-      final user = await GamificationService.loadUser();
-      final unlockedItems =
-          await GamificationService.incrementRoutesContributed(user);
+      // Award points only for new contributions, not edits
+      if (widget.routeToEdit == null) {
+        final user = await GamificationService.loadUser();
+        final unlockedItems =
+            await GamificationService.incrementRoutesContributed(user);
 
-      // Show achievement notifications
-      if (unlockedItems.isNotEmpty) {
-        setState(() {
-          _pendingNotifications = unlockedItems;
-          _showNotificationOverlay = true;
-        });
+        // Show achievement notifications
+        if (unlockedItems.isNotEmpty) {
+          setState(() {
+            _pendingNotifications = unlockedItems;
+            _showNotificationOverlay = true;
+          });
+        }
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Route submitted for review!')),
-      );
+      final message =
+          widget.routeToEdit != null
+              ? 'Route updated successfully!'
+              : 'Route submitted for review!';
 
-      // Reset form
-      setState(() {
-        pathPoints = [];
-        steps = [];
-        stepBoundaries = [];
-        selectionMode = 'start';
-        _startLocationController.clear();
-        _endLocationController.clear();
-        _shortDescriptionController.clear();
-        _scheduleController.clear();
-      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+
+      // Reset form only for new routes
+      if (widget.routeToEdit == null) {
+        setState(() {
+          pathPoints = [];
+          steps = [];
+          stepBoundaries = [];
+          selectionMode = 'start';
+          _startLocationController.clear();
+          _endLocationController.clear();
+          _shortDescriptionController.clear();
+          _scheduleController.clear();
+        });
+      }
     }
   }
 
@@ -737,7 +768,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
       children: [
         Scaffold(
           appBar: AppBar(
-            title: const Text('Contribute a Route'),
+            title: Text(
+              widget.routeToEdit != null ? 'Edit Route' : 'Contribute a Route',
+            ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.help_outline),

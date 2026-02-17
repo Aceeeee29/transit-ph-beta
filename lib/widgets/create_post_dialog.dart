@@ -22,10 +22,10 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
   final TextEditingController _contentController = TextEditingController();
   PostCategory _selectedCategory = PostCategory.discussion;
   bool _anonymous = false;
-  List<File> _selectedImages = [];
+  final List<File> _selectedImages = [];
   File? _selectedVideo;
   Location? _taggedLocation;
-  List<String> _taggedUsers = [];
+  final List<String> _taggedUsers = [];
   String? _routeId;
 
   void _createPost() {

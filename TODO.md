@@ -1,25 +1,26 @@
-# Transit PH Beta - Home Screen Improvements Implementation
+# Profile Screen Polish TODO
 
-## Phase 1: Auto-detect Current Position
-- [x] lib/services/location_service.dart - Create new location service (Already exists)
-- [x] lib/screens/home_screen.dart - Make starting location editable
+## 1. Update Models
+- [x] Add new fields to User model: totalDistance (double), co2Saved (double), mostActiveRegion (String?), streakDays (int)
+- [x] Add progress (int), maxProgress (int), rarity (String) to Achievement model
+- [x] Add contributorId (String) to Route model
 
-## Phase 2: Improve Search Results Presentation
-- [x] lib/screens/home_screen.dart - Replace AlertDialog with persistent bottom sheet (Already implemented)
-- [x] lib/screens/home_screen.dart - Add filter chips (Already implemented)
-- [x] lib/services/bookmark_service.dart - Create bookmark service (Already exists)
-- [x] lib/models/route.dart - Add bookmarked field
+## 2. Enhance Services
+- [x] Add calculateCo2Saved method to RouteMetricsService
+- [x] Create RouteService with getRoutesByUser method for Firestore queries
+- [x] Update GamificationService to calculate and save new user stats
 
-## Phase 3: Enhance Recommendations
-- [x] lib/services/recommendation_service.dart - Create new recommendation service (Already exists)
-- [x] lib/screens/home_screen.dart - Replace static "Routes you may like" with dynamic recommendations (Already implemented)
+## 3. Update Dependencies
+- [x] Add share_plus to pubspec.yaml for social sharing (removed as per user request)
 
-## Phase 4: UI/UX Improvements
-- [x] lib/screens/home_screen.dart - Add route preview thumbnails (Already implemented)
-- [x] lib/screens/home_screen.dart - Add filter UI for duration/price (Already implemented)
-- [x] lib/screens/home_screen.dart - Improve bottom sheet design with drag handle (Already implemented)
+## 4. Create New Screens
+- [x] Create leaderboard_screen.dart for simple leaderboard display (removed as per user request)
 
-## Followup steps:
-- [ ] Test location permissions on device/emulator
-- [ ] Verify bottom sheet works on different screen sizes
-- [ ] Test bookmark functionality persists across app restarts
+## 5. Update Existing Screens
+- [x] Modify contribute_screen.dart to accept optional route for editing
+- [x] Update profile_screen.dart to display new stats, enhanced achievements with progress bars/rarity, and populated contributions with metrics/edit buttons
+
+## 6. Testing
+- [x] Test profile screen functionality after implementation
+- [x] Verify CO2 calculations and stats accuracy
+- [x] Ensure social sharing and leaderboard integration work properly

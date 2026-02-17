@@ -17,6 +17,7 @@ class Route {
   final String? imageUrl;
   final List<Report> reports;
   final List<int> stepBoundaries;
+  final String? contributorId;
   int views;
   int upvotes;
   int downvotes;
@@ -39,6 +40,7 @@ class Route {
     this.imageUrl,
     this.reports = const [],
     this.stepBoundaries = const [],
+    this.contributorId,
     this.views = 0,
     this.upvotes = 0,
     this.downvotes = 0,
@@ -84,6 +86,7 @@ class Route {
                 },
               )
               .toList(),
+      'contributorId': contributorId,
       'views': views,
       'upvotes': upvotes,
       'downvotes': downvotes,
@@ -134,6 +137,7 @@ class Route {
                 ),
               )
               .toList(),
+      contributorId: json['contributorId'],
       views:
           json['views'] is int
               ? json['views']

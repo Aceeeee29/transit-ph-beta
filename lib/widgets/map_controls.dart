@@ -3,7 +3,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
-import '../services/routing_service.dart';
 import '../models/route.dart' as route_model;
 
 class MapControls extends StatefulWidget {

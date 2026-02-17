@@ -29,7 +29,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   late Animation<double> _fadeAnimation;
   Offset _targetPosition = Offset.zero;
   Size _targetSize = Size.zero;
-  bool _showAnimation = true;
+  final bool _showAnimation = true;
 
   @override
   void initState() {

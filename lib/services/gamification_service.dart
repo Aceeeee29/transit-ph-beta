@@ -5,6 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart' as app_user;
 import '../models/achievement.dart';
 import '../models/badge.dart';
+import '../models/route.dart' as route_model;
+import 'route_service.dart';
+import 'route_metrics_service.dart';
 
 class GamificationService {
   static const String _userKey = 'user_data';
@@ -20,13 +23,11 @@ class GamificationService {
   /// Load user data from Firestore
   static Future<app_user.User> loadUser() async {
     final uid = _getCurrentUserUid();
-    
+
     if (uid != null) {
       try {
-        final docSnapshot = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
+        final docSnapshot =
+            await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
         if (docSnapshot.exists) {
           final data = docSnapshot.data() as Map<String, dynamic>;
@@ -49,23 +50,26 @@ class GamificationService {
           // Create a new user document in Firestore if it doesn't exist
           final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
           final newUser = app_user.User(
-            name: firebaseUser?.displayName ?? firebaseUser?.email?.split('@').first ?? 'User',
+            name:
+                firebaseUser?.displayName ??
+                firebaseUser?.email?.split('@').first ??
+                'User',
             email: firebaseUser?.email ?? '',
           );
-          
+
           // Save to Firestore
           await FirebaseFirestore.instance
               .collection('users')
               .doc(uid)
               .set(newUser.toJson());
-          
+
           return newUser;
         }
       } catch (e) {
         print('Error loading user from Firestore: $e');
       }
     }
-    
+
     // Fallback to SharedPreferences if Firebase Auth is not available
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(_userKey);
@@ -78,14 +82,14 @@ class GamificationService {
   /// Save user data to Firestore
   static Future<void> saveUser(app_user.User user) async {
     final uid = _getCurrentUserUid();
-    
+
     if (uid != null) {
       try {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
             .update(user.toJson());
-        
+
         // Also save to SharedPreferences as backup
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_userKey, jsonEncode(user.toJson()));
@@ -98,7 +102,7 @@ class GamificationService {
               .collection('users')
               .doc(uid)
               .set(user.toJson());
-          
+
           // Also save to SharedPreferences as backup
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(_userKey, jsonEncode(user.toJson()));
@@ -108,7 +112,7 @@ class GamificationService {
         }
       }
     }
-    
+
     // Fallback to SharedPreferences if Firebase Auth is not available
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userKey, jsonEncode(user.toJson()));
@@ -146,22 +150,127 @@ class GamificationService {
     await prefs.setString(_badgesKey, jsonEncode(encoded));
   }
 
-  static Future<List<String>> incrementRoutesSearched(app_user.User user) async {
+  static Future<List<String>> incrementRoutesSearched(
+    app_user.User user,
+  ) async {
     user.routesSearched++;
     await saveUser(user);
     return await checkAchievements(user, 'searched');
   }
 
-  static Future<List<String>> incrementRoutesContributed(app_user.User user) async {
+  static Future<List<String>> incrementRoutesContributed(
+    app_user.User user,
+  ) async {
     user.routesContributed++;
     await saveUser(user);
     return await checkAchievements(user, 'contributed');
   }
 
-  static Future<List<String>> incrementReportsSubmitted(app_user.User user) async {
+  static Future<List<String>> incrementReportsSubmitted(
+    app_user.User user,
+  ) async {
     user.reportsSubmitted++;
     await saveUser(user);
     return await checkAchievements(user, 'reported');
+  }
+
+  /// Recalculate user stats from contributed routes
+  static Future<void> recalculateUserStats(app_user.User user) async {
+    final uid = _getCurrentUserUid();
+    if (uid == null) return;
+
+    try {
+      final routes = await RouteService.getRoutesByUser(uid);
+
+      double totalDistance = 0.0;
+      double totalCo2Saved = 0.0;
+      Map<String, int> regionCounts = {};
+      String? mostActiveRegion;
+
+      for (final route in routes) {
+        // Calculate distance
+        final distance = RouteMetricsService.calculateRouteDistance(
+          route.pathPoints,
+        );
+        totalDistance += distance;
+
+        // Calculate CO2 saved
+        final modes = route.steps.map((s) => s.mode).toList();
+        final co2Saved = RouteMetricsService.calculateCo2Saved(
+          route.pathPoints,
+          modes,
+          route.stepBoundaries,
+        );
+        totalCo2Saved += co2Saved;
+
+        // Count regions (simplified: use start location as region)
+        final region = _extractRegionFromLocation(route.startLocation);
+        if (region != null) {
+          regionCounts[region] = (regionCounts[region] ?? 0) + 1;
+        }
+      }
+
+      // Find most active region
+      if (regionCounts.isNotEmpty) {
+        mostActiveRegion =
+            regionCounts.entries
+                .reduce((a, b) => a.value > b.value ? a : b)
+                .key;
+      }
+
+      // Calculate streak days (simplified: assume current streak based on recent activity)
+      // This would need more complex logic with activity timestamps
+      final streakDays = _calculateStreakDays(routes);
+
+      // Update user stats
+      user.totalDistance = totalDistance;
+      user.co2Saved = totalCo2Saved;
+      user.mostActiveRegion = mostActiveRegion;
+      user.streakDays = streakDays;
+
+      await saveUser(user);
+    } catch (e) {
+      print('Error recalculating user stats: $e');
+    }
+  }
+
+  /// Extract region from location string (simplified implementation)
+  static String? _extractRegionFromLocation(String location) {
+    // This is a simplified implementation
+    // In a real app, you'd use geocoding or region mapping
+    final regions = [
+      'NCR',
+      'CALABARZON',
+      'Central Luzon',
+      'Ilocos',
+      'Cagayan Valley',
+      'Bicol',
+      'Western Visayas',
+      'Central Visayas',
+      'Eastern Visayas',
+      'Zamboanga',
+      'Northern Mindanao',
+      'Davao',
+      'SOCCSKSARGEN',
+      'Caraga',
+    ];
+
+    for (final region in regions) {
+      if (location.toLowerCase().contains(region.toLowerCase())) {
+        return region;
+      }
+    }
+    return null;
+  }
+
+  /// Calculate streak days (simplified implementation)
+  static int _calculateStreakDays(List<route_model.Route> routes) {
+    // This is a placeholder - in a real implementation,
+    // you'd track daily activity timestamps
+    // For now, return a simple calculation based on route count
+    if (routes.length >= 7) return 7;
+    if (routes.length >= 3) return 3;
+    return routes.length;
   }
 
   // Favorites functionality removed

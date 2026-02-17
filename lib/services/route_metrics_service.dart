@@ -25,15 +25,13 @@ class RouteMetricsService {
     for (int i = 0; i < points.length - 1; i++) {
       final point1 = points[i];
       final point2 = points[i + 1];
-      if (point2 != null) {
-        final dist = distanceCalculator.as(
-          LengthUnit.Kilometer,
-          point1,
-          point2,
-        );
-        totalDistance += dist;
-      }
-    }
+      final dist = distanceCalculator.as(
+        LengthUnit.Kilometer,
+        point1,
+        point2,
+      );
+      totalDistance += dist;
+        }
 
     return totalDistance;
   }
@@ -61,14 +59,12 @@ class RouteMetricsService {
       if (endIdx > startIdx) {
         double stepDistance = 0;
         for (int j = startIdx; j < endIdx && j + 1 < points.length; j++) {
-          if (points[j + 1] != null) {
-            stepDistance += distanceCalculator.as(
-              LengthUnit.Kilometer,
-              points[j],
-              points[j + 1],
-            );
-          }
-        }
+          stepDistance += distanceCalculator.as(
+            LengthUnit.Kilometer,
+            points[j],
+            points[j + 1],
+          );
+                }
 
         // Convert distance to time based on mode of transport
         final speedKmh = _getSpeedForMode(modes[i]);
@@ -154,14 +150,12 @@ class RouteMetricsService {
       if (endIdx > startIdx) {
         double stepDistance = 0;
         for (int j = startIdx; j < endIdx && j + 1 < points.length; j++) {
-          if (points[j + 1] != null) {
-            stepDistance += distanceCalculator.as(
-              LengthUnit.Kilometer,
-              points[j],
-              points[j + 1],
-            );
-          }
-        }
+          stepDistance += distanceCalculator.as(
+            LengthUnit.Kilometer,
+            points[j],
+            points[j + 1],
+          );
+                }
 
         // Calculate fare based on mode and distance
         totalFare += _calculateFareForMode(modes[i], stepDistance);
@@ -199,6 +193,76 @@ class RouteMetricsService {
         return 0.0 + distanceKm * 3.0;
       default:
         return 0;
+    }
+  }
+
+  /// Calculate CO2 emissions saved by using this route instead of driving
+  /// Returns CO2 in kg
+  static double calculateCo2Saved(
+    List<LatLng> points,
+    List<String> modes,
+    List<int> stepBoundaries,
+  ) {
+    if (points.length < 2 || modes.isEmpty) return 0.0;
+
+    double totalCo2Saved = 0;
+    final Distance distanceCalculator = const Distance();
+
+    // Calculate CO2 for each step
+    for (int i = 0; i < modes.length; i++) {
+      final startIdx =
+          (i == 0)
+              ? 0
+              : (i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
+      final endIdx =
+          (i < stepBoundaries.length) ? stepBoundaries[i] : points.length - 1;
+
+      if (endIdx > startIdx) {
+        double stepDistance = 0;
+        for (int j = startIdx; j < endIdx && j + 1 < points.length; j++) {
+          stepDistance += distanceCalculator.as(
+            LengthUnit.Kilometer,
+            points[j],
+            points[j + 1],
+          );
+                }
+
+        // CO2 emissions per km for different modes (kg CO2 per km)
+        // Average car emissions: ~0.2 kg CO2 per km
+        // Public transport modes have lower emissions
+        final carCo2PerKm = 0.2; // kg CO2 per km for average car
+        final modeCo2PerKm = _getCo2PerKmForMode(modes[i]);
+
+        // CO2 saved = (car emissions - mode emissions) * distance
+        final co2Saved = (carCo2PerKm - modeCo2PerKm) * stepDistance;
+        if (co2Saved > 0) {
+          totalCo2Saved += co2Saved;
+        }
+      }
+    }
+
+    return totalCo2Saved;
+  }
+
+  /// Get CO2 emissions per km for a specific mode of transport
+  static double _getCo2PerKmForMode(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'walk':
+        return 0.0; // No emissions
+      case 'jeepney':
+        return 0.08; // Lower emissions due to shared transport
+      case 'bus':
+        return 0.06; // Public transport
+      case 'train':
+        return 0.04; // Electric train
+      case 'tricycle':
+        return 0.15; // Motorcycle
+      case 'fx/van':
+        return 0.12; // Shared van
+      case 'ferry':
+        return 0.05; // Boat
+      default:
+        return 0.1; // Default
     }
   }
 }

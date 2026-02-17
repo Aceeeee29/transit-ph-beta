@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'settings_screen.dart';
+import 'contribute_screen.dart';
 import '../services/gamification_service.dart';
+import '../services/route_service.dart';
+import '../services/route_metrics_service.dart';
 import '../models/user.dart' as gamification_user;
 import '../models/achievement.dart';
 import '../models/badge.dart' as badge_model;
+import '../models/route.dart' as route_model;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -149,10 +153,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
-            if (user!.userCategory != null && user!.userCategory!.isNotEmpty) ...[
+            if (user!.userCategory != null &&
+                user!.userCategory!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(20),
@@ -187,29 +195,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Column(
                   children: [
                     Text(
-                      '${user!.routesSearched}',
+                      '${user!.totalDistance.toStringAsFixed(1)} km',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text('Searched'),
+                    const Text('Distance'),
                   ],
                 ),
                 Column(
                   children: [
                     Text(
-                      '${user!.reportsSubmitted}',
+                      '${user!.co2Saved.toStringAsFixed(1)} kg',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text('Submitted'),
+                    const Text('CO₂ Saved'),
                   ],
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            if (user!.mostActiveRegion != null || user!.streakDays > 0) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (user!.mostActiveRegion != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Text(
+                        'Most Active: ${user!.mostActiveRegion}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (user!.streakDays > 0) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Text(
+                        '🔥 ${user!.streakDays} day streak',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: _logout,
@@ -270,36 +329,169 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final achievements = snapshot.data!;
-        return ListView.builder(
-          itemCount: achievements.length,
-          itemBuilder: (context, index) {
-            final achievement = achievements[index];
-            final isUnlocked = user!.achievements.contains(achievement.id);
-            return Card(
-              color: isUnlocked ? Colors.green.shade50 : Colors.grey.shade100,
-              child: ListTile(
-                leading: Text(
-                  achievement.icon,
-                  style: const TextStyle(fontSize: 30),
-                ),
-                title: Text(
-                  achievement.name,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isUnlocked ? Colors.green : Colors.grey,
-                  ),
-                ),
-                subtitle: Text(achievement.description),
-                trailing:
-                    isUnlocked
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : const Icon(Icons.lock, color: Colors.grey),
+        return Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [],
               ),
-            );
-          },
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: achievements.length,
+                itemBuilder: (context, index) {
+                  final achievement = achievements[index];
+                  final isUnlocked = user!.achievements.contains(
+                    achievement.id,
+                  );
+                  final progress = _getAchievementProgress(achievement);
+
+                  return Card(
+                    color:
+                        isUnlocked
+                            ? Colors.green.shade50
+                            : Colors.grey.shade100,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                achievement.icon,
+                                style: const TextStyle(fontSize: 30),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          achievement.name,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                isUnlocked
+                                                    ? Colors.green
+                                                    : Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _getRarityColor(
+                                              achievement.rarity,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            achievement.rarity,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      achievement.description,
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isUnlocked)
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                )
+                              else
+                                const Icon(Icons.lock, color: Colors.grey),
+                            ],
+                          ),
+                          if (achievement.maxProgress > 1) ...[
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: progress / achievement.maxProgress,
+                              backgroundColor: Colors.grey[300],
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isUnlocked
+                                    ? Colors.green
+                                    : _getRarityColor(achievement.rarity),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$progress / ${achievement.maxProgress}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color:
+                                    isUnlocked
+                                        ? Colors.green
+                                        : Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  int _getAchievementProgress(Achievement achievement) {
+    switch (achievement.id) {
+      case 'rookie_commuter':
+        return user!.routesSearched > 0 ? 1 : 0;
+      case 'route_pioneer':
+        return user!.routesContributed;
+      case 'daily_rider':
+        return user!.streakDays;
+      case 'community_hero':
+        return user!.routesContributed;
+      case 'metro_master':
+        return user!.routesSearched;
+      default:
+        return 0;
+    }
+  }
+
+  Color _getRarityColor(String rarity) {
+    switch (rarity.toLowerCase()) {
+      case 'common':
+        return Colors.grey;
+      case 'rare':
+        return Colors.blue;
+      case 'epic':
+        return Colors.purple;
+      case 'legendary':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildBadgesTab() {
@@ -340,11 +532,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildContributionsTab() {
-    return ListView.builder(
-      itemCount: contributions.length,
-      itemBuilder: (context, index) {
-        final contribution = contributions[index];
-        return ContributionCard(contribution: contribution);
+    return FutureBuilder<List<route_model.Route>>(
+      future: RouteService.getRoutesByUser(
+        user!.email,
+      ), // Using email as userId for now
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error loading contributions: ${snapshot.error}'),
+          );
+        }
+
+        final routes = snapshot.data ?? [];
+
+        if (routes.isEmpty) {
+          return const Center(
+            child: Text('No contributions yet. Start contributing routes!'),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: routes.length,
+          itemBuilder: (context, index) {
+            final route = routes[index];
+            return RouteContributionCard(route: route);
+          },
+        );
       },
     );
   }
@@ -362,6 +579,115 @@ class Contribution {
     required this.description,
     required this.status,
   });
+}
+
+class RouteContributionCard extends StatelessWidget {
+  final route_model.Route route;
+
+  const RouteContributionCard({super.key, required this.route});
+
+  double _calculateAverageRating() {
+    final total = route.upvotes + route.downvotes;
+    if (total == 0) return 0.0;
+    return (route.upvotes - route.downvotes) / (total + 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final distance = RouteMetricsService.calculateRouteDistance(
+      route.pathPoints,
+    );
+    final avgRating = _calculateAverageRating();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        route.shortDescription,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${route.startLocation} → ${route.endLocation}',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => ContributeScreen(
+                              onRouteSubmitted: (updatedRoute) {
+                                // Handle route update
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Route updated!'),
+                                  ),
+                                );
+                              },
+                              routeToEdit: route,
+                            ),
+                      ),
+                    );
+                  },
+                  tooltip: 'Edit Route',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildMetric('👥 ${route.views}', 'People Used'),
+                _buildMetric('⭐ ${avgRating.toStringAsFixed(1)}', 'Avg Rating'),
+                _buildMetric('👍 ${route.upvotes}', 'Upvotes'),
+                _buildMetric('👎 ${route.downvotes}', 'Downvotes'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildMetric('${distance.toStringAsFixed(1)} km', 'Distance'),
+                const SizedBox(width: 16),
+                _buildMetric(route.eta ?? 'N/A', 'ETA'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetric(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
+    );
+  }
 }
 
 class ContributionCard extends StatelessWidget {

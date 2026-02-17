@@ -9,6 +9,10 @@ class User {
   int routesContributed;
   int routesSearched;
   int reportsSubmitted;
+  double totalDistance;
+  double co2Saved;
+  String? mostActiveRegion;
+  int streakDays;
   UserRole role;
   bool isBanned;
   List<String> bookmarkedPostIds;
@@ -23,6 +27,10 @@ class User {
     this.routesContributed = 0,
     this.routesSearched = 0,
     this.reportsSubmitted = 0,
+    this.totalDistance = 0.0,
+    this.co2Saved = 0.0,
+    this.mostActiveRegion,
+    this.streakDays = 0,
     this.role = UserRole.user,
     this.isBanned = false,
     this.bookmarkedPostIds = const [],
@@ -39,6 +47,10 @@ class User {
       'routesContributed': routesContributed,
       'routesSearched': routesSearched,
       'reportsSubmitted': reportsSubmitted,
+      'totalDistance': totalDistance,
+      'co2Saved': co2Saved,
+      'mostActiveRegion': mostActiveRegion,
+      'streakDays': streakDays,
       'role': role.name,
       'isBanned': isBanned,
       'bookmarkedPostIds': bookmarkedPostIds,
@@ -56,6 +68,10 @@ class User {
       routesContributed: json['routesContributed'] ?? 0,
       routesSearched: json['routesSearched'] ?? 0,
       reportsSubmitted: json['reportsSubmitted'] ?? 0,
+      totalDistance: (json['totalDistance'] as num?)?.toDouble() ?? 0.0,
+      co2Saved: (json['co2Saved'] as num?)?.toDouble() ?? 0.0,
+      mostActiveRegion: json['mostActiveRegion'],
+      streakDays: json['streakDays'] ?? 0,
       role: UserRole.values.firstWhere(
         (e) => e.name == json['role'],
         orElse: () => UserRole.user,

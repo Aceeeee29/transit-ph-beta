@@ -187,7 +187,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               Column(
                 children: [
                   DropdownButtonFormField<String>(
-                    value: selectedStartTime,
+                    initialValue: selectedStartTime,
                     decoration: const InputDecoration(
                       labelText: 'Start Time',
                       border: OutlineInputBorder(),
@@ -217,7 +217,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   if (selectedStartTime != '24/7') ...[
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: selectedEndTime,
+                      initialValue: selectedEndTime,
                       decoration: const InputDecoration(
                         labelText: 'End Time',
                         border: OutlineInputBorder(),
