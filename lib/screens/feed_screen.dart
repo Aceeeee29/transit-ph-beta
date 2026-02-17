@@ -9,6 +9,7 @@ import '../widgets/create_post_dialog.dart';
 import '../models/notification.dart';
 import '../services/notifications_service.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/post_search_screen.dart';
 
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
@@ -32,7 +33,6 @@ class _FeedScreenState extends State<FeedScreen> {
   Map<String, Map<String, List<String>>> emojiReactions =
       {}; // postId -> emoji -> userIds
   Map<String, bool> bookmarkedPosts = {};
-  String searchQuery = '';
 
   Map<String, VideoPlayerController> videoControllers = {};
 
@@ -520,18 +520,22 @@ class _FeedScreenState extends State<FeedScreen> {
         widget.posts
             .where((p) => p.moderationStatus == ModerationStatus.approved)
             .toList();
-    final filteredPosts =
-        approvedPosts
-            .where(
-              (p) =>
-                  p.content.toLowerCase().contains(searchQuery.toLowerCase()),
-            )
-            .toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Community Feed'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => PostSearchScreen(posts: approvedPosts),
+                  ),
+                ),
+          ),
           IconButton(
             icon: const Icon(Icons.notifications),
             onPressed:
@@ -558,24 +562,11 @@ class _FeedScreenState extends State<FeedScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              decoration: const InputDecoration(
-                hintText: 'Search posts...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  searchQuery = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
             Expanded(
               child: ListView.builder(
-                itemCount: filteredPosts.length,
+                itemCount: approvedPosts.length,
                 itemBuilder:
-                    (context, index) => buildPostItem(filteredPosts[index]),
+                    (context, index) => buildPostItem(approvedPosts[index]),
               ),
             ),
           ],
