@@ -1,48 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:video_player/video_player.dart';
 import '../models/post.dart';
-import '../models/feedback.dart' as feedback_model;
-import '../services/moderation_service.dart';
+import '../models/comment.dart';
 import '../services/post_actions_service.dart';
 import '../security/security_manager.dart';
+import '../widgets/create_post_dialog.dart';
+import '../models/notification.dart';
+import '../services/notifications_service.dart';
+import '../screens/notifications_screen.dart';
 
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
   final Function(Post) onPostCreated;
+  final String currentUserName;
 
   const FeedScreen({
     super.key,
     required this.posts,
     required this.onPostCreated,
+    required this.currentUserName,
   });
 
   @override
   State<FeedScreen> createState() => _FeedScreenState();
 }
 
-class _FeedScreenState extends State<FeedScreen>
-    with SingleTickerProviderStateMixin {
-  TabController? _tabControllerNew;
-  int _selectedIndex = 0;
-
+class _FeedScreenState extends State<FeedScreen> {
   Map<String, bool> likedPosts = {};
-  Map<String, List<String>> postComments = {};
+  Map<String, List<Comment>> postComments = {};
+  Map<String, Map<String, List<String>>> emojiReactions =
+      {}; // postId -> emoji -> userIds
+  Map<String, bool> bookmarkedPosts = {};
+  String searchQuery = '';
+
+  Map<String, VideoPlayerController> videoControllers = {};
 
   @override
   void initState() {
     super.initState();
-    _tabControllerNew = TabController(length: 4, vsync: this);
-    _tabControllerNew!.addListener(() {
-      setState(() {
-        _selectedIndex = _tabControllerNew!.index;
-      });
-    });
   }
 
   @override
   void dispose() {
-    _tabControllerNew?.dispose();
     super.dispose();
+  }
+
+  Widget buildComment(Comment comment, {int depth = 0}) {
+    return Padding(
+      padding: EdgeInsets.only(left: depth * 16.0, top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${comment.userName}: ${comment.content}',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          if (comment.replies.isNotEmpty)
+            ...comment.replies.map(
+              (reply) => buildComment(reply, depth: depth + 1),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget buildPostItem(Post post) {
@@ -114,11 +134,16 @@ class _FeedScreenState extends State<FeedScreen>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    post.category == PostCategory.live
-                        ? 'Questions'
-                        : post.category == PostCategory.discussion
-                        ? 'Discussion'
-                        : 'Tips',
+                    switch (post.category) {
+                      PostCategory.discussion => 'Discussion',
+                      PostCategory.live => 'Questions',
+                      PostCategory.underReview => 'Tips',
+                      PostCategory.routeUpdate => 'Route Update',
+                      PostCategory.delayReport => 'Delay Report',
+                      PostCategory.safetyAlert => 'Safety Alert',
+                      PostCategory.recommendation => 'Recommendation',
+                      _ => 'Unknown',
+                    },
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -134,8 +159,68 @@ class _FeedScreenState extends State<FeedScreen>
               },
               text: post.content,
               style: const TextStyle(fontSize: 16),
-              linkStyle: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+              linkStyle: const TextStyle(
+                color: Colors.blue,
+                decoration: TextDecoration.underline,
+              ),
             ),
+            if (post.imageUrls.isNotEmpty) const SizedBox(height: 8),
+            if (post.imageUrls.isNotEmpty)
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: post.imageUrls.length,
+                  itemBuilder:
+                      (context, index) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Image.network(
+                          post.imageUrls[index],
+                          width: 200,
+                          height: 200,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const CircularProgressIndicator();
+                          },
+                          errorBuilder:
+                              (context, error, stackTrace) =>
+                                  const Icon(Icons.error),
+                        ),
+                      ),
+                ),
+              ),
+            if (post.videoUrl != null) const SizedBox(height: 8),
+            if (post.videoUrl != null)
+              FutureBuilder<VideoPlayerController>(
+                future: _initializeVideoController(post.videoUrl!),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done) {
+                    final controller = snapshot.data!;
+                    return AspectRatio(
+                      aspectRatio: controller.value.aspectRatio,
+                      child: VideoPlayer(controller),
+                    );
+                  } else {
+                    return Container(
+                      height: 200,
+                      color: Colors.black,
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    );
+                  }
+                },
+              ),
+            if (post.taggedLocation != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Location: ${post.taggedLocation!.name}',
+                  style: const TextStyle(fontSize: 14, color: Colors.blue),
+                ),
+              ),
+
             const SizedBox(height: 8),
             Row(
               children: [
@@ -144,6 +229,20 @@ class _FeedScreenState extends State<FeedScreen>
                     setState(() {
                       PostActionsService.likePost(post.id, likedPosts);
                     });
+                    if (post.userName != null &&
+                        post.userName != widget.currentUserName) {
+                      NotificationsService.addNotification(
+                        NotificationModel(
+                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                          userId: post.userName!,
+                          type: 'like',
+                          postId: post.id,
+                          fromUserName: widget.currentUserName,
+                          timestamp: DateTime.now(),
+                          message: '${widget.currentUserName} liked your post.',
+                        ),
+                      );
+                    }
                   },
                   icon: Icon(
                     (likedPosts[post.id] ?? false)
@@ -161,22 +260,59 @@ class _FeedScreenState extends State<FeedScreen>
                 ),
                 IconButton(
                   onPressed: () {
+                    _showEmojiPicker(post.id);
+                  },
+                  icon: const Icon(Icons.emoji_emotions_outlined, size: 20),
+                ),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      bookmarkedPosts[post.id] =
+                          !(bookmarkedPosts[post.id] ?? false);
+                    });
+                  },
+                  icon: Icon(
+                    (bookmarkedPosts[post.id] ?? false)
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
+                    size: 20,
+                    color:
+                        (bookmarkedPosts[post.id] ?? false)
+                            ? Colors.blue
+                            : null,
+                  ),
+                ),
+
+                IconButton(
+                  onPressed: () {
                     _reportPost(post);
                   },
-                  icon: const Icon(Icons.report_outlined, size: 20, color: Colors.red),
+                  icon: const Icon(
+                    Icons.report_outlined,
+                    size: 20,
+                    color: Colors.red,
+                  ),
                 ),
               ],
             ),
-            if (postComments[post.id]?.isNotEmpty ?? false)
-              ...postComments[post.id]!.map(
-                (comment) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Comment: $comment',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
+            // Display emoji reactions
+            if (emojiReactions[post.id]?.isNotEmpty ?? false)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 8,
+                  children:
+                      emojiReactions[post.id]!.entries.map((entry) {
+                        if (entry.value.isEmpty) return const SizedBox.shrink();
+                        return Text(
+                          '${entry.key} ${entry.value.length}',
+                          style: const TextStyle(fontSize: 14),
+                        );
+                      }).toList(),
                 ),
               ),
+            if (postComments[post.id]?.isNotEmpty ?? false)
+              ...postComments[post.id]!.map((comment) => buildComment(comment)),
           ],
         ),
       ),
@@ -187,7 +323,10 @@ class _FeedScreenState extends State<FeedScreen>
     showDialog(
       context: context,
       builder:
-          (context) => CreatePostDialog(onPostCreated: widget.onPostCreated),
+          (context) => CreatePostDialog(
+            onPostCreated: widget.onPostCreated,
+            currentUserName: widget.currentUserName,
+          ),
     );
   }
 
@@ -210,9 +349,37 @@ class _FeedScreenState extends State<FeedScreen>
               ElevatedButton(
                 onPressed: () {
                   if (commentController.text.isNotEmpty) {
+                    final comment = Comment(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      postId: postId,
+                      userId: 'currentUserId', // Replace with actual user
+                      userName: widget.currentUserName,
+                      content: commentController.text,
+                      timestamp: DateTime.now(),
+                    );
                     setState(() {
-                      PostActionsService.addComment(postId, commentController.text, postComments);
+                      PostActionsService.addComment(
+                        postId,
+                        comment,
+                        postComments,
+                      );
                     });
+                    final post = widget.posts.firstWhere((p) => p.id == postId);
+                    if (post.userName != null &&
+                        post.userName != widget.currentUserName) {
+                      NotificationsService.addNotification(
+                        NotificationModel(
+                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                          userId: post.userName!,
+                          type: 'comment',
+                          postId: postId,
+                          fromUserName: widget.currentUserName,
+                          timestamp: DateTime.now(),
+                          message:
+                              '${widget.currentUserName} commented on your post.',
+                        ),
+                      );
+                    }
                   }
                   Navigator.pop(context);
                 },
@@ -231,116 +398,155 @@ class _FeedScreenState extends State<FeedScreen>
     String? selectedReason;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report Post'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Why are you reporting this post?'),
-            const SizedBox(height: 16),
-            ...['Spam', 'Inappropriate Content', 'Harassment', 'Misinformation', 'Other'].map(
-              (reason) => RadioListTile<String>(
-                title: Text(reason),
-                value: reason,
-                groupValue: selectedReason,
-                onChanged: (value) {
-                  selectedReason = value;
-                  (context as Element).markNeedsBuild();
-                },
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (selectedReason != null) {
-                PostActionsService.reportPost(post, selectedReason!, 'currentUser@example.com'); // Replace with actual user
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Post reported for moderation')),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Report'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Post> get filteredPosts {
-    final approvedPosts = widget.posts.where((p) => p.moderationStatus == ModerationStatus.approved).toList();
-    switch (_selectedIndex) {
-      case 1:
-        return approvedPosts
-            .where((p) => p.category == PostCategory.discussion)
-            .toList();
-      case 2:
-        return approvedPosts
-            .where((p) => p.category == PostCategory.live)
-            .toList();
-      case 3:
-        return widget.posts
-            .where((p) => p.moderationStatus == ModerationStatus.pending)
-            .toList();
-      default:
-        return approvedPosts;
-    }
-  }
-
-  Widget buildSummaryCard(String label, int count, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 8),
-              Text(
-                count.toString(),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Report Post'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Why are you reporting this post?'),
+                const SizedBox(height: 16),
+                ...[
+                  'Spam',
+                  'Inappropriate Content',
+                  'Harassment',
+                  'Misinformation',
+                  'Other',
+                ].map(
+                  (reason) => RadioListTile<String>(
+                    title: Text(reason),
+                    value: reason,
+                    groupValue: selectedReason,
+                    onChanged: (value) {
+                      selectedReason = value;
+                      (context as Element).markNeedsBuild();
+                    },
+                  ),
                 ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 14, color: Colors.black54),
+              ElevatedButton(
+                onPressed: () {
+                  if (selectedReason != null) {
+                    PostActionsService.reportPost(
+                      post,
+                      selectedReason!,
+                      'currentUser@example.com',
+                    ); // Replace with actual user
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Post reported for moderation'),
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Report'),
               ),
             ],
           ),
-        ),
-      ),
     );
+  }
+
+  void _showEmojiPicker(String postId) {
+    final emojis = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('React with Emoji'),
+            content: Wrap(
+              spacing: 8,
+              children:
+                  emojis.map((emoji) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          emojiReactions[postId] ??= {};
+                          emojiReactions[postId]![emoji] ??= [];
+                          if (emojiReactions[postId]![emoji]!.contains(
+                            'currentUserId',
+                          )) {
+                            emojiReactions[postId]![emoji]!.remove(
+                              'currentUserId',
+                            );
+                          } else {
+                            emojiReactions[postId]![emoji]!.add(
+                              'currentUserId',
+                            );
+                          }
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 24),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<VideoPlayerController> _initializeVideoController(String url) async {
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    await controller.initialize();
+    return controller;
   }
 
   @override
   Widget build(BuildContext context) {
-    final approvedPosts = widget.posts.where((p) => p.moderationStatus == ModerationStatus.approved).toList();
-    int discussionsCount =
-        approvedPosts.where((p) => p.category == PostCategory.discussion).length;
-    int questionsCount =
+    final approvedPosts =
+        widget.posts
+            .where((p) => p.moderationStatus == ModerationStatus.approved)
+            .toList();
+    final filteredPosts =
         approvedPosts
-            .where((p) => p.category == PostCategory.live)
-            .length; // Questions are live category
-    int tipsCount =
-        approvedPosts
-            .where((p) => p.category == PostCategory.underReview)
-            .length; // Tips are underReview category
+            .where(
+              (p) =>
+                  p.content.toLowerCase().contains(searchQuery.toLowerCase()),
+            )
+            .toList();
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Community Feed'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => NotificationsScreen(
+                          currentUserName: widget.currentUserName,
+                        ),
+                  ),
+                ),
+          ),
+        ],
+      ),
       backgroundColor: Colors.white,
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreatePostDialog,
@@ -352,181 +558,29 @@ class _FeedScreenState extends State<FeedScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Community',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Ask questions, share tips, help others',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                buildSummaryCard(
-                  'Discussions',
-                  discussionsCount,
-                  Icons.chat_bubble_outline,
-                  Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                buildSummaryCard(
-                  'Questions',
-                  questionsCount,
-                  Icons.help_outline,
-                  Colors.green,
-                ),
-                const SizedBox(width: 8),
-                buildSummaryCard(
-                  'Tips Shared',
-                  tipsCount,
-                  Icons.trending_up,
-                  Colors.purple,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TabBar(
-              controller: _tabControllerNew,
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.blue,
-              indicatorWeight: 3,
-              tabs: const [
-                Tab(text: 'All'),
-                Tab(text: 'Discussions'),
-                Tab(text: 'Questions'),
-                Tab(text: 'Tips'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                key: ValueKey('${_selectedIndex}_${widget.posts.length}'),
-                itemCount: filteredPosts.length,
-                itemBuilder: (context, index) => buildPostItem(filteredPosts[index]),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class CreatePostDialog extends StatefulWidget {
-  final Function(Post) onPostCreated;
-
-  const CreatePostDialog({super.key, required this.onPostCreated});
-
-  @override
-  State<CreatePostDialog> createState() => _CreatePostDialogState();
-}
-
-class _CreatePostDialogState extends State<CreatePostDialog> {
-  final TextEditingController _contentController = TextEditingController();
-  PostCategory _selectedCategory = PostCategory.discussion;
-  bool _anonymous = false;
-
-  void _createPost() {
-    if (_contentController.text.isEmpty) return;
-
-    final post = Post(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      userName: _anonymous ? null : 'Current User', // Replace with actual user
-      userEmail:
-          _anonymous ? null : 'user@example.com', // Replace with actual user
-      anonymous: _anonymous,
-      content: _contentController.text,
-      type: PostType.text,
-      category: _selectedCategory,
-      timestamp: DateTime.now(),
-    );
-
-    widget.onPostCreated(post);
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create Post'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
             TextField(
-              controller: _contentController,
               decoration: const InputDecoration(
-                hintText: 'What\'s on your mind?',
+                hintText: 'Search posts...',
+                prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            DropdownButton<PostCategory>(
-              value: _selectedCategory,
               onChanged: (value) {
                 setState(() {
-                  _selectedCategory = value!;
+                  searchQuery = value;
                 });
               },
-              items:
-                  PostCategory.values.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(
-                        category == PostCategory.discussion
-                            ? 'Discussions'
-                            : category == PostCategory.live
-                            ? 'Questions'
-                            : 'Tips',
-                      ),
-                    );
-                  }).toList(),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text('Anonymous'),
-                Switch(
-                  value: _anonymous,
-                  onChanged: (value) {
-                    setState(() {
-                      _anonymous = value;
-                    });
-                  },
-                ),
-              ],
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredPosts.length,
+                itemBuilder:
+                    (context, index) => buildPostItem(filteredPosts[index]),
+              ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _createPost,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          child: const Text(
-            'Post',
-            style: TextStyle(color: Colors.white),
-          ),
-        ),
-      ],
     );
   }
 }

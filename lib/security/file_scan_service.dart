@@ -30,7 +30,7 @@ class FileScanService {
     int sizeBytes = await file.length();
     if (sizeBytes > _defaultMaxFileSizeBytes) {
       isBlocked = true;
-      reasons.add('File size exceeds limit (${_defaultMaxFileSizeBytes} bytes)');
+      reasons.add('File size exceeds limit ($_defaultMaxFileSizeBytes bytes)');
     }
 
     // Compute SHA-256 hash

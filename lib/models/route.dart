@@ -14,11 +14,13 @@ class Route {
   final String? eta;
   final String? price;
   final String? schedule;
+  final String? imageUrl;
   final List<Report> reports;
   final List<int> stepBoundaries;
   int views;
   int upvotes;
   int downvotes;
+  bool bookmarked;
 
   Route({
     required this.id,
@@ -34,11 +36,13 @@ class Route {
     this.eta,
     this.price,
     this.schedule,
+    this.imageUrl,
     this.reports = const [],
     this.stepBoundaries = const [],
     this.views = 0,
     this.upvotes = 0,
     this.downvotes = 0,
+    this.bookmarked = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -67,6 +71,9 @@ class Route {
               .toList(),
       'stepBoundaries': stepBoundaries,
       'eta': eta,
+      'price': price,
+      'schedule': schedule,
+      'imageUrl': imageUrl,
       'reports':
           reports
               .map(
@@ -80,6 +87,7 @@ class Route {
       'views': views,
       'upvotes': upvotes,
       'downvotes': downvotes,
+      'bookmarked': bookmarked,
     };
   }
 
@@ -109,10 +117,11 @@ class Route {
               .toList(),
       stepBoundaries:
           (json['stepBoundaries'] as List?)?.map((b) => b as int).toList() ??
-              [],
+          [],
       eta: json['eta'],
       price: json['price'],
       schedule: json['schedule'],
+      imageUrl: json['imageUrl'],
       reports:
           (json['reports'] as List)
               .map(
@@ -137,6 +146,7 @@ class Route {
           json['downvotes'] is int
               ? json['downvotes']
               : int.tryParse(json['downvotes']?.toString() ?? '0') ?? 0,
+      bookmarked: json['bookmarked'] ?? false,
     );
   }
 }

@@ -78,7 +78,7 @@ class LinkSafetyService {
 
     // Rule: suspicious TLD list = +1 risk
     if (parts.isNotEmpty) {
-      String tld = '.' + parts.last;
+      String tld = '.${parts.last}';
       if (suspiciousTlds.contains(tld)) {
         riskScore += 1;
         reasons.add('Suspicious TLD: $tld');

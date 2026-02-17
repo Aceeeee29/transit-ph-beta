@@ -1,23 +1,25 @@
-# Contribute Screen Improvements - Implementation Tracking
+# Transit PH Beta - Home Screen Improvements Implementation
 
-## 1. Better Onboarding Flow
-- [x] Implement tutorial overlay on first use
-- [x] Create animated demonstration of adding route steps
-- [x] Add "Example Route" button to load pre-defined route
+## Phase 1: Auto-detect Current Position
+- [x] lib/services/location_service.dart - Create new location service (Already exists)
+- [x] lib/screens/home_screen.dart - Make starting location editable
 
-## 2. Enhanced Map Interaction
-- [x] Implement undo/redo buttons in map controls
-- [x] Show distance/ETA preview during route drawing
-- [x] Add snap-to-road functionality
-- [x] Implement route preview before submission
+## Phase 2: Improve Search Results Presentation
+- [x] lib/screens/home_screen.dart - Replace AlertDialog with persistent bottom sheet (Already implemented)
+- [x] lib/screens/home_screen.dart - Add filter chips (Already implemented)
+- [x] lib/services/bookmark_service.dart - Create bookmark service (Already exists)
+- [x] lib/models/route.dart - Add bookmarked field
 
-## 3. Improved Form UX
-- [ ] Replace expandable panel with stepper widget
-- [x] Add photo upload for landmarks
-- [x] Implement voice notes for instructions (simulated)
-- [ ] Add drag-to-reorder functionality for steps
+## Phase 3: Enhance Recommendations
+- [x] lib/services/recommendation_service.dart - Create new recommendation service (Already exists)
+- [x] lib/screens/home_screen.dart - Replace static "Routes you may like" with dynamic recommendations (Already implemented)
 
-## 4. Additional Improvements
-- [x] Add validation for overlapping points
-- [x] Implement intuitive UI for selecting transport modes
-- [x] Add visual feedback during route creation
+## Phase 4: UI/UX Improvements
+- [x] lib/screens/home_screen.dart - Add route preview thumbnails (Already implemented)
+- [x] lib/screens/home_screen.dart - Add filter UI for duration/price (Already implemented)
+- [x] lib/screens/home_screen.dart - Improve bottom sheet design with drag handle (Already implemented)
+
+## Followup steps:
+- [ ] Test location permissions on device/emulator
+- [ ] Verify bottom sheet works on different screen sizes
+- [ ] Test bookmark functionality persists across app restarts

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'home_screen.dart';
 import 'contribute_screen.dart';
 import 'profile_screen.dart';
@@ -22,6 +23,11 @@ class _MainScreenState extends State<MainScreen> {
   List<Post> posts = [];
   List<route_model.Route> routes = [];
 
+  String get currentUserName {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.displayName ?? user?.email ?? 'User';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +39,7 @@ class _MainScreenState extends State<MainScreen> {
     final screens = <Widget>[
       HomeScreen(routes: routes),
       FeedScreen(
+        key: ValueKey(posts.length), // Force rebuild when posts change
         posts: posts,
         onPostCreated: (post) {
           setState(() {
@@ -40,6 +47,7 @@ class _MainScreenState extends State<MainScreen> {
             ModerationService.postsNotifier.value = List.from(posts);
           });
         },
+        currentUserName: currentUserName,
       ),
       ContributeScreen(
         onRouteSubmitted: (route) {

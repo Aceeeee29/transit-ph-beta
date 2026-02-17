@@ -255,6 +255,8 @@ class RoutePreview extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.black, width: 2),
               ),
+              width: 24,
+              height: 24,
               child: Center(
                 child: Text(
                   '${i + 1}',
@@ -264,8 +266,6 @@ class RoutePreview extends StatelessWidget {
                   ),
                 ),
               ),
-              width: 24,
-              height: 24,
             ),
           ),
         );

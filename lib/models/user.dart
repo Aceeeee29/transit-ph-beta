@@ -11,6 +11,8 @@ class User {
   int reportsSubmitted;
   UserRole role;
   bool isBanned;
+  List<String> bookmarkedPostIds;
+  List<String> followedRouteIds;
 
   User({
     required this.name,
@@ -23,6 +25,8 @@ class User {
     this.reportsSubmitted = 0,
     this.role = UserRole.user,
     this.isBanned = false,
+    this.bookmarkedPostIds = const [],
+    this.followedRouteIds = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -37,6 +41,8 @@ class User {
       'reportsSubmitted': reportsSubmitted,
       'role': role.name,
       'isBanned': isBanned,
+      'bookmarkedPostIds': bookmarkedPostIds,
+      'followedRouteIds': followedRouteIds,
     };
   }
 
@@ -55,6 +61,8 @@ class User {
         orElse: () => UserRole.user,
       ),
       isBanned: json['isBanned'] ?? false,
+      bookmarkedPostIds: List<String>.from(json['bookmarkedPostIds'] ?? []),
+      followedRouteIds: List<String>.from(json['followedRouteIds'] ?? []),
     );
   }
 }

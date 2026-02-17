@@ -1,4 +1,5 @@
 import '../models/route.dart' as route_model;
+import '../models/user.dart' as user_model;
 import 'search_service.dart';
 import 'location_service.dart';
 
@@ -9,18 +10,18 @@ class RecommendationService {
     int limit,
   ) async {
     final recentSearches = await SearchService.getRecentSearches();
-    
+
     if (recentSearches.isEmpty) {
       return [];
     }
 
     // Score routes based on search history relevance
     final scoredRoutes = <route_model.Route, int>{};
-    
+
     for (final route in allRoutes) {
       int score = 0;
       final searchLower = recentSearches.take(3).map((s) => s.toLowerCase());
-      
+
       for (final search in searchLower) {
         if (route.endLocation.toLowerCase().contains(search) ||
             route.startLocation.toLowerCase().contains(search) ||
@@ -28,16 +29,17 @@ class RecommendationService {
           score += 3;
         }
       }
-      
+
       if (score > 0) {
         scoredRoutes[route] = score;
       }
     }
 
     // Sort by score and return top results
-    final sortedRoutes = scoredRoutes.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
+    final sortedRoutes =
+        scoredRoutes.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
     return sortedRoutes.take(limit).map((e) => e.key).toList();
   }
 
@@ -55,6 +57,39 @@ class RecommendationService {
     return sortedRoutes.take(limit).toList();
   }
 
+  /// Get popular routes in the user's region (based on current address)
+  static List<route_model.Route> getPopularInRegion(
+    List<route_model.Route> allRoutes,
+    String? currentAddress,
+    int limit,
+  ) {
+    if (currentAddress == null || currentAddress.isEmpty) {
+      return getPopularRoutes(allRoutes, limit);
+    }
+
+    // Extract city from address (assume format: "Street, City, Province")
+    final addressParts = currentAddress.split(',');
+    if (addressParts.length < 2) {
+      return getPopularRoutes(allRoutes, limit);
+    }
+    final city = addressParts[1].trim().toLowerCase();
+
+    // Filter routes that start or end in the same city
+    final regionalRoutes =
+        allRoutes.where((route) {
+          final startCity = route.startLocation.toLowerCase();
+          final endCity = route.endLocation.toLowerCase();
+          return startCity.contains(city) || endCity.contains(city);
+        }).toList();
+
+    if (regionalRoutes.isEmpty) {
+      return getPopularRoutes(allRoutes, limit);
+    }
+
+    // Return popular routes from the region
+    return getPopularRoutes(regionalRoutes, limit);
+  }
+
   /// Get routes suitable for rush hour (prioritize alternatives like train/jeepney over bus)
   static List<route_model.Route> getRushHourAlternatives(
     List<route_model.Route> allRoutes,
@@ -66,13 +101,13 @@ class RecommendationService {
 
     // Prioritize routes with multiple transport modes and train options
     final scoredRoutes = <route_model.Route, int>{};
-    
+
     for (final route in allRoutes) {
       int score = 0;
-      
+
       // Prefer routes with more steps (more alternatives)
       score += route.steps.length * 2;
-      
+
       // Prefer train over bus during rush hour
       for (final step in route.steps) {
         if (step.mode.toLowerCase().contains('train')) {
@@ -82,13 +117,14 @@ class RecommendationService {
           score += 5;
         }
       }
-      
+
       scoredRoutes[route] = score;
     }
 
-    final sortedRoutes = scoredRoutes.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
+    final sortedRoutes =
+        scoredRoutes.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
     return sortedRoutes.take(limit).map((e) => e.key).toList();
   }
 
@@ -98,18 +134,18 @@ class RecommendationService {
   ) {
     final timeOfDay = LocationService.getTimeOfDayDescription();
     final recommendations = <String, List<route_model.Route>>{};
-    
+
     // Get popular routes
     recommendations['popular'] = getPopularRoutes(allRoutes, 5);
-    
+
     // Get rush hour alternatives if applicable
     if (LocationService.isRushHour()) {
       recommendations['rushHour'] = getRushHourAlternatives(allRoutes, 5);
     }
-    
+
     // Add time-based section
     recommendations['timeOfDay'] = _getRoutesForTimeOfDay(allRoutes, timeOfDay);
-    
+
     return recommendations;
   }
 
@@ -119,45 +155,63 @@ class RecommendationService {
     String timeOfDay,
   ) {
     // For now, return popular routes filtered by common commuter destinations
-    final commuterRoutes = allRoutes.where((route) {
-      final desc = route.shortDescription.toLowerCase();
-      return desc.contains('work') ||
-          desc.contains('school') ||
-          desc.contains('university') ||
-          desc.contains('office') ||
-          desc.contains('downtown') ||
-          desc.contains('terminal');
-    }).toList();
-    
+    final commuterRoutes =
+        allRoutes.where((route) {
+          final desc = route.shortDescription.toLowerCase();
+          return desc.contains('work') ||
+              desc.contains('school') ||
+              desc.contains('university') ||
+              desc.contains('office') ||
+              desc.contains('downtown') ||
+              desc.contains('terminal');
+        }).toList();
+
     if (commuterRoutes.isEmpty) {
       return getPopularRoutes(allRoutes, 5);
     }
-    
+
     return commuterRoutes.take(5).toList();
   }
 
   /// Get all recommendations combined
   static Future<Map<String, List<route_model.Route>>> getAllRecommendations(
-    List<route_model.Route> allRoutes,
-  ) async {
+    List<route_model.Route> allRoutes, {
+    String? currentAddress,
+    user_model.User? user,
+  }) async {
     final recommendations = <String, List<route_model.Route>>{};
-    
+
     // Get search history based recommendations
     recommendations['forYou'] = await getBasedOnSearchHistory(allRoutes, 5);
-    
+
     // Get popular routes
     recommendations['popular'] = getPopularRoutes(allRoutes, 5);
-    
+
+    // Get popular routes in region
+    recommendations['popularInRegion'] = getPopularInRegion(
+      allRoutes,
+      currentAddress,
+      5,
+    );
+
+    // Get contribution-based recommendations
+    if (user != null && user.routesContributed > 0) {
+      recommendations['contributionBased'] = getPopularRoutes(allRoutes, 5);
+    }
+
     // Get rush hour alternatives if applicable
     if (LocationService.isRushHour()) {
-      recommendations['rushHourAlternatives'] = getRushHourAlternatives(allRoutes, 5);
+      recommendations['rushHourAlternatives'] = getRushHourAlternatives(
+        allRoutes,
+        5,
+      );
     }
-    
+
     // If no personalized recommendations, use popular routes
     if (recommendations['forYou']!.isEmpty) {
       recommendations['forYou'] = getPopularRoutes(allRoutes, 5);
     }
-    
+
     return recommendations;
   }
 }

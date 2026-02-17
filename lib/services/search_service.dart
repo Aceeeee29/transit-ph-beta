@@ -7,21 +7,21 @@ class SearchService {
   /// Save a search query to recent searches
   static Future<void> addRecentSearch(String query) async {
     if (query.trim().isEmpty) return;
-    
+
     final prefs = await SharedPreferences.getInstance();
     final recentSearches = prefs.getStringList(_recentSearchesKey) ?? [];
-    
+
     // Remove if already exists (to move it to top)
     recentSearches.remove(query.trim());
-    
+
     // Add to beginning
     recentSearches.insert(0, query.trim());
-    
+
     // Limit to max recent searches
     if (recentSearches.length > _maxRecentSearches) {
       recentSearches.removeRange(_maxRecentSearches, recentSearches.length);
     }
-    
+
     await prefs.setStringList(_recentSearchesKey, recentSearches);
   }
 

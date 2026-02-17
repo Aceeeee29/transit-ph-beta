@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
+import '../services/route_metrics_service.dart';
 import '../widgets/notification_overlay.dart';
 
 class RouteMapScreen extends StatefulWidget {
@@ -538,9 +539,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (_pathPoints.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Route Map')),
-        body: const Center(
-          child: Text('No route data available'),
-        ),
+        body: const Center(child: Text('No route data available')),
       );
     }
 
@@ -672,6 +671,26 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: ListView(
                     children: [
+                      // Calculate and display distance
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.straighten,
+                                color: Colors.purple,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Distance: ${RouteMetricsService.formatDistance(RouteMetricsService.calculateRouteDistance(_pathPoints))}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       if (widget.route.eta != null)
                         Card(
                           margin: const EdgeInsets.only(bottom: 16),

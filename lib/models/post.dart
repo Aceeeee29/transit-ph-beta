@@ -1,3 +1,5 @@
+import 'location.dart';
+
 class Post {
   final String id;
   final String? userName;
@@ -9,6 +11,11 @@ class Post {
   final DateTime timestamp;
   ModerationStatus moderationStatus;
   int likeCount;
+  final List<String> imageUrls;
+  final String? videoUrl;
+  final Location? taggedLocation;
+  final List<String> taggedUsers;
+  final String? routeId;
 
   Post({
     required this.id,
@@ -21,11 +28,24 @@ class Post {
     required this.timestamp,
     this.moderationStatus = ModerationStatus.approved,
     this.likeCount = 0,
+    this.imageUrls = const [],
+    this.videoUrl,
+    this.taggedLocation,
+    this.taggedUsers = const [],
+    this.routeId,
   });
 }
 
-enum PostType { text, image, poll }
+enum PostType { text, image, video, poll }
 
-enum PostCategory { discussion, live, underReview }
+enum PostCategory {
+  discussion,
+  live,
+  underReview,
+  routeUpdate,
+  delayReport,
+  safetyAlert,
+  recommendation,
+}
 
 enum ModerationStatus { pending, approved, rejected }
