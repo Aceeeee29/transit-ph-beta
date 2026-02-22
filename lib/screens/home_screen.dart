@@ -558,6 +558,37 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _showFareMatrixDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Fare Matrix'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text('Transport Type\t\tUpdated Fare Estimate (₱ PHP)'),
+                SizedBox(height: 8),
+                Text('Jeepney (Traditional / Modern)\t\t₱13 base fare'),
+                Text('City Bus\t\t₱13–₱40+'),
+                Text('Train (LRT/MRT)\t\t₱20–₱55'),
+                Text('Tricycle\t\t₱15–₱60+'),
+                Text('FX / UV Express (Van)\t\t₱30–₱100+'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildRecommendationSection(
     String title,
     List<route_model.Route> routes,
@@ -863,7 +894,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _showFareMatrixDialog,
+                  icon: const Icon(Icons.attach_money),
+                  label: const Text('View Fare Matrix'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Dynamic recommendations section
                 if (_isLoadingRecommendations)

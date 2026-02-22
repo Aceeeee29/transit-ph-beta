@@ -6,3 +6,8 @@
 - [x] Modify lib/screens/feed_screen.dart to remove search TextField from body
 - [x] Add search icon to AppBar actions in feed_screen.dart
 - [x] Update navigation to PostSearchScreen on search icon tap in feed_screen.dart
+
+Fare Matrix Popup Task:
+- [x] Add _showFareMatrixDialog method to _HomeScreenState in home_screen.dart
+- [x] Add ElevatedButton "View Fare Matrix" in build method after search card
+- [x] Test the popup functionality
