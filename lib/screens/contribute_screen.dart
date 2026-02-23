@@ -14,13 +14,15 @@ import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 
 class ContributeScreen extends StatefulWidget {
-  final void Function(route_model.Route) onRouteSubmitted;
+  final Future<void> Function(route_model.Route) onRouteSubmitted;
   final route_model.Route? routeToEdit;
+  final String? contributorId;
 
   const ContributeScreen({
     super.key,
     required this.onRouteSubmitted,
     this.routeToEdit,
+    this.contributorId,
   });
 
   @override
@@ -54,7 +56,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // Tutorial state
   bool _showTutorial = false;
-  final Map<String, GlobalKey> _targetKeys = {};
 
   // Philippine regions with approximate boundaries
   final Map<String, LatLngBounds> philippineRegions = {
@@ -155,7 +156,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeTargetKeys();
     _checkTutorialStatus();
     _loadRouteToEdit();
   }
@@ -175,17 +175,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       });
       _saveToHistory();
     }
-  }
-
-  void _initializeTargetKeys() {
-    _targetKeys['map'] = GlobalKey();
-    _targetKeys['mode_selector'] = GlobalKey();
-    _targetKeys['step_form'] = GlobalKey();
-    _targetKeys['finish_button'] = GlobalKey();
-    _targetKeys['route_form'] = GlobalKey();
-    _targetKeys['media_buttons'] = GlobalKey();
-    _targetKeys['preview_button'] = GlobalKey();
-    _targetKeys['submit_button'] = GlobalKey();
   }
 
   Future<void> _checkTutorialStatus() async {
@@ -484,10 +473,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
         price: fare,
         schedule:
             _scheduleController.text.isEmpty ? null : _scheduleController.text,
-        contributorId: widget.routeToEdit?.contributorId,
+        contributorId:
+            widget.routeToEdit?.contributorId ?? widget.contributorId,
       );
 
-      widget.onRouteSubmitted(route);
+      await widget.onRouteSubmitted(route);
 
       // Award points only for new contributions, not edits
       if (widget.routeToEdit == null) {
@@ -509,9 +499,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
               ? 'Route updated successfully!'
               : 'Route submitted for review!';
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      await showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Route Submitted'),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+      );
 
       // Reset form only for new routes
       if (widget.routeToEdit == null) {
@@ -779,7 +780,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
               ),
               if (selectionMode == 'done')
                 IconButton(
-                  key: _targetKeys['preview_button'],
                   icon: const Icon(Icons.preview),
                   tooltip: 'Preview Route',
                   onPressed: _onPreviewRoute,
@@ -791,7 +791,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
               children: [
                 // Full-screen Map
                 FlutterMap(
-                  key: _targetKeys['map'],
                   mapController: _mapController,
                   options: MapOptions(
                     initialCenter: const LatLng(12.8797, 121.7740),
@@ -843,7 +842,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   top: 70,
                   left: 20,
                   child: MapControls(
-                    key: _targetKeys['mode_selector'],
                     historyService: _historyService,
                     pathPoints: pathPoints,
                     steps: steps,
@@ -969,7 +967,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                               child: Form(
                                 key: _formKey,
                                 child: RouteFormStepper(
-                                  formKey: _formKey,
                                   startLocationController:
                                       _startLocationController,
                                   endLocationController: _endLocationController,
@@ -980,7 +977,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                                   onSubmit: _submit,
                                   onReset: _onReset,
                                   selectionMode: selectionMode,
-                                  targetKeys: _targetKeys,
                                 ),
                               ),
                             ),
@@ -1001,7 +997,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
         if (_showTutorial)
           TutorialOverlay(
             steps: TutorialService.getContributeTutorialSteps(),
-            targetKeys: _targetKeys,
             onComplete: _onTutorialComplete,
             onExampleRouteRequested: _loadExampleRoute,
           ),

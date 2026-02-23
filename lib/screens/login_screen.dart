@@ -35,10 +35,59 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+
+      // Check if user document exists, if not create it
+      try {
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userCredential.user!.uid)
+                .get();
+        if (!userDoc.exists) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .set({
+                'uid': userCredential.user!.uid,
+                'name': userCredential.user!.displayName ?? 'Anonymous',
+                'email': userCredential.user!.email ?? '',
+                'photoUrl': userCredential.user!.photoURL,
+                'userCategory': null,
+                'role': 'user',
+                'isBanned': false,
+                'routesContributed': 0,
+                'routesSearched': 0,
+                'reportsSubmitted': 0,
+                'totalDistance': 0.0,
+                'co2Saved': 0.0,
+                'mostActiveRegion': null,
+                'streakDays': 0,
+                'lastActiveDate': null,
+                'createdAt': FieldValue.serverTimestamp(),
+                'badges': [],
+                'achievements': [],
+                'bookmarkedPostIds': [],
+                'followedRouteIds': [],
+                'hasSeenTutorial': false,
+              });
+          print(
+            'Created user document for email user: ${userCredential.user!.uid}',
+          );
+        } else {
+          print(
+            'User document already exists for email user: ${userCredential.user!.uid}',
+          );
+        }
+      } catch (firestoreError) {
+        print('Failed to create/check user document: $firestoreError');
+        // Continue anyway, AuthGate will handle missing document
+      }
+
       // AuthGate will handle navigation based on role
     } on FirebaseAuthException catch (e) {
       setState(() {
@@ -75,27 +124,57 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
       // Check if user document exists, if not create it
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userCredential.user!.uid)
+                .get();
         if (!userDoc.exists) {
-          await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-            'uid': userCredential.user!.uid,
-            'email': userCredential.user!.email,
-            'role': 'user',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          print('Created user document for Google user: ${userCredential.user!.uid}');
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .set({
+                'uid': userCredential.user!.uid,
+                'name': userCredential.user!.displayName ?? 'Anonymous',
+                'email': userCredential.user!.email ?? '',
+                'photoUrl': userCredential.user!.photoURL,
+                'userCategory': null,
+                'role': 'user',
+                'isBanned': false,
+                'routesContributed': 0,
+                'routesSearched': 0,
+                'reportsSubmitted': 0,
+                'totalDistance': 0.0,
+                'co2Saved': 0.0,
+                'mostActiveRegion': null,
+                'streakDays': 0,
+                'lastActiveDate': null,
+                'createdAt': FieldValue.serverTimestamp(),
+                'badges': [],
+                'achievements': [],
+                'bookmarkedPostIds': [],
+                'followedRouteIds': [],
+                'hasSeenTutorial': false,
+              });
+          print(
+            'Created user document for Google user: ${userCredential.user!.uid}',
+          );
         } else {
-          print('User document already exists for Google user: ${userCredential.user!.uid}');
+          print(
+            'User document already exists for Google user: ${userCredential.user!.uid}',
+          );
         }
       } catch (firestoreError) {
         print('Failed to create/check user document: $firestoreError');
@@ -203,7 +282,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
                             onPressed: () {
                               setState(() {
@@ -231,19 +312,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            child: _isLoading
-                                ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text(
-                                    'Sign in',
-                                    style: TextStyle(fontSize: 16, color: Colors.white),
-                                  ),
+                            child:
+                                _isLoading
+                                    ? const CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                    : const Text(
+                                      'Sign in',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                           ),
                         ),
                       ),
@@ -262,14 +352,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: _isGoogleLoading ? null : _signInWithGoogle,
-                          icon: _isGoogleLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.g_mobiledata, size: 20),
+                          onPressed:
+                              _isGoogleLoading ? null : _signInWithGoogle,
+                          icon:
+                              _isGoogleLoading
+                                  ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : const Icon(Icons.g_mobiledata, size: 20),
                           label: const Text('Continue with Google'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -286,7 +380,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const ForgotPasswordScreen(),
+                              ),
                             );
                           },
                           child: const Text('Forgot password?'),
@@ -300,7 +397,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => const SignupScreen()),
+                                MaterialPageRoute(
+                                  builder: (context) => const SignupScreen(),
+                                ),
                               );
                             },
                             child: const Text('Sign up'),

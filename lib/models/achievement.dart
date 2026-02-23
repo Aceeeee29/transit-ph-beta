@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Achievement {
   final String id;
   final String name;
@@ -8,6 +10,7 @@ class Achievement {
   final int progress;
   final int maxProgress;
   final String rarity;
+  final Timestamp? unlockedAt;
 
   Achievement({
     required this.id,
@@ -19,9 +22,14 @@ class Achievement {
     this.progress = 0,
     this.maxProgress = 1,
     this.rarity = 'Common',
+    this.unlockedAt,
   });
 
-  Achievement copyWith({bool? isUnlocked, int? progress}) {
+  Achievement copyWith({
+    bool? isUnlocked,
+    int? progress,
+    Timestamp? unlockedAt,
+  }) {
     return Achievement(
       id: id,
       name: name,
@@ -32,6 +40,7 @@ class Achievement {
       progress: progress ?? this.progress,
       maxProgress: maxProgress,
       rarity: rarity,
+      unlockedAt: unlockedAt ?? this.unlockedAt,
     );
   }
 
@@ -46,6 +55,7 @@ class Achievement {
       'progress': progress,
       'maxProgress': maxProgress,
       'rarity': rarity,
+      'unlockedAt': unlockedAt,
     };
   }
 
@@ -60,6 +70,7 @@ class Achievement {
       progress: json['progress'] ?? 0,
       maxProgress: json['maxProgress'] ?? 1,
       rarity: json['rarity'] ?? 'Common',
+      unlockedAt: json['unlockedAt'] as Timestamp?,
     );
   }
 }

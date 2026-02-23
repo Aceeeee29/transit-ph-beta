@@ -31,21 +31,7 @@ class GamificationService {
 
         if (docSnapshot.exists) {
           final data = docSnapshot.data() as Map<String, dynamic>;
-          return app_user.User(
-            name: data['name'] ?? 'User',
-            email: data['email'] ?? '',
-            userCategory: data['userCategory'],
-            badges: List<String>.from(data['badges'] ?? []),
-            achievements: List<String>.from(data['achievements'] ?? []),
-            routesContributed: data['routesContributed'] ?? 0,
-            routesSearched: data['routesSearched'] ?? 0,
-            reportsSubmitted: data['reportsSubmitted'] ?? 0,
-            role: app_user.UserRole.values.firstWhere(
-              (e) => e.name == data['role'],
-              orElse: () => app_user.UserRole.user,
-            ),
-            isBanned: data['isBanned'] ?? false,
-          );
+          return app_user.User.fromJson(data);
         } else {
           // Create a new user document in Firestore if it doesn't exist
           final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
@@ -119,6 +105,30 @@ class GamificationService {
   }
 
   static Future<List<Achievement>> loadAchievements() async {
+    final uid = _getCurrentUserUid();
+    if (uid != null) {
+      try {
+        final querySnapshot =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .collection('achievements')
+                .get();
+        if (querySnapshot.docs.isNotEmpty) {
+          return querySnapshot.docs
+              .map((doc) => Achievement.fromJson(doc.data()))
+              .toList();
+        } else {
+          // Seed predefined achievements
+          final predefined = getPredefinedAchievements();
+          await saveAchievements(predefined);
+          return predefined;
+        }
+      } catch (e) {
+        print('Error loading achievements from Firestore: $e');
+      }
+    }
+    // Fallback to SharedPreferences if not logged in or error
     final prefs = await SharedPreferences.getInstance();
     final achievementsJson = prefs.getString(_achievementsKey);
     if (achievementsJson != null) {
@@ -129,12 +139,49 @@ class GamificationService {
   }
 
   static Future<void> saveAchievements(List<Achievement> achievements) async {
+    final uid = _getCurrentUserUid();
+    if (uid != null) {
+      try {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final achievement in achievements) {
+          final docRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('achievements')
+              .doc(achievement.id);
+          batch.set(docRef, achievement.toJson());
+        }
+        await batch.commit();
+      } catch (e) {
+        print('Error saving achievements to Firestore: $e');
+      }
+    }
+    // Also save to SharedPreferences as backup
     final prefs = await SharedPreferences.getInstance();
     final encoded = achievements.map((e) => e.toJson()).toList();
     await prefs.setString(_achievementsKey, jsonEncode(encoded));
   }
 
   static Future<List<Badge>> loadBadges() async {
+    final uid = _getCurrentUserUid();
+    if (uid != null) {
+      try {
+        final querySnapshot =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .collection('badges')
+                .get();
+        if (querySnapshot.docs.isNotEmpty) {
+          return querySnapshot.docs
+              .map((doc) => Badge.fromJson(doc.data()))
+              .toList();
+        }
+      } catch (e) {
+        print('Error loading badges from Firestore: $e');
+      }
+    }
+    // Fallback to SharedPreferences if not logged in or error
     final prefs = await SharedPreferences.getInstance();
     final badgesJson = prefs.getString(_badgesKey);
     if (badgesJson != null) {
@@ -145,6 +192,24 @@ class GamificationService {
   }
 
   static Future<void> saveBadges(List<Badge> badges) async {
+    final uid = _getCurrentUserUid();
+    if (uid != null) {
+      try {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final badge in badges) {
+          final docRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('badges')
+              .doc(badge.id);
+          batch.set(docRef, badge.toJson());
+        }
+        await batch.commit();
+      } catch (e) {
+        print('Error saving badges to Firestore: $e');
+      }
+    }
+    // Also save to SharedPreferences as backup
     final prefs = await SharedPreferences.getInstance();
     final encoded = badges.map((e) => e.toJson()).toList();
     await prefs.setString(_badgesKey, jsonEncode(encoded));
@@ -218,15 +283,10 @@ class GamificationService {
                 .key;
       }
 
-      // Calculate streak days (simplified: assume current streak based on recent activity)
-      // This would need more complex logic with activity timestamps
-      final streakDays = _calculateStreakDays(routes);
-
-      // Update user stats
+      // Update user stats (streak is handled separately on app open)
       user.totalDistance = totalDistance;
       user.co2Saved = totalCo2Saved;
       user.mostActiveRegion = mostActiveRegion;
-      user.streakDays = streakDays;
 
       await saveUser(user);
     } catch (e) {
@@ -263,14 +323,75 @@ class GamificationService {
     return null;
   }
 
-  /// Calculate streak days (simplified implementation)
-  static int _calculateStreakDays(List<route_model.Route> routes) {
-    // This is a placeholder - in a real implementation,
-    // you'd track daily activity timestamps
-    // For now, return a simple calculation based on route count
-    if (routes.length >= 7) return 7;
-    if (routes.length >= 3) return 3;
-    return routes.length;
+  /// Calculate streak days based on lastActiveDate
+  static int _calculateStreakDays(DateTime? lastActiveDate, int currentStreak) {
+    if (lastActiveDate == null) return 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastActive = DateTime(
+      lastActiveDate.year,
+      lastActiveDate.month,
+      lastActiveDate.day,
+    );
+
+    final difference = today.difference(lastActive).inDays;
+
+    if (difference == 0) {
+      // Active today, keep current streak
+      return currentStreak;
+    } else if (difference == 1) {
+      // Active yesterday, increment streak
+      return currentStreak + 1;
+    } else {
+      // Gap in activity, reset to 1
+      return 1;
+    }
+  }
+
+  /// Update streak on app open
+  static Future<void> updateStreakOnAppOpen() async {
+    final uid = _getCurrentUserUid();
+    if (uid == null) return;
+
+    try {
+      final user = await loadUser();
+      final now = DateTime.now();
+      final newStreakDays = _calculateStreakDays(
+        user.lastActiveDate,
+        user.streakDays,
+      );
+
+      user.lastActiveDate = now;
+      user.streakDays = newStreakDays;
+
+      await saveUser(user);
+
+      // Update daily_rider progress
+      final achievements = await loadAchievements();
+      final dailyRiderIndex = achievements.indexWhere(
+        (a) => a.id == 'daily_rider',
+      );
+      if (dailyRiderIndex != -1) {
+        achievements[dailyRiderIndex] = achievements[dailyRiderIndex].copyWith(
+          progress: user.streakDays,
+        );
+        // Check for unlock
+        if (!achievements[dailyRiderIndex].isUnlocked &&
+            achievements[dailyRiderIndex].progress >=
+                achievements[dailyRiderIndex].maxProgress) {
+          achievements[dailyRiderIndex] = achievements[dailyRiderIndex]
+              .copyWith(isUnlocked: true, unlockedAt: Timestamp.now());
+          if (!user.achievements.contains('daily_rider')) {
+            user.achievements.add('daily_rider');
+            await saveUser(user);
+          }
+        }
+        await saveAchievements(achievements);
+      }
+    } catch (e) {
+      print('Error updating streak on app open: $e');
+    }
   }
 
   // Favorites functionality removed
@@ -282,33 +403,28 @@ class GamificationService {
     final achievements = await loadAchievements();
     final badges = await loadBadges();
     List<String> unlockedItems = [];
-    bool updated = false;
+    bool achievementsUpdated = false;
+    bool badgesUpdated = false;
 
+    // Increment progress based on action
     if (action == 'searched') {
-      // Check Rookie Commuter
-      final rookieAchievement = achievements.firstWhere(
+      final rookieIndex = achievements.indexWhere(
         (a) => a.id == 'rookie_commuter',
       );
-      if (!rookieAchievement.isUnlocked && user.routesSearched >= 1) {
-        achievements[achievements.indexOf(
-          rookieAchievement,
-        )] = rookieAchievement.copyWith(isUnlocked: true);
-        user.achievements.add('rookie_commuter');
-        unlockedItems.add('Achievement: Rookie Commuter');
-        updated = true;
+      if (rookieIndex != -1) {
+        achievements[rookieIndex] = achievements[rookieIndex].copyWith(
+          progress: achievements[rookieIndex].progress + 1,
+        );
+        achievementsUpdated = true;
       }
-
-      // Check Metro Master
-      final masterAchievement = achievements.firstWhere(
+      final masterIndex = achievements.indexWhere(
         (a) => a.id == 'metro_master',
       );
-      if (!masterAchievement.isUnlocked && user.routesSearched >= 100) {
-        achievements[achievements.indexOf(
-          masterAchievement,
-        )] = masterAchievement.copyWith(isUnlocked: true);
-        user.achievements.add('metro_master');
-        unlockedItems.add('Achievement: Metro Master');
-        updated = true;
+      if (masterIndex != -1) {
+        achievements[masterIndex] = achievements[masterIndex].copyWith(
+          progress: achievements[masterIndex].progress + 1,
+        );
+        achievementsUpdated = true;
       }
 
       // Check Explorer Badge
@@ -316,25 +432,30 @@ class GamificationService {
       if (!explorerBadge.isUnlocked && user.routesSearched >= 50) {
         badges[badges.indexOf(explorerBadge)] = explorerBadge.copyWith(
           isUnlocked: true,
+          earnedAt: Timestamp.now(),
         );
         user.badges.add('explorer');
         unlockedItems.add('Badge: Explorer');
-        updated = true;
+        badgesUpdated = true;
       }
     } else if (action == 'contributed') {
-      // Check Route Pioneer
-      final pioneerAchievement = achievements.firstWhere(
+      final pioneerIndex = achievements.indexWhere(
         (a) => a.id == 'route_pioneer',
       );
-      if (!pioneerAchievement.isUnlocked && user.routesContributed >= 10) {
-        achievements[achievements.indexOf(
-          pioneerAchievement,
-        )] = pioneerAchievement.copyWith(isUnlocked: true);
-        if (!user.achievements.contains('route_pioneer')) {
-          user.achievements.add('route_pioneer');
-        }
-        unlockedItems.add('Achievement: Route Pioneer');
-        updated = true;
+      if (pioneerIndex != -1) {
+        achievements[pioneerIndex] = achievements[pioneerIndex].copyWith(
+          progress: achievements[pioneerIndex].progress + 1,
+        );
+        achievementsUpdated = true;
+      }
+      final heroIndex = achievements.indexWhere(
+        (a) => a.id == 'community_hero',
+      );
+      if (heroIndex != -1) {
+        achievements[heroIndex] = achievements[heroIndex].copyWith(
+          progress: achievements[heroIndex].progress + 1,
+        );
+        achievementsUpdated = true;
       }
 
       // Check Contributor Badge
@@ -342,34 +463,41 @@ class GamificationService {
       if (!contributorBadge.isUnlocked && user.routesContributed >= 10) {
         badges[badges.indexOf(contributorBadge)] = contributorBadge.copyWith(
           isUnlocked: true,
+          earnedAt: Timestamp.now(),
         );
         if (!user.badges.contains('contributor')) {
           user.badges.add('contributor');
         }
         unlockedItems.add('Badge: Contributor');
-        updated = true;
-      }
-    } else if (action == 'reported') {
-      // Check Daily Rider (assuming it's for reports submitted, e.g., 7 reports)
-      final dailyRiderAchievement = achievements.firstWhere(
-        (a) => a.id == 'daily_rider',
-      );
-      if (!dailyRiderAchievement.isUnlocked && user.reportsSubmitted >= 7) {
-        achievements[achievements.indexOf(
-          dailyRiderAchievement,
-        )] = dailyRiderAchievement.copyWith(isUnlocked: true);
-        if (!user.achievements.contains('daily_rider')) {
-          user.achievements.add('daily_rider');
-        }
-        unlockedItems.add('Achievement: Daily Rider');
-        updated = true;
+        badgesUpdated = true;
       }
     }
 
-    if (updated) {
-      await saveUser(user);
+    // Check for unlocks
+    for (int i = 0; i < achievements.length; i++) {
+      final achievement = achievements[i];
+      if (!achievement.isUnlocked &&
+          achievement.progress >= achievement.maxProgress) {
+        achievements[i] = achievement.copyWith(
+          isUnlocked: true,
+          unlockedAt: Timestamp.now(),
+        );
+        if (!user.achievements.contains(achievement.id)) {
+          user.achievements.add(achievement.id);
+        }
+        unlockedItems.add('Achievement: ${achievement.name}');
+        achievementsUpdated = true;
+      }
+    }
+
+    if (achievementsUpdated) {
       await saveAchievements(achievements);
+    }
+    if (badgesUpdated) {
       await saveBadges(badges);
+    }
+    if (achievementsUpdated || badgesUpdated) {
+      await saveUser(user);
     }
 
     return unlockedItems;

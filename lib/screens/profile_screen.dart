@@ -22,6 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final List<Contribution> contributions = const [];
 
   final TextEditingController _editNameController = TextEditingController();
+  bool _isLoggingOut = false;
 
   @override
   void initState() {
@@ -79,8 +80,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _logout() async {
-    await firebase_auth.FirebaseAuth.instance.signOut();
-    // AuthGate will handle navigation to login
+    if (_isLoggingOut) return; // Prevent multiple calls
+
+    setState(() => _isLoggingOut = true);
+
+    try {
+      await firebase_auth.FirebaseAuth.instance.signOut();
+      // AuthGate will handle navigation to login
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+      }
+    }
   }
 
   @override
@@ -271,11 +288,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout, color: Colors.white),
-              label: const Text(
-                'Logout',
-                style: TextStyle(color: Colors.white),
+              onPressed: _isLoggingOut ? null : _logout,
+              icon:
+                  _isLoggingOut
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                      : const Icon(Icons.logout, color: Colors.white),
+              label: Text(
+                _isLoggingOut ? 'Logging out...' : 'Logout',
+                style: const TextStyle(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue, // button color
@@ -463,20 +490,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   int _getAchievementProgress(Achievement achievement) {
-    switch (achievement.id) {
-      case 'rookie_commuter':
-        return user!.routesSearched > 0 ? 1 : 0;
-      case 'route_pioneer':
-        return user!.routesContributed;
-      case 'daily_rider':
-        return user!.streakDays;
-      case 'community_hero':
-        return user!.routesContributed;
-      case 'metro_master':
-        return user!.routesSearched;
-      default:
-        return 0;
-    }
+    return achievement.progress;
   }
 
   Color _getRarityColor(String rarity) {
@@ -506,7 +520,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           itemCount: badges.length,
           itemBuilder: (context, index) {
             final badge = badges[index];
-            final isUnlocked = user!.badges.contains(badge.id);
+            final isUnlocked = badge.isUnlocked;
+            final earnedDate = badge.earnedAt?.toDate();
+            final formattedDate =
+                earnedDate != null
+                    ? '${earnedDate.month}/${earnedDate.day}/${earnedDate.year}'
+                    : null;
             return Card(
               color: isUnlocked ? Colors.blue.shade50 : Colors.grey.shade100,
               child: ListTile(
@@ -518,7 +537,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: isUnlocked ? Colors.blue : Colors.grey,
                   ),
                 ),
-                subtitle: Text(badge.description),
+                subtitle: Text(
+                  isUnlocked && formattedDate != null
+                      ? '${badge.description}\nEarned on $formattedDate'
+                      : badge.description,
+                ),
                 trailing:
                     isUnlocked
                         ? const Icon(Icons.verified, color: Colors.blue)
@@ -559,7 +582,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           itemCount: routes.length,
           itemBuilder: (context, index) {
             final route = routes[index];
-            return RouteContributionCard(route: route);
+            return RouteContributionCard(route: route, userEmail: user!.email);
           },
         );
       },
@@ -583,8 +606,13 @@ class Contribution {
 
 class RouteContributionCard extends StatelessWidget {
   final route_model.Route route;
+  final String userEmail;
 
-  const RouteContributionCard({super.key, required this.route});
+  const RouteContributionCard({
+    super.key,
+    required this.route,
+    required this.userEmail,
+  });
 
   double _calculateAverageRating() {
     final total = route.upvotes + route.downvotes;
@@ -635,16 +663,27 @@ class RouteContributionCard extends StatelessWidget {
                       MaterialPageRoute(
                         builder:
                             (context) => ContributeScreen(
-                              onRouteSubmitted: (updatedRoute) {
-                                // Handle route update
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Route updated!'),
-                                  ),
-                                );
+                              onRouteSubmitted: (updatedRoute) async {
+                                try {
+                                  await RouteService.updateRoute(updatedRoute);
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Route updated!'),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to update route: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                               routeToEdit: route,
+                              contributorId: userEmail,
                             ),
                       ),
                     );

@@ -432,46 +432,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Post Feedback'),
-        content: TextField(
-          controller: feedbackController,
-          decoration: const InputDecoration(
-            hintText: 'Enter your feedback here...',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 5,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (feedbackController.text.isNotEmpty) {
-                final feedback = feedback_model.Feedback(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  userId: widget.userEmail,
-                  type: feedback_model.FeedbackType.feedback,
-                  content: feedbackController.text,
-                  timestamp: DateTime.now(),
-                );
-                ModerationService.addFeedback(feedback);
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Feedback submitted')),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Post Feedback'),
+            content: TextField(
+              controller: feedbackController,
+              decoration: const InputDecoration(
+                hintText: 'Enter your feedback here...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
             ),
-            child: const Text('Submit'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (feedbackController.text.isNotEmpty) {
+                    final feedback = feedback_model.Feedback(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      userId: widget.userEmail,
+                      type: feedback_model.FeedbackType.feedback,
+                      content: feedbackController.text,
+                      targetType: feedback_model.FeedbackTargetType.general,
+                      timestamp: DateTime.now(),
+                    );
+                    ModerationService.addFeedback(feedback);
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Feedback submitted')),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Submit'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

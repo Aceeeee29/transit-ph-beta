@@ -7,11 +7,13 @@ import '../services/media_service.dart';
 class CreatePostDialog extends StatefulWidget {
   final Function(Post) onPostCreated;
   final String currentUserName;
+  final String currentUserId;
 
   const CreatePostDialog({
     super.key,
     required this.onPostCreated,
     required this.currentUserName,
+    required this.currentUserId,
   });
 
   @override
@@ -36,6 +38,7 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
       userName: _anonymous ? null : widget.currentUserName,
       userEmail:
           _anonymous ? null : 'user@example.com', // Replace with actual user
+      userId: widget.currentUserId,
       anonymous: _anonymous,
       content: _contentController.text,
       type:

@@ -8,6 +8,8 @@ import 'moderator_screen.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
+import '../services/gamification_service.dart';
+import '../services/route_service.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -28,10 +30,40 @@ class _MainScreenState extends State<MainScreen> {
     return user?.displayName ?? user?.email ?? 'User';
   }
 
+  String get currentUserId {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.uid ?? '';
+  }
+
   @override
   void initState() {
     super.initState();
-    ModerationService.postsNotifier.value = posts;
+    _loadData();
+    // Update streak on app open
+    GamificationService.updateStreakOnAppOpen();
+  }
+
+  Future<void> _loadData() async {
+    // Load posts from notifier
+    posts = ModerationService.postsNotifier.value;
+    ModerationService.postsNotifier.addListener(_onPostsChanged);
+
+    // Load routes from Firestore
+    routes = await RouteService.getAllRoutes();
+
+    setState(() {});
+  }
+
+  void _onPostsChanged() {
+    setState(() {
+      posts = ModerationService.postsNotifier.value;
+    });
+  }
+
+  @override
+  void dispose() {
+    ModerationService.postsNotifier.removeListener(_onPostsChanged);
+    super.dispose();
   }
 
   @override
@@ -48,11 +80,20 @@ class _MainScreenState extends State<MainScreen> {
           });
         },
         currentUserName: currentUserName,
+        currentUserId: currentUserId,
       ),
       ContributeScreen(
-        onRouteSubmitted: (route) {
-          setState(() => routes.add(route));
+        onRouteSubmitted: (route) async {
+          try {
+            await RouteService.saveRoute(route);
+            setState(() => routes.add(route));
+          } catch (e) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Failed to save route: $e')));
+          }
         },
+        contributorId: currentUserId,
       ),
       const ProfileScreen(),
       if (widget.isAdmin) const ModeratorScreen(),

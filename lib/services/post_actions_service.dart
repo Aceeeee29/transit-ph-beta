@@ -1,103 +1,82 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../models/feedback.dart' as feedback_model;
 import 'moderation_service.dart';
+import 'post_service.dart';
+import 'bookmark_service.dart';
 
 class PostActionsService {
-  static void reportPost(Post post, String reason, String userId) {
-    // Set post to pending
-    post.moderationStatus = ModerationStatus.pending;
-    ModerationService.postsNotifier.value = List.from(
-      ModerationService.postsNotifier.value,
-    );
-
-    // Add feedback with reason
+  static Future<void> reportPost(
+    Post post,
+    String reason,
+    String userId,
+  ) async {
+    // Update post status in DB atomically with feedback creation
+    final feedbackId = DateTime.now().millisecondsSinceEpoch.toString();
     final feedback = feedback_model.Feedback(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: feedbackId,
       userId: userId,
       type: feedback_model.FeedbackType.report,
       content: reason,
       targetId: post.id,
+      targetType: feedback_model.FeedbackTargetType.post,
       timestamp: DateTime.now(),
     );
-    ModerationService.addFeedback(feedback);
+
+    // Use batch write for atomic operation
+    final firestore = FirebaseFirestore.instance;
+    final batch = firestore.batch();
+    batch.update(firestore.collection('posts').doc(post.id), {
+      'moderationStatus': ModerationStatus.pending.name,
+    });
+    batch.set(
+      firestore.collection('feedbacks').doc(feedbackId),
+      feedback.toJson(),
+    );
+
+    try {
+      await batch.commit();
+      // Update local notifiers
+      post.moderationStatus = ModerationStatus.pending;
+      ModerationService.postsNotifier.value = List.from(
+        ModerationService.postsNotifier.value,
+      );
+      ModerationService.addFeedback(feedback);
+    } catch (e) {
+      print('Error reporting post: $e');
+    }
   }
 
-  static void likePost(String postId, Map<String, bool> likedPosts) {
-    likedPosts[postId] = !(likedPosts[postId] ?? false);
+  static Future<void> likePost(String postId, String userId) async {
+    await PostService.toggleLike(postId, userId);
   }
 
-  static void addComment(
-    String postId,
-    Comment comment,
-    Map<String, List<Comment>> postComments,
-  ) {
-    postComments[postId] ??= [];
-    postComments[postId]!.add(comment);
+  static Future<void> addComment(Comment comment) async {
+    await PostService.addComment(comment);
   }
 
-  static void addReaction(
+  static Future<void> addReaction(
     String postId,
     String emoji,
     String userId,
-    Map<String, Map<String, List<String>>> reactions,
-  ) {
-    reactions[postId] ??= {};
-    reactions[postId]![emoji] ??= [];
-    if (!reactions[postId]![emoji]!.contains(userId)) {
-      reactions[postId]![emoji]!.add(userId);
-    }
+  ) async {
+    await PostService.addReaction(postId, emoji, userId);
   }
 
-  static void removeReaction(
+  static Future<void> removeReaction(
     String postId,
     String emoji,
     String userId,
-    Map<String, Map<String, List<String>>> reactions,
-  ) {
-    if (reactions[postId]?[emoji]?.contains(userId) ?? false) {
-      reactions[postId]![emoji]!.remove(userId);
-      if (reactions[postId]![emoji]!.isEmpty) {
-        reactions[postId]!.remove(emoji);
-      }
-    }
+  ) async {
+    await PostService.removeReaction(postId, emoji, userId);
   }
 
-  static void bookmarkPost(
-    String postId,
-    String userId,
-    Map<String, List<String>> bookmarks,
-  ) {
-    bookmarks[userId] ??= [];
-    if (!bookmarks[userId]!.contains(postId)) {
-      bookmarks[userId]!.add(postId);
-    }
+  static Future<void> bookmarkPost(String postId, String userId) async {
+    await BookmarkService.addPostBookmark(postId);
   }
 
-  static void unbookmarkPost(
-    String postId,
-    String userId,
-    Map<String, List<String>> bookmarks,
-  ) {
-    bookmarks[userId]?.remove(postId);
-  }
-
-  static void followRoute(
-    String routeId,
-    String userId,
-    Map<String, List<String>> followedRoutes,
-  ) {
-    followedRoutes[userId] ??= [];
-    if (!followedRoutes[userId]!.contains(routeId)) {
-      followedRoutes[userId]!.add(routeId);
-    }
-  }
-
-  static void unfollowRoute(
-    String routeId,
-    String userId,
-    Map<String, List<String>> followedRoutes,
-  ) {
-    followedRoutes[userId]?.remove(routeId);
+  static Future<void> followRoute(String routeId, String userId) async {
+    await BookmarkService.addBookmark(routeId);
   }
 }

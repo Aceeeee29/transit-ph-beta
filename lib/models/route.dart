@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
 class Route {
@@ -21,7 +22,8 @@ class Route {
   int views;
   int upvotes;
   int downvotes;
-  bool bookmarked;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   Route({
     required this.id,
@@ -44,7 +46,8 @@ class Route {
     this.views = 0,
     this.upvotes = 0,
     this.downvotes = 0,
-    this.bookmarked = false,
+    this.createdAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toJson() {
@@ -90,7 +93,6 @@ class Route {
       'views': views,
       'upvotes': upvotes,
       'downvotes': downvotes,
-      'bookmarked': bookmarked,
     };
   }
 
@@ -150,7 +152,14 @@ class Route {
           json['downvotes'] is int
               ? json['downvotes']
               : int.tryParse(json['downvotes']?.toString() ?? '0') ?? 0,
-      bookmarked: json['bookmarked'] ?? false,
+      createdAt:
+          json['createdAt'] != null
+              ? (json['createdAt'] as Timestamp).toDate()
+              : null,
+      updatedAt:
+          json['updatedAt'] != null
+              ? (json['updatedAt'] as Timestamp).toDate()
+              : null,
     );
   }
 }

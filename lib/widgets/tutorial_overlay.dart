@@ -4,7 +4,6 @@ import '../services/tutorial_service.dart';
 
 class TutorialOverlay extends StatefulWidget {
   final List<TutorialStep> steps;
-  final Map<String, GlobalKey> targetKeys;
   final VoidCallback onComplete;
   final bool showSkipButton;
   final VoidCallback? onExampleRouteRequested;
@@ -12,7 +11,6 @@ class TutorialOverlay extends StatefulWidget {
   const TutorialOverlay({
     super.key,
     required this.steps,
-    required this.targetKeys,
     required this.onComplete,
     this.showSkipButton = true,
     this.onExampleRouteRequested,
@@ -57,35 +55,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   void _updateTargetPosition() {
     final currentStep = widget.steps[_currentStep];
-    if (currentStep.customPosition != null) {
-      setState(() {
-        _targetPosition = currentStep.customPosition!;
-        _targetSize = currentStep.customSize ?? Size(100, 100);
-      });
-    } else {
-      final targetKey = widget.targetKeys[currentStep.targetKey];
-      if (targetKey?.currentContext != null) {
-        final RenderBox renderBox =
-            targetKey!.currentContext!.findRenderObject() as RenderBox;
-        final position = renderBox.localToGlobal(Offset.zero);
-
-        setState(() {
-          _targetPosition = position;
-          _targetSize = renderBox.size;
-        });
-      } else {
-        // Target not found, use center of screen as fallback
-        final screenSize = MediaQuery.of(context).size;
-        setState(() {
-          _targetPosition = Offset(
-            screenSize.width / 2 - 50,
-            screenSize.height / 2 - 50,
-          );
-          _targetSize = Size(100, 100);
-        });
-        // Don't skip, allow manual targeting
-      }
-    }
+    setState(() {
+      _targetPosition = currentStep.customPosition ?? Offset.zero;
+      _targetSize = currentStep.customSize ?? Size(100, 100);
+    });
   }
 
   void _nextStep() {

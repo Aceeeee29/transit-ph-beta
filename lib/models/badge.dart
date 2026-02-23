@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Badge {
   final String id;
   final String name;
   final String description;
   final String icon;
   final bool isUnlocked;
+  final Timestamp? earnedAt;
 
   Badge({
     required this.id,
@@ -11,15 +14,17 @@ class Badge {
     required this.description,
     required this.icon,
     this.isUnlocked = false,
+    this.earnedAt,
   });
 
-  Badge copyWith({bool? isUnlocked}) {
+  Badge copyWith({bool? isUnlocked, Timestamp? earnedAt}) {
     return Badge(
       id: id,
       name: name,
       description: description,
       icon: icon,
       isUnlocked: isUnlocked ?? this.isUnlocked,
+      earnedAt: earnedAt ?? this.earnedAt,
     );
   }
 
@@ -30,6 +35,7 @@ class Badge {
       'description': description,
       'icon': icon,
       'isUnlocked': isUnlocked,
+      'earnedAt': earnedAt,
     };
   }
 
@@ -40,6 +46,7 @@ class Badge {
       description: json['description'],
       icon: json['icon'],
       isUnlocked: json['isUnlocked'] ?? false,
+      earnedAt: json['earnedAt'] as Timestamp?,
     );
   }
 }

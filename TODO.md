@@ -1,13 +1,11 @@
-- [x] Create lib/screens/post_search_screen.dart with basic structure
-- [x] Implement omnibox (search TextField) in post_search_screen.dart
-- [x] Implement recent searches section in post_search_screen.dart
-- [x] Implement trending hashtags section in post_search_screen.dart
-- [x] Implement search results filtering in post_search_screen.dart
-- [x] Modify lib/screens/feed_screen.dart to remove search TextField from body
-- [x] Add search icon to AppBar actions in feed_screen.dart
-- [x] Update navigation to PostSearchScreen on search icon tap in feed_screen.dart
+# Feedback Collection Implementation
 
-Fare Matrix Popup Task:
-- [x] Add _showFareMatrixDialog method to _HomeScreenState in home_screen.dart
-- [x] Add ElevatedButton "View Fare Matrix" in build method after search card
-- [x] Test the popup functionality
+## Pending Tasks
+- [x] Update Feedback model to include targetType and status
+- [x] Add required indexes to firestore.indexes.json
+- [x] Update firestore.rules for proper permissions
+- [x] Modify moderation_service to handle report logic and status updates
+- [x] Update post_actions_service to persist post updates and add targetType
+- [x] Update settings_screen for feedback submission
+- [x] Update moderator_screen to manage feedback statuses
+- [x] Test the implementation

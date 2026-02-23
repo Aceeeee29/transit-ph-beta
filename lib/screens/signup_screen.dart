@@ -12,7 +12,8 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   String? _errorMessage;
   bool _isLoading = false;
@@ -71,7 +72,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
     if (!_isStrongPassword(_passwordController.text)) {
       setState(() {
-        _errorMessage = 'Password must be at least 8-16 characters long and contain at least 2 of the following: uppercase letters, lowercase letters, numbers, symbols. Common passwords are not allowed.';
+        _errorMessage =
+            'Password must be at least 8-16 characters long and contain at least 2 of the following: uppercase letters, lowercase letters, numbers, symbols. Common passwords are not allowed.';
       });
       return;
     }
@@ -82,10 +84,11 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
       // Send email verification
       try {
@@ -98,13 +101,35 @@ class _SignupScreenState extends State<SignupScreen> {
 
       // Create user document in Firestore
       try {
-        await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-          'uid': userCredential.user!.uid,
-          'email': _emailController.text.trim(),
-          'role': 'user',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-        print('User document created successfully for UID: ${userCredential.user!.uid}');
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+              'uid': userCredential.user!.uid,
+              'name': userCredential.user!.displayName ?? 'Anonymous',
+              'email': _emailController.text.trim(),
+              'photoUrl': userCredential.user!.photoURL,
+              'userCategory': null,
+              'role': 'user',
+              'isBanned': false,
+              'routesContributed': 0,
+              'routesSearched': 0,
+              'reportsSubmitted': 0,
+              'totalDistance': 0.0,
+              'co2Saved': 0.0,
+              'mostActiveRegion': null,
+              'streakDays': 0,
+              'lastActiveDate': null,
+              'createdAt': FieldValue.serverTimestamp(),
+              'badges': [],
+              'achievements': [],
+              'bookmarkedPostIds': [],
+              'followedRouteIds': [],
+              'hasSeenTutorial': false,
+            });
+        print(
+          'User document created successfully for UID: ${userCredential.user!.uid}',
+        );
       } catch (firestoreError) {
         print('Failed to create user document: $firestoreError');
         // Delete the auth user if document creation fails
@@ -161,9 +186,7 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign Up'),
-      ),
+      appBar: AppBar(title: const Text('Sign Up')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -193,7 +216,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {
@@ -215,11 +240,14 @@ class _SignupScreenState extends State<SignupScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                        _isConfirmPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {
-                          _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                          _isConfirmPasswordVisible =
+                              !_isConfirmPasswordVisible;
                         });
                       },
                     ),
@@ -243,19 +271,28 @@ class _SignupScreenState extends State<SignupScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Sign Up',
-                              style: TextStyle(fontSize: 16, color: Colors.white),
-                            ),
+                      child:
+                          _isLoading
+                              ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                              : const Text(
+                                'Sign Up',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
                     ),
                   ),
                 ),

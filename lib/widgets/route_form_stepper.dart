@@ -35,7 +35,6 @@ const List<String> timeOptions = [
 ];
 
 class RouteFormStepper extends StatefulWidget {
-  final GlobalKey<FormState> formKey;
   final TextEditingController startLocationController;
   final TextEditingController endLocationController;
   final TextEditingController shortDescriptionController;
@@ -44,11 +43,9 @@ class RouteFormStepper extends StatefulWidget {
   final VoidCallback onSubmit;
   final VoidCallback onReset;
   final String selectionMode;
-  final Map<String, GlobalKey> targetKeys;
 
   const RouteFormStepper({
     super.key,
-    required this.formKey,
     required this.startLocationController,
     required this.endLocationController,
     required this.shortDescriptionController,
@@ -57,7 +54,6 @@ class RouteFormStepper extends StatefulWidget {
     required this.onSubmit,
     required this.onReset,
     required this.selectionMode,
-    required this.targetKeys,
   });
 
   @override
@@ -75,7 +71,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
   @override
   Widget build(BuildContext context) {
     return Stepper(
-      key: widget.targetKeys['route_form'],
       currentStep: _activeStep,
       onStepTapped: (step) => setState(() => _activeStep = step),
       controlsBuilder: (context, details) {
@@ -102,7 +97,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               const Spacer(),
               if (_activeStep == 2 && widget.selectionMode == 'done')
                 ElevatedButton(
-                  key: widget.targetKeys['submit_button'],
                   onPressed: widget.onSubmit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -167,11 +161,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
-                validator:
-                    (value) =>
-                        value?.isEmpty ?? true
-                            ? 'Short description is required'
-                            : null,
               ),
             ],
           ),
@@ -269,7 +258,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               ),
               const SizedBox(height: 8),
               Row(
-                key: widget.targetKeys['media_buttons'],
                 children: [
                   ElevatedButton.icon(
                     onPressed: _pickLandmarkImage,

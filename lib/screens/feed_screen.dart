@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../services/post_actions_service.dart';
+import '../services/post_service.dart';
 import '../security/security_manager.dart';
 import '../widgets/create_post_dialog.dart';
 import '../models/notification.dart';
@@ -15,12 +16,14 @@ class FeedScreen extends StatefulWidget {
   final List<Post> posts;
   final Function(Post) onPostCreated;
   final String currentUserName;
+  final String currentUserId;
 
   const FeedScreen({
     super.key,
     required this.posts,
     required this.onPostCreated,
     required this.currentUserName,
+    required this.currentUserId,
   });
 
   @override
@@ -33,6 +36,7 @@ class _FeedScreenState extends State<FeedScreen> {
   Map<String, Map<String, List<String>>> emojiReactions =
       {}; // postId -> emoji -> userIds
   Map<String, bool> bookmarkedPosts = {};
+  Set<String> _loadedPostIds = {};
 
   Map<String, VideoPlayerController> videoControllers = {};
 
@@ -46,15 +50,35 @@ class _FeedScreenState extends State<FeedScreen> {
     super.dispose();
   }
 
+  Future<void> _loadComments(String postId) async {
+    final comments = await PostService.getComments(postId);
+    setState(() {
+      postComments[postId] = comments;
+      _loadedPostIds.add(postId);
+    });
+  }
+
   Widget buildComment(Comment comment, {int depth = 0}) {
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0, top: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${comment.userName}: ${comment.content}',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${comment.userName}: ${comment.content}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  _showCommentDialog(comment.postId, parentComment: comment);
+                },
+                icon: const Icon(Icons.reply, size: 16),
+              ),
+            ],
           ),
           if (comment.replies.isNotEmpty)
             ...comment.replies.map(
@@ -225,9 +249,13 @@ class _FeedScreenState extends State<FeedScreen> {
             Row(
               children: [
                 IconButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    await PostActionsService.likePost(
+                      post.id,
+                      widget.currentUserId,
+                    );
                     setState(() {
-                      PostActionsService.likePost(post.id, likedPosts);
+                      likedPosts[post.id] = !(likedPosts[post.id] ?? false);
                     });
                     if (post.userName != null &&
                         post.userName != widget.currentUserName) {
@@ -253,7 +281,10 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!_loadedPostIds.contains(post.id)) {
+                      await _loadComments(post.id);
+                    }
                     _showCommentDialog(post.id);
                   },
                   icon: const Icon(Icons.comment_outlined, size: 20),
@@ -265,7 +296,11 @@ class _FeedScreenState extends State<FeedScreen> {
                   icon: const Icon(Icons.emoji_emotions_outlined, size: 20),
                 ),
                 IconButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    await PostActionsService.bookmarkPost(
+                      post.id,
+                      widget.currentUserId,
+                    );
                     setState(() {
                       bookmarkedPosts[post.id] =
                           !(bookmarkedPosts[post.id] ?? false);
@@ -326,17 +361,22 @@ class _FeedScreenState extends State<FeedScreen> {
           (context) => CreatePostDialog(
             onPostCreated: widget.onPostCreated,
             currentUserName: widget.currentUserName,
+            currentUserId: widget.currentUserId,
           ),
     );
   }
 
-  void _showCommentDialog(String postId) {
+  void _showCommentDialog(String postId, {Comment? parentComment}) {
     TextEditingController commentController = TextEditingController();
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Add Comment'),
+            title: Text(
+              parentComment != null
+                  ? 'Reply to ${parentComment.userName}'
+                  : 'Add Comment',
+            ),
             content: TextField(
               controller: commentController,
               decoration: const InputDecoration(hintText: 'Enter your comment'),
@@ -347,23 +387,19 @@ class _FeedScreenState extends State<FeedScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (commentController.text.isNotEmpty) {
                     final comment = Comment(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
                       postId: postId,
-                      userId: 'currentUserId', // Replace with actual user
+                      userId: widget.currentUserId,
                       userName: widget.currentUserName,
                       content: commentController.text,
+                      parentId: parentComment?.id,
                       timestamp: DateTime.now(),
                     );
-                    setState(() {
-                      PostActionsService.addComment(
-                        postId,
-                        comment,
-                        postComments,
-                      );
-                    });
+                    await PostActionsService.addComment(comment);
+                    await _loadComments(postId);
                     final post = widget.posts.firstWhere((p) => p.id == postId);
                     if (post.userName != null &&
                         post.userName != widget.currentUserName) {
@@ -466,19 +502,35 @@ class _FeedScreenState extends State<FeedScreen> {
               children:
                   emojis.map((emoji) {
                     return GestureDetector(
-                      onTap: () {
+                      onTap: () async {
+                        final contains =
+                            emojiReactions[postId]?[emoji]?.contains(
+                              widget.currentUserId,
+                            ) ??
+                            false;
+                        if (contains) {
+                          await PostActionsService.removeReaction(
+                            postId,
+                            emoji,
+                            widget.currentUserId,
+                          );
+                        } else {
+                          await PostActionsService.addReaction(
+                            postId,
+                            emoji,
+                            widget.currentUserId,
+                          );
+                        }
                         setState(() {
                           emojiReactions[postId] ??= {};
                           emojiReactions[postId]![emoji] ??= [];
-                          if (emojiReactions[postId]![emoji]!.contains(
-                            'currentUserId',
-                          )) {
+                          if (contains) {
                             emojiReactions[postId]![emoji]!.remove(
-                              'currentUserId',
+                              widget.currentUserId,
                             );
                           } else {
                             emojiReactions[postId]![emoji]!.add(
-                              'currentUserId',
+                              widget.currentUserId,
                             );
                           }
                         });
@@ -544,7 +596,7 @@ class _FeedScreenState extends State<FeedScreen> {
                   MaterialPageRoute(
                     builder:
                         (context) => NotificationsScreen(
-                          currentUserName: widget.currentUserName,
+                          currentUserId: widget.currentUserId,
                         ),
                   ),
                 ),

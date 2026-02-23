@@ -1,16 +1,137 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow users to read and write their own user documents
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // ── HELPER FUNCTIONS ──────────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
     }
-    // Add rules for other collections as needed
-    // For example, allow reading posts
+
+    function isSelf(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // FIX: Use .get('role', '') to safely handle missing role field,
+    // preventing null-dereference crashes in rule evaluation.
+    function isModerator() {
+      return isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid))
+          .data.get('role', '') == 'moderator';
+    }
+
+    // ── USERS ─────────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isAuth();
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid) || isModerator();
+      allow delete: if isModerator();
+
+      match /achievements/{achievementId} {
+        allow read, write: if isSelf(uid) || isModerator();
+      }
+
+      match /badges/{badgeId} {
+        allow read, write: if isSelf(uid) || isModerator();
+      }
+
+      // FIX: Added explicit rules for subcollections the app writes to.
+      match /bookmarks/{bookmarkId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      match /routeHistory/{historyId} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    // ── POSTS ─────────────────────────────────────────────────────────────────
     match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == resource.data.userId;
+      // FIX: Pending posts are now only visible to their own author.
+      allow read: if isAuth() && (
+        resource.data.moderationStatus == 'approved' ||
+        (resource.data.moderationStatus == 'pending' &&
+          request.auth.uid == resource.data.userId)
+      );
+
+      allow create: if isAuth();
+
+      // FIX: Added field-level validation for likes so likeCount
+      // can only change by 1 and likedBy must contain the requesting UID.
+      allow update: if isAuth() && (
+        request.auth.uid == resource.data.userId ||
+        isModerator() ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['likeCount', 'likedBy', 'reactions']) &&
+          (
+            (
+              request.resource.data.likeCount == resource.data.likeCount + 1 &&
+              request.resource.data.likedBy.hasAll(resource.data.likedBy) &&
+              request.resource.data.likedBy.hasAll([request.auth.uid])
+            ) ||
+            (
+              request.resource.data.likeCount == resource.data.likeCount - 1 &&
+              !request.resource.data.likedBy.hasAny([request.auth.uid])
+            )
+          )
+        )
+      );
+
+      allow delete: if isModerator();
+
+      match /comments/{commentId} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+        allow update, delete: if isAuth() &&
+          resource.data.userId == request.auth.uid;
+      }
     }
-    // Add more rules based on your app's requirements
+
+    // ── ROUTES ────────────────────────────────────────────────────────────────
+    match /routes/{routeId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.contributorId == request.auth.uid || isModerator()
+      );
+      allow delete: if isModerator();
+    }
+
+    // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read, update, delete: if isAuth() &&
+        resource.data.userId == request.auth.uid;
+
+      // FIX: Validates required fields and blocks self-targeting.
+      allow create: if isAuth() &&
+        request.resource.data.keys().hasAll(['userId', 'type', 'timestamp']) &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId != request.auth.uid;
+    }
+
+    // ── FEEDBACKS (reports) ───────────────────────────────────────────────────
+    match /feedbacks/{feedbackId} {
+      allow create: if isAuth();
+      // FIX: Users can now read their own feedback to see its status.
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+      allow update, delete: if isModerator();
+    }
+
+    // ── LOCATIONS ─────────────────────────────────────────────────────────────
+    match /locations/{locationId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      // FIX: Restricted update/delete to creator or moderator only.
+      allow update: if isAuth() && (
+        resource.data.userId == request.auth.uid || isModerator()
+      );
+      allow delete: if isAuth() && (
+        resource.data.userId == request.auth.uid || isModerator()
+      );
+    }
   }
 }

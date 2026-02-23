@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
+import 'services/moderation_service.dart';
 
 /// Resets gamification data on app start.
 Future<void> resetGamificationData() async {
@@ -24,10 +25,7 @@ ThemeData buildTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        vertical: 14,
-        horizontal: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -41,14 +39,9 @@ ThemeData buildTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.blue.shade700,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(vertical: 16),
-        textStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
       ),
     ),
   );
@@ -67,9 +60,10 @@ final Map<String, WidgetBuilder> appRoutes = {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize moderation service listeners
+  ModerationService.init();
 
   await dotenv.load();
 

@@ -16,59 +16,68 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentPage = 0;
   bool _categorySelected = false;
   String? _selectedCategory;
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> _slides = [
     {
       'title': 'Welcome to TransitPH',
-      'description': 'Find the fastest and cheapest public transport routes in the Philippines.',
+      'description':
+          'Find the fastest and cheapest public transport routes in the Philippines.',
       'icon': Icons.map,
       'color': Colors.blue,
     },
     {
       'title': 'Search Your Route',
-      'description': 'Enter your destination. TransitPH finds available public transport routes.',
+      'description':
+          'Enter your destination. TransitPH finds available public transport routes.',
       'icon': Icons.search,
       'color': Colors.green,
     },
     {
       'title': 'Multi-Leg Routes',
-      'description': 'Some trips need multiple rides. TransitPH breaks trips into clear steps: Walk, Ride, Transfer.\n\nExample: Valenzuela → Monumento → SM North EDSA',
+      'description':
+          'Some trips need multiple rides. TransitPH breaks trips into clear steps: Walk, Ride, Transfer.\n\nExample: Valenzuela → Monumento → SM North EDSA',
       'icon': Icons.directions,
       'color': Colors.orange,
     },
     {
       'title': 'Route Details',
-      'description': 'Estimated travel time, Fare estimate, Landmarks & stops, Step-by-step directions.',
+      'description':
+          'Estimated travel time, Fare estimate, Landmarks & stops, Step-by-step directions.',
       'icon': Icons.info,
       'color': Colors.purple,
     },
     {
       'title': 'Safety & Tips',
-      'description': 'Verified routes and safety tips. Always follow local traffic rules. Data is community & system-assisted.',
+      'description':
+          'Verified routes and safety tips. Always follow local traffic rules. Data is community & system-assisted.',
       'icon': Icons.security,
       'color': Colors.red,
     },
     {
       'title': 'Contribute a Route',
-      'description': 'Know a route that\'s not on TransitPH? Help the community by contributing new routes. Your knowledge makes public transport better for everyone!',
+      'description':
+          'Know a route that\'s not on TransitPH? Help the community by contributing new routes. Your knowledge makes public transport better for everyone!',
       'icon': Icons.add_location,
       'color': Colors.indigo,
     },
     {
       'title': 'You\'re Ready!',
-      'description': 'You\'re all set! Start exploring public transport routes in the Philippines.',
+      'description':
+          'You\'re all set! Start exploring public transport routes in the Philippines.',
       'icon': Icons.check_circle,
       'color': Colors.teal,
     },
   ];
 
   void _onSkip() async {
-    await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
-      'hasSeenTutorial': true,
-    });
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.user.uid)
+        .update({'hasSeenTutorial': true});
     Navigator.of(context).pushReplacementNamed('/main', arguments: false);
   }
-  
+
   void _onNext() {
     if (_currentPage < _slides.length - 1) {
       _pageController.nextPage(
@@ -81,28 +90,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _onStartExploring() async {
-    await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
-      'hasSeenTutorial': true,
-    });
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.user.uid)
+        .update({'hasSeenTutorial': true});
     Navigator.of(context).pushReplacementNamed('/main', arguments: false);
   }
 
   void _onCategorySelected(String category) async {
-    // Save to Firestore
-    await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
-      'userCategory': category,
+    setState(() {
+      _isLoading = true;
     });
-    
-    // Also save to SharedPreferences via GamificationService
-    final appUser = await GamificationService.loadUser();
-    appUser.userCategory = category;
-    appUser.name = widget.user.displayName ?? widget.user.email?.split('@').first ?? 'User';
-    appUser.email = widget.user.email ?? '';
-    await GamificationService.saveUser(appUser);
-    
+
+    try {
+      // Save to Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .update({'userCategory': category});
+
+      // Also save to SharedPreferences via GamificationService
+      final appUser = await GamificationService.loadUser();
+      appUser.userCategory = category;
+      appUser.name =
+          widget.user.displayName ??
+          widget.user.email?.split('@').first ??
+          'User';
+      appUser.email = widget.user.email ?? '';
+      await GamificationService.saveUser(appUser);
+    } catch (e) {
+      print('Error saving category: $e');
+      // Continue anyway to proceed
+    }
+
     setState(() {
       _selectedCategory = category;
       _categorySelected = true;
+      _isLoading = false;
     });
   }
 
@@ -114,73 +138,100 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           const Text(
             'Welcome to TransitPH!',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
           const Text(
             'Please select your category to personalize your experience:',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black54,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.black54),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
-          Column(
-            children: [
-              ElevatedButton(
-                onPressed: () => _onCategorySelected('Student'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          if (_isLoading)
+            const CircularProgressIndicator()
+          else
+            Column(
+              children: [
+                ElevatedButton(
+                  onPressed:
+                      _isLoading ? null : () => _onCategorySelected('Student'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 32,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    foregroundColor: Colors.white,
                   ),
-                  foregroundColor: Colors.white,
+                  child: const Text('Student', style: TextStyle(fontSize: 16)),
                 ),
-                child: const Text('Student', style: TextStyle(fontSize: 16)),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _onCategorySelected('Employee'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed:
+                      _isLoading ? null : () => _onCategorySelected('Employee'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 32,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    foregroundColor: Colors.white,
                   ),
-                  foregroundColor: Colors.white,
+                  child: const Text('Employee', style: TextStyle(fontSize: 16)),
                 ),
-                child: const Text('Employee', style: TextStyle(fontSize: 16)),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _onCategorySelected('Foreigner'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed:
+                      _isLoading
+                          ? null
+                          : () => _onCategorySelected('Foreigner'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 32,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    foregroundColor: Colors.white,
                   ),
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Foreigner', style: TextStyle(fontSize: 16)),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _onCategorySelected('New to Area'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  child: const Text(
+                    'Foreigner',
+                    style: TextStyle(fontSize: 16),
                   ),
-                  foregroundColor: Colors.white,
                 ),
-                child: const Text('New to Area', style: TextStyle(fontSize: 16)),
-              ),
-            ],
-          ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed:
+                      _isLoading
+                          ? null
+                          : () => _onCategorySelected('New to Area'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 32,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text(
+                    'New to Area',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -189,9 +240,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_categorySelected) {
-      return Scaffold(
-        body: _buildCategorySelection(),
-      );
+      return Scaffold(body: _buildCategorySelection());
     }
 
     return Scaffold(
@@ -247,10 +296,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               onPressed: _onSkip,
               child: const Text(
                 'Skip',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.blue,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.blue),
               ),
             ),
           ),
@@ -288,8 +334,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               child: Text(
                 _currentPage == _slides.length - 1 ? 'Start Exploring' : 'Next',
-                style: const TextStyle(fontSize: 16,
-                color: Colors.white),
+                style: const TextStyle(fontSize: 16, color: Colors.white),
               ),
             ),
           ),

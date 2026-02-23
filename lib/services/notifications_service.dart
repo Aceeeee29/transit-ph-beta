@@ -1,25 +1,79 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/notification.dart';
 
 class NotificationsService {
-  static final List<NotificationModel> _notifications = [];
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static void addNotification(NotificationModel notification) {
-    _notifications.add(notification);
+  /// Add a notification to Firestore
+  static Future<void> addNotification(NotificationModel notification) async {
+    try {
+      final data = notification.toJson();
+      data['timestamp'] = FieldValue.serverTimestamp();
+      await _firestore
+          .collection('notifications')
+          .doc(notification.id)
+          .set(data);
+    } catch (e) {
+      print('Error adding notification ${notification.id}: $e');
+      rethrow;
+    }
   }
 
-  static List<NotificationModel> getNotificationsForUser(String userId) {
-    return _notifications.where((n) => n.userId == userId).toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  /// Get notifications for a user
+  static Future<List<NotificationModel>> getNotificationsForUser(
+    String userId,
+  ) async {
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('notifications')
+              .where('userId', isEqualTo: userId)
+              .orderBy('timestamp', descending: true)
+              .get();
+      return querySnapshot.docs
+          .map((doc) => NotificationModel.fromJson(doc.data()))
+          .toList();
+    } catch (e) {
+      print('Error fetching notifications for user $userId: $e');
+      return [];
+    }
   }
 
-  static void markAsRead(String notificationId) {
-    final notification = _notifications.firstWhere(
-      (n) => n.id == notificationId,
-    );
-    notification.isRead = true;
+  /// Mark a notification as read
+  static Future<void> markAsRead(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'isRead': true,
+      });
+    } catch (e) {
+      print('Error marking notification $notificationId as read: $e');
+      rethrow;
+    }
   }
 
-  static int getUnreadCount(String userId) {
-    return _notifications.where((n) => n.userId == userId && !n.isRead).length;
+  /// Get unread count for a user
+  static Future<int> getUnreadCount(String userId) async {
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('notifications')
+              .where('userId', isEqualTo: userId)
+              .where('isRead', isEqualTo: false)
+              .get();
+      return querySnapshot.docs.length;
+    } catch (e) {
+      print('Error fetching unread count for user $userId: $e');
+      return 0;
+    }
+  }
+
+  /// Delete a notification
+  static Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).delete();
+    } catch (e) {
+      print('Error deleting notification $notificationId: $e');
+      rethrow;
+    }
   }
 }

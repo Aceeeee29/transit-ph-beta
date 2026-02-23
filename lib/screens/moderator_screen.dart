@@ -217,9 +217,11 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   children: [
                     if (!user.isBanned)
                       ElevatedButton(
-                        onPressed: () {
-                          ModerationService.banUser(user.email);
-                          setState(() {});
+                        onPressed: () async {
+                          if (user.uid != null) {
+                            await ModerationService.banUser(user.uid!);
+                            setState(() {});
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
@@ -228,9 +230,11 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                       )
                     else
                       ElevatedButton(
-                        onPressed: () {
-                          ModerationService.unbanUser(user.email);
-                          setState(() {});
+                        onPressed: () async {
+                          if (user.uid != null) {
+                            await ModerationService.unbanUser(user.uid!);
+                            setState(() {});
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
@@ -248,10 +252,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }
 
   Widget _buildFeedbacksTab() {
-    final feedbacks =
-        ModerationService.getFeedbacks()
-            .where((f) => f.type != feedback_model.FeedbackType.report)
-            .toList();
+    final feedbacks = ModerationService.getFeedbacks();
     return ListView.builder(
       itemCount: feedbacks.length,
       itemBuilder: (context, index) {
@@ -263,10 +264,87 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Type: ${feedback.type.name}'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Type: ${feedback.type.name}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            feedback.status ==
+                                    feedback_model.FeedbackStatus.pending
+                                ? Colors.orange
+                                : feedback.status ==
+                                    feedback_model.FeedbackStatus.resolved
+                                ? Colors.green
+                                : Colors.grey,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        feedback.status.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text(feedback.content),
+                if (feedback.targetId != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Target: ${feedback.targetType?.name ?? 'unknown'} (${feedback.targetId})',
+                    style: const TextStyle(fontSize: 12, color: Colors.blue),
+                  ),
+                ],
+                const SizedBox(height: 4),
                 Text('From: ${feedback.userId}'),
                 Text('Time: ${feedback.timestamp}'),
+                if (feedback.status ==
+                    feedback_model.FeedbackStatus.pending) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () async {
+                          await ModerationService.updateFeedbackStatus(
+                            feedback.id,
+                            feedback_model.FeedbackStatus.resolved,
+                          );
+                          setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                        ),
+                        child: const Text('Resolve'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          await ModerationService.updateFeedbackStatus(
+                            feedback.id,
+                            feedback_model.FeedbackStatus.dismissed,
+                          );
+                          setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey,
+                        ),
+                        child: const Text('Dismiss'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

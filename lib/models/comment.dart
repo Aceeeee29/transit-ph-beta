@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Comment {
   final String id;
   final String postId;
@@ -41,8 +43,6 @@ class Comment {
       'userName': userName,
       'content': content,
       'parentId': parentId,
-      'replies': replies.map((r) => r.toJson()).toList(),
-      'timestamp': timestamp.toIso8601String(),
     };
   }
 
@@ -59,7 +59,7 @@ class Comment {
               ?.map((r) => Comment.fromJson(r))
               .toList() ??
           [],
-      timestamp: DateTime.parse(json['timestamp']),
+      timestamp: (json['timestamp'] as Timestamp).toDate(),
     );
   }
 }

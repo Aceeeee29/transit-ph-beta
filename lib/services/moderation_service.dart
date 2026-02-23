@@ -1,59 +1,162 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/user.dart';
 import '../models/feedback.dart' as feedback_model;
 
 class ModerationService {
-  // In a real app, these would be fetched from a backend
-  static ValueNotifier<List<Post>> postsNotifier = ValueNotifier([]);
-  static List<User> users = [];
-  static List<feedback_model.Feedback> feedbacks = [];
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Post moderation
-  static void approvePost(String postId) {
-    final post = postsNotifier.value.firstWhere((p) => p.id == postId);
-    post.moderationStatus = ModerationStatus.approved;
-    postsNotifier.value = List.from(postsNotifier.value); // Trigger notification
-    print('Approved post $postId');
+  static ValueNotifier<List<Post>> postsNotifier = ValueNotifier([]);
+  static ValueNotifier<List<User>> usersNotifier = ValueNotifier([]);
+  static ValueNotifier<List<feedback_model.Feedback>> feedbacksNotifier =
+      ValueNotifier([]);
+
+  static StreamSubscription<QuerySnapshot>? _postsSubscription;
+  static StreamSubscription<QuerySnapshot>? _usersSubscription;
+  static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
+
+  // Initialize listeners
+  static void init() {
+    _postsSubscription = _firestore.collection('posts').snapshots().listen((
+      snapshot,
+    ) {
+      final posts =
+          snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      postsNotifier.value = posts;
+    });
+
+    _usersSubscription = _firestore.collection('users').snapshots().listen((
+      snapshot,
+    ) {
+      final users =
+          snapshot.docs.map((doc) => User.fromJson(doc.data())).toList();
+      usersNotifier.value = users;
+    });
+
+    _feedbacksSubscription = _firestore
+        .collection('feedbacks')
+        .snapshots()
+        .listen((snapshot) {
+          final feedbacks =
+              snapshot.docs
+                  .map((doc) => feedback_model.Feedback.fromJson(doc.data()))
+                  .toList();
+          feedbacksNotifier.value = feedbacks;
+        });
   }
 
-  static void rejectPost(String postId) {
-    final post = postsNotifier.value.firstWhere((p) => p.id == postId);
-    post.moderationStatus = ModerationStatus.rejected;
-    postsNotifier.value = List.from(postsNotifier.value); // Trigger notification
-    print('Rejected post $postId');
+  // Post moderation
+  static Future<void> approvePost(String postId) async {
+    try {
+      await _firestore.collection('posts').doc(postId).update({
+        'moderationStatus': ModerationStatus.approved.name,
+      });
+      print('Approved post $postId');
+    } catch (e) {
+      print('Error approving post $postId: $e');
+    }
+  }
+
+  static Future<void> rejectPost(String postId) async {
+    try {
+      await _firestore.collection('posts').doc(postId).update({
+        'moderationStatus': ModerationStatus.rejected.name,
+      });
+      print('Rejected post $postId');
+    } catch (e) {
+      print('Error rejecting post $postId: $e');
+    }
   }
 
   // User moderation
-  static void banUser(String userId) {
-    final user = users.firstWhere((u) => u.email == userId); // assuming email as id
-    user.isBanned = true;
-    print('Banned user $userId');
+  static Future<void> banUser(String uid) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({'isBanned': true});
+      final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
+      user.isBanned = true;
+      print('Banned user $uid');
+    } catch (e) {
+      print('Error banning user $uid: $e');
+    }
   }
 
-  static void unbanUser(String userId) {
-    final user = users.firstWhere((u) => u.email == userId);
-    user.isBanned = false;
-    print('Unbanned user $userId');
+  static Future<void> unbanUser(String uid) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({'isBanned': false});
+      final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
+      user.isBanned = false;
+      print('Unbanned user $uid');
+    } catch (e) {
+      print('Error unbanning user $uid: $e');
+    }
   }
 
   // Feedback management
   static List<feedback_model.Feedback> getFeedbacks() {
-    return feedbacks;
+    return feedbacksNotifier.value;
   }
 
-  static void addFeedback(feedback_model.Feedback feedback) {
-    feedbacks.add(feedback);
+  static Future<void> addFeedback(feedback_model.Feedback feedback) async {
+    try {
+      await _firestore
+          .collection('feedbacks')
+          .doc(feedback.id)
+          .set(feedback.toJson());
+      feedbacksNotifier.value = [...feedbacksNotifier.value, feedback];
+    } catch (e) {
+      print('Error adding feedback ${feedback.id}: $e');
+    }
+  }
+
+  static Future<void> saveFeedback(feedback_model.Feedback feedback) async {
+    try {
+      await _firestore
+          .collection('feedbacks')
+          .doc(feedback.id)
+          .set(feedback.toJson());
+    } catch (e) {
+      print('Error saving feedback ${feedback.id}: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> updateFeedbackStatus(
+    String feedbackId,
+    feedback_model.FeedbackStatus status,
+  ) async {
+    try {
+      await _firestore.collection('feedbacks').doc(feedbackId).update({
+        'status': status.name,
+      });
+      // Update local notifier
+      final index = feedbacksNotifier.value.indexWhere(
+        (f) => f.id == feedbackId,
+      );
+      if (index != -1) {
+        final updatedFeedback = feedbacksNotifier.value[index].copyWith(
+          status: status,
+        );
+        feedbacksNotifier.value = List.from(feedbacksNotifier.value)
+          ..[index] = updatedFeedback;
+      }
+      print('Updated feedback $feedbackId status to ${status.name}');
+    } catch (e) {
+      print('Error updating feedback $feedbackId status: $e');
+    }
   }
 
   // Get pending posts
   static List<Post> getPendingPosts() {
-    return postsNotifier.value.where((p) => p.moderationStatus == ModerationStatus.pending).toList();
+    return postsNotifier.value
+        .where((p) => p.moderationStatus == ModerationStatus.pending)
+        .toList();
   }
 
   // Get all users
   static List<User> getUsers() {
-    return users;
+    return usersNotifier.value;
   }
 
   // Get post by id
