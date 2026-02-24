@@ -1,11 +1,10 @@
-# Feedback Collection Implementation
+# Database Integration Migration
 
 ## Pending Tasks
-- [x] Update Feedback model to include targetType and status
-- [x] Add required indexes to firestore.indexes.json
-- [x] Update firestore.rules for proper permissions
-- [x] Modify moderation_service to handle report logic and status updates
-- [x] Update post_actions_service to persist post updates and add targetType
-- [x] Update settings_screen for feedback submission
-- [x] Update moderator_screen to manage feedback statuses
-- [x] Test the implementation
+- [x] Update User model to include tutorialStatus and recentSearches fields
+- [x] Modify tutorial_service.dart to use Firestore instead of SharedPreferences
+- [x] Modify search_service.dart to use Firestore instead of SharedPreferences
+- [x] Optimize gamification_service.dart to reduce SharedPreferences usage
+- [x] Update firestore.rules for new user fields if needed
+- [x] Remove gamification reset function from main.dart (debugging code)
+- [x] Test data migration and offline scenarios (code changes completed, manual testing required)

@@ -57,6 +57,17 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // Tutorial state
   bool _showTutorial = false;
 
+  // ─── Color tokens (matches design system) ──────────────────────────────────
+  static const _bg = Color(0xFFF4F8FF);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static const _accent = Color(0xFF2E7CF6);
+  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _textPrimary = Color(0xFF0F1D35);
+  static const _textSecondary = Color(0xFF7A92B2);
+  static const _border = Color(0xFFD4E4F7);
+  static const _danger = Color(0xFFE05C6A);
+
   // Philippine regions with approximate boundaries
   final Map<String, LatLngBounds> philippineRegions = {
     'Philippines': LatLngBounds(
@@ -298,36 +309,155 @@ class _ContributeScreenState extends State<ContributeScreen> {
     showDialog(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Select Transport Mode for Next Step'),
-            content: SingleChildScrollView(
+          (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.08),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children:
-                    modes
-                        .map(
-                          (mode) => ListTile(
-                            leading: Icon(
-                              _getModeIcon(mode),
-                              color: modeColors[mode],
-                            ),
-                            title: Text(mode),
-                            onTap: () {
-                              setState(() {
-                                currentMode = mode;
-                              });
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Tap on the map to select the next point for $mode',
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      border: Border(
+                        bottom: BorderSide(color: _border, width: 1),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _accentSoft,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: const Icon(
+                            Icons.alt_route,
+                            color: _accent,
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Select Transport Mode',
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children:
+                            modes.map((mode) {
+                              final color = modeColors[mode] ?? _accent;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    currentMode = mode;
+                                  });
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Tap on the map to select the next point for $mode',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        currentMode == mode
+                                            ? color.withOpacity(0.08)
+                                            : _surface,
+                                    borderRadius: BorderRadius.circular(11),
+                                    border: Border.all(
+                                      color:
+                                          currentMode == mode
+                                              ? color.withOpacity(0.4)
+                                              : _border,
+                                      width: currentMode == mode ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 34,
+                                        height: 34,
+                                        decoration: BoxDecoration(
+                                          color: color.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            9,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          _getModeIcon(mode),
+                                          color: color,
+                                          size: 17,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        mode,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight:
+                                              currentMode == mode
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                          color:
+                                              currentMode == mode
+                                                  ? _textPrimary
+                                                  : _textSecondary,
+                                        ),
+                                      ),
+                                      if (currentMode == mode) ...[
+                                        const Spacer(),
+                                        Icon(
+                                          Icons.check_circle_rounded,
+                                          color: color,
+                                          size: 16,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               );
-                            },
-                          ),
-                        )
-                        .toList(),
+                            }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -341,55 +471,129 @@ class _ContributeScreenState extends State<ContributeScreen> {
     showDialog(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: Text('Step: $currentMode'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  onChanged: (value) => instruction = value,
-                  decoration: const InputDecoration(
-                    labelText:
-                        'Instruction (e.g., Ride a jeep with Cubao terminal)',
+          (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.08),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
                   ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  onChanged: (value) => details = value,
-                  decoration: const InputDecoration(
-                    labelText: 'Details (e.g., Drop off at Gateway Mall)',
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  pathPoints.removeLast(); // Remove the point if cancel
-                },
-                child: const Text('Cancel'),
+                ],
               ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    steps.add(
-                      route_model.Step(
-                        mode: currentMode,
-                        instruction: instruction,
-                        details: details,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
                       ),
-                    );
-                    stepBoundaries.add(pathPoints.length - 1);
-                  });
-                  Navigator.pop(context);
-                  _showAddAnotherStepDialog();
-                },
-                child: const Text('Save Step'),
+                      border: Border(
+                        bottom: BorderSide(color: _border, width: 1),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: (modeColors[currentMode] ?? _accent)
+                                .withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Icon(
+                            _getModeIcon(currentMode),
+                            color: modeColors[currentMode] ?? _accent,
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Step: $currentMode',
+                          style: const TextStyle(
+                            color: _textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        _styledTextField(
+                          hint: 'e.g., Ride a jeep with Cubao terminal',
+                          label: 'Instruction',
+                          icon: Icons.info_outline,
+                          maxLines: 2,
+                          onChanged: (v) => instruction = v,
+                        ),
+                        const SizedBox(height: 10),
+                        _styledTextField(
+                          hint: 'e.g., Drop off at Gateway Mall',
+                          label: 'Details',
+                          icon: Icons.location_on_outlined,
+                          maxLines: 2,
+                          onChanged: (v) => details = v,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _ghostButton(
+                            label: 'Cancel',
+                            onTap: () {
+                              Navigator.pop(context);
+                              pathPoints
+                                  .removeLast(); // Remove the point if cancel
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: _gradientButton(
+                            label: 'Save Step',
+                            icon: Icons.check_rounded,
+                            onTap: () {
+                              setState(() {
+                                steps.add(
+                                  route_model.Step(
+                                    mode: currentMode,
+                                    instruction: instruction,
+                                    details: details,
+                                  ),
+                                );
+                                stepBoundaries.add(pathPoints.length - 1);
+                              });
+                              Navigator.pop(context);
+                              _showAddAnotherStepDialog();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
     );
   }
@@ -398,29 +602,134 @@ class _ContributeScreenState extends State<ContributeScreen> {
     showDialog(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Add Another Step?'),
-            content: Text(
-              'You have added ${steps.length} steps. Add more or finish the route?',
+          (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.08),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      border: Border(
+                        bottom: BorderSide(color: _border, width: 1),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3EC97A).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: const Icon(
+                            Icons.check_circle_outline,
+                            color: Color(0xFF3EC97A),
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Step Added',
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _surfaceAlt,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: _accentSoft,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${steps.length}',
+                                style: const TextStyle(
+                                  color: _accent,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'step${steps.length > 1 ? 's' : ''} added to this route',
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Column(
+                      children: [
+                        _gradientButton(
+                          label: 'Add Another Step',
+                          icon: Icons.add_rounded,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showModeDialog();
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        _ghostButton(
+                          label: 'Finish Route',
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() {
+                              selectionMode = 'done';
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _showModeDialog();
-                },
-                child: const Text('Add Another Step'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    selectionMode = 'done';
-                  });
-                },
-                child: const Text('Finish Route'),
-              ),
-            ],
           ),
     );
   }
@@ -502,15 +811,76 @@ class _ContributeScreenState extends State<ContributeScreen> {
       await showDialog(
         context: context,
         builder:
-            (context) => AlertDialog(
-              title: const Text('Route Submitted'),
-              content: Text(message),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
+            (context) => Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withOpacity(0.08),
+                      blurRadius: 32,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-              ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 28),
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3EC97A).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: const Color(0xFF3EC97A).withOpacity(0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: Color(0xFF3EC97A),
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Route Submitted',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        message,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      child: _gradientButton(
+                        label: 'OK',
+                        icon: Icons.check_rounded,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
       );
 
@@ -763,28 +1133,223 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
+  // ─── Shared UI helpers (matching design system) ────────────────────────────
+
+  Widget _styledTextField({
+    required String hint,
+    required String label,
+    required IconData icon,
+    int maxLines = 1,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: TextField(
+        onChanged: onChanged,
+        maxLines: maxLines,
+        style: const TextStyle(color: _textPrimary, fontSize: 14),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+          hintText: hint,
+          hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+          prefixIcon: Icon(icon, color: _accent, size: 18),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 13,
+            horizontal: 4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _gradientButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 46,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: _accent.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ghostButton({required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 46,
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: _textSecondary,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getInstructionText() {
+    switch (selectionMode) {
+      case 'start':
+        return 'Tap on the map to select the starting point';
+      case 'step':
+        return 'Tap to select next point for $currentMode';
+      case 'done':
+        return 'Route complete! Fill in the details below and submit.';
+      default:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Scaffold(
+          backgroundColor: _bg,
+          // ─── AppBar ────────────────────────────────────────────────────
           appBar: AppBar(
-            title: Text(
-              widget.routeToEdit != null ? 'Edit Route' : 'Contribute a Route',
+            backgroundColor: _surface,
+            foregroundColor: _textPrimary,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            leading: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                margin: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: _border),
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 15,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: _accentSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: const Icon(
+                    Icons.add_road_rounded,
+                    color: _accent,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  widget.routeToEdit != null
+                      ? 'Edit Route'
+                      : 'Contribute a Route',
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ],
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.help_outline),
-                tooltip: 'Show Tutorial',
-                onPressed: () => setState(() => _showTutorial = true),
+              GestureDetector(
+                onTap: () => setState(() => _showTutorial = true),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _surfaceAlt,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _border),
+                  ),
+                  child: const Icon(
+                    Icons.help_outline_rounded,
+                    color: _textSecondary,
+                    size: 18,
+                  ),
+                ),
               ),
               if (selectionMode == 'done')
-                IconButton(
-                  icon: const Icon(Icons.preview),
-                  tooltip: 'Preview Route',
-                  onPressed: _onPreviewRoute,
+                GestureDetector(
+                  onTap: _onPreviewRoute,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 16),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _accentSoft,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _accent.withOpacity(0.3)),
+                    ),
+                    child: const Icon(
+                      Icons.preview_rounded,
+                      color: _accent,
+                      size: 18,
+                    ),
+                  ),
                 ),
             ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(height: 1, color: _border),
+            ),
           ),
           body: SafeArea(
             child: Stack(
@@ -856,21 +1421,81 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     snapToRoadEnabled: _snapToRoadEnabled,
                   ),
                 ),
-                // Region Selector Overlay
+
+                // ─── Instruction pill ─────────────────────────────────
+                if (selectionMode != 'done')
+                  Positioned(
+                    top: 16,
+                    left: 80,
+                    right: 20,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _surface.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: _border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accent.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: _accentSoft,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.touch_app_rounded,
+                              size: 13,
+                              color: _accent,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _getInstructionText(),
+                              style: const TextStyle(
+                                color: _textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // ─── Region Selector Overlay ──────────────────────────
                 Positioned(
                   top: 10,
-                  right: 20,
+                  right: 16,
                   child: Container(
-                    width: 160,
-                    padding: const EdgeInsets.all(4),
+                    width: 155,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(8),
+                      color: _surface.withOpacity(0.97),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _border),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                          color: _accent.withOpacity(0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
@@ -878,12 +1503,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
                       initialValue: selectedRegion,
                       hint: const Text(
                         'Select Region',
-                        style: TextStyle(fontSize: 12),
+                        style: TextStyle(fontSize: 11, color: _textSecondary),
                       ),
                       isExpanded: true,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      dropdownColor: _surface,
+                      style: const TextStyle(color: _textPrimary, fontSize: 11),
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
+                        isDense: true,
                       ),
                       items:
                           philippineRegions.keys.map((region) {
@@ -891,7 +1524,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                               value: region,
                               child: Text(
                                 region,
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(fontSize: 11),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             );
@@ -901,7 +1534,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   ),
                 ),
 
-                // Form Stepper Container
+                // ─── Form Stepper Container ───────────────────────────
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -911,58 +1544,108 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     height:
                         _isFormExpanded
                             ? MediaQuery.of(context).size.height * 0.6
-                            : 32,
+                            : 36,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: _surface,
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(16),
+                        top: Radius.circular(20),
+                      ),
+                      border: Border(
+                        top: BorderSide(color: _border, width: 1.5),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, -5),
+                          color: _accent.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, -6),
                         ),
                       ],
                     ),
                     child: Column(
                       children: [
-                        // Header Button
-                        Container(
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(16),
-                            ),
-                            border: Border.all(
-                              color: Colors.blue.shade200,
-                              width: 1,
-                            ),
+                        // ─── Handle / Toggle ──────────────────────────
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isFormExpanded = !_isFormExpanded;
+                            });
+                          },
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
                           ),
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _isFormExpanded = !_isFormExpanded;
-                              });
-                            },
-                            child: Center(
-                              child: Icon(
-                                _isFormExpanded
-                                    ? Icons.keyboard_arrow_down
-                                    : Icons.keyboard_arrow_up,
-                                size: 20,
-                                color: Colors.blue,
+                          child: Container(
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20),
                               ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: _border,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _isFormExpanded
+                                      ? 'Hide Form'
+                                      : 'Route Details',
+                                  style: const TextStyle(
+                                    color: _textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(
+                                  _isFormExpanded
+                                      ? Icons.keyboard_arrow_down_rounded
+                                      : Icons.keyboard_arrow_up_rounded,
+                                  size: 18,
+                                  color: _accent,
+                                ),
+                                if (!_isFormExpanded && steps.isNotEmpty) ...[
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _accentSoft,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: _accent.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${steps.length} step${steps.length > 1 ? 's' : ''}',
+                                      style: const TextStyle(
+                                        color: _accent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
+
+                        // ─── Form content ─────────────────────────────
                         if (_isFormExpanded)
                           Expanded(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
-                                vertical: 10,
+                                vertical: 8,
                               ),
                               child: Form(
                                 key: _formKey,
@@ -1002,18 +1685,5 @@ class _ContributeScreenState extends State<ContributeScreen> {
           ),
       ],
     );
-  }
-
-  String _getInstructionText() {
-    switch (selectionMode) {
-      case 'start':
-        return 'Tap on the map to select the starting point';
-      case 'step':
-        return 'Tap to select next point for $currentMode';
-      case 'done':
-        return 'Route complete! Fill in the details below and submit.';
-      default:
-        return '';
-    }
   }
 }

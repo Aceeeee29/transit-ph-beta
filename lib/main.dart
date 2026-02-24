@@ -1,20 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/moderation_service.dart';
-
-/// Resets gamification data on app start.
-Future<void> resetGamificationData() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('user_data');
-  await prefs.remove('achievements_data');
-  await prefs.remove('badges_data');
-}
 
 /// app's theme.
 ThemeData buildTheme() {
@@ -66,10 +58,6 @@ void main() async {
   ModerationService.init();
 
   await dotenv.load();
-
-  if (kDebugMode) {
-    await resetGamificationData();
-  }
 
   runApp(const TransitPHApp());
 }

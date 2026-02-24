@@ -10,6 +10,7 @@ import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
 import '../services/gamification_service.dart';
 import '../services/route_service.dart';
+import '../services/post_service.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -73,11 +74,24 @@ class _MainScreenState extends State<MainScreen> {
       FeedScreen(
         key: ValueKey(posts.length), // Force rebuild when posts change
         posts: posts,
-        onPostCreated: (post) {
+        onPostCreated: (post) async {
+          // Add locally first to show immediately
           setState(() {
             posts.add(post);
             ModerationService.postsNotifier.value = List.from(posts);
           });
+          try {
+            await PostService.savePost(post);
+          } catch (e) {
+            // If save fails, remove from local
+            setState(() {
+              posts.remove(post);
+              ModerationService.postsNotifier.value = List.from(posts);
+            });
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Failed to save post: $e')));
+          }
         },
         currentUserName: currentUserName,
         currentUserId: currentUserId,

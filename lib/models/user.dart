@@ -24,6 +24,7 @@ class User {
   List<String> bookmarkedPostIds;
   List<String> followedRouteIds;
   bool hasSeenTutorial;
+  List<String> recentSearches;
 
   User({
     this.uid,
@@ -47,6 +48,7 @@ class User {
     this.bookmarkedPostIds = const [],
     this.followedRouteIds = const [],
     this.hasSeenTutorial = false,
+    this.recentSearches = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -72,6 +74,7 @@ class User {
       'bookmarkedPostIds': bookmarkedPostIds,
       'followedRouteIds': followedRouteIds,
       'hasSeenTutorial': hasSeenTutorial,
+      'recentSearches': recentSearches,
     };
   }
 
@@ -109,6 +112,7 @@ class User {
       bookmarkedPostIds: List<String>.from(json['bookmarkedPostIds'] ?? []),
       followedRouteIds: List<String>.from(json['followedRouteIds'] ?? []),
       hasSeenTutorial: json['hasSeenTutorial'] ?? false,
+      recentSearches: List<String>.from(json['recentSearches'] ?? []),
     );
   }
 }

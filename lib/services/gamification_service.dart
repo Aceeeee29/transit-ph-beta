@@ -76,9 +76,6 @@ class GamificationService {
             .doc(uid)
             .update(user.toJson());
 
-        // Also save to SharedPreferences as backup
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_userKey, jsonEncode(user.toJson()));
         return;
       } catch (e) {
         print('Error saving user to Firestore: $e');
@@ -89,9 +86,6 @@ class GamificationService {
               .doc(uid)
               .set(user.toJson());
 
-          // Also save to SharedPreferences as backup
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(_userKey, jsonEncode(user.toJson()));
           return;
         } catch (e2) {
           print('Error creating user document in Firestore: $e2');
@@ -156,10 +150,6 @@ class GamificationService {
         print('Error saving achievements to Firestore: $e');
       }
     }
-    // Also save to SharedPreferences as backup
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = achievements.map((e) => e.toJson()).toList();
-    await prefs.setString(_achievementsKey, jsonEncode(encoded));
   }
 
   static Future<List<Badge>> loadBadges() async {
@@ -209,10 +199,6 @@ class GamificationService {
         print('Error saving badges to Firestore: $e');
       }
     }
-    // Also save to SharedPreferences as backup
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = badges.map((e) => e.toJson()).toList();
-    await prefs.setString(_badgesKey, jsonEncode(encoded));
   }
 
   static Future<List<String>> incrementRoutesSearched(

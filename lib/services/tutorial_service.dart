@@ -1,7 +1,9 @@
 import 'dart:ui';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
+import 'gamification_service.dart';
 
 class TutorialService {
   static const String _hasSeenContributeTutorialKey =
@@ -9,20 +11,35 @@ class TutorialService {
 
   /// Check if the user has seen the contribute tutorial
   static Future<bool> hasSeenContributeTutorial() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_hasSeenContributeTutorialKey) ?? false;
+    try {
+      final user = await GamificationService.loadUser();
+      return user.hasSeenTutorial;
+    } catch (e) {
+      print('Error loading tutorial status: $e');
+      return false;
+    }
   }
 
   /// Mark the contribute tutorial as seen
   static Future<void> markContributeTutorialAsSeen() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_hasSeenContributeTutorialKey, true);
+    try {
+      final user = await GamificationService.loadUser();
+      user.hasSeenTutorial = true;
+      await GamificationService.saveUser(user);
+    } catch (e) {
+      print('Error saving tutorial status: $e');
+    }
   }
 
   /// Reset tutorial status (for testing)
   static Future<void> resetTutorialStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_hasSeenContributeTutorialKey, false);
+    try {
+      final user = await GamificationService.loadUser();
+      user.hasSeenTutorial = false;
+      await GamificationService.saveUser(user);
+    } catch (e) {
+      print('Error resetting tutorial status: $e');
+    }
   }
 
   /// Get tutorial steps for contribute screen

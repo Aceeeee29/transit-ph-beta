@@ -1,4 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'gamification_service.dart';
 
 class SearchService {
   static const String _recentSearchesKey = 'recent_searches';
@@ -8,40 +10,58 @@ class SearchService {
   static Future<void> addRecentSearch(String query) async {
     if (query.trim().isEmpty) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final recentSearches = prefs.getStringList(_recentSearchesKey) ?? [];
+    try {
+      final user = await GamificationService.loadUser();
+      final recentSearches = List<String>.from(user.recentSearches);
 
-    // Remove if already exists (to move it to top)
-    recentSearches.remove(query.trim());
+      // Remove if already exists (to move it to top)
+      recentSearches.remove(query.trim());
 
-    // Add to beginning
-    recentSearches.insert(0, query.trim());
+      // Add to beginning
+      recentSearches.insert(0, query.trim());
 
-    // Limit to max recent searches
-    if (recentSearches.length > _maxRecentSearches) {
-      recentSearches.removeRange(_maxRecentSearches, recentSearches.length);
+      // Limit to max recent searches
+      if (recentSearches.length > _maxRecentSearches) {
+        recentSearches.removeRange(_maxRecentSearches, recentSearches.length);
+      }
+
+      user.recentSearches = recentSearches;
+      await GamificationService.saveUser(user);
+    } catch (e) {
+      print('Error saving recent search: $e');
     }
-
-    await prefs.setStringList(_recentSearchesKey, recentSearches);
   }
 
   /// Get recent searches
   static Future<List<String>> getRecentSearches() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_recentSearchesKey) ?? [];
+    try {
+      final user = await GamificationService.loadUser();
+      return List<String>.from(user.recentSearches);
+    } catch (e) {
+      print('Error loading recent searches: $e');
+      return [];
+    }
   }
 
   /// Clear all recent searches
   static Future<void> clearRecentSearches() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_recentSearchesKey);
+    try {
+      final user = await GamificationService.loadUser();
+      user.recentSearches = [];
+      await GamificationService.saveUser(user);
+    } catch (e) {
+      print('Error clearing recent searches: $e');
+    }
   }
 
   /// Remove a single recent search
   static Future<void> removeRecentSearch(String query) async {
-    final prefs = await SharedPreferences.getInstance();
-    final recentSearches = prefs.getStringList(_recentSearchesKey) ?? [];
-    recentSearches.remove(query);
-    await prefs.setStringList(_recentSearchesKey, recentSearches);
+    try {
+      final user = await GamificationService.loadUser();
+      user.recentSearches.remove(query);
+      await GamificationService.saveUser(user);
+    } catch (e) {
+      print('Error removing recent search: $e');
+    }
   }
 }
