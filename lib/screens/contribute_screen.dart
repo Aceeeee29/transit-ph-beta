@@ -1262,22 +1262,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
             elevation: 0,
             scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
-            leading: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                margin: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: _border),
-                ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  size: 15,
-                  color: _textSecondary,
-                ),
-              ),
-            ),
+
             title: Row(
               children: [
                 Container(
@@ -1422,57 +1407,59 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   ),
                 ),
 
-                // ─── Instruction pill ─────────────────────────────────
+                // ─── Instruction pill (above bottom sheet, no overlap) ──
                 if (selectionMode != 'done')
                   Positioned(
-                    top: 16,
-                    left: 80,
-                    right: 20,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _surface.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: _border),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: _accentSoft,
-                              shape: BoxShape.circle,
+                    bottom: 50,
+                    left: 16,
+                    right: 16,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _surface.withOpacity(0.96),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: _border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accent.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
-                            child: const Icon(
-                              Icons.touch_app_rounded,
-                              size: 13,
-                              color: _accent,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              _getInstructionText(),
-                              style: const TextStyle(
-                                color: _textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: const BoxDecoration(
+                                color: _accentSoft,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.touch_app_rounded,
+                                size: 13,
+                                color: _accent,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                _getInstructionText(),
+                                style: const TextStyle(
+                                  color: _textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1544,7 +1531,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     height:
                         _isFormExpanded
                             ? MediaQuery.of(context).size.height * 0.6
-                            : 36,
+                            : 40,
                     decoration: BoxDecoration(
                       color: _surface,
                       borderRadius: const BorderRadius.vertical(
@@ -1561,110 +1548,111 @@ class _ContributeScreenState extends State<ContributeScreen> {
                         ),
                       ],
                     ),
-                    child: Column(
-                      children: [
-                        // ─── Handle / Toggle ──────────────────────────
-                        InkWell(
-                          onTap: () {
-                            setState(() {
-                              _isFormExpanded = !_isFormExpanded;
-                            });
-                          },
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                          child: Container(
-                            height: 36,
-                            decoration: const BoxDecoration(
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(20),
-                              ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          // ─── Handle / Toggle ──────────────────────────
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isFormExpanded = !_isFormExpanded;
+                              });
+                            },
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: _border,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  _isFormExpanded
-                                      ? 'Hide Form'
-                                      : 'Route Details',
-                                  style: const TextStyle(
-                                    color: _textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Icon(
-                                  _isFormExpanded
-                                      ? Icons.keyboard_arrow_down_rounded
-                                      : Icons.keyboard_arrow_up_rounded,
-                                  size: 18,
-                                  color: _accent,
-                                ),
-                                if (!_isFormExpanded && steps.isNotEmpty) ...[
-                                  const SizedBox(width: 10),
+                            child: SizedBox(
+                              height: 40,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
+                                    width: 36,
+                                    height: 4,
                                     decoration: BoxDecoration(
-                                      color: _accentSoft,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: _accent.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '${steps.length} step${steps.length > 1 ? 's' : ''}',
-                                      style: const TextStyle(
-                                        color: _accent,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                      color: _border,
+                                      borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _isFormExpanded
+                                        ? 'Hide Form'
+                                        : 'Route Details',
+                                    style: const TextStyle(
+                                      color: _textSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    _isFormExpanded
+                                        ? Icons.keyboard_arrow_down_rounded
+                                        : Icons.keyboard_arrow_up_rounded,
+                                    size: 18,
+                                    color: _accent,
+                                  ),
+                                  if (!_isFormExpanded && steps.isNotEmpty) ...[
+                                    const SizedBox(width: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _accentSoft,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: _accent.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${steps.length} step${steps.length > 1 ? 's' : ''}',
+                                        style: const TextStyle(
+                                          color: _accent,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
-                        ),
 
-                        // ─── Form content ─────────────────────────────
-                        if (_isFormExpanded)
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              child: Form(
-                                key: _formKey,
-                                child: RouteFormStepper(
-                                  startLocationController:
-                                      _startLocationController,
-                                  endLocationController: _endLocationController,
-                                  shortDescriptionController:
-                                      _shortDescriptionController,
-                                  scheduleController: _scheduleController,
-                                  steps: steps,
-                                  onSubmit: _submit,
-                                  onReset: _onReset,
-                                  selectionMode: selectionMode,
+                          // ─── Form content ─────────────────────────────
+                          if (_isFormExpanded)
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                child: Form(
+                                  key: _formKey,
+                                  child: RouteFormStepper(
+                                    startLocationController:
+                                        _startLocationController,
+                                    endLocationController:
+                                        _endLocationController,
+                                    shortDescriptionController:
+                                        _shortDescriptionController,
+                                    scheduleController: _scheduleController,
+                                    steps: steps,
+                                    onSubmit: _submit,
+                                    onReset: _onReset,
+                                    selectionMode: selectionMode,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

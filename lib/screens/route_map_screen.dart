@@ -26,8 +26,20 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   List<route_model.Report> _routeReports = [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
-  bool? _userVote; // true for upvote, false for downvote, null for no vote
+  bool? _userVote;
   List<LatLng> _pathPoints = [];
+
+  // ─── Color tokens ───────────────────────────────────────────────────────────
+  static const _bg = Color(0xFFF4F8FF);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static const _accent = Color(0xFF2E7CF6);
+  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _textPrimary = Color(0xFF0F1D35);
+  static const _textSecondary = Color(0xFF7A92B2);
+  static const _border = Color(0xFFD4E4F7);
+  static const _danger = Color(0xFFE05C6A);
+  static const _green = Color(0xFF3EC97A);
 
   static const Map<String, List<String>> reportCategories = {
     'Traffic-Related': [
@@ -51,6 +63,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       'Landslide / mudslide',
       'Storm / lightning hazard',
     ],
+  };
+
+  final Map<String, Color> modeColors = {
+    'Walk': Colors.green,
+    'Jeepney': Colors.blue,
+    'Bus': Colors.red,
+    'Train': Colors.purple,
+    'Tricycle': Colors.orange,
+    'FX/Van': Colors.amber,
+    'Ferry': Colors.lightBlue,
   };
 
   IconData _getModeIcon(String mode) {
@@ -83,10 +105,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   Future<void> _incrementViews() async {
-    // Increment views for this route
-    // Assuming routes are stored in a file or service, update the views count
-    // For now, we'll just update the widget's route if possible
-    // In a real app, this would be persisted to a database
     setState(() {
       widget.route.views++;
     });
@@ -163,7 +181,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               .toList();
       await file.writeAsString(jsonEncode(allReports));
     } catch (e) {
-      // Handle error, perhaps show SnackBar
+      // Handle error
     }
   }
 
@@ -173,76 +191,373 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder:
           (context) => StatefulBuilder(
             builder:
-                (context, setState) => Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Report Issue',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: ListView(
-                          children:
-                              reportCategories.entries
-                                  .map(
-                                    (entry) => ExpansionTile(
-                                      title: Text(entry.key),
-                                      children:
-                                          entry.value
-                                              .map(
-                                                (type) => RadioListTile<String>(
-                                                  title: Text(type),
-                                                  value: type,
-                                                  groupValue: selectedType,
-                                                  onChanged:
-                                                      (value) => setState(
-                                                        () =>
-                                                            selectedType =
-                                                                value,
-                                                      ),
-                                                ),
-                                              )
-                                              .toList(),
+                (context, setSheetState) => DraggableScrollableSheet(
+                  initialChildSize: 0.75,
+                  minChildSize: 0.5,
+                  maxChildSize: 0.95,
+                  builder:
+                      (context, scrollController) => Container(
+                        decoration: const BoxDecoration(
+                          color: _bg,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            // Handle
+                            Container(
+                              margin: const EdgeInsets.only(top: 12),
+                              width: 36,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: _border,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            // Header
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                14,
+                                16,
+                                14,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: _danger.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(9),
                                     ),
-                                  )
-                                  .toList(),
+                                    child: const Icon(
+                                      Icons.report_problem_outlined,
+                                      color: _danger,
+                                      size: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    'Report an Issue',
+                                    style: TextStyle(
+                                      color: _textPrimary,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Divider(color: _border, height: 1),
+                            // Content
+                            Expanded(
+                              child: ListView(
+                                controller: scrollController,
+                                padding: const EdgeInsets.all(16),
+                                children: [
+                                  ...reportCategories.entries.map((entry) {
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      decoration: BoxDecoration(
+                                        color: _surface,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(color: _border),
+                                      ),
+                                      child: Theme(
+                                        data: Theme.of(context).copyWith(
+                                          dividerColor: Colors.transparent,
+                                        ),
+                                        child: ExpansionTile(
+                                          tilePadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 4,
+                                              ),
+                                          title: Text(
+                                            entry.key,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: _textPrimary,
+                                            ),
+                                          ),
+                                          iconColor: _accent,
+                                          collapsedIconColor: _textSecondary,
+                                          children:
+                                              entry.value.map((type) {
+                                                return GestureDetector(
+                                                  onTap:
+                                                      () => setSheetState(
+                                                        () =>
+                                                            selectedType = type,
+                                                      ),
+                                                  child: Container(
+                                                    margin:
+                                                        const EdgeInsets.fromLTRB(
+                                                          10,
+                                                          0,
+                                                          10,
+                                                          6,
+                                                        ),
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 10,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          selectedType == type
+                                                              ? _accentSoft
+                                                              : _surfaceAlt,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            9,
+                                                          ),
+                                                      border: Border.all(
+                                                        color:
+                                                            selectedType == type
+                                                                ? _accent
+                                                                    .withOpacity(
+                                                                      0.35,
+                                                                    )
+                                                                : _border,
+                                                        width:
+                                                            selectedType == type
+                                                                ? 1.5
+                                                                : 1,
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          width: 16,
+                                                          height: 16,
+                                                          decoration: BoxDecoration(
+                                                            shape:
+                                                                BoxShape.circle,
+                                                            border: Border.all(
+                                                              color:
+                                                                  selectedType ==
+                                                                          type
+                                                                      ? _accent
+                                                                      : _border,
+                                                              width: 2,
+                                                            ),
+                                                            color:
+                                                                selectedType ==
+                                                                        type
+                                                                    ? _accent
+                                                                    : Colors
+                                                                        .transparent,
+                                                          ),
+                                                          child:
+                                                              selectedType ==
+                                                                      type
+                                                                  ? const Icon(
+                                                                    Icons.check,
+                                                                    size: 10,
+                                                                    color:
+                                                                        Colors
+                                                                            .white,
+                                                                  )
+                                                                  : null,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            type,
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              color:
+                                                                  selectedType ==
+                                                                          type
+                                                                      ? _textPrimary
+                                                                      : _textSecondary,
+                                                              fontWeight:
+                                                                  selectedType ==
+                                                                          type
+                                                                      ? FontWeight
+                                                                          .w600
+                                                                      : FontWeight
+                                                                          .w400,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                  const SizedBox(height: 4),
+                                  // Description field
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: _surface,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: _border),
+                                    ),
+                                    child: TextField(
+                                      onChanged: (val) => description = val,
+                                      maxLines: 3,
+                                      style: const TextStyle(
+                                        color: _textPrimary,
+                                        fontSize: 14,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText:
+                                            'Additional description (optional)',
+                                        hintStyle: TextStyle(
+                                          color: _textSecondary,
+                                          fontSize: 13,
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.edit_note_outlined,
+                                          color: _accent,
+                                          size: 20,
+                                        ),
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.symmetric(
+                                          vertical: 13,
+                                          horizontal: 4,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.pop(context),
+                                          child: Container(
+                                            height: 46,
+                                            decoration: BoxDecoration(
+                                              color: _surface,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: _border,
+                                              ),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: const Text(
+                                              'Cancel',
+                                              style: TextStyle(
+                                                color: _textSecondary,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        flex: 2,
+                                        child: GestureDetector(
+                                          onTap:
+                                              selectedType != null
+                                                  ? () => _submitReport(
+                                                    selectedType!,
+                                                    description,
+                                                    context,
+                                                  )
+                                                  : null,
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 200,
+                                            ),
+                                            height: 46,
+                                            decoration: BoxDecoration(
+                                              gradient:
+                                                  selectedType != null
+                                                      ? const LinearGradient(
+                                                        colors: [
+                                                          Color(0xFFE05C6A),
+                                                          Color(0xFFEA8A94),
+                                                        ],
+                                                        begin:
+                                                            Alignment
+                                                                .centerLeft,
+                                                        end:
+                                                            Alignment
+                                                                .centerRight,
+                                                      )
+                                                      : null,
+                                              color:
+                                                  selectedType == null
+                                                      ? _border
+                                                      : null,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              boxShadow:
+                                                  selectedType != null
+                                                      ? [
+                                                        BoxShadow(
+                                                          color: _danger
+                                                              .withOpacity(0.3),
+                                                          blurRadius: 10,
+                                                          offset: const Offset(
+                                                            0,
+                                                            3,
+                                                          ),
+                                                        ),
+                                                      ]
+                                                      : null,
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.flag_outlined,
+                                                  color:
+                                                      selectedType != null
+                                                          ? Colors.white
+                                                          : _textSecondary,
+                                                  size: 16,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  'Submit Report',
+                                                  style: TextStyle(
+                                                    color:
+                                                        selectedType != null
+                                                            ? Colors.white
+                                                            : _textSecondary,
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      TextField(
-                        onChanged: (val) => description = val,
-                        decoration: const InputDecoration(
-                          labelText: 'Additional Description (optional)',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            onPressed:
-                                selectedType != null
-                                    ? () => _submitReport(
-                                      selectedType!,
-                                      description,
-                                      context,
-                                    )
-                                    : null,
-                            child: const Text('Submit'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
                 ),
           ),
     );
@@ -261,13 +576,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _routeReports.add(report);
     await _saveReports();
 
-    // Award points for reporting
     final user = await GamificationService.loadUser();
     final unlockedItems = await GamificationService.incrementReportsSubmitted(
       user,
     );
 
-    // Show achievement notifications
     if (unlockedItems.isNotEmpty) {
       setState(() {
         _pendingNotifications = unlockedItems;
@@ -352,29 +665,25 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       return;
     }
 
-    // Generate points by interpolating between start and end
-    // Number of segments = number of steps
     final numSegments = widget.route.steps.length;
     final latStep = (end.latitude - start.latitude) / numSegments;
     final lngStep = (end.longitude - start.longitude) / numSegments;
 
     _pathPoints = [];
     for (int i = 0; i <= numSegments; i++) {
-      final lat = start.latitude + latStep * i;
-      final lng = start.longitude + lngStep * i;
-      _pathPoints.add(LatLng(lat, lng));
+      _pathPoints.add(
+        LatLng(start.latitude + latStep * i, start.longitude + lngStep * i),
+      );
     }
   }
 
   void _vote(bool isUpvote) {
     if (_userVote != null) {
-      // User has already voted, don't allow another vote
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You have already voted on this route')),
       );
       return;
     }
-
     setState(() {
       _userVote = isUpvote;
       if (isUpvote) {
@@ -383,20 +692,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         widget.route.downvotes++;
       }
     });
-    // In a real app, persist this to a database
   }
-
-  // Favorites functionality removed
-
-  final Map<String, Color> modeColors = {
-    'Walk': Colors.green,
-    'Jeepney': Colors.blue,
-    'Bus': Colors.red,
-    'Train': Colors.purple,
-    'Tricycle': Colors.orange,
-    'FX/Van': Colors.amber,
-    'Ferry': Colors.lightBlue,
-  };
 
   List<Polyline> get polylines {
     if (_pathPoints.length < 2) return [];
@@ -419,7 +715,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       ];
     }
     if (widget.route.stepBoundaries.isNotEmpty) {
-      // New logic for routes with stepBoundaries
       List<Polyline> polys = [];
       for (int i = 0; i < widget.route.steps.length; i++) {
         final step = widget.route.steps[i];
@@ -453,14 +748,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       }
       return polys;
     } else {
-      // Compute even boundaries for routes without stepBoundaries
       int totalPoints = _pathPoints.length;
       int numSteps = widget.route.steps.length;
       List<int> boundaries = [];
       for (int i = 1; i < numSteps; i++) {
         boundaries.add((i * (totalPoints - 1) / numSteps).round());
       }
-      // Use the same logic as new routes
       List<Polyline> polys = [];
       for (int i = 0; i < widget.route.steps.length; i++) {
         final step = widget.route.steps[i];
@@ -497,8 +790,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   List<Marker> get markers {
     List<Marker> routeMarkers = [];
     final points = _pathPoints;
-
-    // Add start marker
     if (points.isNotEmpty) {
       routeMarkers.add(
         Marker(
@@ -507,8 +798,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         ),
       );
     }
-
-    // Add end marker
     if (points.length > 1) {
       routeMarkers.add(
         Marker(
@@ -517,8 +806,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         ),
       );
     }
-
-    // Add current location marker
     if (_currentPosition != null) {
       routeMarkers.add(
         Marker(
@@ -530,16 +817,126 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         ),
       );
     }
-
     return routeMarkers;
   }
+
+  // ─── Shared UI helpers ─────────────────────────────────────────────────────
+  Widget _metricCard({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, color: iconColor, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: _textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      label.toUpperCase(),
+      style: const TextStyle(
+        color: _textSecondary,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.2,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     if (_pathPoints.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Route Map')),
-        body: const Center(child: Text('No route data available')),
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          title: const Text(
+            'Route Map',
+            style: TextStyle(
+              color: _textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 17,
+            ),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.map_outlined,
+                  size: 36,
+                  color: _textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No route data available',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -551,43 +948,177 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     return Stack(
       children: [
         Scaffold(
+          backgroundColor: _bg,
+          // ─── AppBar ──────────────────────────────────────────────────
           appBar: AppBar(
-            title: Text(
-              '${widget.route.startLocation} to ${widget.route.endLocation}',
+            backgroundColor: _surface,
+            foregroundColor: _textPrimary,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            leading: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                margin: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: _border),
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 15,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.route.startLocation,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.arrow_forward,
+                      size: 11,
+                      color: _textSecondary,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        widget.route.endLocation,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
             actions: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      _userVote == true
-                          ? Icons.arrow_upward
-                          : Icons.arrow_upward,
-                      color: _userVote == true ? Colors.green : null,
+              // ── Vote buttons ──
+              GestureDetector(
+                onTap: _userVote == null ? () => _vote(true) : null,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        _userVote == true
+                            ? _green.withOpacity(0.12)
+                            : _surfaceAlt,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color:
+                          _userVote == true ? _green.withOpacity(0.4) : _border,
                     ),
-                    onPressed: _userVote == null ? () => _vote(true) : null,
                   ),
-                  Text('${widget.route.upvotes}'),
-                  IconButton(
-                    icon: Icon(
-                      _userVote == false
-                          ? Icons.arrow_downward
-                          : Icons.arrow_downward,
-                      color: _userVote == false ? Colors.red : null,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 15,
+                        color: _userVote == true ? _green : _textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${widget.route.upvotes}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _userVote == true ? _green : _textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: _userVote == null ? () => _vote(false) : null,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        _userVote == false
+                            ? _danger.withOpacity(0.1)
+                            : _surfaceAlt,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color:
+                          _userVote == false
+                              ? _danger.withOpacity(0.35)
+                              : _border,
                     ),
-                    onPressed: _userVote == null ? () => _vote(false) : null,
                   ),
-                  Text('${widget.route.downvotes}'),
-                  IconButton(
-                    icon: const Icon(Icons.report_problem),
-                    onPressed: _showReportDialog,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.arrow_downward_rounded,
+                        size: 15,
+                        color: _userVote == false ? _danger : _textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${widget.route.downvotes}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _userVote == false ? _danger : _textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ),
+              // ── Report button ──
+              GestureDetector(
+                onTap: _showReportDialog,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _danger.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _danger.withOpacity(0.25)),
+                  ),
+                  child: const Icon(
+                    Icons.report_problem_outlined,
+                    color: _danger,
+                    size: 17,
+                  ),
+                ),
               ),
             ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(height: 1, color: _border),
+            ),
           ),
+
           body: Column(
             children: [
+              // ─── Map ───────────────────────────────────────────────
               Expanded(
                 flex: 2,
                 child: Stack(
@@ -601,14 +1132,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                         maxZoom: 18.0,
                         cameraConstraint: CameraConstraint.contain(
                           bounds: LatLngBounds(
-                            const LatLng(
-                              4.5,
-                              116.0,
-                            ), // Southwest corner (Mindanao area)
-                            const LatLng(
-                              21.5,
-                              127.0,
-                            ), // Northeast corner (Batanes + eastern sea)
+                            const LatLng(4.5, 116.0),
+                            const LatLng(21.5, 127.0),
                           ),
                         ),
                       ),
@@ -623,19 +1148,25 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                         PolylineLayer(polylines: polylines),
                       ],
                     ),
+
+                    // ── Mode legend ────────────────────────────────────
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 12,
+                      right: 12,
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(8),
+                          color: _surface.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _border),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+                              color: _accent.withOpacity(0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
                           ],
                         ),
@@ -643,184 +1174,327 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children:
                               modeColors.entries.map((entry) {
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 16,
-                                      height: 16,
-                                      color: entry.value,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      entry.key,
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ],
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: entry.value,
+                                          borderRadius: BorderRadius.circular(
+                                            3,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        entry.key,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: _textPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 );
                               }).toList(),
+                        ),
+                      ),
+                    ),
+
+                    // ── Center on location button ──────────────────────
+                    Positioned(
+                      bottom: 12,
+                      right: 12,
+                      child: GestureDetector(
+                        onTap: _centerOnCurrentLocation,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: _surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _border),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _accent.withOpacity(0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.my_location_rounded,
+                            color: _accent,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // ─── Info panel ─────────────────────────────────────────
               Expanded(
                 flex: 1,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _bg,
+                    border: Border(top: BorderSide(color: _border, width: 1.5)),
+                  ),
                   child: ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      // Calculate and display distance
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.straighten,
-                                color: Colors.purple,
+                      // ── Metrics chips row ─────────────────────────
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _metricCard(
+                              icon: Icons.straighten,
+                              iconColor: const Color(0xFF9B7FE8),
+                              label: 'Distance',
+                              value: RouteMetricsService.formatDistance(
+                                RouteMetricsService.calculateRouteDistance(
+                                  _pathPoints,
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Distance: ${RouteMetricsService.formatDistance(RouteMetricsService.calculateRouteDistance(_pathPoints))}',
-                                style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            if (widget.route.eta != null) ...[
+                              const SizedBox(width: 10),
+                              _metricCard(
+                                icon: Icons.access_time_rounded,
+                                iconColor: _accent,
+                                label: 'ETA',
+                                value: '${widget.route.eta} min',
                               ),
                             ],
-                          ),
+                            if (widget.route.price != null) ...[
+                              const SizedBox(width: 10),
+                              _metricCard(
+                                icon: Icons.payments_outlined,
+                                iconColor: _green,
+                                label: 'Fare',
+                                value: '${widget.route.price}',
+                              ),
+                            ],
+                            if (widget.route.schedule != null) ...[
+                              const SizedBox(width: 10),
+                              _metricCard(
+                                icon: Icons.schedule_outlined,
+                                iconColor: const Color(0xFFE89A3C),
+                                label: 'Schedule',
+                                value: widget.route.schedule!,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      if (widget.route.eta != null)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.access_time,
-                                  color: Colors.blue,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'ETA: ${widget.route.eta} minutes',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (widget.route.price != null)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.attach_money,
-                                  color: Colors.green,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Price: ${widget.route.price}',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (widget.route.schedule != null)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.schedule,
-                                  color: Colors.orange,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Schedule: ${widget.route.schedule}',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      Text(
+
+                      const SizedBox(height: 16),
+
+                      // ── Route steps ───────────────────────────────
+                      _sectionLabel(
                         'Route Steps (${widget.route.steps.length})',
-                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 8),
                       ...widget.route.steps.asMap().entries.map((entry) {
                         final idx = entry.key;
                         final step = entry.value;
-                        return Card(
+                        final modeColor = modeColors[step.mode] ?? _accent;
+
+                        return Container(
                           margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: Icon(
-                              _getModeIcon(step.mode),
-                              color: modeColors[step.mode] ?? Colors.blue,
-                            ),
-                            title: Text(step.mode),
-                            subtitle: Column(
+                          decoration: BoxDecoration(
+                            color: _surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: _border),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  step.instruction,
-                                  softWrap: true,
-                                  overflow: TextOverflow.visible,
+                                // Step number + mode icon
+                                Column(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: modeColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: modeColor.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        _getModeIcon(step.mode),
+                                        color: modeColor,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      decoration: BoxDecoration(
+                                        color: _surfaceAlt,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: _border),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '${idx + 1}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: _textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                if (step.details.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    step.details,
-                                    style: const TextStyle(fontSize: 12),
-                                    softWrap: true,
-                                    overflow: TextOverflow.visible,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        step.mode,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: modeColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        step.instruction,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: _textPrimary,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      if (step.details.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          step.details,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: _textSecondary,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
                         );
                       }),
+
+                      // ── Recent reports ────────────────────────────
                       if (_routeReports.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          'Recent Reports',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
+                        _sectionLabel('Recent Reports'),
                         ..._routeReports.map(
-                          (report) => Card(
+                          (report) => Container(
                             margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: Icon(_getReportIcon(report.type)),
-                              title: Text(report.type),
-                              subtitle: Text(
-                                '${report.description ?? ''}\n${_formatTime(report.timestamp)}',
+                            decoration: BoxDecoration(
+                              color: _surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _danger.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      color: _danger.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    child: Icon(
+                                      _getReportIcon(report.type),
+                                      color: _danger,
+                                      size: 17,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          report.type,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: _textPrimary,
+                                          ),
+                                        ),
+                                        if (report.description != null &&
+                                            report.description!.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            report.description!,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: _textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.access_time,
+                                              size: 11,
+                                              color: _textSecondary,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              _formatTime(report.timestamp),
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: _textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
                       ],
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
             ],
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: _centerOnCurrentLocation,
-            child: const Icon(Icons.my_location),
           ),
         ),
         if (_showNotificationOverlay)
