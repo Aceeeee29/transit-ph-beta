@@ -9,17 +9,49 @@ import 'onboarding_screen.dart';
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
+  // ─── Color tokens ──────────────────────────────────────────────────────────
+  static const _bg = Color(0xFFF4F8FF);
+  static const _accent = Color(0xFF2E7CF6);
+
+  // ─── Shared loading scaffold ───────────────────────────────────────────────
+  static Widget _loadingScaffold() {
+    return const Scaffold(
+      backgroundColor: _bg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(
+                color: _accent,
+                strokeWidth: 2.5,
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'TransitPH',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _accent,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+          return _loadingScaffold();
         }
 
         if (snapshot.hasData) {
@@ -39,11 +71,7 @@ class AuthGate extends StatelessWidget {
             future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
             builder: (context, userSnapshot) {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
+                return _loadingScaffold();
               }
 
               if (userSnapshot.hasError) {
