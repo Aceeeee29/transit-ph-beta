@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
+import '../models/ors_route_result.dart';
 import '../services/search_service.dart';
 import '../services/gamification_service.dart';
+import '../services/routing_service.dart';
+import '../services/location_service.dart';
 import '../widgets/notification_overlay.dart';
 import 'route_map_screen.dart';
 
@@ -25,16 +30,12 @@ class _SearchScreenState extends State<SearchScreen> {
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
 
-  // ─── Color tokens (matches design system) ──────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
-  static const _danger = Color(0xFFE05C6A);
+  // ORS fallback state
+  OrsRouteResult? _orsResult;
+  bool _isLoadingOrs = false;
+  bool _orsError = false;
+  String _orsErrorMessage = '';
+  String _lastOrsQuery = '';
 
   @override
   void initState() {
@@ -108,6 +109,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   searchTerm,
                 );
           }).toList();
+      // Reset ORS state whenever the query changes
+      if (query.trim() != _lastOrsQuery) {
+        _orsResult = null;
+        _orsError = false;
+        _orsErrorMessage = '';
+      }
     });
   }
 
@@ -204,6 +211,86 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  /// Geocodes the destination query to coordinates, then fetches a route
+  /// from ORS using the user's current GPS position as the origin.
+  Future<void> _fetchOrsRoute() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() {
+      _isLoadingOrs = true;
+      _orsError = false;
+      _orsErrorMessage = '';
+      _orsResult = null;
+      _lastOrsQuery = query;
+    });
+
+    try {
+      // 1. Get user's current location
+      final position = await LocationService.getCurrentPosition();
+      if (position == null) {
+        setState(() {
+          _isLoadingOrs = false;
+          _orsError = true;
+          _orsErrorMessage =
+              'Could not get your current location. Check location permissions.';
+        });
+        return;
+      }
+      final origin = LatLng(position.latitude, position.longitude);
+      final originName =
+          await LocationService.getAddressFromCoordinates(
+            position.latitude,
+            position.longitude,
+          ) ??
+          'Current Location';
+
+      // 2. Geocode the destination text to coordinates
+      final locations = await locationFromAddress(query);
+      if (locations.isEmpty) {
+        setState(() {
+          _isLoadingOrs = false;
+          _orsError = true;
+          _orsErrorMessage =
+              'Could not find coordinates for "$query". Try a more specific name.';
+        });
+        return;
+      }
+      final dest = locations.first;
+      final destination = LatLng(dest.latitude, dest.longitude);
+
+      // 3. Fetch from ORS (with Firestore cache)
+      final result = await RoutingService.getRoute(
+        originName: originName,
+        origin: origin,
+        destinationName: query,
+        destination: destination,
+        mode: 'Jeepney',
+      );
+
+      if (result == null) {
+        setState(() {
+          _isLoadingOrs = false;
+          _orsError = true;
+          _orsErrorMessage =
+              'Could not generate a route. Check your ORS API key or try again.';
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoadingOrs = false;
+        _orsResult = result;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingOrs = false;
+        _orsError = true;
+        _orsErrorMessage = 'Unexpected error: $e';
+      });
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -211,307 +298,78 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
-  // ─── Mode chip helpers (shared with HomeScreen) ────────────────────────────
-
-  IconData _modeIconData(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Icons.directions_walk;
-      case 'Jeepney':
-        return Icons.directions_bus;
-      case 'Bus':
-        return Icons.directions_bus_filled;
-      case 'Train':
-        return Icons.train;
-      case 'Tricycle':
-        return Icons.pedal_bike;
-      case 'FX/Van':
-        return Icons.directions_car;
-      case 'Ferry':
-        return Icons.directions_boat;
-      default:
-        return Icons.directions_walk;
-    }
-  }
-
-  Widget _modeChip(String mode) {
-    final Map<String, Color> modeColors = {
-      'Walk': const Color(0xFF3EC97A),
-      'Jeepney': _accent,
-      'Bus': _danger,
-      'Train': const Color(0xFF9B7FE8),
-      'Tricycle': const Color(0xFFE89A3C),
-      'FX/Van': const Color(0xFFD4A017),
-      'Ferry': const Color(0xFF3EC9D6),
-    };
-    final color = modeColors[mode] ?? _textSecondary;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_modeIconData(mode), size: 11, color: color),
-          const SizedBox(width: 4),
-          Text(
-            mode,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(IconData icon, String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: color,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─── Section label helper ──────────────────────────────────────────────────
-  Widget _sectionLabel(String label) {
-    return Text(
-      label.toUpperCase(),
-      style: const TextStyle(
-        color: _textSecondary,
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: _bg,
-          // ─── AppBar ──────────────────────────────────────────────────────
           appBar: AppBar(
-            backgroundColor: _surface,
-            foregroundColor: _textPrimary,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            surfaceTintColor: Colors.transparent,
-            leading: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                margin: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: _border),
-                ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  size: 15,
-                  color: _textSecondary,
-                ),
-              ),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: _accentSoft,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: const Icon(
-                    Icons.search_rounded,
-                    color: _accent,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Search Routes',
-                  style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ],
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: _border),
-            ),
+            title: const Text('Search Routes'),
+            backgroundColor: Colors.blue.shade700,
+            foregroundColor: Colors.white,
           ),
           body: Column(
             children: [
-              // ─── Search Bar (Omnibox) ─────────────────────────────────
+              // Search Bar (Omnibox)
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                color: _surface,
+                padding: const EdgeInsets.all(16),
+                color: Colors.white,
                 child: Column(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: _surfaceAlt,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: _border, width: 1.5),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        autofocus: true,
-                        style: const TextStyle(
-                          color: _textPrimary,
-                          fontSize: 14,
+                    TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Search destinations...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon:
+                            _searchController.text.isNotEmpty
+                                ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _onSearch('');
+                                  },
+                                )
+                                : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        decoration: InputDecoration(
-                          hintText: 'Search destinations...',
-                          hintStyle: const TextStyle(
-                            color: _textSecondary,
-                            fontSize: 14,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.search_rounded,
-                            color: _accent,
-                            size: 20,
-                          ),
-                          suffixIcon:
-                              _searchController.text.isNotEmpty
-                                  ? GestureDetector(
-                                    onTap: () {
-                                      _searchController.clear();
-                                      _onSearch('');
-                                    },
-                                    child: Container(
-                                      margin: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: _border,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        size: 14,
-                                        color: _textSecondary,
-                                      ),
-                                    ),
-                                  )
-                                  : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                            horizontal: 4,
-                          ),
-                        ),
-                        onChanged: _onSearch,
-                        onSubmitted: _onSearchSubmitted,
-                        onTap: _onSearchFocus,
                       ),
+                      onChanged: _onSearch,
+                      onSubmitted: _onSearchSubmitted,
+                      onTap: _onSearchFocus,
                     ),
                     // Omnibox Suggestions
                     if (_showOmnibox && _suggestions.isNotEmpty)
                       Container(
-                        margin: const EdgeInsets.only(top: 6),
+                        margin: const EdgeInsets.only(top: 4),
                         decoration: BoxDecoration(
-                          color: _surface,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _border),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: _accent.withOpacity(0.08),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
                             ),
                           ],
                         ),
-                        child: ListView.separated(
+                        child: ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _suggestions.length,
-                          separatorBuilder:
-                              (_, __) => Divider(color: _border, height: 1),
                           itemBuilder: (context, index) {
                             final suggestion = _suggestions[index];
-                            final isRecent = _recentSearches.contains(
-                              suggestion,
-                            );
-                            return InkWell(
+                            return ListTile(
+                              leading: const Icon(
+                                Icons.search,
+                                color: Colors.grey,
+                              ),
+                              title: Text(suggestion),
                               onTap: () => _onSuggestionTap(suggestion),
-                              borderRadius: BorderRadius.vertical(
-                                top:
-                                    index == 0
-                                        ? const Radius.circular(14)
-                                        : Radius.zero,
-                                bottom:
-                                    index == _suggestions.length - 1
-                                        ? const Radius.circular(14)
-                                        : Radius.zero,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 11,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        color:
-                                            isRecent
-                                                ? _surfaceAlt
-                                                : _accentSoft,
-                                        borderRadius: BorderRadius.circular(7),
-                                      ),
-                                      child: Icon(
-                                        isRecent
-                                            ? Icons.history_rounded
-                                            : Icons.location_on_outlined,
-                                        size: 14,
-                                        color:
-                                            isRecent ? _textSecondary : _accent,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        suggestion,
-                                        style: const TextStyle(
-                                          color: _textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    const Icon(
-                                      Icons.north_west,
-                                      size: 13,
-                                      color: _textSecondary,
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              dense: true,
                             );
                           },
                         ),
@@ -520,7 +378,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
 
-              // ─── Content ──────────────────────────────────────────────
+              // Content
               Expanded(
                 child:
                     _isSearching
@@ -540,50 +398,253 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchResults() {
-    if (_filteredRoutes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.search_off_rounded,
-                size: 36,
-                color: _textSecondary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No routes found',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Try a different search term',
-              style: TextStyle(fontSize: 14, color: _textSecondary),
-            ),
-          ],
-        ),
+    // ── Community routes found ───────────────────────────────────────────────
+    if (_filteredRoutes.isNotEmpty) {
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _filteredRoutes.length,
+        itemBuilder:
+            (context, index) => _buildRouteCard(_filteredRoutes[index]),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _filteredRoutes.length,
-      itemBuilder: (context, index) {
-        final route = _filteredRoutes[index];
-        return _buildRouteCard(route);
-      },
+    // ── No community routes: ORS fallback ────────────────────────────────────
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (_isLoadingOrs) ...[
+            const SizedBox(height: 60),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 20),
+            Text(
+              'Generating route from OpenRouteService…',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
+          ] else if (_orsResult != null) ...[
+            // ── Disclaimer banner ──────────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                border: Border.all(color: Colors.blue.shade300),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.blue.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Auto-generated route via OpenRouteService — '
+                      'not yet verified by the community. '
+                      'Road names and distances are estimated.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Route summary card ─────────────────────────────────────────
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: Colors.blue.shade200, width: 1.5),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.route,
+                          color: Colors.blue.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _searchController.text.trim(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Distance + Duration chips
+                    Row(
+                      children: [
+                        _infoChip(
+                          Icons.straighten,
+                          _orsResult!.distanceLabel,
+                          Colors.green,
+                        ),
+                        const SizedBox(width: 8),
+                        _infoChip(
+                          Icons.timer_outlined,
+                          _orsResult!.durationLabel,
+                          Colors.orange,
+                        ),
+                      ],
+                    ),
+                    if (_orsResult!.steps.isNotEmpty) ...[
+                      const Divider(height: 24),
+                      const Text(
+                        'Turn-by-turn directions',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Show up to 6 steps to keep the card compact
+                      ..._orsResult!.steps
+                          .take(6)
+                          .map(
+                            (step) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.arrow_right,
+                                    color: Colors.grey,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      step.instruction,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      if (_orsResult!.steps.length > 6)
+                        Text(
+                          '+ ${_orsResult!.steps.length - 6} more steps',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Route data cached locally — next search is instant.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ] else ...[
+            // ── Initial empty state ────────────────────────────────────────
+            const SizedBox(height: 48),
+            Icon(Icons.search_off, size: 72, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'No community routes found',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This route hasn\'t been contributed yet.\nGenerate a route from OpenRouteService instead.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 28),
+            if (_orsError)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    _orsErrorMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                  ),
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isLoadingOrs ? null : _fetchOrsRoute,
+                icon: const Icon(Icons.map_outlined, color: Colors.white),
+                label: const Text(
+                  'Generate Route',
+                  style: TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade700,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _infoChip(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -593,113 +654,48 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Recent Searches Section ────────────────────────────────
+          // Recent Searches Section
           if (_recentSearches.isNotEmpty) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _sectionLabel('Recent Searches'),
-                GestureDetector(
-                  onTap: _onClearRecentSearches,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _surfaceAlt,
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: _border),
-                    ),
-                    child: const Text(
-                      'Clear All',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                const Text(
+                  'Recent Searches',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                TextButton(
+                  onPressed: _onClearRecentSearches,
+                  child: const Text('Clear All'),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children:
                   _recentSearches.map((search) {
-                    return GestureDetector(
-                      onTap: () => _onRecentSearchTap(search),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _surface,
-                          borderRadius: BorderRadius.circular(9),
-                          border: Border.all(color: _border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.history_rounded,
-                              size: 13,
-                              color: _textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              search,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: _textPrimary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _onRemoveRecentSearch(search),
-                              child: const Icon(
-                                Icons.close,
-                                size: 12,
-                                color: _textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    return ActionChip(
+                      label: Text(search),
+                      avatar: const Icon(Icons.history, size: 18),
+                      onPressed: () => _onRecentSearchTap(search),
                     );
                   }).toList(),
             ),
             const SizedBox(height: 24),
           ],
 
-          // ─── Top Searches Section ────────────────────────────────────
-          Row(
-            children: [
-              _sectionLabel('Top Searches'),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFECE8),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: const Text(
-                  '🔥 Trending',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
+          // Top Searches Section
+          const Text(
+            'Top Searches',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           const Text(
             'Popular routes based on community activity',
-            style: TextStyle(fontSize: 13, color: _textSecondary),
+            style: TextStyle(fontSize: 14, color: Colors.black54),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           ..._topSearches.map((route) => _buildRouteCard(route)),
         ],
       ),
@@ -709,23 +705,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildRouteCard(route_model.Route route) {
     final score = route.views + route.upvotes - route.downvotes;
 
-    return Container(
+    return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: _accent.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: InkWell(
         onTap: () => _onRouteTap(route),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -735,33 +719,28 @@ class _SearchScreenState extends State<SearchScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${route.startLocation} → ${route.endLocation}',
+                      '${route.startLocation} to ${route.endLocation}',
                       style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: _textPrimary,
-                        letterSpacing: -0.2,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Score badge
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
+                      horizontal: 8,
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _accentSoft,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _accent.withOpacity(0.2)),
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '$score pts',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _accent,
-                        fontWeight: FontWeight.w700,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
@@ -772,54 +751,35 @@ class _SearchScreenState extends State<SearchScreen> {
                 route.shortDescription,
                 style: const TextStyle(
                   fontStyle: FontStyle.italic,
-                  fontSize: 13,
-                  color: _textSecondary,
-                  height: 1.4,
+                  fontSize: 14,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 10),
-              // Transport mode chips
-              if (route.steps.isNotEmpty)
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children:
-                      route.steps.map((step) => _modeChip(step.mode)).toList(),
-                ),
-              const SizedBox(height: 10),
-              // Stats row
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    _statItem(
-                      Icons.visibility_outlined,
-                      '${route.views}',
-                      _textSecondary,
-                    ),
-                    const SizedBox(width: 14),
-                    _statItem(
-                      Icons.thumb_up_outlined,
-                      '${route.upvotes}',
-                      const Color(0xFF3EC97A),
-                    ),
-                    const SizedBox(width: 14),
-                    _statItem(
-                      Icons.thumb_down_outlined,
-                      '${route.downvotes}',
-                      _danger,
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.visibility, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${route.views}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(Icons.thumb_up, size: 16, color: Colors.green.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${route.upvotes}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(Icons.thumb_down, size: 16, color: Colors.red.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${route.downvotes}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
               ),
             ],
           ),

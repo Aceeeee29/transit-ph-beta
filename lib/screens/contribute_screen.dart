@@ -47,7 +47,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
   String? selectedRegion;
-  bool _showRoutePreview = false;
 
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
@@ -66,7 +65,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
-  static const _danger = Color(0xFFE05C6A);
 
   // Philippine regions with approximate boundaries
   final Map<String, LatLngBounds> philippineRegions = {
@@ -246,20 +244,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
         if (_snapToRoadEnabled) {
           // Try to get route from OpenRouteService with snap-to-road
           try {
-            final routePoints = await RoutingService.getRoute(
-              lastPoint,
-              point,
-              currentMode,
+            final routeResult = await RoutingService.getRoute(
+              origin: lastPoint,
+              originName: 'Route Point',
+              destination: point,
+              destinationName: 'Route Point',
+              mode: currentMode,
             );
-            if (routePoints.isNotEmpty) {
+            if (routeResult != null && routeResult.polyline.isNotEmpty) {
+              if (!mounted) return;
               setState(() {
-                pathPoints.addAll(routePoints);
+                pathPoints.addAll(routeResult.polyline);
               });
               _showStepDialog();
               return;
             }
           } catch (e) {
             // If snap-to-road fails, we'll fall back to straight line
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
@@ -398,13 +400,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
                                   decoration: BoxDecoration(
                                     color:
                                         currentMode == mode
-                                            ? color.withOpacity(0.08)
+                                            ? color.withValues(alpha: 0.08)
                                             : _surface,
                                     borderRadius: BorderRadius.circular(11),
                                     border: Border.all(
                                       color:
                                           currentMode == mode
-                                              ? color.withOpacity(0.4)
+                                              ? color.withValues(alpha: 0.4)
                                               : _border,
                                       width: currentMode == mode ? 1.5 : 1,
                                     ),
@@ -415,7 +417,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                                         width: 34,
                                         height: 34,
                                         decoration: BoxDecoration(
-                                          color: color.withOpacity(0.1),
+                                          color: color.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(
                                             9,
                                           ),
@@ -508,7 +510,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           height: 32,
                           decoration: BoxDecoration(
                             color: (modeColors[currentMode] ?? _accent)
-                                .withOpacity(0.12),
+                                .withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: Icon(
@@ -638,7 +640,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3EC97A).withOpacity(0.12),
+                            color: const Color(
+                              0xFF3EC97A,
+                            ).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: const Icon(
@@ -1049,10 +1053,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
           _scheduleController.text.isEmpty ? null : _scheduleController.text,
     );
 
-    setState(() {
-      _showRoutePreview = true;
-    });
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -1060,9 +1060,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
               route: route,
               onEdit: () {
                 Navigator.pop(context);
-                setState(() {
-                  _showRoutePreview = false;
-                });
               },
               onSubmit: () {
                 Navigator.pop(context);
