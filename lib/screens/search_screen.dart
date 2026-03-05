@@ -354,6 +354,355 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isDetectingLocation = false);
   }
 
+  void _showSearchHelpSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (_) => DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder:
+                (_, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      // Title
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.help_outline,
+                            color: Colors.blue.shade700,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Search & Route Tips',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Section 1: Recommended format ──────────────────────────────
+                      _helpSectionTitle('✅ Recommended Format'),
+                      const SizedBox(height: 8),
+                      _helpCard(
+                        color: Colors.green.shade50,
+                        border: Colors.green.shade200,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Landmark or Street, City/Municipality',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _exampleRow(
+                              '✓',
+                              'SM Megamall, Mandaluyong',
+                              Colors.green.shade700,
+                            ),
+                            _exampleRow(
+                              '✓',
+                              'Quezon City Hall, Quezon City',
+                              Colors.green.shade700,
+                            ),
+                            _exampleRow(
+                              '✓',
+                              'NAIA Terminal 3, Pasay',
+                              Colors.green.shade700,
+                            ),
+                            _exampleRow(
+                              '✓',
+                              'Ayala MRT Station, Makati',
+                              Colors.green.shade700,
+                            ),
+                            _exampleRow(
+                              '✓',
+                              'Robinsons Place Manila, Ermita',
+                              Colors.green.shade700,
+                            ),
+                            _exampleRow(
+                              '✓',
+                              'UST, Sampaloc, Manila',
+                              Colors.green.shade700,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Section 2: What to avoid ───────────────────────────────────
+                      _helpSectionTitle('❌ Inputs That May Fail'),
+                      const SizedBox(height: 8),
+                      _helpCard(
+                        color: Colors.red.shade50,
+                        border: Colors.red.shade200,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _exampleRow(
+                              '✗',
+                              '"Mall" — too vague',
+                              Colors.red.shade700,
+                            ),
+                            _exampleRow(
+                              '✗',
+                              '"Cubao" — no city context',
+                              Colors.red.shade700,
+                            ),
+                            _exampleRow(
+                              '✗',
+                              '"Home" — not a real address',
+                              Colors.red.shade700,
+                            ),
+                            _exampleRow(
+                              '✗',
+                              '"EDSA" — a road, not a point',
+                              Colors.red.shade700,
+                            ),
+                            _exampleRow(
+                              '✗',
+                              '"School" — too generic',
+                              Colors.red.shade700,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tip: If a search fails, try adding the city name after a comma.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.red.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Section 3: Community vs Generated ─────────────────────────
+                      _helpSectionTitle(
+                        '🗺️ Community Routes vs Generated Routes',
+                      ),
+                      const SizedBox(height: 8),
+                      _helpCard(
+                        color: Colors.blue.shade50,
+                        border: Colors.blue.shade200,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _infoRow(
+                              Icons.people_alt_outlined,
+                              'Community Routes',
+                              'Contributed by real commuters. Includes accurate jeepney codes, stops, and fares.',
+                              Colors.blue.shade700,
+                            ),
+                            const SizedBox(height: 10),
+                            _infoRow(
+                              Icons.map_outlined,
+                              'Generated Routes (ORS)',
+                              'Auto-generated using OpenRouteService. Transit modes and fares are estimated — verify locally.',
+                              Colors.orange.shade700,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Section 4: Starting point tips ─────────────────────────────
+                      _helpSectionTitle('📍 Starting Point Tips'),
+                      const SizedBox(height: 8),
+                      _helpCard(
+                        color: Colors.purple.shade50,
+                        border: Colors.purple.shade200,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _infoRow(
+                              Icons.my_location,
+                              'My Location (GPS)',
+                              'Uses your current GPS position. Make sure location permission is granted.',
+                              Colors.purple.shade700,
+                            ),
+                            const SizedBox(height: 10),
+                            _infoRow(
+                              Icons.edit_location_alt_outlined,
+                              'Enter Address',
+                              'Type any landmark or address as your starting point. Use the same format as the destination.',
+                              Colors.purple.shade700,
+                            ),
+                            const SizedBox(height: 10),
+                            _infoRow(
+                              Icons.gps_fixed,
+                              'GPS Fill button',
+                              'Inside "Enter Address" mode, tap the GPS icon to auto-fill your current location into the field — then edit it if needed.',
+                              Colors.purple.shade700,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Section 5: Fare disclaimer ─────────────────────────────────
+                      _helpSectionTitle('💰 About Estimated Fares'),
+                      const SizedBox(height: 8),
+                      _helpCard(
+                        color: Colors.amber.shade50,
+                        border: Colors.amber.shade300,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Fares shown for generated routes are estimates based on LTFRB 2025–2026 rates and the calculated road distance.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _exampleRow(
+                              '•',
+                              'Jeepney: ₱13 base + ₱1.80/km',
+                              Colors.amber.shade900,
+                            ),
+                            _exampleRow(
+                              '•',
+                              'Bus: ₱13–15 base + ₱1.85–2.65/km',
+                              Colors.amber.shade900,
+                            ),
+                            _exampleRow(
+                              '•',
+                              'FX/Van: ₱35 base + ₱4.00/km',
+                              Colors.amber.shade900,
+                            ),
+                            _exampleRow(
+                              '•',
+                              'Tricycle: ₱15 base + ₱5.00/km',
+                              Colors.amber.shade900,
+                            ),
+                            _exampleRow(
+                              '•',
+                              'Train: ₱20 base',
+                              Colors.amber.shade900,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'A ±15% range is shown to account for real-world variance. Always confirm with the driver or station.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ),
+    );
+  }
+
+  Widget _helpSectionTitle(String title) => Text(
+    title,
+    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+  );
+
+  Widget _helpCard({
+    required Color color,
+    required Color border,
+    required Widget child,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: border),
+    ),
+    child: child,
+  );
+
+  Widget _exampleRow(String prefix, String text, Color color) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          prefix,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: TextStyle(fontSize: 13, color: color)),
+        ),
+      ],
+    ),
+  );
+
+  Widget _infoRow(IconData icon, String title, String body, Color color) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 18, color: color),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              body,
+              style: TextStyle(fontSize: 12, color: color.withOpacity(0.85)),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -371,6 +720,13 @@ class _SearchScreenState extends State<SearchScreen> {
             title: const Text('Search Routes'),
             backgroundColor: Colors.blue.shade700,
             foregroundColor: Colors.white,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.help_outline),
+                tooltip: 'Search tips',
+                onPressed: _showSearchHelpSheet,
+              ),
+            ],
           ),
           body: Column(
             children: [
@@ -1197,3 +1553,4 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 }
+  
