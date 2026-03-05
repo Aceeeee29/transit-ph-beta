@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/transit_mode_inferrer.dart';
 
 /// Service responsible for fetching road-snapped routes from
 /// OpenRouteService (ORS) Directions API, with Firestore caching.
@@ -29,8 +30,7 @@ import '../repositories/route_cache_repository.dart';
 /// }
 /// ```
 class RoutingService {
-  static const _baseUrl =
-      'https://api.openrouteservice.org/v2/directions';
+  static const _baseUrl = 'https://api.openrouteservice.org/v2/directions';
 
   // Maps app transport modes to ORS API profiles
   static const _modeToProfile = {
@@ -136,14 +136,14 @@ class RoutingService {
       final feature = (data['features'] as List).first as Map<String, dynamic>;
 
       // ── Geometry: decode polyline coordinates ─────────────────────────────
-      final rawCoords =
-          feature['geometry']['coordinates'] as List;
-      final polyline = rawCoords
-          .map((c) => LatLng(
-                (c[1] as num).toDouble(),
-                (c[0] as num).toDouble(),
-              ))
-          .toList();
+      final rawCoords = feature['geometry']['coordinates'] as List;
+      final polyline =
+          rawCoords
+              .map(
+                (c) =>
+                    LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+              )
+              .toList();
 
       // ── Summary: distance and duration ────────────────────────────────────
       final summary = feature['properties']['summary'] as Map<String, dynamic>;
@@ -152,22 +152,27 @@ class RoutingService {
 
       // ── Bounding box ──────────────────────────────────────────────────────
       final rawBbox = data['bbox'] as List?;
-      final bbox = rawBbox != null
-          ? rawBbox.map((v) => (v as num).toDouble()).toList()
-          : <double>[];
+      final bbox =
+          rawBbox != null
+              ? rawBbox.map((v) => (v as num).toDouble()).toList()
+              : <double>[];
 
       // ── Turn-by-turn steps ────────────────────────────────────────────────
-      final segments =
-          feature['properties']['segments'] as List? ?? [];
+      final segments = feature['properties']['segments'] as List? ?? [];
       final List<OrsStep> steps = [];
       for (final segment in segments) {
         final rawSteps = segment['steps'] as List? ?? [];
         for (final s in rawSteps) {
-          steps.add(OrsStep(
-            instruction: s['instruction'] as String? ?? '',
-            distanceMeters: (s['distance'] as num?)?.toDouble() ?? 0,
-            durationSeconds: (s['duration'] as num?)?.toDouble() ?? 0,
-          ));
+          final wayPoints = s['way_points'] as List?;
+          steps.add(
+            OrsStep(
+              instruction: s['instruction'] as String? ?? '',
+              distanceMeters: (s['distance'] as num?)?.toDouble() ?? 0,
+              durationSeconds: (s['duration'] as num?)?.toDouble() ?? 0,
+              wayPointStart: wayPoints != null ? (wayPoints[0] as int) : 0,
+              wayPointEnd: wayPoints != null ? (wayPoints[1] as int) : 0,
+            ),
+          );
         }
       }
 
@@ -175,7 +180,7 @@ class RoutingService {
         distanceMeters: distanceMeters,
         durationSeconds: durationSeconds,
         polyline: polyline,
-        steps: steps,
+        steps: TransitModeInferrer.inferModes(steps),
         bbox: bbox,
       );
     } catch (e) {

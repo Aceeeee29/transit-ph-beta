@@ -89,21 +89,47 @@ class OrsStep {
   /// Duration of this step in seconds
   final double durationSeconds;
 
+  /// Inferred Philippine transit mode for this step segment.
+  /// One of: Walk, Jeepney, Bus, Train, Tricycle, FX/Van, Ferry
+  final String suggestedMode;
+
+  /// Estimated fare in PHP for this step segment based on LTFRB rates.
+  /// 0.0 for Walk steps.
+  final double estimatedFare;
+
+  /// Start index into the route polyline points list for this step.
+  final int wayPointStart;
+
+  /// End index into the route polyline points list for this step.
+  final int wayPointEnd;
+
   const OrsStep({
     required this.instruction,
     required this.distanceMeters,
     required this.durationSeconds,
+    this.suggestedMode = 'Jeepney',
+    this.estimatedFare = 0.0,
+    this.wayPointStart = 0,
+    this.wayPointEnd = 0,
   });
 
   Map<String, dynamic> toJson() => {
         'instruction': instruction,
         'distanceMeters': distanceMeters,
         'durationSeconds': durationSeconds,
+        'suggestedMode': suggestedMode,
+        'estimatedFare': estimatedFare,
+        'wayPointStart': wayPointStart,
+        'wayPointEnd': wayPointEnd,
       };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
         instruction: json['instruction'] as String,
         distanceMeters: (json['distanceMeters'] as num).toDouble(),
         durationSeconds: (json['durationSeconds'] as num).toDouble(),
+        suggestedMode: json['suggestedMode'] as String? ?? 'Jeepney',
+        estimatedFare: (json['estimatedFare'] as num?)?.toDouble() ?? 0.0,
+        wayPointStart: json['wayPointStart'] as int? ?? 0,
+        wayPointEnd: json['wayPointEnd'] as int? ?? 0,
       );
 }

@@ -9,6 +9,7 @@ import '../services/routing_service.dart';
 import '../services/location_service.dart';
 import '../widgets/notification_overlay.dart';
 import 'route_map_screen.dart';
+import 'ors_route_map_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final List<route_model.Route> routes;
@@ -36,6 +37,11 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _orsError = false;
   String _orsErrorMessage = '';
   String _lastOrsQuery = '';
+
+  // Origin state
+  final TextEditingController _originController = TextEditingController();
+  bool _useCurrentLocation = true;
+  bool _isDetectingLocation = false;
 
   @override
   void initState() {
@@ -211,8 +217,8 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Geocodes the destination query to coordinates, then fetches a route
-  /// from ORS using the user's current GPS position as the origin.
+  /// Resolves the origin (GPS or typed address), geocodes destination,
+  /// then fetches a route from ORS with Firestore caching.
   Future<void> _fetchOrsRoute() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
@@ -226,26 +232,57 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      // 1. Get user's current location
-      final position = await LocationService.getCurrentPosition();
-      if (position == null) {
-        setState(() {
-          _isLoadingOrs = false;
-          _orsError = true;
-          _orsErrorMessage =
-              'Could not get your current location. Check location permissions.';
-        });
-        return;
-      }
-      final origin = LatLng(position.latitude, position.longitude);
-      final originName =
-          await LocationService.getAddressFromCoordinates(
-            position.latitude,
-            position.longitude,
-          ) ??
-          'Current Location';
+      LatLng origin;
+      String originName;
 
-      // 2. Geocode the destination text to coordinates
+      if (_useCurrentLocation) {
+        // ── GPS origin ───────────────────────────────────────────────────────
+        final position = await LocationService.getCurrentPosition();
+        if (position == null) {
+          setState(() {
+            _isLoadingOrs = false;
+            _orsError = true;
+            _orsErrorMessage =
+                'Could not get your current location. Check location permissions.';
+          });
+          return;
+        }
+        origin = LatLng(position.latitude, position.longitude);
+        originName =
+            await LocationService.getAddressFromCoordinates(
+              position.latitude,
+              position.longitude,
+            ) ??
+            'Current Location';
+      } else {
+        // ── Custom typed origin ──────────────────────────────────────────────
+        final originText = _originController.text.trim();
+        if (originText.isEmpty) {
+          setState(() {
+            _isLoadingOrs = false;
+            _orsError = true;
+            _orsErrorMessage = 'Please enter a starting point.';
+          });
+          return;
+        }
+        final originLocations = await locationFromAddress(originText);
+        if (originLocations.isEmpty) {
+          setState(() {
+            _isLoadingOrs = false;
+            _orsError = true;
+            _orsErrorMessage =
+                'Could not find "$originText". Try a more specific address.';
+          });
+          return;
+        }
+        origin = LatLng(
+          originLocations.first.latitude,
+          originLocations.first.longitude,
+        );
+        originName = originText;
+      }
+
+      // ── Geocode destination ─────────────────────────────────────────────────
       final locations = await locationFromAddress(query);
       if (locations.isEmpty) {
         setState(() {
@@ -256,10 +293,12 @@ class _SearchScreenState extends State<SearchScreen> {
         });
         return;
       }
-      final dest = locations.first;
-      final destination = LatLng(dest.latitude, dest.longitude);
+      final destination = LatLng(
+        locations.first.latitude,
+        locations.first.longitude,
+      );
 
-      // 3. Fetch from ORS (with Firestore cache)
+      // ── Fetch from ORS (with Firestore cache) ──────────────────────────────
       final result = await RoutingService.getRoute(
         originName: originName,
         origin: origin,
@@ -291,10 +330,35 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  /// Detects GPS location and fills the origin text field.
+  Future<void> _detectAndFillOrigin() async {
+    setState(() => _isDetectingLocation = true);
+    final position = await LocationService.getCurrentPosition();
+    if (position != null) {
+      final address =
+          await LocationService.getAddressFromCoordinates(
+            position.latitude,
+            position.longitude,
+          ) ??
+          'Current Location';
+      _originController.text = address;
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not detect location. Check permissions.'),
+          ),
+        );
+      }
+    }
+    setState(() => _isDetectingLocation = false);
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _originController.dispose();
     super.dispose();
   }
 
@@ -491,19 +555,25 @@ class _SearchScreenState extends State<SearchScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // Distance + Duration chips
-                    Row(
+                    // Distance + Duration + Fare chips
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         _infoChip(
                           Icons.straighten,
                           _orsResult!.distanceLabel,
                           Colors.green,
                         ),
-                        const SizedBox(width: 8),
                         _infoChip(
                           Icons.timer_outlined,
                           _orsResult!.durationLabel,
                           Colors.orange,
+                        ),
+                        _infoChip(
+                          Icons.payments_outlined,
+                          _totalFareRange(),
+                          Colors.green.shade700,
                         ),
                       ],
                     ),
@@ -526,16 +596,41 @@ class _SearchScreenState extends State<SearchScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(
-                                    Icons.arrow_right,
-                                    color: Colors.grey,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 6),
+                                  _stepModeIcon(step.suggestedMode),
+                                  const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      step.instruction,
-                                      style: const TextStyle(fontSize: 13),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _stepModeColor(
+                                              step.suggestedMode,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            step.suggestedMode,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          step.instruction,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -560,11 +655,41 @@ class _SearchScreenState extends State<SearchScreen> {
               'Route data cached locally — next search is instant.',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
+            const SizedBox(height: 16),
+            // ── View on Map button ─────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => OrsRouteMapScreen(
+                            result: _orsResult!,
+                            destinationName: _searchController.text.trim(),
+                          ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.map, color: Colors.white),
+                label: const Text(
+                  'View on Map',
+                  style: TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade700,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
           ] else ...[
             // ── Initial empty state ────────────────────────────────────────
-            const SizedBox(height: 48),
-            Icon(Icons.search_off, size: 72, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
+            Icon(Icons.search_off, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
             Text(
               'No community routes found',
               style: TextStyle(
@@ -573,13 +698,226 @@ class _SearchScreenState extends State<SearchScreen> {
                 color: Colors.grey.shade600,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              'This route hasn\'t been contributed yet.\nGenerate a route from OpenRouteService instead.',
+              'Generate a route using OpenRouteService instead.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
+
+            // ── Origin selector ────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Starting point',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Toggle row
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap:
+                            () => setState(() {
+                              _useCurrentLocation = true;
+                              _originController.clear();
+                            }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                _useCurrentLocation
+                                    ? Colors.blue.shade700
+                                    : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color:
+                                  _useCurrentLocation
+                                      ? Colors.blue.shade700
+                                      : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.my_location,
+                                size: 15,
+                                color:
+                                    _useCurrentLocation
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'My location',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      _useCurrentLocation
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap:
+                            () => setState(() {
+                              _useCurrentLocation = false;
+                            }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                !_useCurrentLocation
+                                    ? Colors.blue.shade700
+                                    : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color:
+                                  !_useCurrentLocation
+                                      ? Colors.blue.shade700
+                                      : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.edit_location_alt_outlined,
+                                size: 15,
+                                color:
+                                    !_useCurrentLocation
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Enter address',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      !_useCurrentLocation
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Custom address field (animated)
+                  AnimatedCrossFade(
+                    duration: const Duration(milliseconds: 220),
+                    crossFadeState:
+                        _useCurrentLocation
+                            ? CrossFadeState.showFirst
+                            : CrossFadeState.showSecond,
+                    firstChild: const SizedBox(width: double.infinity),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _originController,
+                              decoration: InputDecoration(
+                                hintText:
+                                    'e.g. Quezon City Hall, EDSA Cubao...',
+                                hintStyle: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade400,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.location_on_outlined,
+                                  color: Colors.blue.shade600,
+                                  size: 20,
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                              ),
+                              textInputAction: TextInputAction.done,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // GPS fill button
+                          IconButton.filled(
+                            onPressed:
+                                _isDetectingLocation
+                                    ? null
+                                    : _detectAndFillOrigin,
+                            icon:
+                                _isDetectingLocation
+                                    ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : const Icon(Icons.my_location, size: 18),
+                            tooltip: 'Use GPS location',
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
             if (_orsError)
               Padding(
                 padding: const EdgeInsets.only(bottom: 14),
@@ -700,6 +1038,77 @@ class _SearchScreenState extends State<SearchScreen> {
         ],
       ),
     );
+  }
+
+  String _totalFareRange() {
+    if (_orsResult == null) return '₱0';
+    final total = _orsResult!.steps.fold(
+      0.0,
+      (sum, s) => sum + s.estimatedFare,
+    );
+    if (total == 0) return 'Free';
+    final low = (total * 0.9).round();
+    final high = (total * 1.15).round();
+    return '₱$low–$high';
+  }
+
+  Widget _stepModeIcon(String mode) {
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        color: _stepModeColor(mode).withOpacity(0.15),
+        shape: BoxShape.circle,
+        border: Border.all(color: _stepModeColor(mode), width: 1.2),
+      ),
+      child: Icon(
+        _stepModeIconData(mode),
+        size: 14,
+        color: _stepModeColor(mode),
+      ),
+    );
+  }
+
+  IconData _stepModeIconData(String mode) {
+    switch (mode) {
+      case 'Walk':
+        return Icons.directions_walk;
+      case 'Jeepney':
+        return Icons.directions_bus;
+      case 'Bus':
+        return Icons.directions_bus_filled;
+      case 'Train':
+        return Icons.train;
+      case 'Tricycle':
+        return Icons.two_wheeler;
+      case 'FX/Van':
+        return Icons.airport_shuttle;
+      case 'Ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_bus;
+    }
+  }
+
+  Color _stepModeColor(String mode) {
+    switch (mode) {
+      case 'Walk':
+        return Colors.green.shade600;
+      case 'Jeepney':
+        return Colors.blue.shade600;
+      case 'Bus':
+        return Colors.red.shade600;
+      case 'Train':
+        return Colors.purple.shade600;
+      case 'Tricycle':
+        return Colors.orange.shade600;
+      case 'FX/Van':
+        return Colors.amber.shade700;
+      case 'Ferry':
+        return Colors.lightBlue.shade600;
+      default:
+        return Colors.blue.shade600;
+    }
   }
 
   Widget _buildRouteCard(route_model.Route route) {
