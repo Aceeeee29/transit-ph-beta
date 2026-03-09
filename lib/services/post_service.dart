@@ -12,6 +12,7 @@ class PostService {
           await _firestore
               .collection('posts')
               .where('moderationStatus', isEqualTo: 'approved')
+              .orderBy('timestamp', descending: true)
               .get();
       return querySnapshot.docs
           .map((doc) => Post.fromJson(doc.data()))
@@ -69,7 +70,8 @@ class PostService {
   /// Update an existing post
   static Future<void> updatePost(Post post) async {
     try {
-      await _firestore.collection('posts').doc(post.id).update(post.toJson());
+      final data = post.toJson()..remove('timestamp'); // preserve server Timestamp
+      await _firestore.collection('posts').doc(post.id).update(data);
     } catch (e) {
       print('Error updating post ${post.id}: $e');
       rethrow;
@@ -192,7 +194,7 @@ class PostService {
         }
       }
 
-      return topLevelComments;
+      return topLevelComments.map((c) => commentMap[c.id] ?? c).toList();
     } catch (e) {
       print('Error fetching comments for post $postId: $e');
       return [];

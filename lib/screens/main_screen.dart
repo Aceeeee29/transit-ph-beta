@@ -9,8 +9,8 @@ import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
 import '../services/gamification_service.dart';
-import '../services/route_service.dart';
 import '../services/post_service.dart';
+import '../services/route_service.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -22,6 +22,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  bool _isLoading = false;
 
   List<Post> posts = [];
   List<route_model.Route> routes = [];
@@ -30,7 +31,6 @@ class _MainScreenState extends State<MainScreen> {
   static const _surface = Color(0xFFFFFFFF);
   static const _accent = Color(0xFF2E7CF6);
   static const _accentSoft = Color(0x1A2E7CF6);
-  static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
 
@@ -47,68 +47,52 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
+    _loadData();
   }
 
+  /// Fetches the latest routes and posts from Firestore.
+  /// Called on init and whenever the user pulls to refresh.
   Future<void> _loadData() async {
-    posts = ModerationService.postsNotifier.value;
-    ModerationService.postsNotifier.addListener(_onPostsChanged);
-    routes = await RouteService.getAllRoutes();
-    setState(() {});
-  }
-
-  void _onPostsChanged() {
-    setState(() {
-      posts = ModerationService.postsNotifier.value;
-    });
-  }
-
-  @override
-  void dispose() {
-    ModerationService.postsNotifier.removeListener(_onPostsChanged);
-    super.dispose();
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      final fetchedPosts = await PostService.getAllPosts();
+      final fetchedRoutes = await RouteService.getAllRoutes();
+      setState(() {
+        posts = fetchedPosts;
+        routes = fetchedRoutes;
+        ModerationService.postsNotifier.value = List.from(posts);
+      });
+    } catch (e) {
+      debugPrint('[MainScreen] Error loading data: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
-      HomeScreen(routes: routes),
+      HomeScreen(routes: routes, onRefresh: _loadData),
       FeedScreen(
         key: ValueKey(posts.length),
         posts: posts,
-        onPostCreated: (post) async {
+        onRefresh: _loadData,
+        onPostCreated: (post) {
           setState(() {
             posts.add(post);
             ModerationService.postsNotifier.value = List.from(posts);
           });
-          try {
-            await PostService.savePost(post);
-          } catch (e) {
-            setState(() {
-              posts.remove(post);
-              ModerationService.postsNotifier.value = List.from(posts);
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to save post: $e')),
-            );
-          }
         },
         currentUserName: currentUserName,
         currentUserId: currentUserId,
       ),
       ContributeScreen(
         onRouteSubmitted: (route) async {
-          try {
-            await RouteService.saveRoute(route);
-            setState(() => routes.add(route));
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to save route: $e')),
-            );
-          }
+          setState(() => routes.add(route));
         },
-        contributorId: currentUserId,
       ),
       const ProfileScreen(),
       if (widget.isAdmin) const ModeratorScreen(),
@@ -214,8 +198,7 @@ class _MainScreenState extends State<MainScreen> {
                           ),
                           child: Icon(
                             isSelected ? item.activeIcon : item.icon,
-                            color:
-                                isSelected ? Colors.white : _textSecondary,
+                            color: isSelected ? Colors.white : _textSecondary,
                             size: 22,
                           ),
                         ),

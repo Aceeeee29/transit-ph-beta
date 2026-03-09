@@ -59,7 +59,9 @@ class Comment {
               ?.map((r) => Comment.fromJson(r))
               .toList() ??
           [],
-      timestamp: (json['timestamp'] as Timestamp).toDate(),
+      timestamp: json['timestamp'] != null
+          ? (json['timestamp'] as Timestamp).toDate()
+          : DateTime.now(),
     );
   }
 }

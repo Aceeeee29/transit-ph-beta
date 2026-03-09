@@ -17,6 +17,7 @@ class FeedScreen extends StatefulWidget {
   final Function(Post) onPostCreated;
   final String currentUserName;
   final String currentUserId;
+  final Future<void> Function()? onRefresh;
 
   const FeedScreen({
     super.key,
@@ -24,6 +25,7 @@ class FeedScreen extends StatefulWidget {
     required this.onPostCreated,
     required this.currentUserName,
     required this.currentUserId,
+    this.onRefresh,
   });
 
   @override
@@ -40,7 +42,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
   Map<String, VideoPlayerController> videoControllers = {};
 
-  // ─── Color tokens (matches design system) ──────────────────────────────────
+  // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
@@ -271,7 +273,6 @@ class _FeedScreenState extends State<FeedScreen> {
                     ],
                   ),
                 ),
-                // Category badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -305,7 +306,6 @@ class _FeedScreenState extends State<FeedScreen> {
               ],
             ),
             const SizedBox(height: 12),
-
             // ─── Post content ─────────────────────────────────────────
             Linkify(
               onOpen: (link) async {
@@ -322,9 +322,8 @@ class _FeedScreenState extends State<FeedScreen> {
                 decoration: TextDecoration.underline,
               ),
             ),
-
             // ─── Images ───────────────────────────────────────────────
-            if (post.imageUrls.isNotEmpty) ...[
+            if (post.imageUrls.isNotEmpty) ...[  
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -378,9 +377,8 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ),
             ],
-
             // ─── Video ────────────────────────────────────────────────
-            if (post.videoUrl != null) ...[
+            if (post.videoUrl != null) ...[  
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -412,9 +410,8 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ),
             ],
-
             // ─── Tagged location ──────────────────────────────────────
-            if (post.taggedLocation != null) ...[
+            if (post.taggedLocation != null) ...[  
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -447,11 +444,9 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ),
             ],
-
             const SizedBox(height: 12),
             Divider(color: _border, height: 1),
             const SizedBox(height: 8),
-
             // ─── Action bar ───────────────────────────────────────────
             Row(
               children: [
@@ -467,12 +462,12 @@ class _FeedScreenState extends State<FeedScreen> {
                     setState(() {
                       likedPosts[post.id] = !isLiked;
                     });
-                    if (post.userName != null &&
-                        post.userName != widget.currentUserName) {
+                    if (post.userId != null &&
+                        post.userId != widget.currentUserId) {
                       NotificationsService.addNotification(
                         NotificationModel(
                           id: DateTime.now().millisecondsSinceEpoch.toString(),
-                          userId: post.userName!,
+                          userId: post.userId!,
                           type: 'like',
                           postId: post.id,
                           fromUserName: widget.currentUserName,
@@ -527,9 +522,8 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ],
             ),
-
             // ─── Emoji reactions ──────────────────────────────────────
-            if (emojiReactions[post.id]?.isNotEmpty ?? false) ...[
+            if (emojiReactions[post.id]?.isNotEmpty ?? false) ...[  
               const SizedBox(height: 10),
               Wrap(
                 spacing: 6,
@@ -555,9 +549,8 @@ class _FeedScreenState extends State<FeedScreen> {
                     }).toList(),
               ),
             ],
-
             // ─── Comments ─────────────────────────────────────────────
-            if (postComments[post.id]?.isNotEmpty ?? false) ...[
+            if (postComments[post.id]?.isNotEmpty ?? false) ...[  
               const SizedBox(height: 10),
               ...postComments[post.id]!.map((comment) => buildComment(comment)),
             ],
@@ -623,7 +616,6 @@ class _FeedScreenState extends State<FeedScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
                   Container(
                     padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
                     decoration: BoxDecoration(
@@ -724,41 +716,55 @@ class _FeedScreenState extends State<FeedScreen> {
                           child: GestureDetector(
                             onTap: () async {
                               if (commentController.text.isNotEmpty) {
-                                final comment = Comment(
-                                  id:
-                                      DateTime.now().millisecondsSinceEpoch
-                                          .toString(),
-                                  postId: postId,
-                                  userId: widget.currentUserId,
-                                  userName: widget.currentUserName,
-                                  content: commentController.text,
-                                  parentId: parentComment?.id,
-                                  timestamp: DateTime.now(),
-                                );
-                                await PostActionsService.addComment(comment);
-                                await _loadComments(postId);
-                                final post = widget.posts.firstWhere(
-                                  (p) => p.id == postId,
-                                );
-                                if (post.userName != null &&
-                                    post.userName != widget.currentUserName) {
-                                  NotificationsService.addNotification(
-                                    NotificationModel(
-                                      id:
-                                          DateTime.now().millisecondsSinceEpoch
-                                              .toString(),
-                                      userId: post.userName!,
-                                      type: 'comment',
-                                      postId: postId,
-                                      fromUserName: widget.currentUserName,
-                                      timestamp: DateTime.now(),
-                                      message:
-                                          '${widget.currentUserName} commented on your post.',
-                                    ),
+                                try {
+                                  final comment = Comment(
+                                    id: DateTime.now()
+                                        .millisecondsSinceEpoch
+                                        .toString(),
+                                    postId: postId,
+                                    userId: widget.currentUserId,
+                                    userName: widget.currentUserName,
+                                    content: commentController.text,
+                                    parentId: parentComment?.id,
+                                    timestamp: DateTime.now(),
                                   );
+                                  await PostActionsService.addComment(comment);
+                                  await _loadComments(postId);
+                                  final post = widget.posts.firstWhere(
+                                    (p) => p.id == postId,
+                                  );
+                                  if (post.userId != null &&
+                                      post.userId != widget.currentUserId) {
+                                    NotificationsService.addNotification(
+                                      NotificationModel(
+                                        id: DateTime.now()
+                                            .millisecondsSinceEpoch
+                                            .toString(),
+                                        userId: post.userId!,
+                                        type: 'comment',
+                                        postId: postId,
+                                        fromUserName: widget.currentUserName,
+                                        timestamp: DateTime.now(),
+                                        message:
+                                            '${widget.currentUserName} commented on your post.',
+                                      ),
+                                    );
+                                  }
+                                  if (context.mounted) Navigator.pop(context);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Failed to post comment. Please try again.',
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 }
+                              } else {
+                                Navigator.pop(context);
                               }
-                              Navigator.pop(context);
                             },
                             child: Container(
                               height: 44,
@@ -811,268 +817,234 @@ class _FeedScreenState extends State<FeedScreen> {
     showDialog(
       context: context,
       builder:
-          (context) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _bg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withOpacity(0.08),
-                    blurRadius: 32,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
+          (context) => StatefulBuilder(
+            builder: (context, setState) {
+              return Dialog(
+                backgroundColor: Colors.transparent,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _bg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _accent.withOpacity(0.08),
+                        blurRadius: 32,
+                        offset: const Offset(0, 12),
                       ),
-                      border: Border(
-                        bottom: BorderSide(color: _border, width: 1),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: _danger.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: const Icon(
-                            Icons.flag_outlined,
-                            color: _danger,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Report Post',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Why are you reporting this post?',
-                          style: TextStyle(color: _textSecondary, fontSize: 13),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                        decoration: BoxDecoration(
+                          color: _surface,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(color: _border, width: 1),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        StatefulBuilder(
-                          builder: (context, setDialogState) {
-                            return Column(
-                              children:
-                                  [
-                                        'Spam',
-                                        'Inappropriate Content',
-                                        'Harassment',
-                                        'Misinformation',
-                                        'Other',
-                                      ]
-                                      .map(
-                                        (reason) => GestureDetector(
-                                          onTap: () {
-                                            setDialogState(
-                                              () => selectedReason = reason,
-                                            );
-                                          },
-                                          child: Container(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 6,
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  selectedReason == reason
-                                                      ? _danger.withOpacity(
-                                                        0.08,
-                                                      )
-                                                      : _surface,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color:
-                                                    selectedReason == reason
-                                                        ? _danger.withOpacity(
-                                                          0.4,
-                                                        )
-                                                        : _border,
-                                                width:
-                                                    selectedReason == reason
-                                                        ? 1.5
-                                                        : 1,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  width: 16,
-                                                  height: 16,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color:
-                                                          selectedReason ==
-                                                                  reason
-                                                              ? _danger
-                                                              : _border,
-                                                      width: 2,
-                                                    ),
-                                                    color:
-                                                        selectedReason == reason
-                                                            ? _danger
-                                                            : Colors
-                                                                .transparent,
-                                                  ),
-                                                  child:
-                                                      selectedReason == reason
-                                                          ? const Icon(
-                                                            Icons.check,
-                                                            size: 10,
-                                                            color: Colors.white,
-                                                          )
-                                                          : null,
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Text(
-                                                  reason,
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight:
-                                                        selectedReason == reason
-                                                            ? FontWeight.w600
-                                                            : FontWeight.w400,
-                                                    color:
-                                                        selectedReason == reason
-                                                            ? _textPrimary
-                                                            : _textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => Navigator.of(context).pop(),
-                            child: Container(
-                              height: 44,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
                               decoration: BoxDecoration(
-                                color: _surface,
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(color: _border),
+                                color: _danger.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(9),
                               ),
-                              alignment: Alignment.center,
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: _textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
+                              child: Icon(
+                                Icons.flag_outlined,
+                                color: _danger,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Report Post',
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Why are you reporting this post?',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            ...[
+                              'Spam',
+                              'Inappropriate Content',
+                              'Harassment',
+                              'Misinformation',
+                              'Other',
+                            ].map(
+                              (reason) => GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedReason = reason;
+                                  });
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: selectedReason == reason
+                                        ? _accentSoft
+                                        : _surface,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: selectedReason == reason
+                                          ? _accent
+                                          : _border,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 16,
+                                        height: 16,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: selectedReason == reason
+                                                ? _accent
+                                                : _textSecondary,
+                                            width: 2,
+                                          ),
+                                          color: selectedReason == reason
+                                              ? _accent
+                                              : Colors.transparent,
+                                        ),
+                                        child: selectedReason == reason
+                                            ? const Icon(
+                                                Icons.check,
+                                                color: Colors.white,
+                                                size: 10,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        reason,
+                                        style: TextStyle(
+                                          color: selectedReason == reason
+                                              ? _textPrimary
+                                              : _textSecondary,
+                                          fontWeight: selectedReason == reason
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: GestureDetector(
-                            onTap: () {
-                              if (selectedReason != null) {
-                                PostActionsService.reportPost(
-                                  post,
-                                  selectedReason!,
-                                  'currentUser@example.com',
-                                ); // Replace with actual user
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Post reported for moderation',
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => Navigator.of(context).pop(),
+                                child: Container(
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: _surface,
+                                    borderRadius: BorderRadius.circular(11),
+                                    border: Border.all(color: _border),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      color: _textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
                                     ),
                                   ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: _danger,
-                                borderRadius: BorderRadius.circular(11),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _danger.withOpacity(0.3),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
+                                ),
                               ),
-                              alignment: Alignment.center,
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.flag_outlined,
-                                    color: Colors.white,
-                                    size: 15,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (selectedReason != null) {
+                                    PostActionsService.reportPost(
+                                      post,
+                                      selectedReason!,
+                                      'currentUser@example.com',
+                                    ); // Replace with actual user
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Post reported for moderation',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: _danger,
+                                    borderRadius: BorderRadius.circular(11),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _danger.withOpacity(0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Submit Report',
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    'Report',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 14,
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
     );
   }
@@ -1100,7 +1072,6 @@ class _FeedScreenState extends State<FeedScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
                   Container(
                     padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
                     decoration: BoxDecoration(
@@ -1129,7 +1100,7 @@ class _FeedScreenState extends State<FeedScreen> {
                         ),
                         const SizedBox(width: 10),
                         const Text(
-                          'React to Post',
+                          'React',
                           style: TextStyle(
                             color: _textPrimary,
                             fontSize: 16,
@@ -1143,9 +1114,8 @@ class _FeedScreenState extends State<FeedScreen> {
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 12,
                       children:
                           emojis.map((emoji) {
                             final isActive =
@@ -1189,33 +1159,19 @@ class _FeedScreenState extends State<FeedScreen> {
                                 Navigator.pop(context);
                               },
                               child: Container(
-                                width: 60,
-                                height: 60,
+                                width: 56,
+                                height: 56,
                                 decoration: BoxDecoration(
                                   color: isActive ? _accentSoft : _surface,
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color:
-                                        isActive
-                                            ? _accent.withOpacity(0.4)
-                                            : _border,
-                                    width: isActive ? 1.5 : 1,
+                                    color: isActive ? _accent : _border,
                                   ),
-                                  boxShadow:
-                                      isActive
-                                          ? [
-                                            BoxShadow(
-                                              color: _accent.withOpacity(0.12),
-                                              blurRadius: 8,
-                                            ),
-                                          ]
-                                          : null,
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    emoji,
-                                    style: const TextStyle(fontSize: 28),
-                                  ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  emoji,
+                                  style: const TextStyle(fontSize: 28),
                                 ),
                               ),
                             );
@@ -1268,39 +1224,32 @@ class _FeedScreenState extends State<FeedScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
-      // ─── AppBar ────────────────────────────────────────────────────────
       appBar: AppBar(
-        backgroundColor: _surface,
-        foregroundColor: _textPrimary,
+        backgroundColor: _bg,
         elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: _accentSoft,
-                borderRadius: BorderRadius.circular(9),
+        centerTitle: false,
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _accentSoft,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _border),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.forum_rounded, color: _accent, size: 16),
+              SizedBox(width: 8),
+              Text(
+                'Community Feed',
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
-              child: const Icon(
-                Icons.people_outline_rounded,
-                color: _accent,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'Community Feed',
-              style: TextStyle(
-                color: _textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           GestureDetector(
@@ -1314,18 +1263,13 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
-              width: 36,
-              height: 36,
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _surfaceAlt,
+                color: _surface,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: _border),
               ),
-              child: const Icon(
-                Icons.search_rounded,
-                color: _textSecondary,
-                size: 18,
-              ),
+              child: const Icon(Icons.search, color: _textPrimary, size: 20),
             ),
           ),
           GestureDetector(
@@ -1341,114 +1285,112 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
             child: Container(
               margin: const EdgeInsets.only(right: 16),
-              width: 36,
-              height: 36,
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _surfaceAlt,
+                color: _surface,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: _border),
               ),
               child: const Icon(
                 Icons.notifications_outlined,
-                color: _textSecondary,
-                size: 18,
+                color: _textPrimary,
+                size: 20,
               ),
             ),
           ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: _border),
+          child: Container(color: _border, height: 1),
         ),
       ),
-
-      // ─── FAB ────────────────────────────────────────────────────────────
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showCreatePostDialog,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        label: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _showCreatePostDialog,
             borderRadius: BorderRadius.circular(16),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withOpacity(0.3),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: const Row(
+            children: [
+              Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'New Post',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: approvedPosts.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.edit_outlined, color: Colors.white, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'New Post',
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: _accentSoft,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _border),
+                    ),
+                    child: const Icon(
+                      Icons.forum_outlined,
+                      color: _accent,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No posts yet',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _textPrimary,
                       fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Be the first to share something\nwith the community.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _textSecondary,
                       fontSize: 14,
+                      height: 1.5,
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-
-      // ─── Body ────────────────────────────────────────────────────────────
-      body:
-          approvedPosts.isEmpty
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: _surfaceAlt,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.forum_outlined,
-                        size: 36,
-                        color: _textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'No posts yet',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: _textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Be the first to post in the community!',
-                      style: TextStyle(fontSize: 14, color: _textSecondary),
-                    ),
-                  ],
-                ),
-              )
-              : ListView.builder(
+            )
+          : RefreshIndicator(
+              onRefresh: widget.onRefresh ?? () async {},
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                 itemCount: approvedPosts.length,
                 itemBuilder:
                     (context, index) => buildPostItem(approvedPosts[index]),
               ),
+            ),
     );
   }
 }

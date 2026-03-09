@@ -47,6 +47,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String currentMode = 'Walk';
   String selectionMode = 'start'; // 'start', 'step', 'end', 'done'
   String? selectedRegion;
+  bool _showRoutePreview = false;
 
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
@@ -244,17 +245,16 @@ class _ContributeScreenState extends State<ContributeScreen> {
         if (_snapToRoadEnabled) {
           // Try to get route from OpenRouteService with snap-to-road
           try {
-            final routeResult = await RoutingService.getRoute(
+            final result = await RoutingService.getRoute(
+              originName: lastPoint.toString(),
               origin: lastPoint,
-              originName: 'Route Point',
+              destinationName: point.toString(),
               destination: point,
-              destinationName: 'Route Point',
               mode: currentMode,
             );
-            if (routeResult != null && routeResult.polyline.isNotEmpty) {
-              if (!mounted) return;
+            if (result != null && result.polyline.isNotEmpty) {
               setState(() {
-                pathPoints.addAll(routeResult.polyline);
+                pathPoints.addAll(result.polyline);
               });
               _showStepDialog();
               return;
@@ -286,11 +286,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (region != null && philippineRegions.containsKey(region)) {
       final bounds = philippineRegions[region]!;
 
-      // Special handling for Philippines - reset to initial view
+      // reset to initial view
       if (region == 'Philippines') {
         _mapController.move(const LatLng(12.8797, 121.7740), 6.0);
       } else if (region == 'MIMAROPA Region (Region IV-B)') {
-        // Special handling for MIMAROPA - use move instead of fitCamera
+        //use move instead of fitCamera
         final center = LatLng(
           (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
           (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
@@ -418,9 +418,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                                         height: 34,
                                         decoration: BoxDecoration(
                                           color: color.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            9,
-                                          ),
+                                          borderRadius: BorderRadius.circular(9),
                                         ),
                                         child: Icon(
                                           _getModeIcon(mode),
@@ -563,8 +561,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                             label: 'Cancel',
                             onTap: () {
                               Navigator.pop(context);
-                              pathPoints
-                                  .removeLast(); // Remove the point if cancel
+                              pathPoints.removeLast(); // Remove the point if cancel
                             },
                           ),
                         ),
@@ -640,9 +637,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF3EC97A,
-                            ).withValues(alpha: 0.12),
+                            color: const Color(0xFF3EC97A).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: const Icon(
@@ -786,11 +781,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
         price: fare,
         schedule:
             _scheduleController.text.isEmpty ? null : _scheduleController.text,
-        contributorId:
-            widget.routeToEdit?.contributorId ?? widget.contributorId,
+        contributorId: widget.routeToEdit?.contributorId ?? widget.contributorId,
       );
 
-      await widget.onRouteSubmitted(route);
+      widget.onRouteSubmitted(route);
 
       // Award points only for new contributions, not edits
       if (widget.routeToEdit == null) {
@@ -799,7 +793,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
             await GamificationService.incrementRoutesContributed(user);
 
         // Show achievement notifications
-        if (unlockedItems.isNotEmpty) {
+        if (unlockedItems.isNotEmpty && mounted) {
           setState(() {
             _pendingNotifications = unlockedItems;
             _showNotificationOverlay = true;
@@ -807,6 +801,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         }
       }
 
+      if (!mounted) return;
       final message =
           widget.routeToEdit != null
               ? 'Route updated successfully!'
@@ -1053,6 +1048,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
           _scheduleController.text.isEmpty ? null : _scheduleController.text,
     );
 
+    setState(() {
+      _showRoutePreview = true;
+    });
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -1060,6 +1059,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
               route: route,
               onEdit: () {
                 Navigator.pop(context);
+                setState(() {
+                  _showRoutePreview = false;
+                });
               },
               onSubmit: () {
                 Navigator.pop(context);
@@ -1233,19 +1235,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  String _getInstructionText() {
-    switch (selectionMode) {
-      case 'start':
-        return 'Tap on the map to select the starting point';
-      case 'step':
-        return 'Tap to select next point for $currentMode';
-      case 'done':
-        return 'Route complete! Fill in the details below and submit.';
-      default:
-        return '';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -1259,7 +1248,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
             elevation: 0,
             scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
-
             title: Row(
               children: [
                 Container(
@@ -1670,5 +1658,18 @@ class _ContributeScreenState extends State<ContributeScreen> {
           ),
       ],
     );
+  }
+
+  String _getInstructionText() {
+    switch (selectionMode) {
+      case 'start':
+        return 'Tap on the map to select the starting point';
+      case 'step':
+        return 'Tap to select next point for $currentMode';
+      case 'done':
+        return 'Route complete! Fill in the details below and submit.';
+      default:
+        return '';
+    }
   }
 }

@@ -43,8 +43,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUser() async {
-    user = await GamificationService.loadUser();
-    setState(() {});
+    final loadedUser = await GamificationService.loadUser();
+    if (!mounted) return;
+    setState(() {
+      user = loadedUser;
+    });
     _editNameController.text = user?.name ?? 'N/A';
   }
 
@@ -179,9 +182,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ? 'N/A'
                                       : _editNameController.text.trim();
                               await GamificationService.saveUser(user!);
+                              if (!mounted) return;
                               setState(() {});
                             }
-                            Navigator.of(context).pop();
+                            if (mounted) Navigator.of(context).pop();
                           },
                           child: Container(
                             height: 44,
@@ -1004,9 +1008,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
+                const Text(
                   'Error loading contributions',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: _textPrimary,

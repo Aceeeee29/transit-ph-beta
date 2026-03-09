@@ -4,6 +4,23 @@ import '../models/route.dart' as route_model;
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  /// Get all community routes ordered by newest first
+  static Future<List<route_model.Route>> getAllRoutes() async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('routes')
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => route_model.Route.fromJson(doc.data()))
+          .toList();
+    } catch (e) {
+      print('Error fetching all routes: $e');
+      return [];
+    }
+  }
+
   /// Get all routes contributed by a specific user
   static Future<List<route_model.Route>> getRoutesByUser(String userId) async {
     try {
@@ -152,19 +169,6 @@ class RouteService {
           .toList();
     } catch (e) {
       print('Error searching routes from $startLocation to $endLocation: $e');
-      return [];
-    }
-  }
-
-  /// Get all routes
-  static Future<List<route_model.Route>> getAllRoutes() async {
-    try {
-      final querySnapshot = await _firestore.collection('routes').get();
-      return querySnapshot.docs
-          .map((doc) => route_model.Route.fromJson(doc.data()))
-          .toList();
-    } catch (e) {
-      print('Error fetching all routes: $e');
       return [];
     }
   }

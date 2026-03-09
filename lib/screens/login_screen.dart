@@ -123,8 +123,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
-      // Sign out to force account selection every time
-      await googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
@@ -553,7 +551,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 )
                               else ...[
-                                // Google "G" rendered with text
                                 Container(
                                   width: 22,
                                   height: 22,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/route.dart' as route_model;
 import 'route_map_screen.dart';
 import 'search_screen.dart';
+import '../services/gamification_service.dart';
 import '../services/weather_service.dart';
 import '../services/location_service.dart';
 import '../services/bookmark_service.dart';
@@ -10,8 +11,9 @@ import '../widgets/notification_overlay.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
+  final Future<void> Function()? onRefresh;
 
-  const HomeScreen({super.key, required this.routes});
+  const HomeScreen({super.key, required this.routes, this.onRefresh});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingWeather = true;
   bool _isDetectingLocation = false;
 
+  // Search filters
+  final Set<String> _selectedModes = {};
+
   // Bookmarks
   Set<String> _bookmarkedRouteIds = {};
 
@@ -35,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
 
-  // ─── Color tokens (matches CreatePostDialog design system) ─────────────────
+  // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
@@ -79,6 +84,249 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoadingRecommendations = false;
       });
     }
+  }
+
+  void _findRoute() async {
+    final destination = _destinationController.text.trim().toLowerCase();
+
+    if (destination.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a destination')),
+      );
+      return;
+    }
+
+    // Award points for searching
+    final user = await GamificationService.loadUser();
+    final unlockedItems = await GamificationService.incrementRoutesSearched(
+      user,
+    );
+
+    // Show achievement notifications
+    if (unlockedItems.isNotEmpty) {
+      setState(() {
+        _pendingNotifications = unlockedItems;
+        _showNotificationOverlay = true;
+      });
+    }
+
+    final matchedRoutes =
+        widget.routes.where((route) {
+          final matchesDestination =
+              route.endLocation.trim().toLowerCase().contains(destination) ||
+              route.shortDescription.trim().toLowerCase().contains(destination);
+
+          // Apply filters
+          if (_selectedModes.isNotEmpty) {
+            final hasMatchingMode = route.steps.any(
+              (step) => _selectedModes.contains(step.mode),
+            );
+            return matchesDestination && hasMatchingMode;
+          }
+
+          return matchesDestination;
+        }).toList();
+
+    _showSearchResultsBottomSheet(matchedRoutes);
+  }
+
+  void _showSearchResultsBottomSheet(List<route_model.Route> matchedRoutes) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder:
+                (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Drag handle
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      // Header with filters
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Search Results (${matchedRoutes.length})',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _showFilterDialog(),
+                              icon: const Icon(Icons.filter_list),
+                              label: Text(
+                                'Filter${_selectedModes.isNotEmpty ? ' (${_selectedModes.length})' : ''}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Filter chips
+                      if (_selectedModes.isNotEmpty)
+                        SizedBox(
+                          height: 40,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            children:
+                                _selectedModes
+                                    .map(
+                                      (mode) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 8,
+                                        ),
+                                        child: Chip(
+                                          label: Text(mode),
+                                          deleteIcon: const Icon(
+                                            Icons.close,
+                                            size: 18,
+                                          ),
+                                          onDeleted: () {
+                                            setState(() {
+                                              _selectedModes.remove(mode);
+                                            });
+                                            _findRoute();
+                                          },
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ),
+                      const Divider(),
+                      // Results
+                      Expanded(
+                        child:
+                            matchedRoutes.isEmpty
+                                ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 64,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No routes found',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Try adjusting your filters',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                : ListView.builder(
+                                  controller: scrollController,
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: matchedRoutes.length,
+                                  itemBuilder:
+                                      (context, index) =>
+                                          _buildRouteCard(matchedRoutes[index]),
+                                ),
+                      ),
+                    ],
+                  ),
+                ),
+          ),
+    );
+  }
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Filter by Transport Mode'),
+            content: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children:
+                      [
+                            'Jeepney',
+                            'Bus',
+                            'Train',
+                            'Tricycle',
+                            'FX/Van',
+                            'Ferry',
+                            'Walk',
+                          ]
+                          .map(
+                            (mode) => CheckboxListTile(
+                              title: Row(
+                                children: [
+                                  _modeIcon(mode),
+                                  const SizedBox(width: 8),
+                                  Text(mode),
+                                ],
+                              ),
+                              value: _selectedModes.contains(mode),
+                              onChanged: (checked) {
+                                setDialogState(() {
+                                  setState(() {
+                                    if (checked == true) {
+                                      _selectedModes.add(mode);
+                                    } else {
+                                      _selectedModes.remove(mode);
+                                    }
+                                  });
+                                });
+                              },
+                            ),
+                          )
+                          .toList(),
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() => _selectedModes.clear());
+                  Navigator.pop(context);
+                  _findRoute();
+                },
+                child: const Text('Clear All'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
+    );
   }
 
   Widget _buildRouteCard(route_model.Route route) {
@@ -157,8 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: isBookmarked ? _accentSoft : _surfaceAlt,
                         borderRadius: BorderRadius.circular(9),
                         border: Border.all(
-                          color:
-                              isBookmarked ? _accent.withOpacity(0.3) : _border,
+                          color: isBookmarked ? _accent.withOpacity(0.3) : _border,
                         ),
                       ),
                       child: Icon(
@@ -447,7 +694,6 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
                 Container(
                   padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
                   decoration: BoxDecoration(
@@ -507,46 +753,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    children:
-                        [
-                              _fareRow(
-                                'Jeepney',
-                                '₱13 base fare',
-                                Icons.directions_bus,
-                                _accent,
-                              ),
-                              _fareRow(
-                                'City Bus',
-                                '₱13 – ₱40+',
-                                Icons.directions_bus_filled,
-                                _danger,
-                              ),
-                              _fareRow(
-                                'Train (LRT/MRT)',
-                                '₱20 – ₱55',
-                                Icons.train,
-                                const Color(0xFF9B7FE8),
-                              ),
-                              _fareRow(
-                                'Tricycle',
-                                '₱15 – ₱60+',
-                                Icons.pedal_bike,
-                                const Color(0xFFE89A3C),
-                              ),
-                              _fareRow(
-                                'FX / UV Express',
-                                '₱30 – ₱100+',
-                                Icons.directions_car,
-                                const Color(0xFFD4A017),
-                              ),
-                            ]
-                            .map(
-                              (row) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: row,
-                              ),
-                            )
-                            .toList(),
+                    children: [
+                      _fareRow('Jeepney', '₱13 base fare', Icons.directions_bus, _accent),
+                      const SizedBox(height: 8),
+                      _fareRow('City Bus', '₱13 – ₱40+', Icons.directions_bus_filled, _danger),
+                      const SizedBox(height: 8),
+                      _fareRow('Train (LRT/MRT)', '₱20 – ₱55', Icons.train, const Color(0xFF9B7FE8)),
+                      const SizedBox(height: 8),
+                      _fareRow('Tricycle', '₱15 – ₱60+', Icons.pedal_bike, const Color(0xFFE89A3C)),
+                      const SizedBox(height: 8),
+                      _fareRow('FX / UV Express', '₱30 – ₱100+', Icons.directions_car, const Color(0xFFD4A017)),
+                    ],
                   ),
                 ),
               ],
@@ -675,10 +892,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: isBookmarked ? _accentSoft : _surfaceAlt,
                                 borderRadius: BorderRadius.circular(7),
                                 border: Border.all(
-                                  color:
-                                      isBookmarked
-                                          ? _accent.withOpacity(0.3)
-                                          : _border,
+                                  color: isBookmarked
+                                      ? _accent.withOpacity(0.3)
+                                      : _border,
                                 ),
                               ),
                               child: Icon(
@@ -821,10 +1037,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
+                    const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'TransitPH',
                           style: TextStyle(
                             fontSize: 24,
@@ -833,7 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Your community transit guide',
                           style: TextStyle(fontSize: 12, color: _textSecondary),
                         ),
@@ -843,7 +1059,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Weather card
+                // ─── Weather card ──────────────────────────────────────────
                 if (_isLoadingWeather)
                   Container(
                     height: 64,
@@ -1059,7 +1275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 width: 3,
                                 height: 3,
                                 margin: const EdgeInsets.symmetric(vertical: 2),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: _border,
                                   shape: BoxShape.circle,
                                 ),
@@ -1073,8 +1289,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder:
-                                    (context) =>
-                                        SearchScreen(routes: widget.routes),
+                                    (context) => SearchScreen(
+                                      routes: widget.routes,
+                                      onRefresh: widget.onRefresh,
+                                    ),
                               ),
                             );
                           },
@@ -1118,7 +1336,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ─── Action buttons row ────────────────────────────────────
+                // ─── Fare Matrix button ────────────────────────────────────
                 GestureDetector(
                   onTap: _showFareMatrixDialog,
                   child: Container(
@@ -1157,22 +1375,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   )
                 else ...[
-                  // Rush hour alternatives
                   if (_recommendations['rushHourAlternatives']?.isNotEmpty ==
                       true)
                     _buildRecommendationSection(
                       '🚗 Rush Hour Alternatives',
                       _recommendations['rushHourAlternatives']!,
                     ),
-
-                  // Based on your searches
                   if (_recommendations['forYou']?.isNotEmpty == true)
                     _buildRecommendationSection(
                       '⭐ Recommended for You',
                       _recommendations['forYou']!,
                     ),
-
-                  // Popular routes
                   if (_recommendations['popular']?.isNotEmpty == true)
                     _buildRecommendationSection(
                       '🔥 Popular Routes',

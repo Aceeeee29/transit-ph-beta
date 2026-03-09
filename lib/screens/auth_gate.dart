@@ -95,10 +95,41 @@ class AuthGate extends StatelessWidget {
                   return MainScreen(isAdmin: isAdmin);
                 }
               } else {
-                // User document doesn't exist, sign out
-                print('User document does not exist for UID: ${user.uid}');
-                FirebaseAuth.instance.signOut();
-                return const LoginScreen();
+                                // Document may not exist yet — race between auth event and
+                // Firestore write completing. Wait 2 s then retry once.
+                print('User document not found for UID: ${user.uid} — retrying...');
+                return FutureBuilder<DocumentSnapshot>(
+                  future: Future.delayed(const Duration(seconds: 2)).then(
+                    (_) => FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .get(),
+                  ),
+                  builder: (context, retrySnapshot) {
+                    if (retrySnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return _loadingScaffold();
+                    }
+                    if (retrySnapshot.hasData &&
+                        retrySnapshot.data!.exists) {
+                      final data = retrySnapshot.data!.data()
+                          as Map<String, dynamic>;
+                      final isAdmin = data['role'] == 'moderator';
+                      final hasSeenTutorial =
+                          data['hasSeenTutorial'] as bool? ?? false;
+                      return hasSeenTutorial
+                          ? MainScreen(isAdmin: isAdmin)
+                          : OnboardingScreen(user: user);
+                    }
+                    // Still no document after retry — sign out for real
+                    print(
+                      'User document still not found after retry — signing out',
+                    );
+                    FirebaseAuth.instance.signOut();
+                    return const LoginScreen();
+                  },
+                );
+
               }
             },
           );
