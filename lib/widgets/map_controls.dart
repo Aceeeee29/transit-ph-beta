@@ -117,21 +117,24 @@ class _MapControlsState extends State<MapControls> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (_expanded)
-                    // Mode indicator
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getModeColor(widget.selectionMode),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        _getModeText(widget.selectionMode),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getModeColor(widget.selectionMode),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          _getModeText(widget.selectionMode),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -177,12 +180,42 @@ class _MapControlsState extends State<MapControls> {
                 if (widget.selectionMode == 'step') ...[
                   Row(
                     children: [
-                      const Text('Snap to Road:'),
-                      const SizedBox(width: 4),
-                      Switch(
-                        value: widget.snapToRoadEnabled,
-                        onChanged: widget.onSnapToRoadToggled,
-                        activeThumbColor: Colors.blue,
+                      const Text('Snap to Road:', style: TextStyle(fontSize: 12)),
+                      const SizedBox(width: 2),
+                      Transform.scale(
+                        scale: 0.8,
+                        child: Switch(
+                          value: widget.snapToRoadEnabled,
+                          onChanged: widget.onSnapToRoadToggled,
+                          activeThumbColor: Colors.blue,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Snap to Road'),
+                              content: const Text(
+                                'When enabled, points you tap on the map are automatically moved to the nearest road using OpenRouteService.\n\n'
+                                'This makes drawn routes more realistic and accurate. '
+                                'Disable it if you need to place points off-road (e.g. ferry terminals, footpaths).',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Got it'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
