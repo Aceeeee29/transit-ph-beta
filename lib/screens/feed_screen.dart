@@ -17,6 +17,7 @@ import '../widgets/feed/emoji_picker_dialog.dart';
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
   final Function(Post) onPostCreated;
+  final Function(Post)? onPostDeleted;
   final String currentUserName;
   final String currentUserId;
   final Future<void> Function()? onRefresh;
@@ -25,6 +26,7 @@ class FeedScreen extends StatefulWidget {
     super.key,
     required this.posts,
     required this.onPostCreated,
+    this.onPostDeleted,
     required this.currentUserName,
     required this.currentUserId,
     this.onRefresh,
@@ -91,6 +93,42 @@ class _FeedScreenState extends State<FeedScreen> {
       context: context,
       builder: (_) => ReportPostDialog(post: post),
     );
+  }
+
+  Future<void> _deletePost(Post post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Post'),
+        content: const Text(
+          'Are you sure you want to delete this post? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await PostService.deletePost(post.id);
+        widget.onPostDeleted?.call(post);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to delete post. Please try again.')),
+          );
+        }
+      }
+    }
   }
 
   void _showEmojiPicker(String postId) {
@@ -176,6 +214,9 @@ class _FeedScreenState extends State<FeedScreen> {
         });
       },
       onReportTapped: () => _showReportDialog(post),
+      onDeleteTapped: post.userId == widget.currentUserId
+          ? () => _deletePost(post)
+          : null,
     );
   }
 

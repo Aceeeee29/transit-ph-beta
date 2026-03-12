@@ -78,13 +78,21 @@ service cloud.firestore {
         )
       );
 
-      allow delete: if isModerator();
+      allow delete: if isAuth() && (
+        request.auth.uid == resource.data.userId ||
+        isModerator()
+      );
 
       match /comments/{commentId} {
         allow read: if isAuth();
         allow create: if isAuth();
-        allow update, delete: if isAuth() &&
+        allow update: if isAuth() &&
           resource.data.userId == request.auth.uid;
+        allow delete: if isAuth() && (
+          resource.data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/posts/$(postId)).data.userId == request.auth.uid ||
+          isModerator()
+        );
       }
     }
 

@@ -167,6 +167,11 @@ class RouteMetricsService {
     return 'PHP $roundedFare';
   }
 
+  /// Calculate fare for a specific mode and distance (public)
+  static double calculateFareForMode(String mode, double distanceKm) {
+    return _calculateFareForMode(mode, distanceKm);
+  }
+
   /// Calculate fare for a specific mode and distance
   static double _calculateFareForMode(String mode, double distanceKm) {
     switch (mode.toLowerCase()) {

@@ -20,6 +20,7 @@ class Post {
   final Location? taggedLocation;
   final List<String> taggedUsers;
   final String? routeId;
+  final DateTime? expiresAt;
 
   Post({
     required this.id,
@@ -40,6 +41,7 @@ class Post {
     this.taggedLocation,
     this.taggedUsers = const [],
     this.routeId,
+    this.expiresAt,
   });
 
   Map<String, dynamic> toJson() {
@@ -62,6 +64,7 @@ class Post {
       'taggedLocation': taggedLocation?.toJson(),
       'taggedUsers': taggedUsers,
       'routeId': routeId,
+      'expiresAt': expiresAt?.toIso8601String(),
     };
   }
 
@@ -102,6 +105,11 @@ class Post {
               : null,
       taggedUsers: List<String>.from(json['taggedUsers'] ?? []),
       routeId: json['routeId'],
+      expiresAt: json['expiresAt'] != null
+          ? (json['expiresAt'] is Timestamp
+              ? (json['expiresAt'] as Timestamp).toDate()
+              : DateTime.tryParse(json['expiresAt'] as String))
+          : null,
     );
   }
 }

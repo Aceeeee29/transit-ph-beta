@@ -29,25 +29,28 @@ class RoutePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate route metrics
+    // Distance: sum haversine over all path points (road-snapped points give real road distance)
     final totalDistance = RouteMetricsService.calculateRouteDistance(
       route.pathPoints,
     );
     final formattedDistance = RouteMetricsService.formatDistance(totalDistance);
 
-    final modes = route.steps.map((step) => step.mode).toList();
-    final eta = RouteMetricsService.calculateEta(
-      route.pathPoints,
-      modes,
-      route.stepBoundaries,
-    );
-    final formattedEta = RouteMetricsService.formatEta(eta);
+    // Prefer ORS-derived ETA/fare stored on the route over recalculating
+    final formattedEta = route.eta != null && route.eta!.isNotEmpty
+        ? RouteMetricsService.formatEta(int.tryParse(route.eta!) ?? 0)
+        : RouteMetricsService.formatEta(RouteMetricsService.calculateEta(
+            route.pathPoints,
+            route.steps.map((s) => s.mode).toList(),
+            route.stepBoundaries,
+          ));
 
-    final fare = RouteMetricsService.calculateFareEstimate(
-      route.pathPoints,
-      modes,
-      route.stepBoundaries,
-    );
+    final fare = (route.price != null && route.price!.isNotEmpty)
+        ? route.price!
+        : RouteMetricsService.calculateFareEstimate(
+            route.pathPoints,
+            route.steps.map((s) => s.mode).toList(),
+            route.stepBoundaries,
+          );
 
     return Scaffold(
       backgroundColor: _bg,

@@ -14,8 +14,11 @@ class PostService {
               .where('moderationStatus', isEqualTo: 'approved')
               .orderBy('timestamp', descending: true)
               .get();
+      final now = DateTime.now();
       return querySnapshot.docs
           .map((doc) => Post.fromJson(doc.data()))
+          .where((post) =>
+              post.expiresAt == null || post.expiresAt!.isAfter(now))
           .toList();
     } catch (e) {
       print('Error fetching posts: $e');
@@ -60,6 +63,9 @@ class PostService {
     try {
       final data = post.toJson()..remove('timestamp');
       data['timestamp'] = FieldValue.serverTimestamp();
+      data['expiresAt'] = Timestamp.fromDate(
+        DateTime.now().add(const Duration(hours: 24)),
+      );
       await _firestore.collection('posts').doc(post.id).set(data);
     } catch (e) {
       print('Error saving post ${post.id}: $e');
@@ -78,13 +84,39 @@ class PostService {
     }
   }
 
-  /// Delete a post
+  /// Delete a post and all its sub-collection comments
   static Future<void> deletePost(String postId) async {
     try {
-      await _firestore.collection('posts').doc(postId).delete();
+      final commentsSnapshot = await _firestore
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .get();
+      final batch = _firestore.batch();
+      for (final doc in commentsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      batch.delete(_firestore.collection('posts').doc(postId));
+      await batch.commit();
     } catch (e) {
       print('Error deleting post $postId: $e');
       rethrow;
+    }
+  }
+
+  /// Delete all posts whose expiresAt has passed
+  static Future<void> deleteExpiredPosts() async {
+    try {
+      final now = Timestamp.now();
+      final expired = await _firestore
+          .collection('posts')
+          .where('expiresAt', isLessThan: now)
+          .get();
+      for (final doc in expired.docs) {
+        await deletePost(doc.id);
+      }
+    } catch (e) {
+      print('Error cleaning up expired posts: $e');
     }
   }
 
@@ -156,6 +188,34 @@ class PostService {
           .set(data);
     } catch (e) {
       print('Error adding comment ${comment.id}: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a comment by ID, and if it's a top-level comment also delete its replies
+  static Future<void> deleteComment(String postId, String commentId, {bool isTopLevel = true}) async {
+    try {
+      final commentsRef = _firestore
+          .collection('posts')
+          .doc(postId)
+          .collection('comments');
+
+      if (isTopLevel) {
+        // Delete all replies first
+        final replies = await commentsRef
+            .where('parentId', isEqualTo: commentId)
+            .get();
+        final batch = _firestore.batch();
+        for (final doc in replies.docs) {
+          batch.delete(doc.reference);
+        }
+        batch.delete(commentsRef.doc(commentId));
+        await batch.commit();
+      } else {
+        await commentsRef.doc(commentId).delete();
+      }
+    } catch (e) {
+      print('Error deleting comment $commentId: $e');
       rethrow;
     }
   }

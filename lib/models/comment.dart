@@ -35,6 +35,20 @@ class Comment {
     );
   }
 
+  // Remove a reply by id
+  Comment removeReply(String replyId) {
+    return Comment(
+      id: id,
+      postId: postId,
+      userId: userId,
+      userName: userName,
+      content: content,
+      parentId: parentId,
+      replies: replies.where((r) => r.id != replyId).toList(),
+      timestamp: timestamp,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

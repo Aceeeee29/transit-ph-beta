@@ -20,6 +20,7 @@ class FeedPostCard extends StatefulWidget {
   final VoidCallback onReactTapped;
   final VoidCallback onBookmarkTapped;
   final VoidCallback onReportTapped;
+  final VoidCallback? onDeleteTapped;
 
   const FeedPostCard({
     super.key,
@@ -34,6 +35,7 @@ class FeedPostCard extends StatefulWidget {
     required this.onReactTapped,
     required this.onBookmarkTapped,
     required this.onReportTapped,
+    this.onDeleteTapped,
   });
 
   @override
@@ -100,6 +102,9 @@ class _FeedPostCardState extends State<FeedPostCard> {
               displayName: displayName,
               initials: initials,
               catColor: catColor,
+              isOwnPost: widget.currentUserId.isNotEmpty &&
+                  widget.currentUserId == post.userId,
+              onDeleteTapped: widget.onDeleteTapped,
             ),
             const SizedBox(height: 12),
             _PostContent(post: post, videoController: _videoController),
@@ -198,12 +203,16 @@ class _PostHeader extends StatelessWidget {
   final String displayName;
   final String initials;
   final Color catColor;
+  final bool isOwnPost;
+  final VoidCallback? onDeleteTapped;
 
   const _PostHeader({
     required this.post,
     required this.displayName,
     required this.initials,
     required this.catColor,
+    required this.isOwnPost,
+    this.onDeleteTapped,
   });
 
   @override
@@ -258,6 +267,37 @@ class _PostHeader extends StatelessWidget {
           ),
         ),
         _CategoryBadge(catColor: catColor, category: post.category),
+        if (isOwnPost && onDeleteTapped != null) ...[
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.more_vert,
+              size: 18,
+              color: FeedColors.textSecondary,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onSelected: (value) {
+              if (value == 'delete') onDeleteTapped!();
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Delete Post',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

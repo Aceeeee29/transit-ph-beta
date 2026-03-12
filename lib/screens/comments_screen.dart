@@ -135,6 +135,38 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
   void _cancelReply() => setState(() => _replyingTo = null);
 
+  Future<void> _deleteComment(Comment comment, bool isTopLevel) async {
+    // Optimistic removal from local state
+    setState(() {
+      if (isTopLevel) {
+        _comments.removeWhere((c) => c.id == comment.id);
+      } else {
+        // Remove reply from its parent
+        final parentIdx = _comments.indexWhere((c) => c.id == comment.parentId);
+        if (parentIdx != -1) {
+          _comments[parentIdx] = _comments[parentIdx].removeReply(comment.id);
+        }
+      }
+    });
+
+    try {
+      await PostActionsService.deleteComment(
+        widget.postId,
+        comment.id,
+        isTopLevel: isTopLevel,
+      );
+      await widget.onCommentPosted();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete comment. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -253,6 +285,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
         comment: _comments[i],
         depth: 0,
         onReply: _startReply,
+        currentUserId: widget.currentUserId,
+        onDelete: _deleteComment,
       ),
     );
   }

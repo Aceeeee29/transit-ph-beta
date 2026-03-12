@@ -60,6 +60,7 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final fetchedPosts = await PostService.getAllPosts();
       final fetchedRoutes = await RouteService.getAllRoutes();
+      PostService.deleteExpiredPosts(); // fire-and-forget background cleanup
       setState(() {
         posts = fetchedPosts;
         routes = fetchedRoutes;
@@ -80,9 +81,20 @@ class _MainScreenState extends State<MainScreen> {
         key: ValueKey(posts.length),
         posts: posts,
         onRefresh: _loadData,
-        onPostCreated: (post) {
+        onPostCreated: (post) async {
+          try {
+            await PostService.savePost(post);
+          } catch (e) {
+            debugPrint('[MainScreen] Failed to save post: $e');
+          }
           setState(() {
             posts.add(post);
+            ModerationService.postsNotifier.value = List.from(posts);
+          });
+        },
+        onPostDeleted: (post) {
+          setState(() {
+            posts.removeWhere((p) => p.id == post.id);
             ModerationService.postsNotifier.value = List.from(posts);
           });
         },

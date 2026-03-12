@@ -12,6 +12,7 @@ import '../widgets/map_controls.dart';
 import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
+import '../services/location_service.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 
 class ContributeScreen extends StatefulWidget {
@@ -43,6 +44,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
   List<int> stepBoundaries = [];
+  // ORS-provided metrics per saved step (null = straight-line fallback)
+  final List<double?> _stepOrsDistM = [];
+  final List<double?> _stepOrsDurS = [];
+  double? _pendingOrsDistM;
+  double? _pendingOrsDurS;
   String currentMode = 'Walk';
   String selectionMode = 'start';
   String? selectedRegion;
@@ -227,6 +233,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
         selectionMode = 'step';
         _showModeDialog();
       });
+      if (_startLocationController.text.isEmpty) {
+        final name = await LocationService.getAddressFromCoordinates(
+          point.latitude, point.longitude);
+        if (mounted && _startLocationController.text.isEmpty) {
+          _startLocationController.text = name ??
+              '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
+        }
+      }
     } else if (selectionMode == 'step') {
       if (pathPoints.isNotEmpty) {
         final lastPoint = pathPoints.last;
@@ -241,6 +255,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
               mode: currentMode,
             );
             if (result != null && result.polyline.isNotEmpty) {
+              _pendingOrsDistM = result.distanceMeters;
+              _pendingOrsDurS = result.durationSeconds;
               setState(() => pathPoints.addAll(result.polyline));
               _showStepDialog();
               return;
@@ -256,6 +272,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
           }
         }
 
+        _pendingOrsDistM = null;
+        _pendingOrsDurS = null;
         setState(() => pathPoints.add(point));
         _showStepDialog();
       }
@@ -294,7 +312,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
         getModeIcon: _getModeIcon,
         onModeSelected: (mode) {
           setState(() => currentMode = mode);
-          _showStepDialog();
+          // Do NOT call _showStepDialog here — the user must tap the
+          // end/next location on the map first. _onMapTap will call
+          // _showStepDialog once the point is placed.
         },
       ),
     );
@@ -312,6 +332,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
           setState(() {
             steps.add(step);
             stepBoundaries.add(pathPoints.length - 1);
+            _stepOrsDistM.add(_pendingOrsDistM);
+            _stepOrsDurS.add(_pendingOrsDurS);
+            _pendingOrsDistM = null;
+            _pendingOrsDurS = null;
           });
           _showAddAnotherStepDialog();
         },
@@ -325,7 +349,18 @@ class _ContributeScreenState extends State<ContributeScreen> {
       builder: (_) => AddStepDialog(
         stepCount: steps.length,
         onAddAnother: () => _showModeDialog(),
-        onFinished: () => setState(() => selectionMode = 'done'),
+        onFinished: () async {
+          setState(() => selectionMode = 'done');
+          if (_endLocationController.text.isEmpty && pathPoints.isNotEmpty) {
+            final last = pathPoints.last;
+            final name = await LocationService.getAddressFromCoordinates(
+              last.latitude, last.longitude);
+            if (mounted && _endLocationController.text.isEmpty) {
+              _endLocationController.text = name ??
+                  '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
+            }
+          }
+        },
       ),
     );
   }
@@ -359,6 +394,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
       pathPoints = [];
       steps = [];
       stepBoundaries = [];
+      _stepOrsDistM.clear();
+      _stepOrsDurS.clear();
+      _pendingOrsDistM = null;
+      _pendingOrsDurS = null;
       selectionMode = 'start';
       _startLocationController.clear();
       _endLocationController.clear();
@@ -447,6 +486,19 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
   }
 
+  double _speedForMode(String mode) {
+    switch (mode) {
+      case 'Walk':      return 5.0;
+      case 'Jeepney':   return 20.0;
+      case 'Bus':       return 25.0;
+      case 'Train':     return 40.0;
+      case 'Tricycle':  return 15.0;
+      case 'FX/Van':    return 30.0;
+      case 'Ferry':     return 20.0;
+      default:          return 5.0;
+    }
+  }
+
   List<Polyline> get polylines {
     final result = <Polyline>[];
     for (int i = 0; i < steps.length; i++) {
@@ -479,12 +531,42 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   route_model.Route _buildRoute({String? existingId}) {
     final modsList = steps.map((s) => s.mode).toList();
-    final fare = RouteMetricsService.calculateFareEstimate(
-      pathPoints, modsList, stepBoundaries,
-    );
-    final eta = RouteMetricsService.calculateEta(
-      pathPoints, modsList, stepBoundaries,
-    );
+
+    // Per-step: use ORS data when available, haversine+speed otherwise.
+    double totalDurS = 0;
+    double totalFare = 0;
+    final Distance distCalc = const Distance();
+
+    for (int i = 0; i < steps.length; i++) {
+      final orsDistM = i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
+      final orsDurS = i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
+
+      if (orsDistM != null && orsDurS != null) {
+        totalDurS += orsDurS;
+        totalFare += RouteMetricsService.calculateFareForMode(
+          steps[i].mode, orsDistM / 1000);
+      } else {
+        // Haversine over the path segment for this step
+        final startIdx =
+            (i == 0) ? 0 : (i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
+        final endIdx =
+            (i < stepBoundaries.length) ? stepBoundaries[i] : pathPoints.length - 1;
+        double segDistKm = 0;
+        for (int j = startIdx; j < endIdx && j + 1 < pathPoints.length; j++) {
+          segDistKm += distCalc.as(
+              LengthUnit.Kilometer, pathPoints[j], pathPoints[j + 1]);
+        }
+        final speedKmh = _speedForMode(steps[i].mode);
+        totalDurS += (segDistKm / speedKmh) * 3600;
+        totalFare += RouteMetricsService.calculateFareForMode(
+          steps[i].mode, segDistKm);
+      }
+    }
+    // Add 2-min transfer wait per handoff
+    if (steps.length > 1) totalDurS += (steps.length - 1) * 120;
+
+    final etaStr = (totalDurS / 60).ceil().toString();
+    final fareStr = 'PHP ${totalFare.round()}';
 
     String startLoc = _startLocationController.text.isEmpty
         ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
@@ -508,8 +590,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
       endLng: pathPoints.last.longitude,
       pathPoints: pathPoints,
       stepBoundaries: stepBoundaries,
-      eta: eta.toString(),
-      price: fare,
+      eta: etaStr,
+      price: fareStr,
       schedule: _scheduleController.text.isEmpty ? null : _scheduleController.text,
       contributorId: widget.routeToEdit?.contributorId ?? widget.contributorId,
     );

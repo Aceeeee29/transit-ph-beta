@@ -56,6 +56,14 @@ class PostActionsService {
     await PostService.addComment(comment);
   }
 
+  static Future<void> deleteComment(
+    String postId,
+    String commentId, {
+    bool isTopLevel = true,
+  }) async {
+    await PostService.deleteComment(postId, commentId, isTopLevel: isTopLevel);
+  }
+
   static Future<void> addReaction(
     String postId,
     String emoji,
