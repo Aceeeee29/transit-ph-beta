@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/moderation_service.dart';
+import 'widgets/update_dialog.dart';
 
 /// app's theme.
 ThemeData buildTheme() {
@@ -60,12 +61,33 @@ void main() async {
   runApp(const TransitPHApp());
 }
 
-class TransitPHApp extends StatelessWidget {
+class TransitPHApp extends StatefulWidget {
   const TransitPHApp({super.key});
+
+  @override
+  State<TransitPHApp> createState() => _TransitPHAppState();
+}
+
+class _TransitPHAppState extends State<TransitPHApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Check for updates after the first frame so a valid context is available.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
+  }
+
+  Future<void> _checkForUpdates() async {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+    await UpdateDialog.checkAndShow(ctx);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'TransitPH',
       theme: buildTheme(),
       initialRoute: '/',

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App-private external storage (Android/data/<pkg>/files/).
+         No WRITE_EXTERNAL_STORAGE permission is needed here on API 29+. -->
+    <external-files-path name="external_files" path="." />
+    <!-- Internal cache directory used as a fallback when external storage
+         is unavailable (e.g. no SD card / emulator). -->
+    <cache-path name="cache" path="." />
+</paths>
