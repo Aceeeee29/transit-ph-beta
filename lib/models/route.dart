@@ -14,11 +14,13 @@ class Route {
   final List<LatLng> pathPoints;
   final String? eta;
   final String? price;
+  final String? distance;
   final String? schedule;
   final String? imageUrl;
   final List<Report> reports;
   final List<int> stepBoundaries;
   final String? contributorId;
+  final double? distanceMeters;
   int views;
   int upvotes;
   int downvotes;
@@ -38,11 +40,13 @@ class Route {
     this.pathPoints = const [],
     this.eta,
     this.price,
+    this.distance,
     this.schedule,
     this.imageUrl,
     this.reports = const [],
     this.stepBoundaries = const [],
     this.contributorId,
+    this.distanceMeters,
     this.views = 0,
     this.upvotes = 0,
     this.downvotes = 0,
@@ -77,8 +81,10 @@ class Route {
       'stepBoundaries': stepBoundaries,
       'eta': eta,
       'price': price,
+      'distance': distance,
       'schedule': schedule,
       'imageUrl': imageUrl,
+      'distanceMeters': distanceMeters,
       'reports':
           reports
               .map(
@@ -125,8 +131,13 @@ class Route {
           [],
       eta: json['eta'],
       price: json['price'],
+      distance: json['distance'],
       schedule: json['schedule'],
       imageUrl: json['imageUrl'],
+      distanceMeters:
+          json['distanceMeters'] != null
+              ? (json['distanceMeters'] as num).toDouble()
+              : null,
       reports:
           (json['reports'] as List)
               .map(

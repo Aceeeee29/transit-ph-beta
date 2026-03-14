@@ -534,6 +534,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
     // Per-step: use ORS data when available, haversine+speed otherwise.
     double totalDurS = 0;
+    double totalDistKm = 0;
     double totalFare = 0;
     final Distance distCalc = const Distance();
 
@@ -542,6 +543,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       final orsDurS = i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
 
       if (orsDistM != null && orsDurS != null) {
+        totalDistKm += orsDistM / 1000;
         totalDurS += orsDurS;
         totalFare += RouteMetricsService.calculateFareForMode(
           steps[i].mode, orsDistM / 1000);
@@ -556,6 +558,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
           segDistKm += distCalc.as(
               LengthUnit.Kilometer, pathPoints[j], pathPoints[j + 1]);
         }
+        totalDistKm += segDistKm;
         final speedKmh = _speedForMode(steps[i].mode);
         totalDurS += (segDistKm / speedKmh) * 3600;
         totalFare += RouteMetricsService.calculateFareForMode(
@@ -565,6 +568,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     // Add 2-min transfer wait per handoff
     if (steps.length > 1) totalDurS += (steps.length - 1) * 120;
 
+    final distStr = RouteMetricsService.formatDistance(totalDistKm);
     final etaStr = (totalDurS / 60).ceil().toString();
     final fareStr = 'PHP ${totalFare.round()}';
 
@@ -592,7 +596,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
       stepBoundaries: stepBoundaries,
       eta: etaStr,
       price: fareStr,
+      distance: distStr,
       schedule: _scheduleController.text.isEmpty ? null : _scheduleController.text,
+      distanceMeters: totalDistKm > 0 ? totalDistKm * 1000 : null,
       contributorId: widget.routeToEdit?.contributorId ?? widget.contributorId,
     );
   }
@@ -829,6 +835,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   Widget _buildMapControlsOverlay() {
+    // Calculate total ORS metrics from stored per-step values
+    double? totalOrsDistKm;
+    int? totalOrsDurMinutes; // Store as minutes for formatEta
+    
+    // Only calculate if we have ORS data for all steps
+    if (_stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null)) {
+      totalOrsDistKm = _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000;
+    }
+    if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
+      double totalSeconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
+      // Add 2-min transfer wait per handoff
+      if (steps.length > 1) {
+        totalSeconds += ((steps.length - 1) * 120);
+      }
+      // Convert seconds to minutes (formatEta expects minutes)
+      totalOrsDurMinutes = (totalSeconds / 60).ceil();
+    }
+
     return Positioned(
       top: 70,
       left: 20,
@@ -845,6 +869,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         onPreview: _onPreviewRoute,
         onSnapToRoadToggled: _onSnapToRoadToggled,
         snapToRoadEnabled: _snapToRoadEnabled,
+        orsDistanceKm: totalOrsDistKm,
+        orsDurationMinutes: totalOrsDurMinutes,
       ),
     );
   }

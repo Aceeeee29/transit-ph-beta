@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:open_file_plus/open_file_plus.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -92,7 +92,11 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
 
       _cancelToken = CancelToken();
 
-      await Dio().download(
+      final dio = Dio();
+      dio.options.followRedirects = true;
+      dio.options.maxRedirects = 5;
+
+      await dio.download(
         widget.info.updateUrl,
         savePath,
         cancelToken: _cancelToken,
@@ -105,8 +109,28 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
 
       if (!mounted) return;
 
+      // Validate that the downloaded file is actually an APK (ZIP archive).
+      final file = File(savePath);
+      if (!await _isValidApk(file)) {
+        if (mounted) {
+          setState(() {
+            _state = _DownloadState.error;
+            _errorMessage =
+                'The downloaded file is not a valid APK.\n\n'
+                'The download link may be broken or redirecting to a web page '
+                'instead of the actual file. Please check the update URL.';
+          });
+        }
+        // Clean up the invalid file.
+        try { await file.delete(); } catch (_) {}
+        return;
+      }
+
       // Hand the downloaded APK to the system package installer.
-      final result = await OpenFile.open(savePath);
+      final result = await OpenFilex.open(
+        savePath,
+        type: 'application/vnd.android.package-archive',
+      );
       if (result.type != ResultType.done && mounted) {
         setState(() {
           _state = _DownloadState.error;
@@ -133,6 +157,24 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     }
   }
 
+  /// Returns `true` if [file] starts with the ZIP/APK magic bytes (`PK\x03\x04`).
+  static Future<bool> _isValidApk(File file) async {
+    try {
+      if (!await file.exists()) return false;
+      final raf = await file.open(mode: FileMode.read);
+      final header = await raf.read(4);
+      await raf.close();
+      // APK files are ZIP archives — the magic number is PK\x03\x04.
+      return header.length == 4 &&
+          header[0] == 0x50 && // P
+          header[1] == 0x4B && // K
+          header[2] == 0x03 &&
+          header[3] == 0x04;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void _cancelDownload() {
     _cancelToken?.cancel('User cancelled download');
   }
@@ -155,8 +197,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
   Widget build(BuildContext context) {
     return PopScope(
       // Block the Back button while force-updating or actively downloading.
-      canPop:
-          !widget.info.forceUpdate && _state != _DownloadState.downloading,
+      canPop: !widget.info.forceUpdate && _state != _DownloadState.downloading,
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
@@ -195,10 +236,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Downloading update…',
-              style: TextStyle(fontSize: 14),
-            ),
+            const Text('Downloading update…', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
@@ -225,8 +263,11 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded,
-                color: Colors.red.shade600, size: 38),
+            Icon(
+              Icons.error_outline_rounded,
+              color: Colors.red.shade600,
+              size: 38,
+            ),
             const SizedBox(height: 12),
             Text(
               _errorMessage ?? 'An unexpected error occurred.',
@@ -256,7 +297,8 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
               backgroundColor: Colors.blue.shade700,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: _startDownload,
           ),
@@ -264,10 +306,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
 
       case _DownloadState.downloading:
         return [
-          TextButton(
-            onPressed: _cancelDownload,
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: _cancelDownload, child: const Text('Cancel')),
         ];
 
       case _DownloadState.error:
@@ -284,7 +323,8 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
               backgroundColor: Colors.blue.shade700,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: _startDownload,
           ),
@@ -292,4 +332,3 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     }
   }
 }
-

@@ -681,7 +681,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                 _anonymous = value;
               });
             },
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: _accent,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: _border,

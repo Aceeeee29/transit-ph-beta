@@ -1,6 +1,4 @@
 import 'dart:ui';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 import 'gamification_service.dart';

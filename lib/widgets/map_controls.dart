@@ -19,6 +19,8 @@ class MapControls extends StatefulWidget {
   final Function(bool) onSnapToRoadToggled;
   final bool showPreview;
   final bool snapToRoadEnabled;
+  final double? orsDistanceKm; // ORS-calculated distance in km
+  final int? orsDurationMinutes; // ORS-calculated duration in minutes
 
   const MapControls({
     super.key,
@@ -35,6 +37,8 @@ class MapControls extends StatefulWidget {
     required this.onSnapToRoadToggled,
     this.showPreview = true,
     this.snapToRoadEnabled = true,
+    this.orsDistanceKm,
+    this.orsDurationMinutes,
   });
 
   @override
@@ -73,25 +77,35 @@ class _MapControlsState extends State<MapControls> {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate total distance and ETA
-    final totalDistance = RouteMetricsService.calculateRouteDistance(
-      widget.pathPoints,
-    );
-    final formattedDistance = RouteMetricsService.formatDistance(totalDistance);
+    // Prefer ORS metrics when available, fall back to calculation
+    final formattedDistance = widget.orsDistanceKm != null
+        ? RouteMetricsService.formatDistance(widget.orsDistanceKm!)
+        : RouteMetricsService.formatDistance(
+            RouteMetricsService.calculateRouteDistance(widget.pathPoints),
+          );
 
     final modes = widget.steps.map((step) => step.mode).toList();
-    final eta = RouteMetricsService.calculateEta(
-      widget.pathPoints,
-      modes,
-      widget.stepBoundaries,
-    );
-    final formattedEta = RouteMetricsService.formatEta(eta);
+    final formattedEta = widget.orsDurationMinutes != null
+        ? RouteMetricsService.formatEta(widget.orsDurationMinutes!)
+        : RouteMetricsService.formatEta(
+            RouteMetricsService.calculateEta(
+              widget.pathPoints,
+              modes,
+              widget.stepBoundaries,
+            ),
+          );
 
-    final fare = RouteMetricsService.calculateFareEstimate(
-      widget.pathPoints,
-      modes,
-      widget.stepBoundaries,
-    );
+    final fare = widget.orsDistanceKm != null
+        ? RouteMetricsService.calculateFareEstimate(
+            widget.pathPoints,
+            modes,
+            widget.stepBoundaries,
+          ) // For ORS routes, use existing fare calculation (same methodology)
+        : RouteMetricsService.calculateFareEstimate(
+            widget.pathPoints,
+            modes,
+            widget.stepBoundaries,
+          );
 
     return AnimatedContainer(
           duration: const Duration(milliseconds: 300),

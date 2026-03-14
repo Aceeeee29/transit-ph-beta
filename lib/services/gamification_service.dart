@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart' as app_user;
 import '../models/achievement.dart';
 import '../models/badge.dart';
-import '../models/route.dart' as route_model;
 import 'route_service.dart';
 import 'route_metrics_service.dart';
 

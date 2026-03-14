@@ -29,11 +29,11 @@ class RoutePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Distance: sum haversine over all path points (road-snapped points give real road distance)
-    final totalDistance = RouteMetricsService.calculateRouteDistance(
-      route.pathPoints,
-    );
-    final formattedDistance = RouteMetricsService.formatDistance(totalDistance);
+    // Distance: prefer ORS-derived distance string, fall back to haversine calculation
+    final formattedDistance = (route.distance != null && route.distance!.isNotEmpty)
+        ? route.distance!
+        : RouteMetricsService.formatDistance(
+            RouteMetricsService.calculateRouteDistance(route.pathPoints));
 
     // Prefer ORS-derived ETA/fare stored on the route over recalculating
     final formattedEta = route.eta != null && route.eta!.isNotEmpty
