@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
@@ -36,28 +38,28 @@ class _SearchScreenState extends State<SearchScreen> {
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
 
-  // ─── Color tokens ────────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  // ─── Color tokens ─────────────────────────────────────────────────────────
+  static const _bg          = Color(0xFFF4F8FF);
+  static const _surface     = Color(0xFFFFFFFF);
+  static const _surfaceAlt  = Color(0xFFEAF2FF);
+  static const _accent      = Color(0xFF2E7CF6);
+  static const _accentSoft  = Color(0x1A2E7CF6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static const _border      = Color(0xFFD4E4F7);
 
-  // ─── ORS fallback state ──────────────────────────────────────────────────────
+  // ─── ORS state ────────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
-  bool _isLoadingOrs = false;
-  bool _orsError = false;
+  bool _isLoadingOrs     = false;
+  bool _orsError         = false;
   String _orsErrorMessage = '';
-  String _lastOrsQuery = '';
+  String _lastOrsQuery   = '';
 
-  // ─── Origin state ────────────────────────────────────────────────────────────
+  // ─── Origin state ─────────────────────────────────────────────────────────
   bool _useCurrentLocation = true;
   bool _isDetectingLocation = false;
 
-  // ─── Lifecycle ───────────────────────────────────────────────────────────────
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -78,7 +80,77 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _recentSearches = searches);
   }
 
-  // ─── Search logic ────────────────────────────────────────────────────────────
+  // ─── Issue 7: Philippines-biased geocoding ────────────────────────────────
+  //
+  // Uses Nominatim with countrycodes=ph and the Philippines viewbox so that
+  // "España Blvd" doesn't resolve to Spain.  Falls back to the geocoding
+  // package if Nominatim fails.
+
+  /// Converts a place name / address to a [LatLng], biased to the Philippines.
+  /// Returns null if geocoding fails entirely.
+  Future<LatLng?> _geocodePhilippines(String query) async {
+    // ── Nominatim (primary) ──────────────────────────────────────────────────
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q':              query,
+        'format':         'json',
+        'limit':          '5',
+        'countrycodes':   'ph',
+        // Philippines bounding box — prevents off-country results
+        'viewbox':        '116.0,4.5,127.0,21.5',
+        'bounded':        '0',           // prefer PH but don't hard-restrict
+        'accept-language':'en',
+      });
+
+      final response = await http.get(uri, headers: {
+        'User-Agent': 'TransitPH/1.0 (transit-routing-app)',
+      }).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final results = jsonDecode(response.body) as List;
+        if (results.isNotEmpty) {
+          // Prefer results inside the Philippines bounding box
+          Map<String, dynamic>? best;
+          for (final r in results.cast<Map<String, dynamic>>()) {
+            final lat = double.tryParse(r['lat'] as String? ?? '') ?? 0;
+            final lng = double.tryParse(r['lon'] as String? ?? '') ?? 0;
+            if (lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0) {
+              best = r;
+              break;
+            }
+          }
+          best ??= results.first as Map<String, dynamic>;
+          final lat = double.parse(best['lat'] as String);
+          final lng = double.parse(best['lon'] as String);
+          debugPrint('[Geocoding] Nominatim: "$query" → $lat,$lng (${best['display_name']})');
+          return LatLng(lat, lng);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Geocoding] Nominatim error for "$query": $e');
+    }
+
+    // ── geocoding package (fallback) ─────────────────────────────────────────
+    try {
+      final locations = await locationFromAddress(query);
+      if (locations.isNotEmpty) {
+        // Filter to Philippines if possible
+        final phLocations = locations.where((l) =>
+          l.latitude  >= 4.5  && l.latitude  <= 21.5 &&
+          l.longitude >= 116.0 && l.longitude <= 127.0,
+        ).toList();
+        final loc = phLocations.isNotEmpty ? phLocations.first : locations.first;
+        debugPrint('[Geocoding] Fallback: "$query" → ${loc.latitude},${loc.longitude}');
+        return LatLng(loc.latitude, loc.longitude);
+      }
+    } catch (e) {
+      debugPrint('[Geocoding] Fallback error for "$query": $e');
+    }
+
+    return null;
+  }
+
+  // ─── Search logic ─────────────────────────────────────────────────────────
 
   void _onSearch(String query) {
     if (query.trim().isEmpty) {
@@ -92,12 +164,11 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final searchTerm = query.trim().toLowerCase();
-    final List<String> newSuggestions = [];
+    final newSuggestions = <String>[];
 
-    for (final search in _recentSearches) {
-      if (search.toLowerCase().contains(searchTerm) &&
-          !newSuggestions.contains(search)) {
-        newSuggestions.add(search);
+    for (final s in _recentSearches) {
+      if (s.toLowerCase().contains(searchTerm) && !newSuggestions.contains(s)) {
+        newSuggestions.add(s);
       }
     }
     for (final route in widget.routes) {
@@ -113,24 +184,22 @@ class _SearchScreenState extends State<SearchScreen> {
     for (final route in widget.routes) {
       if (route.shortDescription.toLowerCase().contains(searchTerm)) {
         final suggestion = '${route.startLocation} to ${route.endLocation}';
-        if (!newSuggestions.contains(suggestion)) {
-          newSuggestions.add(suggestion);
-        }
+        if (!newSuggestions.contains(suggestion)) newSuggestions.add(suggestion);
       }
     }
 
     setState(() {
-      _isSearching = true;
-      _suggestions = newSuggestions.take(5).toList();
-      _showOmnibox = _suggestions.isNotEmpty;
-      _filteredRoutes = widget.routes.where((route) {
-        return route.endLocation.trim().toLowerCase().contains(searchTerm) ||
-            route.startLocation.trim().toLowerCase().contains(searchTerm) ||
-            route.shortDescription.trim().toLowerCase().contains(searchTerm);
+      _isSearching    = true;
+      _suggestions    = newSuggestions.take(5).toList();
+      _showOmnibox    = _suggestions.isNotEmpty;
+      _filteredRoutes = widget.routes.where((r) {
+        return r.endLocation.trim().toLowerCase().contains(searchTerm) ||
+               r.startLocation.trim().toLowerCase().contains(searchTerm) ||
+               r.shortDescription.trim().toLowerCase().contains(searchTerm);
       }).toList();
       if (query.trim() != _lastOrsQuery) {
-        _orsResult = null;
-        _orsError = false;
+        _orsResult      = null;
+        _orsError       = false;
         _orsErrorMessage = '';
       }
     });
@@ -159,13 +228,11 @@ class _SearchScreenState extends State<SearchScreen> {
     if (query.trim().isNotEmpty) {
       await SearchService.addRecentSearch(query.trim());
       await _loadRecentSearches();
-
-      final user = await GamificationService.loadUser();
-      final unlockedItems =
-          await GamificationService.incrementRoutesSearched(user);
+      final user         = await GamificationService.loadUser();
+      final unlockedItems = await GamificationService.incrementRoutesSearched(user);
       if (unlockedItems.isNotEmpty) {
         setState(() {
-          _pendingNotifications = unlockedItems;
+          _pendingNotifications    = unlockedItems;
           _showNotificationOverlay = true;
         });
       }
@@ -198,33 +265,32 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onRouteTap(route_model.Route route) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)));
   }
 
   List<route_model.Route> get _topSearches {
-    final sortedRoutes = List<route_model.Route>.from(widget.routes);
-    sortedRoutes.sort((a, b) {
+    final sorted = List<route_model.Route>.from(widget.routes);
+    sorted.sort((a, b) {
       final scoreA = a.views + a.upvotes - a.downvotes;
       final scoreB = b.views + b.upvotes - b.downvotes;
       return scoreB.compareTo(scoreA);
     });
-    return sortedRoutes.take(10).toList();
+    return sorted.take(10).toList();
   }
 
-  // ─── ORS route fetching ──────────────────────────────────────────────────────
+  // ─── ORS route fetching ───────────────────────────────────────────────────
 
   Future<void> _fetchOrsRoute() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
     setState(() {
-      _isLoadingOrs = true;
-      _orsError = false;
+      _isLoadingOrs   = true;
+      _orsError       = false;
       _orsErrorMessage = '';
-      _orsResult = null;
-      _lastOrsQuery = query;
+      _orsResult      = null;
+      _lastOrsQuery   = query;
     });
 
     try {
@@ -235,88 +301,76 @@ class _SearchScreenState extends State<SearchScreen> {
         final position = await LocationService.getCurrentPosition();
         if (position == null) {
           setState(() {
-            _isLoadingOrs = false;
-            _orsError = true;
-            _orsErrorMessage =
-                'Could not get your current location. Check location permissions.';
+            _isLoadingOrs    = false;
+            _orsError        = true;
+            _orsErrorMessage = 'Could not get your current location. Check location permissions.';
           });
           return;
         }
-        origin = LatLng(position.latitude, position.longitude);
-        originName =
-            await LocationService.getAddressFromCoordinates(
-              position.latitude,
-              position.longitude,
-            ) ??
-            'Current Location';
+        origin     = LatLng(position.latitude, position.longitude);
+        originName = await LocationService.getAddressFromCoordinates(
+          position.latitude, position.longitude,
+        ) ?? 'Current Location';
       } else {
         final originText = _originController.text.trim();
         if (originText.isEmpty) {
           setState(() {
-            _isLoadingOrs = false;
-            _orsError = true;
+            _isLoadingOrs    = false;
+            _orsError        = true;
             _orsErrorMessage = 'Please enter a starting point.';
           });
           return;
         }
-        final originLocations = await locationFromAddress(originText);
-        if (originLocations.isEmpty) {
+        // Issue 7 — Nominatim geocoding with PH bias
+        final originLatLng = await _geocodePhilippines(originText);
+        if (originLatLng == null) {
           setState(() {
-            _isLoadingOrs = false;
-            _orsError = true;
-            _orsErrorMessage =
-                'Could not find "$originText". Try a more specific address.';
+            _isLoadingOrs    = false;
+            _orsError        = true;
+            _orsErrorMessage = 'Could not find "$originText". Try a more specific address (e.g. "España Blvd, Sampaloc, Manila").';
           });
           return;
         }
-        origin = LatLng(
-          originLocations.first.latitude,
-          originLocations.first.longitude,
-        );
+        origin     = originLatLng;
         originName = originText;
       }
 
-      final locations = await locationFromAddress(query);
-      if (locations.isEmpty) {
+      // Issue 7 — Nominatim geocoding with PH bias
+      final destLatLng = await _geocodePhilippines(query);
+      if (destLatLng == null) {
         setState(() {
-          _isLoadingOrs = false;
-          _orsError = true;
-          _orsErrorMessage =
-              'Could not find coordinates for "$query". Try a more specific name.';
+          _isLoadingOrs    = false;
+          _orsError        = true;
+          _orsErrorMessage = 'Could not find "$query". Try a more specific name (e.g. "Makati CBD, Makati City").';
         });
         return;
       }
-      final destination = LatLng(
-        locations.first.latitude,
-        locations.first.longitude,
-      );
 
       final result = await RoutingService.getRoute(
-        originName: originName,
-        origin: origin,
+        originName:      originName,
+        origin:          origin,
         destinationName: query,
-        destination: destination,
-        mode: 'Jeepney',
+        destination:     destLatLng,
+        mode:            'Jeepney',
       );
 
       if (result == null) {
         setState(() {
-          _isLoadingOrs = false;
-          _orsError = true;
-          _orsErrorMessage =
-              'Could not generate a route. Check your ORS API key or try again.';
+          _isLoadingOrs    = false;
+          _orsError        = true;
+          _orsErrorMessage = 'Could not generate a route. Check your ORS API key or try again.';
         });
         return;
       }
 
       setState(() {
         _isLoadingOrs = false;
-        _orsResult = result;
+        _orsResult    = result;
       });
     } catch (e) {
       setState(() {
-        _isLoadingOrs = false;
-        _orsError = true;
+        _isLoadingOrs    = false;
+        _orsError        = true;
         _orsErrorMessage = 'Unexpected error: $e';
       });
     }
@@ -326,19 +380,14 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isDetectingLocation = true);
     final position = await LocationService.getCurrentPosition();
     if (position != null) {
-      final address =
-          await LocationService.getAddressFromCoordinates(
-            position.latitude,
-            position.longitude,
-          ) ??
-          'Current Location';
+      final address = await LocationService.getAddressFromCoordinates(
+        position.latitude, position.longitude,
+      ) ?? 'Current Location';
       _originController.text = address;
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not detect location. Check permissions.'),
-          ),
+          const SnackBar(content: Text('Could not detect location. Check permissions.')),
         );
       }
     }
@@ -354,12 +403,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ─── ORS helpers ─────────────────────────────────────────────────────────────
+  // ─── ORS helpers ──────────────────────────────────────────────────────────
 
   String _totalFareRange() {
     if (_orsResult == null) return '₱0';
-    final total =
-        _orsResult!.steps.fold(0.0, (sum, s) => sum + s.estimatedFare);
+    final total = _orsResult!.steps.fold(0.0, (sum, s) => sum + s.estimatedFare);
     if (total == 0) return 'Free';
     return '₱${(total * 0.9).round()}–${(total * 1.15).round()}';
   }
@@ -377,14 +425,7 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -393,8 +434,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _stepModeIcon(String mode) {
     final color = _stepModeColor(mode);
     return Container(
-      width: 26,
-      height: 26,
+      width: 26, height: 26,
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         shape: BoxShape.circle,
@@ -406,47 +446,31 @@ class _SearchScreenState extends State<SearchScreen> {
 
   IconData _stepModeIconData(String mode) {
     switch (mode) {
-      case 'Walk':
-        return Icons.directions_walk;
-      case 'Jeepney':
-        return Icons.directions_bus;
-      case 'Bus':
-        return Icons.directions_bus_filled;
-      case 'Train':
-        return Icons.train;
-      case 'Tricycle':
-        return Icons.two_wheeler;
-      case 'FX/Van':
-        return Icons.airport_shuttle;
-      case 'Ferry':
-        return Icons.directions_boat;
-      default:
-        return Icons.directions_bus;
+      case 'Walk':     return Icons.directions_walk;
+      case 'Jeepney':  return Icons.directions_bus;
+      case 'Bus':      return Icons.directions_bus_filled;
+      case 'Train':    return Icons.train;
+      case 'Tricycle': return Icons.two_wheeler;
+      case 'FX/Van':   return Icons.airport_shuttle;
+      case 'Ferry':    return Icons.directions_boat;
+      default:         return Icons.directions_bus;
     }
   }
 
   Color _stepModeColor(String mode) {
     switch (mode) {
-      case 'Walk':
-        return Colors.green.shade600;
-      case 'Jeepney':
-        return Colors.blue.shade600;
-      case 'Bus':
-        return Colors.red.shade600;
-      case 'Train':
-        return Colors.purple.shade600;
-      case 'Tricycle':
-        return Colors.orange.shade600;
-      case 'FX/Van':
-        return Colors.amber.shade700;
-      case 'Ferry':
-        return Colors.lightBlue.shade600;
-      default:
-        return Colors.blue.shade600;
+      case 'Walk':     return Colors.green.shade600;
+      case 'Jeepney':  return Colors.blue.shade600;
+      case 'Bus':      return Colors.red.shade600;
+      case 'Train':    return Colors.purple.shade600;
+      case 'Tricycle': return Colors.orange.shade600;
+      case 'FX/Van':   return Colors.amber.shade700;
+      case 'Ferry':    return Colors.lightBlue.shade600;
+      default:         return Colors.blue.shade600;
     }
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────────
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -498,37 +522,20 @@ class _SearchScreenState extends State<SearchScreen> {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: _border),
           ),
-          child: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 15,
-            color: _textSecondary,
-          ),
+          child: const Icon(Icons.arrow_back_ios_new, size: 15, color: _textSecondary),
         ),
       ),
       title: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _accentSoft,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.manage_search_rounded,
-              color: _accent,
-              size: 16,
-            ),
+            width: 30, height: 30,
+            decoration: BoxDecoration(color: _accentSoft, borderRadius: BorderRadius.circular(9)),
+            child: const Icon(Icons.manage_search_rounded, color: _accent, size: 16),
           ),
           const SizedBox(width: 10),
           const Text(
             'Search Routes',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
+            style: TextStyle(color: _textPrimary, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
         ],
       ),
@@ -540,15 +547,10 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(9),
+                color: _surfaceAlt, borderRadius: BorderRadius.circular(9),
                 border: Border.all(color: _border),
               ),
-              child: const Icon(
-                Icons.help_outline_rounded,
-                size: 17,
-                color: _textSecondary,
-              ),
+              child: const Icon(Icons.help_outline_rounded, size: 17, color: _textSecondary),
             ),
           ),
         ),
@@ -579,42 +581,24 @@ class _SearchScreenState extends State<SearchScreen> {
               style: const TextStyle(color: _textPrimary, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search destinations...',
-                hintStyle:
-                    const TextStyle(color: _textSecondary, fontSize: 14),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: _accent,
-                  size: 20,
-                ),
+                hintStyle: const TextStyle(color: _textSecondary, fontSize: 14),
+                prefixIcon: const Icon(Icons.search_rounded, color: _accent, size: 20),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? GestureDetector(
-                        onTap: () {
-                          _searchController.clear();
-                          _onSearch('');
-                        },
+                        onTap: () { _searchController.clear(); _onSearch(''); },
                         child: Container(
                           margin: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _border,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            size: 14,
-                            color: _textSecondary,
-                          ),
+                          decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(6)),
+                          child: const Icon(Icons.close, size: 14, color: _textSecondary),
                         ),
                       )
                     : null,
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 4,
-                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
               ),
-              onChanged: _onSearch,
+              onChanged:   _onSearch,
               onSubmitted: _onSearchSubmitted,
-              onTap: _onSearchFocus,
+              onTap:       _onSearchFocus,
             ),
           ),
           if (_showOmnibox && _suggestions.isNotEmpty) _buildOmnibox(),
@@ -627,16 +611,9 @@ class _SearchScreenState extends State<SearchScreen> {
     return Container(
       margin: const EdgeInsets.only(top: 6),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
+        color: _surface, borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: _accent.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: ListView.separated(
         shrinkWrap: true,
@@ -645,50 +622,35 @@ class _SearchScreenState extends State<SearchScreen> {
         separatorBuilder: (_, __) => Divider(color: _border, height: 1),
         itemBuilder: (context, index) {
           final suggestion = _suggestions[index];
-          final isRecent = _recentSearches.contains(suggestion);
+          final isRecent   = _recentSearches.contains(suggestion);
           return InkWell(
             onTap: () => _onSuggestionTap(suggestion),
             borderRadius: BorderRadius.vertical(
-              top: index == 0 ? const Radius.circular(14) : Radius.zero,
-              bottom: index == _suggestions.length - 1
-                  ? const Radius.circular(14)
-                  : Radius.zero,
+              top:    index == 0                      ? const Radius.circular(14) : Radius.zero,
+              bottom: index == _suggestions.length - 1 ? const Radius.circular(14) : Radius.zero,
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               child: Row(
                 children: [
                   Container(
-                    width: 28,
-                    height: 28,
+                    width: 28, height: 28,
                     decoration: BoxDecoration(
                       color: isRecent ? _surfaceAlt : _accentSoft,
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Icon(
-                      isRecent
-                          ? Icons.history_rounded
-                          : Icons.search_rounded,
+                      isRecent ? Icons.history_rounded : Icons.search_rounded,
                       size: 14,
                       color: isRecent ? _textSecondary : _accent,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      suggestion,
-                      style: const TextStyle(
-                        color: _textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    child: Text(suggestion,
+                      style: const TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
                   ),
-                  const Icon(
-                    Icons.north_west,
-                    size: 13,
-                    color: _textSecondary,
-                  ),
+                  const Icon(Icons.north_west, size: 13, color: _textSecondary),
                 ],
               ),
             ),
@@ -698,7 +660,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ─── Search results ──────────────────────────────────────────────────────────
+  // ─── Search results ───────────────────────────────────────────────────────
 
   Widget _buildSearchResults() {
     if (_filteredRoutes.isNotEmpty) {
@@ -724,7 +686,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
             Text(
-              'Generating route from OpenRouteService…',
+              'Generating route…',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
@@ -742,7 +704,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Disclaimer banner
+        // Disclaimer
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -758,11 +720,9 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Auto-generated route via OpenRouteService — '
-                  'not yet verified by the community. '
+                  'Auto-generated route via OpenRouteService — not yet verified by the community. '
                   'Road names and distances are estimated.',
-                  style:
-                      TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                  style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
                 ),
               ),
             ],
@@ -783,102 +743,63 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.route,
-                        color: Colors.blue.shade700, size: 20),
+                    Icon(Icons.route, color: Colors.blue.shade700, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _searchController.text.trim(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
+                  spacing: 8, runSpacing: 6,
                   children: [
-                    _infoChip(
-                      Icons.straighten,
-                      _orsResult!.distanceLabel,
-                      Colors.green,
-                    ),
-                    _infoChip(
-                      Icons.timer_outlined,
-                      _orsResult!.durationLabel,
-                      Colors.orange,
-                    ),
-                    _infoChip(
-                      Icons.payments_outlined,
-                      _totalFareRange(),
-                      Colors.green.shade700,
-                    ),
+                    _infoChip(Icons.straighten,      _orsResult!.distanceLabel, Colors.green),
+                    _infoChip(Icons.timer_outlined,  _orsResult!.durationLabel, Colors.orange),
+                    _infoChip(Icons.payments_outlined, _totalFareRange(),        Colors.green.shade700),
                   ],
                 ),
                 if (_orsResult!.steps.isNotEmpty) ...[
                   const Divider(height: 24),
-                  const Text(
-                    'Turn-by-turn directions',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
+                  const Text('Route steps', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 8),
-                  ..._orsResult!.steps.take(6).map(
-                    (step) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _stepModeIcon(step.suggestedMode),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _stepModeColor(step.suggestedMode),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    step.suggestedMode,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                  ..._orsResult!.steps.take(6).map((step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _stepModeIcon(step.suggestedMode),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _stepModeColor(step.suggestedMode),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  step.instruction,
-                                  style: const TextStyle(fontSize: 13),
+                                child: Text(
+                                  step.suggestedMode,
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(step.instruction, style: const TextStyle(fontSize: 13)),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ),
+                  )),
                   if (_orsResult!.steps.length > 6)
                     Text(
                       '+ ${_orsResult!.steps.length - 6} more steps',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
                 ],
               ],
@@ -887,7 +808,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Route data cached locally — next search is instant.',
+          'Route cached locally — next search is instant.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
         ),
         const SizedBox(height: 16),
@@ -895,26 +816,19 @@ class _SearchScreenState extends State<SearchScreen> {
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => OrsRouteMapScreen(
-                    result: _orsResult!,
-                    destinationName: _searchController.text.trim(),
-                  ),
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => OrsRouteMapScreen(
+                  result: _orsResult!,
+                  destinationName: _searchController.text.trim(),
                 ),
-              );
+              ));
             },
             icon: const Icon(Icons.map, color: Colors.white),
-            label: const Text(
-              'View on Map',
-              style: TextStyle(color: Colors.white, fontSize: 15),
-            ),
+            label: const Text('View on Map', style: TextStyle(color: Colors.white, fontSize: 15)),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
@@ -927,26 +841,14 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         const SizedBox(height: 32),
         Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: _surfaceAlt,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Icon(
-            Icons.search_off_rounded,
-            size: 36,
-            color: _textSecondary,
-          ),
+          width: 72, height: 72,
+          decoration: BoxDecoration(color: _surfaceAlt, borderRadius: BorderRadius.circular(20)),
+          child: const Icon(Icons.search_off_rounded, size: 36, color: _textSecondary),
         ),
         const SizedBox(height: 16),
         const Text(
           'No community routes found',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: _textPrimary,
-          ),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary),
         ),
         const SizedBox(height: 6),
         const Text(
@@ -964,15 +866,13 @@ class _SearchScreenState extends State<SearchScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.red.shade50, borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.red.shade200),
               ),
               child: Text(
                 _orsErrorMessage,
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(color: Colors.red.shade700, fontSize: 13),
+                style: TextStyle(color: Colors.red.shade700, fontSize: 13),
               ),
             ),
           ),
@@ -981,16 +881,11 @@ class _SearchScreenState extends State<SearchScreen> {
           child: ElevatedButton.icon(
             onPressed: _isLoadingOrs ? null : _fetchOrsRoute,
             icon: const Icon(Icons.map_outlined, color: Colors.white),
-            label: const Text(
-              'Generate Route',
-              style: TextStyle(color: Colors.white, fontSize: 15),
-            ),
+            label: const Text('Generate Route', style: TextStyle(color: Colors.white, fontSize: 15)),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
@@ -1009,31 +904,23 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Starting point ─────────────────────────────────────────────────
           Text(
             'Starting point',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.blue.shade700,
-              letterSpacing: 0.4,
-            ),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                color: Colors.blue.shade700, letterSpacing: 0.4),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               _originToggleBtn(
-                label: 'My location',
-                icon: Icons.my_location,
+                label: 'My location', icon: Icons.my_location,
                 active: _useCurrentLocation,
-                onTap: () => setState(() {
-                  _useCurrentLocation = true;
-                  _originController.clear();
-                }),
+                onTap: () => setState(() { _useCurrentLocation = true; _originController.clear(); }),
               ),
               const SizedBox(width: 8),
               _originToggleBtn(
-                label: 'Enter address',
-                icon: Icons.edit_location_alt_outlined,
+                label: 'Enter address', icon: Icons.edit_location_alt_outlined,
                 active: !_useCurrentLocation,
                 onTap: () => setState(() => _useCurrentLocation = false),
               ),
@@ -1042,8 +929,7 @@ class _SearchScreenState extends State<SearchScreen> {
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 220),
             crossFadeState: _useCurrentLocation
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
+                ? CrossFadeState.showFirst : CrossFadeState.showSecond,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -1054,30 +940,18 @@ class _SearchScreenState extends State<SearchScreen> {
                       controller: _originController,
                       decoration: InputDecoration(
                         hintText: 'e.g. Quezon City Hall, EDSA Cubao...',
-                        hintStyle: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade400,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.location_on_outlined,
-                          color: Colors.blue.shade600,
-                          size: 20,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        prefixIcon: Icon(Icons.location_on_outlined,
+                            color: Colors.blue.shade600, size: 20),
+                        filled: true, fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                       ),
                       textInputAction: TextInputAction.done,
@@ -1085,28 +959,24 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                   const SizedBox(width: 8),
                   IconButton.filled(
-                    onPressed:
-                        _isDetectingLocation ? null : _detectAndFillOrigin,
+                    onPressed: _isDetectingLocation ? null : _detectAndFillOrigin,
                     icon: _isDetectingLocation
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
                         : const Icon(Icons.my_location, size: 18),
                     tooltip: 'Use GPS location',
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white,
                     ),
                   ),
                 ],
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1133,17 +1003,12 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 15,
-              color: active ? Colors.white : Colors.grey.shade600,
-            ),
+            Icon(icon, size: 15, color: active ? Colors.white : Colors.grey.shade600),
             const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontSize: 13, fontWeight: FontWeight.w600,
                 color: active ? Colors.white : Colors.grey.shade600,
               ),
             ),
@@ -1153,7 +1018,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ─── Suggestions panel ───────────────────────────────────────────────────────
+  // ─── Suggestions panel ────────────────────────────────────────────────────
 
   Widget _buildSearchSuggestions() {
     return SingleChildScrollView(
@@ -1179,78 +1044,45 @@ class _SearchScreenState extends State<SearchScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'RECENT SEARCHES',
-              style: const TextStyle(
-                color: _textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
+            const Text('RECENT SEARCHES',
+                style: TextStyle(color: _textSecondary, fontSize: 10,
+                    fontWeight: FontWeight.w700, letterSpacing: 1.2)),
             GestureDetector(
               onTap: _onClearRecentSearches,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(7),
+                  color: _surfaceAlt, borderRadius: BorderRadius.circular(7),
                   border: Border.all(color: _border),
                 ),
-                child: const Text(
-                  'Clear All',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: const Text('Clear All',
+                    style: TextStyle(fontSize: 11, color: _textSecondary, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 8, runSpacing: 8,
           children: _recentSearches.map((search) {
             return GestureDetector(
               onTap: () => _onRecentSearchTap(search),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(9),
+                  color: _surface, borderRadius: BorderRadius.circular(9),
                   border: Border.all(color: _border),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.history_rounded,
-                      size: 13,
-                      color: _textSecondary,
-                    ),
+                    const Icon(Icons.history_rounded, size: 13, color: _textSecondary),
                     const SizedBox(width: 6),
-                    Text(
-                      search,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Text(search, style: const TextStyle(fontSize: 12, color: _textPrimary, fontWeight: FontWeight.w500)),
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => _onRemoveRecentSearch(search),
-                      child: const Icon(
-                        Icons.close,
-                        size: 12,
-                        color: _textSecondary,
-                      ),
+                      child: const Icon(Icons.close, size: 12, color: _textSecondary),
                     ),
                   ],
                 ),
@@ -1266,26 +1098,15 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'TOP SEARCHES',
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
-        ),
+        const Text('TOP SEARCHES',
+            style: TextStyle(color: _textSecondary, fontSize: 10,
+                fontWeight: FontWeight.w700, letterSpacing: 1.2)),
         const SizedBox(height: 4),
-        const Text(
-          'Popular routes based on community activity',
-          style: TextStyle(fontSize: 13, color: _textSecondary),
-        ),
+        const Text('Popular routes based on community activity',
+            style: TextStyle(fontSize: 13, color: _textSecondary)),
         const SizedBox(height: 16),
         ..._topSearches.map(
-          (route) => SearchRouteCard(
-            route: route,
-            onTap: () => _onRouteTap(route),
-          ),
+          (route) => SearchRouteCard(route: route, onTap: () => _onRouteTap(route)),
         ),
       ],
     );
