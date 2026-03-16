@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/moderation_service.dart';
 import 'widgets/update_dialog.dart';
+import 'config.dart';
 
 /// app's theme.
 ThemeData buildTheme() {
@@ -51,12 +53,19 @@ final Map<String, WidgetBuilder> appRoutes = {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load .env first — everything else depends on it
+  await dotenv.load();
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize Supabase with keys from .env
+  await Supabase.initialize(
+    url: Config.supabaseUrl,
+    anonKey: Config.supabaseAnonKey,
+  );
 
   // Initialize moderation service listeners
   ModerationService.init();
-
-  await dotenv.load();
 
   runApp(const TransitPHApp());
 }
@@ -74,7 +83,6 @@ class _TransitPHAppState extends State<TransitPHApp> {
   @override
   void initState() {
     super.initState();
-    // Check for updates after the first frame so a valid context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
   }
 
