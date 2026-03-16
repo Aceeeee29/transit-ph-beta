@@ -4,414 +4,591 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import 'supabase_route_service.dart';
 import 'transport_mode_inference.dart';
 
+/// Thrown when routing cannot produce a result.
+class RoutingException implements Exception {
+  final String message;
+  const RoutingException(this.message);
+  @override
+  String toString() => message;
+}
+
+/// Supabase/GTFS routing with OSRM road snapping.
+///
+/// Priority:
+///   1. GTFS direct route        — one trip, road-snapped via OSRM
+///   2. GTFS 1-transfer route    — two trips, road-snapped via OSRM
+///   3. Fallback direct route    — estimated walk/ride, road-snapped via OSRM
+///
+/// OSRM public API is used for road snapping only (free, no key required).
 class RoutingService {
-  static const _baseUrl = 'https://api.openrouteservice.org/v2/directions';
+  static const _minWalkSegmentKm           = 0.08;
+  static const _walkSpeedKmh               = 5.0;
+  static const _stopSearchRadiusKm         = 0.5;
+  static const _stopSearchRadiusExpandedKm = 1.5;
 
-  static const _modeToProfile = {
-    'Walk':     'foot-walking',
-    'Jeepney':  'driving-car',
-    'Bus':      'driving-hgv',
-    'Train':    'driving-car',
-    'Tricycle': 'foot-walking',
-    'FX/Van':   'driving-car',
-    'Ferry':    'driving-car',
-  };
+  // OSRM public demo server — free, no API key needed
+  static const _osrmBase = 'https://router.project-osrm.org/route/v1';
 
-  static const _durationMultipliers = {
-    'Walk':     1.1,
-    'Jeepney':  2.5,
-    'Bus':      2.0,
-    'Train':    1.0,
-    'Tricycle': 1.5,
-    'FX/Van':   1.8,
-    'Ferry':    1.2,
-  };
+  // ── Public API ───────────────────────────────────────────────────────────────
 
-  static const _minWalkSegmentKm = 0.08;
-  static const _viaThresholdKm   = 5.0;
-  static const _mmMinLat = 14.35, _mmMaxLat = 14.80;
-  static const _mmMinLng = 120.90, _mmMaxLng = 121.20;
-  static const _edsaLng  = 121.0389;
-
-  static String profileForMode(String mode) =>
-      _modeToProfile[mode] ?? 'driving-car';
-
-  // ── Public API ──────────────────────────────────────────────────────────────
-
-  static Future<OrsRouteResult?> getRoute({
+  static Future<OrsRouteResult> getRoute({
     required String originName,
     required LatLng origin,
     required String destinationName,
     required LatLng destination,
     String mode = 'Jeepney',
   }) async {
-    final profile = profileForMode(mode);
+    const cacheProfile = 'supabase-gtfs-v2';
 
     final cached = await RouteCacheRepository.get(
-      originName, destinationName, mode, profile,
+      originName, destinationName, mode, cacheProfile,
     );
-    if (cached != null) return cached;
-
-    OrsRouteResult? result;
-    final directKm = _haversineKm(origin, destination);
-
-    if (mode != 'Walk' && mode != 'Train' && directKm > 0.5) {
-      result = await _getMultiModalRoute(
-        origin: origin, destination: destination,
-        profile: profile, mode: mode,
-      );
-      if (result != null) {
-        debugPrint('[RoutingService] Multi-modal route succeeded');
-      }
+    if (cached != null) {
+      debugPrint('[RoutingService] Cache hit');
+      return cached;
     }
 
-    result ??= await _fetchFromOrs(
-      origin: origin, destination: destination,
-      profile: profile, mode: mode,
+    final result = await _getGtfsRoute(
+      origin:        origin,
+      destination:   destination,
+      preferredMode: mode,
     );
 
-    if (result == null) return null;
-
-    RouteCacheRepository.put(originName, destinationName, mode, profile, result);
+    RouteCacheRepository.put(
+        originName, destinationName, mode, cacheProfile, result);
     return result;
   }
 
-  // ── Multi-modal routing ─────────────────────────────────────────────────────
+  // ── GTFS routing with fallback ────────────────────────────────────────────────
 
-  static Future<OrsRouteResult?> _getMultiModalRoute({
+  static Future<OrsRouteResult> _getGtfsRoute({
     required LatLng origin,
     required LatLng destination,
-    required String profile,
-    required String mode,
+    required String preferredMode,
   }) async {
-    // Find nearest stops via Supabase (replaces Overpass)
+    // ── Step 1: Nearest stops ─────────────────────────────────────────────────
     List<Map<String, dynamic>?> stops;
     try {
       stops = await Future.wait([
-        SupabaseRouteService.findNearestStop(origin),
-        SupabaseRouteService.findNearestStop(destination),
+        SupabaseRouteService.findNearestStop(origin,
+            radiusKm: _stopSearchRadiusKm),
+        SupabaseRouteService.findNearestStop(destination,
+            radiusKm: _stopSearchRadiusKm),
       ]).timeout(const Duration(seconds: 8));
     } on TimeoutException {
-      debugPrint('[RoutingService] Stop finder timed out');
-      return null;
+      throw const RoutingException(
+          'Stop lookup timed out. Check your internet connection.');
+    }
+
+    // Expand radius if either stop missing
+    if (stops[0] == null || stops[1] == null) {
+      try {
+        stops = await Future.wait([
+          stops[0] != null
+              ? Future.value(stops[0])
+              : SupabaseRouteService.findNearestStop(origin,
+                  radiusKm: _stopSearchRadiusExpandedKm),
+          stops[1] != null
+              ? Future.value(stops[1])
+              : SupabaseRouteService.findNearestStop(destination,
+                  radiusKm: _stopSearchRadiusExpandedKm),
+        ]).timeout(const Duration(seconds: 8));
+      } on TimeoutException {
+        throw const RoutingException(
+            'Stop lookup timed out. Check your internet connection.');
+      }
     }
 
     final originStopData = stops[0];
     final destStopData   = stops[1];
 
+    // ── Fallback A: no stops at all — walk-only route ─────────────────────────
     if (originStopData == null || destStopData == null) {
-      debugPrint('[RoutingService] No stops found — using direct route');
-      return null;
+      debugPrint('[RoutingService] No stops found — using walk fallback');
+      return _buildFallbackRoute(
+        origin:        origin,
+        destination:   destination,
+        preferredMode: 'Walk',
+        note:          'No transit stops found nearby. Showing estimated walking route.',
+      );
     }
 
-    final originStop = LatLng(
-      (originStopData['stop_lat'] as num).toDouble(),
-      (originStopData['stop_lon'] as num).toDouble(),
+    final originStopId = originStopData['stop_id'].toString();
+    final destStopId   = destStopData['stop_id'].toString();
+
+    debugPrint('[RoutingService] Origin stop: ${originStopData['stop_name']} ($originStopId)');
+    debugPrint('[RoutingService] Dest stop:   ${destStopData['stop_name']} ($destStopId)');
+
+    if (originStopId == destStopId) {
+      return _buildFallbackRoute(
+        origin:        origin,
+        destination:   destination,
+        preferredMode: 'Walk',
+        note:          'Origin and destination are very close. Showing walking route.',
+      );
+    }
+
+    // ── Step 2: GTFS trip plan ────────────────────────────────────────────────
+    TripPlan? plan;
+    try {
+      plan = await SupabaseRouteService.findTripPlan(originStopId, destStopId)
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      throw const RoutingException(
+          'Route lookup timed out. Check your internet connection.');
+    } catch (e) {
+      debugPrint('[RoutingService] Trip plan error: $e');
+    }
+
+    // ── Fallback B: no GTFS connection — estimated direct route ───────────────
+    if (plan == null) {
+      debugPrint('[RoutingService] No GTFS connection — using direct fallback');
+      return _buildFallbackRoute(
+        origin:        origin,
+        destination:   destination,
+        preferredMode: preferredMode,
+        originStop:    LatLng(
+          (originStopData['stop_lat'] as num).toDouble(),
+          (originStopData['stop_lon'] as num).toDouble(),
+        ),
+        originStopName: originStopData['stop_name'] as String? ?? 'Stop',
+        destStop:       LatLng(
+          (destStopData['stop_lat'] as num).toDouble(),
+          (destStopData['stop_lon'] as num).toDouble(),
+        ),
+        destStopName:   destStopData['stop_name'] as String? ?? 'Stop',
+        note:           'No connected transit route found in current data. '
+                        'Showing estimated direct route.',
+      );
+    }
+
+    debugPrint('[RoutingService] Plan: ${plan.legs.length} leg(s)');
+
+    // ── Step 3: Road-snap each leg via OSRM ──────────────────────────────────
+    final shapePolylines = await Future.wait(
+      plan.legs.map((leg) async {
+        final board  = LatLng(leg.boardLat,  leg.boardLon);
+        final alight = LatLng(leg.alightLat, leg.alightLon);
+        final osrmMode = _osrmProfileForMode(
+            _inferModeFromRoute(leg.routeType ?? 3, leg.routeShortName ?? '', 'Jeepney'));
+
+        // Try OSRM snap first
+        final snapped = await _osrmSnap(board, alight, osrmMode);
+        if (snapped != null && snapped.length >= 2) return snapped;
+
+        // Fall back to GTFS shape clipped to stops
+        if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
+          try {
+            final pts = await SupabaseRouteService
+                .getShapePolyline(leg.shapeId!)
+                .timeout(const Duration(seconds: 8));
+            if (pts.length >= 2) {
+              return _clipShapeToStops(pts, board, alight);
+            }
+          } catch (_) {}
+        }
+
+        // Last resort: straight line
+        return [board, alight];
+      }),
     );
-    final destStop = LatLng(
-      (destStopData['stop_lat'] as num).toDouble(),
-      (destStopData['stop_lon'] as num).toDouble(),
+
+    return _buildResult(
+      origin:         origin,
+      destination:    destination,
+      legs:           plan.legs,
+      shapePolylines: shapePolylines,
+      preferredMode:  preferredMode,
     );
-
-    if (_haversineKm(originStop, destStop) < 0.1) {
-      debugPrint('[RoutingService] Stops too close — using direct route');
-      return null;
-    }
-
-    final walkInKm  = _haversineKm(origin, originStop);
-    final walkOutKm = _haversineKm(destination, destStop);
-
-    debugPrint(
-      '[RoutingService] Multi-modal: '
-      'walk-in ${walkInKm.toStringAsFixed(2)} km, '
-      'walk-out ${walkOutKm.toStringAsFixed(2)} km',
-    );
-
-    final futures      = <Future<OrsRouteResult?>>[];
-    final segmentModes = <String>[];
-
-    if (walkInKm > _minWalkSegmentKm) {
-      futures.add(_fetchFromOrs(
-        origin: origin, destination: originStop,
-        profile: 'foot-walking', mode: 'Walk',
-      ));
-      segmentModes.add('Walk');
-    }
-
-    futures.add(_fetchFromOrs(
-      origin: originStop, destination: destStop,
-      profile: profile, mode: mode,
-    ));
-    segmentModes.add(mode);
-
-    if (walkOutKm > _minWalkSegmentKm) {
-      futures.add(_fetchFromOrs(
-        origin: destStop, destination: destination,
-        profile: 'foot-walking', mode: 'Walk',
-      ));
-      segmentModes.add('Walk');
-    }
-
-    final results = await Future.wait(futures);
-    if (results.any((r) => r == null)) {
-      debugPrint('[RoutingService] A multi-modal segment failed');
-      return null;
-    }
-
-    return _stitchSegments(results.cast<OrsRouteResult>());
   }
 
-  // ── Stitch segments ─────────────────────────────────────────────────────────
+  // ── Fallback route (no GTFS data) ─────────────────────────────────────────────
+  //
+  // Builds a Walk-in → estimated Vehicle ride → Walk-out route using OSRM
+  // for road-snapped polylines. Clearly marked as estimated.
 
-  static OrsRouteResult _stitchSegments(List<OrsRouteResult> segments) {
-    if (segments.length == 1) return segments.first;
-
+  static Future<OrsRouteResult> _buildFallbackRoute({
+    required LatLng origin,
+    required LatLng destination,
+    required String preferredMode,
+    LatLng? originStop,
+    String? originStopName,
+    LatLng? destStop,
+    String? destStopName,
+    required String note,
+  }) async {
     final combinedPolyline = <LatLng>[];
-    final combinedSteps    = <OrsStep>[];
-    double totalDist = 0, totalDur = 0;
-    final bboxes = <List<double>>[];
+    final steps            = <OrsStep>[];
 
-    for (int s = 0; s < segments.length; s++) {
-      final seg = segments[s];
-      if (seg.polyline.isEmpty) continue;
+    final bool hasStops = originStop != null && destStop != null;
 
-      final int offset;
-      if (s == 0) {
-        combinedPolyline.addAll(seg.polyline);
-        offset = 0;
+    // ── Walk-in (origin → nearest stop) ──────────────────────────────────────
+    if (hasStops) {
+      final walkInKm = _haversineKm(origin, originStop!);
+      if (walkInKm > _minWalkSegmentKm) {
+        final walkPts = await _osrmSnap(origin, originStop, 'foot') ??
+            [origin, originStop];
+        final walkDistM = _polylineDistanceKm(walkPts) * 1000;
+        final startIdx  = combinedPolyline.length;
+        combinedPolyline.addAll(walkPts);
+        steps.add(OrsStep(
+          instruction:     'Walk to ${originStopName ?? 'nearest stop'}',
+          distanceMeters:  walkDistM,
+          durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
+          suggestedMode:   'Walk',
+          estimatedFare:   0.0,
+          wayPointStart:   startIdx,
+          wayPointEnd:     combinedPolyline.length - 1,
+        ));
       } else {
-        offset = combinedPolyline.length - 1;
-        if (seg.polyline.length > 1) {
-          combinedPolyline.addAll(seg.polyline.skip(1));
-        }
+        combinedPolyline.add(originStop!);
       }
+    } else {
+      combinedPolyline.add(origin);
+    }
 
-      totalDist += seg.distanceMeters;
-      totalDur  += seg.durationSeconds;
-      if (seg.bbox.length >= 4) bboxes.add(seg.bbox);
+    // ── Main estimated ride / walk ────────────────────────────────────────────
+    final ridePtA   = hasStops ? originStop! : origin;
+    final ridePtB   = hasStops ? destStop!   : destination;
+    final rideMode  = preferredMode == 'Walk' ? 'Walk' : preferredMode;
+    final osrmProf  = _osrmProfileForMode(rideMode);
 
-      for (final step in seg.steps) {
-        combinedSteps.add(OrsStep(
-          instruction:     step.instruction,
-          distanceMeters:  step.distanceMeters,
-          durationSeconds: step.durationSeconds,
-          suggestedMode:   step.suggestedMode,
-          estimatedFare:   step.estimatedFare,
-          wayPointStart:   step.wayPointStart + offset,
-          wayPointEnd:     step.wayPointEnd   + offset,
+    final ridePts   = await _osrmSnap(ridePtA, ridePtB, osrmProf) ??
+        [ridePtA, ridePtB];
+
+    final rideDistM = _polylineDistanceKm(ridePts) * 1000;
+    final rideSpeed = _speedForMode(rideMode);
+    final rideDurS  = (rideDistM / 1000 / rideSpeed) * 3600;
+    final rideFare  = PhFareCalculator.compute(rideMode, rideDistM);
+
+    final rideStartIdx = combinedPolyline.isEmpty
+        ? 0
+        : combinedPolyline.length - 1;
+
+    // Avoid duplicating junction point
+    final rideToAdd = combinedPolyline.isNotEmpty &&
+            ridePts.isNotEmpty &&
+            _haversineKm(combinedPolyline.last, ridePts.first) < 0.001
+        ? ridePts.skip(1).toList()
+        : ridePts;
+    combinedPolyline.addAll(rideToAdd);
+
+    final rideLabel = hasStops
+        ? '[Estimated] $rideMode from ${originStopName ?? 'start'} to ${destStopName ?? 'destination'}'
+        : '[Estimated] $rideMode to destination';
+
+    steps.add(OrsStep(
+      instruction:     rideLabel,
+      distanceMeters:  rideDistM,
+      durationSeconds: rideDurS,
+      suggestedMode:   rideMode,
+      estimatedFare:   rideFare,
+      wayPointStart:   rideStartIdx,
+      wayPointEnd:     combinedPolyline.length - 1,
+    ));
+
+    // ── Walk-out (dest stop → destination) ────────────────────────────────────
+    if (hasStops) {
+      final walkOutKm = _haversineKm(destStop!, destination);
+      if (walkOutKm > _minWalkSegmentKm) {
+        final walkPts = await _osrmSnap(destStop, destination, 'foot') ??
+            [destStop, destination];
+        final walkDistM  = _polylineDistanceKm(walkPts) * 1000;
+        final startIdx   = combinedPolyline.length - 1;
+        final toAdd = _haversineKm(combinedPolyline.last, walkPts.first) < 0.001
+            ? walkPts.skip(1).toList()
+            : walkPts;
+        combinedPolyline.addAll(toAdd);
+        steps.add(OrsStep(
+          instruction:     'Walk from ${destStopName ?? 'stop'} to destination',
+          distanceMeters:  walkDistM,
+          durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
+          suggestedMode:   'Walk',
+          estimatedFare:   0.0,
+          wayPointStart:   startIdx,
+          wayPointEnd:     combinedPolyline.length - 1,
         ));
       }
     }
 
-    List<double> mergedBbox = [];
-    if (bboxes.isNotEmpty) {
-      mergedBbox = [
-        bboxes.map((b) => b[0]).reduce(math.min),
-        bboxes.map((b) => b[1]).reduce(math.min),
-        bboxes.map((b) => b[2]).reduce(math.max),
-        bboxes.map((b) => b[3]).reduce(math.max),
+    // ── Totals + BBox ─────────────────────────────────────────────────────────
+    final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
+    final totalDurS  = steps.fold(0.0, (s, e) => s + e.durationSeconds);
+
+    List<double> bbox = [];
+    if (combinedPolyline.isNotEmpty) {
+      final lats = combinedPolyline.map((p) => p.latitude);
+      final lngs = combinedPolyline.map((p) => p.longitude);
+      bbox = [
+        lngs.reduce(math.min), lats.reduce(math.min),
+        lngs.reduce(math.max), lats.reduce(math.max),
+      ];
+    }
+
+    debugPrint('[RoutingService] Fallback route built — $note');
+
+    return OrsRouteResult(
+      distanceMeters:  totalDistM,
+      durationSeconds: totalDurS,
+      polyline:        combinedPolyline,
+      steps:           steps,
+      bbox:            bbox,
+    );
+  }
+
+  // ── OSRM road snapping ────────────────────────────────────────────────────────
+  //
+  // Uses the public OSRM demo server to get a road-following polyline
+  // between two points. Returns null on any error so callers can fallback.
+
+  static Future<List<LatLng>?> _osrmSnap(
+    LatLng from,
+    LatLng to,
+    String profile, // 'driving', 'foot', 'cycling'
+  ) async {
+    try {
+      final coords =
+          '${from.longitude},${from.latitude};${to.longitude},${to.latitude}';
+      final uri = Uri.parse(
+          '$_osrmBase/$profile/$coords?overview=full&geometries=geojson');
+
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) return null;
+
+      final data  = jsonDecode(response.body) as Map<String, dynamic>;
+      final code  = data['code'] as String?;
+      if (code != 'Ok') return null;
+
+      final routes = data['routes'] as List?;
+      if (routes == null || routes.isEmpty) return null;
+
+      final geometry   = routes[0]['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      return coordinates
+          .map((c) => LatLng(
+                (c[1] as num).toDouble(),
+                (c[0] as num).toDouble(),
+              ))
+          .toList();
+    } catch (e) {
+      debugPrint('[OSRM] Snap failed ($profile): $e');
+      return null;
+    }
+  }
+
+  static String _osrmProfileForMode(String mode) {
+    switch (mode) {
+      case 'Walk':    return 'foot';
+      case 'Train':   return 'driving'; // closest available
+      case 'Ferry':   return 'driving';
+      default:        return 'driving'; // Jeepney, Bus, FX/Van, Tricycle
+    }
+  }
+
+  // ── Build OrsRouteResult from GTFS legs ──────────────────────────────────────
+
+  static OrsRouteResult _buildResult({
+    required LatLng origin,
+    required LatLng destination,
+    required List<TransitLeg> legs,
+    required List<List<LatLng>> shapePolylines,
+    required String preferredMode,
+  }) {
+    final combinedPolyline = <LatLng>[];
+    final steps            = <OrsStep>[];
+    final firstLeg         = legs.first;
+    final lastLeg          = legs.last;
+
+    // ── Walk-in ───────────────────────────────────────────────────────────────
+    final boardFirst = LatLng(firstLeg.boardLat, firstLeg.boardLon);
+    final walkInKm   = _haversineKm(origin, boardFirst);
+    if (walkInKm > _minWalkSegmentKm) {
+      combinedPolyline.add(origin);
+      combinedPolyline.add(boardFirst);
+      steps.add(OrsStep(
+        instruction:     'Walk to ${firstLeg.boardStopName}',
+        distanceMeters:  walkInKm * 1000,
+        durationSeconds: (walkInKm / _walkSpeedKmh) * 3600,
+        suggestedMode:   'Walk',
+        estimatedFare:   0.0,
+        wayPointStart:   0,
+        wayPointEnd:     1,
+      ));
+    } else {
+      combinedPolyline.add(origin);
+    }
+
+    // ── Vehicle legs ──────────────────────────────────────────────────────────
+    for (int i = 0; i < legs.length; i++) {
+      final leg      = legs[i];
+      final polyline = shapePolylines[i];
+      final mode     = _inferModeFromRoute(
+          leg.routeType ?? 3, leg.routeShortName ?? '', preferredMode);
+
+      final vehicleStartIdx = combinedPolyline.length - 1;
+
+      final toAdd = combinedPolyline.isNotEmpty &&
+              polyline.isNotEmpty &&
+              _haversineKm(combinedPolyline.last, polyline.first) < 0.001
+          ? polyline.skip(1).toList()
+          : polyline;
+      combinedPolyline.addAll(toAdd);
+
+      final vehicleEndIdx = combinedPolyline.length - 1;
+      final distKm        = _polylineDistanceKm(polyline);
+      final distM         = distKm * 1000;
+
+      steps.add(OrsStep(
+        instruction:     leg.routeShortName?.isNotEmpty == true
+            ? 'Ride $mode (${leg.routeShortName}) from ${leg.boardStopName} to ${leg.alightStopName}'
+            : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}',
+        distanceMeters:  distM,
+        durationSeconds: (distKm / _speedForMode(mode)) * 3600,
+        suggestedMode:   mode,
+        estimatedFare:   PhFareCalculator.compute(mode, distM),
+        wayPointStart:   vehicleStartIdx,
+        wayPointEnd:     vehicleEndIdx,
+      ));
+
+      // ── Transfer walk ──────────────────────────────────────────────────────
+      if (i < legs.length - 1) {
+        final nextLeg    = legs[i + 1];
+        final alightPt   = LatLng(leg.alightLat,   leg.alightLon);
+        final boardPt    = LatLng(nextLeg.boardLat, nextLeg.boardLon);
+        final transferKm = _haversineKm(alightPt, boardPt);
+        if (transferKm > _minWalkSegmentKm) {
+          final tStart = combinedPolyline.length - 1;
+          combinedPolyline.add(boardPt);
+          steps.add(OrsStep(
+            instruction:     'Transfer: walk from ${leg.alightStopName} to ${nextLeg.boardStopName}',
+            distanceMeters:  transferKm * 1000,
+            durationSeconds: (transferKm / _walkSpeedKmh) * 3600,
+            suggestedMode:   'Walk',
+            estimatedFare:   0.0,
+            wayPointStart:   tStart,
+            wayPointEnd:     combinedPolyline.length - 1,
+          ));
+        }
+      }
+    }
+
+    // ── Walk-out ──────────────────────────────────────────────────────────────
+    final alightLast = LatLng(lastLeg.alightLat, lastLeg.alightLon);
+    final walkOutKm  = _haversineKm(alightLast, destination);
+    if (walkOutKm > _minWalkSegmentKm) {
+      final startIdx = combinedPolyline.length - 1;
+      combinedPolyline.add(destination);
+      steps.add(OrsStep(
+        instruction:     'Walk from ${lastLeg.alightStopName} to destination',
+        distanceMeters:  walkOutKm * 1000,
+        durationSeconds: (walkOutKm / _walkSpeedKmh) * 3600,
+        suggestedMode:   'Walk',
+        estimatedFare:   0.0,
+        wayPointStart:   startIdx,
+        wayPointEnd:     combinedPolyline.length - 1,
+      ));
+    }
+
+    // ── Totals + BBox ─────────────────────────────────────────────────────────
+    final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
+    final transfers  = steps.where((s) => s.suggestedMode != 'Walk').length;
+    final totalDurS  = steps.fold(0.0, (s, e) => s + e.durationSeconds)
+        + (transfers > 0 ? transfers * 120.0 : 0.0);
+
+    List<double> bbox = [];
+    if (combinedPolyline.isNotEmpty) {
+      final lats = combinedPolyline.map((p) => p.latitude);
+      final lngs = combinedPolyline.map((p) => p.longitude);
+      bbox = [
+        lngs.reduce(math.min), lats.reduce(math.min),
+        lngs.reduce(math.max), lats.reduce(math.max),
       ];
     }
 
     return OrsRouteResult(
-      distanceMeters:  totalDist,
-      durationSeconds: totalDur,
+      distanceMeters:  totalDistM,
+      durationSeconds: totalDurS,
       polyline:        combinedPolyline,
-      steps:           combinedSteps,
-      bbox:            mergedBbox,
+      steps:           steps,
+      bbox:            bbox,
     );
   }
 
-  // ── ORS fetch ───────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  static Future<OrsRouteResult?> _fetchFromOrs({
-    required LatLng origin,
-    required LatLng destination,
-    required String profile,
-    String mode = 'Jeepney',
-  }) async {
-    final apiKey = Config.openRouteServiceApiKey;
-    if (apiKey.isEmpty) {
-      debugPrint('[RoutingService] ORS API key missing.');
-      return null;
-    }
-
-    final coordinates = <List<double>>[[origin.longitude, origin.latitude]];
-    if (_haversineKm(origin, destination) > _viaThresholdKm) {
-      final via = _inferViaWaypoint(origin, destination, mode);
-      if (via != null) coordinates.add([via.longitude, via.latitude]);
-    }
-    coordinates.add([destination.longitude, destination.latitude]);
-
-    final avoidFeatures = (mode == 'Jeepney' || mode == 'Tricycle')
-        ? ['tollways', 'highways'] : <String>[];
-
-    final body = jsonEncode({
-      'coordinates': coordinates,
-      'instructions': true,
-      'geometry': true,
-      if (avoidFeatures.isNotEmpty) 'options': {'avoid_features': avoidFeatures},
-    });
-
-    try {
-      debugPrint('[RoutingService] POST $profile ($mode)');
-      final response = await http.post(
-        Uri.parse('$_baseUrl/$profile/geojson'),
-        headers: {'Authorization': apiKey, 'Content-Type': 'application/json'},
-        body: body,
-      ).timeout(const Duration(seconds: 15));
-
-      debugPrint('[RoutingService] ORS ${response.statusCode}');
-      if (response.statusCode == 429) { debugPrint('[RoutingService] Rate limited.'); return null; }
-      if (response.statusCode != 200) { debugPrint('[RoutingService] Error: ${response.body}'); return null; }
-
-      return await _parseOrsResponse(response.body, mode);
-    } catch (e) {
-      debugPrint('[RoutingService] Exception: $e');
-      return null;
-    }
+  static String _inferModeFromRoute(
+      int routeType, String shortName, String preferredMode) {
+    if (routeType == 0 || routeType == 1 || routeType == 2) return 'Train';
+    if (routeType == 4) return 'Ferry';
+    if (preferredMode != 'Walk') return preferredMode;
+    final name = shortName.toLowerCase();
+    if (name.contains('bus') || name.contains('carousel') ||
+        name.contains('brt') || name.contains('uvex')) return 'Bus';
+    if (name.contains('fx') || name.contains('uv') ||
+        name.contains('van')) return 'FX/Van';
+    return 'Jeepney';
   }
 
-  // ── Parsing + enrichment ────────────────────────────────────────────────────
-
-  static Future<OrsRouteResult?> _parseOrsResponse(String body, String mode) async {
-    try {
-      final data    = jsonDecode(body) as Map<String, dynamic>;
-      final feature = (data['features'] as List).first as Map<String, dynamic>;
-
-      final polyline = (feature['geometry']['coordinates'] as List)
-          .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
-          .toList();
-
-      final summary    = feature['properties']['summary'] as Map<String, dynamic>;
-      final distMeters = (summary['distance'] as num).toDouble();
-      final rawDurSec  = (summary['duration'] as num).toDouble();
-
-      final multiplier = _durationMultipliers[mode] ?? 1.5;
-      final adjDurSec  = rawDurSec * multiplier;
-      debugPrint('[RoutingService] Duration: raw ${rawDurSec.toInt()}s × $multiplier = ${adjDurSec.toInt()}s ($mode)');
-
-      final rawBbox = data['bbox'] as List?;
-      final bbox    = rawBbox?.map((v) => (v as num).toDouble()).toList() ?? <double>[];
-
-      final rawSteps = <OrsStep>[];
-      for (final segment in (feature['properties']['segments'] as List? ?? [])) {
-        for (final s in (segment['steps'] as List? ?? [])) {
-          final wp = s['way_points'] as List?;
-          rawSteps.add(OrsStep(
-            instruction:     s['instruction']  as String? ?? '',
-            distanceMeters:  (s['distance']    as num?)?.toDouble() ?? 0,
-            durationSeconds: (s['duration']    as num?)?.toDouble() ?? 0,
-            wayPointStart:   wp != null ? (wp[0] as int) : 0,
-            wayPointEnd:     wp != null ? (wp[1] as int) : 0,
-          ));
-        }
-      }
-
-      // Enrich steps with stop names from Supabase (replaces Overpass enrichment)
-      final enrichedSteps = await _enrichStepsWithSupabase(
-        rawSteps, polyline, mode,
-      );
-
-      return OrsRouteResult(
-        distanceMeters:  distMeters,
-        durationSeconds: adjDurSec,
-        polyline:        polyline,
-        steps:           enrichedSteps,
-        bbox:            bbox,
-      );
-    } catch (e) {
-      debugPrint('[RoutingService] Parse error: $e');
-      return null;
+  static List<LatLng> _clipShapeToStops(
+      List<LatLng> shape, LatLng boardStop, LatLng alightStop) {
+    if (shape.length < 2) return shape;
+    int bIdx = _closestIdx(shape, boardStop);
+    int aIdx = _closestIdx(shape, alightStop);
+    if (bIdx == aIdx) return shape;
+    if (bIdx > aIdx) {
+      final rev = shape.reversed.toList();
+      return rev.sublist(shape.length - 1 - bIdx, shape.length - 1 - aIdx + 1);
     }
+    return shape.sublist(bIdx, aIdx + 1);
   }
 
-  // ── Supabase step enrichment (replaces Overpass getModesForSteps) ───────────
-
-  static Future<List<OrsStep>> _enrichStepsWithSupabase(
-    List<OrsStep> rawSteps,
-    List<LatLng> polyline,
-    String mode,
-  ) async {
-    // For each significant step, find the nearest stop from Supabase
-    // and use its name to enrich the instruction label
-    final futures = <Future<Map<String, dynamic>?>>[];
-    final indices = <int>[];
-
-    for (int i = 0; i < rawSteps.length; i++) {
-      final step = rawSteps[i];
-      if (step.distanceMeters < 50 || polyline.isEmpty) continue;
-
-      final start  = step.wayPointStart.clamp(0, polyline.length - 1);
-      final end    = step.wayPointEnd.clamp(0, polyline.length - 1);
-      final midIdx = ((start + end) / 2).round().clamp(0, polyline.length - 1);
-
-      futures.add(SupabaseRouteService.findNearestStop(
-        polyline[midIdx],
-        radiusKm: 0.15, // tighter radius for step enrichment
-      ));
-      indices.add(i);
+  static int _closestIdx(List<LatLng> polyline, LatLng target) {
+    int best = 0; double bestDist = double.infinity;
+    for (int i = 0; i < polyline.length; i++) {
+      final d = _haversineKm(polyline[i], target);
+      if (d < bestDist) { bestDist = d; best = i; }
     }
-
-    // Fetch all in parallel with a 6s cap
-    List<Map<String, dynamic>?> nearbyStops;
-    try {
-      nearbyStops = await Future.wait(futures)
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      debugPrint('[RoutingService] Step enrichment timed out — using raw steps');
-      return TransitModeInferrer.inferModes(rawSteps,
-          dominantMode: mode, overpassModes: List.filled(rawSteps.length, null));
-    }
-
-    // Build overpassModes-equivalent list for TransitModeInferrer
-    final stopNames = List<String?>.filled(rawSteps.length, null);
-    for (int i = 0; i < indices.length; i++) {
-      final stop = nearbyStops[i];
-      if (stop != null) {
-        stopNames[indices[i]] = stop['stop_name'] as String?;
-        debugPrint('[RoutingService] Step ${indices[i]} near stop: ${stop['stop_name']}');
-      }
-    }
-
-    return TransitModeInferrer.inferModes(
-      rawSteps,
-      dominantMode:  mode,
-      overpassModes: null, // same shape as before, now from Supabase
-    );
+    return best;
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  static LatLng? _inferViaWaypoint(LatLng origin, LatLng dest, String mode) {
-    final midLat = (origin.latitude  + dest.latitude)  / 2;
-    final midLng = (origin.longitude + dest.longitude) / 2;
-    if (!_isMetroManila(midLat, midLng)) return null;
-    if (mode == 'Bus' && (dest.longitude - origin.longitude).abs() > 0.02) {
-      return LatLng(midLat, _edsaLng);
+  static double _polylineDistanceKm(List<LatLng> points) {
+    double total = 0;
+    for (int i = 0; i < points.length - 1; i++) {
+      total += _haversineKm(points[i], points[i + 1]);
     }
-    return null;
+    return total;
+  }
+
+  static double _speedForMode(String mode) {
+    switch (mode) {
+      case 'Walk':     return 5.0;
+      case 'Jeepney':  return 20.0;
+      case 'Bus':      return 25.0;
+      case 'Train':    return 40.0;
+      case 'Tricycle': return 15.0;
+      case 'FX/Van':   return 30.0;
+      case 'Ferry':    return 20.0;
+      default:         return 20.0;
+    }
   }
 
   static double _haversineKm(LatLng a, LatLng b) {
-    const r = 6371.0;
+    const r    = 6371.0;
     final dLat = _rad(b.latitude  - a.latitude);
     final dLng = _rad(b.longitude - a.longitude);
-    final x = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final x    = math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_rad(a.latitude)) * math.cos(_rad(b.latitude)) *
             math.sin(dLng / 2) * math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(x), math.sqrt(1 - x));
   }
 
   static double _rad(double deg) => deg * math.pi / 180;
-
-  static bool _isMetroManila(double lat, double lng) =>
-      lat >= _mmMinLat && lat <= _mmMaxLat &&
-      lng >= _mmMinLng && lng <= _mmMaxLng;
 }

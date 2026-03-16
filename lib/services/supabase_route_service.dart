@@ -3,6 +3,51 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// A single vehicle ride between two stops.
+class TransitLeg {
+  final String tripId;
+  final String routeId;
+  final String? shapeId;
+  final String? routeShortName;
+  final String? routeLongName;
+  final String? routeColor;
+  final int?    routeType;
+  final String  boardStopId;
+  final String  alightStopId;
+  final String  boardStopName;
+  final String  alightStopName;
+  final double  boardLat;
+  final double  boardLon;
+  final double  alightLat;
+  final double  alightLon;
+
+  const TransitLeg({
+    required this.tripId,
+    required this.routeId,
+    this.shapeId,
+    this.routeShortName,
+    this.routeLongName,
+    this.routeColor,
+    this.routeType,
+    required this.boardStopId,
+    required this.alightStopId,
+    required this.boardStopName,
+    required this.alightStopName,
+    required this.boardLat,
+    required this.boardLon,
+    required this.alightLat,
+    required this.alightLon,
+  });
+}
+
+/// 1 leg = direct, 2 legs = one transfer.
+class TripPlan {
+  final List<TransitLeg> legs;
+  const TripPlan(this.legs);
+  bool get isDirect    => legs.length == 1;
+  bool get hasTransfer => legs.length == 2;
+}
+
 class SupabaseRouteService {
   static final _client = Supabase.instance.client;
 
@@ -11,9 +56,9 @@ class SupabaseRouteService {
     LatLng point, {
     double radiusKm = 0.5,
   }) async {
-    // Bounding box search first (Supabase doesn't have native geo queries)
     final latDelta = radiusKm / 111.0;
-    final lngDelta = radiusKm / (111.0 * math.cos(point.latitude * math.pi / 180));
+    final lngDelta =
+        radiusKm / (111.0 * math.cos(point.latitude * math.pi / 180));
 
     final results = await _client
         .from('stops')
@@ -25,80 +70,130 @@ class SupabaseRouteService {
 
     if (results.isEmpty) return null;
 
-    // Find the actual closest by haversine
     results.sort((a, b) {
-      final distA = _haversineKm(
-        point, LatLng(a['stop_lat'], a['stop_lon']));
-      final distB = _haversineKm(
-        point, LatLng(b['stop_lat'], b['stop_lon']));
-      return distA.compareTo(distB);
+      final dA = _haversineKm(point, LatLng(a['stop_lat'], a['stop_lon']));
+      final dB = _haversineKm(point, LatLng(b['stop_lat'], b['stop_lon']));
+      return dA.compareTo(dB);
     });
 
     return results.first;
   }
 
-  // ── Find trips connecting two stops ───────────────────────────────────────
-  static Future<List<Map<String, dynamic>>> findTripsBetween(
+  // ── Find a trip plan via Supabase RPC (server-side, no row-limit issues) ──
+  //
+  // Calls the `find_trip_plan` PostgreSQL function which handles both
+  // direct and 1-transfer routing entirely in the DB.
+  static Future<TripPlan?> findTripPlan(
     String originStopId,
     String destStopId,
   ) async {
-    // Get all trips + sequences for origin stop
-    final originTimes = await _client
-        .from('stop_times')
-        .select('trip_id, stop_sequence')
-        .eq('stop_id', originStopId);
+    debugPrint('[SupabaseRouteService] findTripPlan: "$originStopId" → "$destStopId"');
 
-    if (originTimes.isEmpty) return [];
+    final response = await _client.rpc('find_trip_plan', params: {
+      'origin_stop_id': originStopId,
+      'dest_stop_id':   destStopId,
+    });
 
-    final tripIds = originTimes.map((e) => e['trip_id'].toString()).toList();
-    final originSeqMap = {
-      for (var t in originTimes)
-        t['trip_id'].toString(): t['stop_sequence'] as int
-    };
+    if (response == null) {
+      debugPrint('[SupabaseRouteService] RPC returned null — no route found');
+      return null;
+    }
 
-    // Get matching trips that also serve dest stop
-    final destTimes = await _client
-        .from('stop_times')
-        .select('trip_id, stop_sequence')
-        .eq('stop_id', destStopId)
-        .inFilter('trip_id', tripIds);
+    final data = Map<String, dynamic>.from(response as Map);
+    final type = data['type'] as String?;
 
-    // Filter: dest sequence must be AFTER origin sequence
-    final validTripIds = destTimes
-        .where((d) =>
-            (d['stop_sequence'] as int) >
-            (originSeqMap[d['trip_id'].toString()] ?? 0))
-        .map((d) => d['trip_id'].toString())
-        .toList();
+    debugPrint('[SupabaseRouteService] RPC result type: $type');
 
-    if (validTripIds.isEmpty) return [];
+    if (type == 'direct') {
+      final leg = await _buildLeg(
+        tripId:      data['leg1_trip_id'].toString(),
+        boardStopId: originStopId,
+        alightStopId: destStopId,
+      );
+      if (leg == null) return null;
+      debugPrint('[SupabaseRouteService] Direct route ✓');
+      return TripPlan([leg]);
+    }
 
-    // Get route info for valid trips
-    final trips = await _client
+    if (type == 'transfer') {
+      final transferStopId = data['transfer_stop_id'].toString();
+      debugPrint('[SupabaseRouteService] Transfer via stop: $transferStopId');
+
+      final leg1 = await _buildLeg(
+        tripId:      data['leg1_trip_id'].toString(),
+        boardStopId: originStopId,
+        alightStopId: transferStopId,
+      );
+      final leg2 = await _buildLeg(
+        tripId:      data['leg2_trip_id'].toString(),
+        boardStopId: transferStopId,
+        alightStopId: destStopId,
+      );
+
+      if (leg1 == null || leg2 == null) return null;
+      debugPrint('[SupabaseRouteService] Transfer route ✓');
+      return TripPlan([leg1, leg2]);
+    }
+
+    return null;
+  }
+
+  // ── Build a single TransitLeg ──────────────────────────────────────────────
+  static Future<TransitLeg?> _buildLeg({
+    required String tripId,
+    required String boardStopId,
+    required String alightStopId,
+  }) async {
+    final tripRow = await _client
         .from('trips')
-        .select('trip_id, route_id, shape_id, direction_id')
-        .inFilter('trip_id', validTripIds);
+        .select('trip_id, route_id, shape_id')
+        .eq('trip_id', tripId)
+        .maybeSingle();
 
-    final routeIds = trips.map((t) => t['route_id'].toString()).toSet().toList();
+    if (tripRow == null) return null;
 
-    final routes = await _client
+    final routeId = tripRow['route_id'].toString();
+    final shapeId = tripRow['shape_id']?.toString();
+
+    final stopRows = await _client
+        .from('stops')
+        .select('stop_id, stop_name, stop_lat, stop_lon')
+        .inFilter('stop_id', [boardStopId, alightStopId]);
+
+    final routeRow = await _client
         .from('routes')
         .select('route_id, route_short_name, route_long_name, route_color, route_type')
-        .inFilter('route_id', routeIds);
+        .eq('route_id', routeId)
+        .maybeSingle();
 
-    final routeMap = {for (var r in routes) r['route_id'].toString(): r};
+    Map<String, dynamic>? boardStop, alightStop;
+    for (final s in stopRows) {
+      if (s['stop_id'].toString() == boardStopId)  boardStop  = Map.from(s);
+      if (s['stop_id'].toString() == alightStopId) alightStop = Map.from(s);
+    }
 
-    // Combine trip + route info
-    return trips.map((t) {
-      final route = routeMap[t['route_id'].toString()] ?? {};
-      return {
-        ...t,
-        'route_short_name': route['route_short_name'],
-        'route_long_name':  route['route_long_name'],
-        'route_color':      route['route_color'],
-        'route_type':       route['route_type'],
-      };
-    }).toList();
+    if (boardStop == null || alightStop == null) {
+      debugPrint('[SupabaseRouteService] Could not find stop coords for leg $tripId');
+      return null;
+    }
+
+    return TransitLeg(
+      tripId:         tripId,
+      routeId:        routeId,
+      shapeId:        shapeId,
+      routeShortName: routeRow?['route_short_name'] as String?,
+      routeLongName:  routeRow?['route_long_name']  as String?,
+      routeColor:     routeRow?['route_color']       as String?,
+      routeType:      routeRow?['route_type']        as int?,
+      boardStopId:    boardStopId,
+      alightStopId:   alightStopId,
+      boardStopName:  boardStop['stop_name']  as String? ?? 'Stop',
+      alightStopName: alightStop['stop_name'] as String? ?? 'Stop',
+      boardLat:  (boardStop['stop_lat']  as num).toDouble(),
+      boardLon:  (boardStop['stop_lon']  as num).toDouble(),
+      alightLat: (alightStop['stop_lat'] as num).toDouble(),
+      alightLon: (alightStop['stop_lon'] as num).toDouble(),
+    );
   }
 
   // ── Get shape polyline for a trip ─────────────────────────────────────────
@@ -146,16 +241,14 @@ class SupabaseRouteService {
     }).toList();
   }
 
-  // ── Haversine helper ──────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
   static double _haversineKm(LatLng a, LatLng b) {
-    const r = 6371.0;
-    final dLat = _rad(b.latitude - a.latitude);
+    const r    = 6371.0;
+    final dLat = _rad(b.latitude  - a.latitude);
     final dLng = _rad(b.longitude - a.longitude);
-    final x = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_rad(a.latitude)) *
-            math.cos(_rad(b.latitude)) *
-            math.sin(dLng / 2) *
-            math.sin(dLng / 2);
+    final x    = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(a.latitude)) * math.cos(_rad(b.latitude)) *
+            math.sin(dLng / 2) * math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(x), math.sqrt(1 - x));
   }
 

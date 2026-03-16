@@ -48,15 +48,15 @@ class _SearchScreenState extends State<SearchScreen> {
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border      = Color(0xFFD4E4F7);
 
-  // ─── ORS state ────────────────────────────────────────────────────────────
+  // ─── Route state ──────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
-  bool _isLoadingOrs     = false;
-  bool _orsError         = false;
+  bool _isLoadingOrs      = false;
+  bool _orsError          = false;
   String _orsErrorMessage = '';
-  String _lastOrsQuery   = '';
+  String _lastOrsQuery    = '';
 
   // ─── Origin state ─────────────────────────────────────────────────────────
-  bool _useCurrentLocation = true;
+  bool _useCurrentLocation  = true;
   bool _isDetectingLocation = false;
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -80,26 +80,19 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _recentSearches = searches);
   }
 
-  // ─── Issue 7: Philippines-biased geocoding ────────────────────────────────
-  //
-  // Uses Nominatim with countrycodes=ph and the Philippines viewbox so that
-  // "España Blvd" doesn't resolve to Spain.  Falls back to the geocoding
-  // package if Nominatim fails.
+  // ─── Philippines-biased geocoding ─────────────────────────────────────────
 
-  /// Converts a place name / address to a [LatLng], biased to the Philippines.
-  /// Returns null if geocoding fails entirely.
   Future<LatLng?> _geocodePhilippines(String query) async {
     // ── Nominatim (primary) ──────────────────────────────────────────────────
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q':              query,
-        'format':         'json',
-        'limit':          '5',
-        'countrycodes':   'ph',
-        // Philippines bounding box — prevents off-country results
-        'viewbox':        '116.0,4.5,127.0,21.5',
-        'bounded':        '0',           // prefer PH but don't hard-restrict
-        'accept-language':'en',
+        'q':               query,
+        'format':          'json',
+        'limit':           '5',
+        'countrycodes':    'ph',
+        'viewbox':         '116.0,4.5,127.0,21.5',
+        'bounded':         '0',
+        'accept-language': 'en',
       });
 
       final response = await http.get(uri, headers: {
@@ -109,7 +102,6 @@ class _SearchScreenState extends State<SearchScreen> {
       if (response.statusCode == 200) {
         final results = jsonDecode(response.body) as List;
         if (results.isNotEmpty) {
-          // Prefer results inside the Philippines bounding box
           Map<String, dynamic>? best;
           for (final r in results.cast<Map<String, dynamic>>()) {
             final lat = double.tryParse(r['lat'] as String? ?? '') ?? 0;
@@ -134,7 +126,6 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
-        // Filter to Philippines if possible
         final phLocations = locations.where((l) =>
           l.latitude  >= 4.5  && l.latitude  <= 21.5 &&
           l.longitude >= 116.0 && l.longitude <= 127.0,
@@ -155,15 +146,15 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onSearch(String query) {
     if (query.trim().isEmpty) {
       setState(() {
-        _isSearching = false;
+        _isSearching    = false;
         _filteredRoutes = [];
-        _suggestions = [];
-        _showOmnibox = false;
+        _suggestions    = [];
+        _showOmnibox    = false;
       });
       return;
     }
 
-    final searchTerm = query.trim().toLowerCase();
+    final searchTerm     = query.trim().toLowerCase();
     final newSuggestions = <String>[];
 
     for (final s in _recentSearches) {
@@ -198,8 +189,8 @@ class _SearchScreenState extends State<SearchScreen> {
                r.shortDescription.trim().toLowerCase().contains(searchTerm);
       }).toList();
       if (query.trim() != _lastOrsQuery) {
-        _orsResult      = null;
-        _orsError       = false;
+        _orsResult       = null;
+        _orsError        = false;
         _orsErrorMessage = '';
       }
     });
@@ -228,7 +219,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (query.trim().isNotEmpty) {
       await SearchService.addRecentSearch(query.trim());
       await _loadRecentSearches();
-      final user         = await GamificationService.loadUser();
+      final user          = await GamificationService.loadUser();
       final unlockedItems = await GamificationService.incrementRoutesSearched(user);
       if (unlockedItems.isNotEmpty) {
         setState(() {
@@ -279,18 +270,18 @@ class _SearchScreenState extends State<SearchScreen> {
     return sorted.take(10).toList();
   }
 
-  // ─── ORS route fetching ───────────────────────────────────────────────────
+  // ─── Route generation ─────────────────────────────────────────────────────
 
   Future<void> _fetchOrsRoute() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
     setState(() {
-      _isLoadingOrs   = true;
-      _orsError       = false;
+      _isLoadingOrs    = true;
+      _orsError        = false;
       _orsErrorMessage = '';
-      _orsResult      = null;
-      _lastOrsQuery   = query;
+      _orsResult       = null;
+      _lastOrsQuery    = query;
     });
 
     try {
@@ -321,7 +312,6 @@ class _SearchScreenState extends State<SearchScreen> {
           });
           return;
         }
-        // Issue 7 — Nominatim geocoding with PH bias
         final originLatLng = await _geocodePhilippines(originText);
         if (originLatLng == null) {
           setState(() {
@@ -335,7 +325,6 @@ class _SearchScreenState extends State<SearchScreen> {
         originName = originText;
       }
 
-      // Issue 7 — Nominatim geocoding with PH bias
       final destLatLng = await _geocodePhilippines(query);
       if (destLatLng == null) {
         setState(() {
@@ -346,6 +335,7 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
 
+      // ── Supabase/GTFS routing — throws RoutingException on failure ──────────
       final result = await RoutingService.getRoute(
         originName:      originName,
         origin:          origin,
@@ -354,18 +344,16 @@ class _SearchScreenState extends State<SearchScreen> {
         mode:            'Jeepney',
       );
 
-      if (result == null) {
-        setState(() {
-          _isLoadingOrs    = false;
-          _orsError        = true;
-          _orsErrorMessage = 'Could not generate a route. Check your ORS API key or try again.';
-        });
-        return;
-      }
-
       setState(() {
         _isLoadingOrs = false;
         _orsResult    = result;
+      });
+    } on RoutingException catch (e) {
+      // Descriptive failures from the routing service (no stops, no trips, etc.)
+      setState(() {
+        _isLoadingOrs    = false;
+        _orsError        = true;
+        _orsErrorMessage = e.message;
       });
     } catch (e) {
       setState(() {
@@ -626,7 +614,7 @@ class _SearchScreenState extends State<SearchScreen> {
           return InkWell(
             onTap: () => _onSuggestionTap(suggestion),
             borderRadius: BorderRadius.vertical(
-              top:    index == 0                      ? const Radius.circular(14) : Radius.zero,
+              top:    index == 0                       ? const Radius.circular(14) : Radius.zero,
               bottom: index == _suggestions.length - 1 ? const Radius.circular(14) : Radius.zero,
             ),
             child: Padding(
@@ -686,7 +674,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
             Text(
-              'Generating route…',
+              'Finding your route…',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
@@ -720,8 +708,8 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Auto-generated route via OpenRouteService — not yet verified by the community. '
-                  'Road names and distances are estimated.',
+                  'Auto-generated route from transit stop data — not yet verified by the community. '
+                  'Distances and fares are estimated.',
                   style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
                 ),
               ),
@@ -757,9 +745,9 @@ class _SearchScreenState extends State<SearchScreen> {
                 Wrap(
                   spacing: 8, runSpacing: 6,
                   children: [
-                    _infoChip(Icons.straighten,      _orsResult!.distanceLabel, Colors.green),
-                    _infoChip(Icons.timer_outlined,  _orsResult!.durationLabel, Colors.orange),
-                    _infoChip(Icons.payments_outlined, _totalFareRange(),        Colors.green.shade700),
+                    _infoChip(Icons.straighten,       _orsResult!.distanceLabel, Colors.green),
+                    _infoChip(Icons.timer_outlined,   _orsResult!.durationLabel, Colors.orange),
+                    _infoChip(Icons.payments_outlined, _totalFareRange(),         Colors.green.shade700),
                   ],
                 ),
                 if (_orsResult!.steps.isNotEmpty) ...[
@@ -852,7 +840,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Generate a route using OpenRouteService instead.',
+          'Generate a route from transit stop data instead.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: _textSecondary),
         ),
@@ -866,7 +854,8 @@ class _SearchScreenState extends State<SearchScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50, borderRadius: BorderRadius.circular(10),
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.red.shade200),
               ),
               child: Text(
@@ -904,7 +893,6 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Starting point ─────────────────────────────────────────────────
           Text(
             'Starting point',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
@@ -929,7 +917,8 @@ class _SearchScreenState extends State<SearchScreen> {
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 220),
             crossFadeState: _useCurrentLocation
-                ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -968,14 +957,14 @@ class _SearchScreenState extends State<SearchScreen> {
                         : const Icon(Icons.my_location, size: 18),
                     tooltip: 'Use GPS location',
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white,
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-
           const SizedBox(height: 16),
         ],
       ),
