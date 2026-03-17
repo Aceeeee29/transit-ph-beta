@@ -6,15 +6,20 @@ import '../services/route_metrics_service.dart';
 
 class RoutePreview extends StatelessWidget {
   final route_model.Route route;
-  final VoidCallback onEdit;
-  final VoidCallback onSubmit;
+  final VoidCallback? onEdit;
+  final VoidCallback? onSubmit;
+  final bool readOnly;
 
   const RoutePreview({
     super.key,
     required this.route,
-    required this.onEdit,
-    required this.onSubmit,
-  });
+    this.onEdit,
+    this.onSubmit,
+    this.readOnly = false,
+  }) : assert(
+          readOnly || (onEdit != null && onSubmit != null),
+          'onEdit and onSubmit are required when readOnly is false',
+        );
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -108,32 +113,33 @@ class RoutePreview extends StatelessWidget {
           ],
         ),
         actions: [
-          GestureDetector(
-            onTap: onEdit,
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: _border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.edit_outlined, color: _textSecondary, size: 14),
-                  SizedBox(width: 5),
-                  Text(
-                    'Edit',
-                    style: TextStyle(
-                      color: _textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+          if (!readOnly && onEdit != null)
+            GestureDetector(
+              onTap: onEdit,
+              child: Container(
+                margin: const EdgeInsets.only(right: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: _border),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.edit_outlined, color: _textSecondary, size: 14),
+                    SizedBox(width: 5),
+                    Text(
+                      'Edit',
+                      style: TextStyle(
+                        color: _textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -400,11 +406,12 @@ class RoutePreview extends StatelessWidget {
                     },
                   ),
 
-                  const SizedBox(height: 16),
+                  if (!readOnly && onSubmit != null) ...[
+                    const SizedBox(height: 16),
 
-                  // ── Submit button ────────────────────────────────────────
-                  GestureDetector(
-                    onTap: () async {
+                    // ── Submit button ────────────────────────────────────────
+                    GestureDetector(
+                      onTap: () async {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder:
@@ -598,50 +605,51 @@ class RoutePreview extends StatelessWidget {
                               ),
                             ),
                       );
-                      if (confirm == true) {
-                        onSubmit();
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                        if (confirm == true) {
+                          onSubmit!.call();
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
                           ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.send_rounded,
-                            color: Colors.white,
-                            size: 17,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Submit Route',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accent.withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 17,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Submit Route',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

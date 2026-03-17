@@ -57,47 +57,61 @@ class AuthGate extends StatelessWidget {
         if (snapshot.hasData) {
           final user = snapshot.data!;
           print('User signed in: ${user.uid}, email: ${user.email}, emailVerified: ${user.emailVerified}');
-          // Check if email is verified (skip for Google sign-in users)
-          final isGoogleUser = user.providerData.any((provider) => provider.providerId == 'google.com');
-          print('Is Google user: $isGoogleUser');
-          if (!user.emailVerified && !isGoogleUser) {
-            print('Redirecting to email verification');
-            return EmailVerificationScreen(user: user);
-          }
-          print('Email verified or Google user, proceeding to role check');
 
-          // User is signed in and verified, check role and onboarding status
+          // ── Fetch role FIRST before any other checks ───────────────────────
           return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get(),
             builder: (context, userSnapshot) {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return _loadingScaffold();
               }
 
               if (userSnapshot.hasError) {
-                // Handle error, perhaps show error message or sign out
                 print('Error fetching user document: ${userSnapshot.error}');
                 FirebaseAuth.instance.signOut();
                 return const LoginScreen();
               }
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final data = userSnapshot.data!.data() as Map<String, dynamic>;
+                final data =
+                    userSnapshot.data!.data() as Map<String, dynamic>;
                 final role = data['role'] as String?;
-                final isAdmin = role == 'moderator';
-                final hasSeenTutorial = data['hasSeenTutorial'] as bool? ?? false;
+                final isAdmin =
+                    role == 'moderator' || role == 'admin';
+                final hasSeenTutorial =
+                    data['hasSeenTutorial'] as bool? ?? false;
 
-                if (!hasSeenTutorial) {
-                  // Show onboarding if not seen
-                  return OnboardingScreen(user: user);
-                } else {
-                  // Proceed to main screen
-                  return MainScreen(isAdmin: isAdmin);
+                // ── Moderators/admins skip email verification & onboarding ──
+                if (isAdmin) {
+                  print('Moderator/admin detected — skipping verification and onboarding');
+                  return MainScreen(isAdmin: true);
                 }
+
+                // ── Regular users: check email verification ─────────────────
+                final isGoogleUser = user.providerData
+                    .any((p) => p.providerId == 'google.com');
+                print('Is Google user: $isGoogleUser');
+
+                if (!user.emailVerified && !isGoogleUser) {
+                  print('Redirecting to email verification');
+                  return EmailVerificationScreen(user: user);
+                }
+
+                // ── Check onboarding ────────────────────────────────────────
+                if (!hasSeenTutorial) {
+                  return OnboardingScreen(user: user);
+                }
+
+                return MainScreen(isAdmin: false);
+
               } else {
-                                // Document may not exist yet — race between auth event and
+                // Document may not exist yet — race between auth event and
                 // Firestore write completing. Wait 2 s then retry once.
-                print('User document not found for UID: ${user.uid} — retrying...');
+                print(
+                    'User document not found for UID: ${user.uid} — retrying...');
                 return FutureBuilder<DocumentSnapshot>(
                   future: Future.delayed(const Duration(seconds: 2)).then(
                     (_) => FirebaseFirestore.instance
@@ -110,26 +124,32 @@ class AuthGate extends StatelessWidget {
                         ConnectionState.waiting) {
                       return _loadingScaffold();
                     }
+
                     if (retrySnapshot.hasData &&
                         retrySnapshot.data!.exists) {
                       final data = retrySnapshot.data!.data()
                           as Map<String, dynamic>;
-                      final isAdmin = data['role'] == 'moderator';
+                      final role = data['role'] as String?;
+                      final isAdmin =
+                          role == 'moderator' || role == 'admin';
                       final hasSeenTutorial =
                           data['hasSeenTutorial'] as bool? ?? false;
+
+                      // Moderators skip verification & onboarding on retry too
+                      if (isAdmin) return MainScreen(isAdmin: true);
+
                       return hasSeenTutorial
-                          ? MainScreen(isAdmin: isAdmin)
+                          ? MainScreen(isAdmin: false)
                           : OnboardingScreen(user: user);
                     }
-                    // Still no document after retry — sign out for real
+
+                    // Still no document after retry — sign out
                     print(
-                      'User document still not found after retry — signing out',
-                    );
+                        'User document still not found after retry — signing out');
                     FirebaseAuth.instance.signOut();
                     return const LoginScreen();
                   },
                 );
-
               }
             },
           );

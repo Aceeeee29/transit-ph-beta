@@ -103,11 +103,12 @@ class _MainScreenState extends State<MainScreen> {
       ),
       ContributeScreen(
         onRouteSubmitted: (route) async {
-          setState(() => routes.add(route));
+          await RouteService.saveRoute(route);
+          await _loadData();
         },
       ),
       const ProfileScreen(),
-      if (widget.isAdmin) const ModeratorScreen(),
+      if (widget.isAdmin) ModeratorScreen(onRoutesModerated: _loadData),
     ];
 
     // ─── Nav items ────────────────────────────────────────────────────────────

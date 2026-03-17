@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
+import 'moderator_login_screen.dart'; // ← new import
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,7 +27,6 @@ class _LoginScreenState extends State<LoginScreen> {
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
   static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -34,9 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter email and password';
-      });
+      setState(() => _errorMessage = 'Please enter email and password');
       return;
     }
 
@@ -52,13 +50,11 @@ class _LoginScreenState extends State<LoginScreen> {
             password: _passwordController.text.trim(),
           );
 
-      // Check if user document exists, if not create it
       try {
-        final userDoc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(userCredential.user!.uid)
-                .get();
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
         if (!userDoc.exists) {
           await FirebaseFirestore.instance
               .collection('users')
@@ -86,32 +82,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 'followedRouteIds': [],
                 'hasSeenTutorial': false,
               });
-          print(
-            'Created user document for email user: ${userCredential.user!.uid}',
-          );
-        } else {
-          print(
-            'User document already exists for email user: ${userCredential.user!.uid}',
-          );
         }
       } catch (firestoreError) {
         print('Failed to create/check user document: $firestoreError');
-        // Continue anyway, AuthGate will handle missing document
       }
-
-      // AuthGate will handle navigation based on role
+      // AuthGate handles navigation
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _errorMessage = _getErrorMessage(e.code);
-      });
+      setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
-      setState(() {
-        _errorMessage = 'An unexpected error occurred';
-      });
+      setState(() => _errorMessage = 'An unexpected error occurred');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -124,12 +105,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
       if (googleUser == null) {
-        // User cancelled the sign-in
-        setState(() {
-          _isGoogleLoading = false;
-        });
+        setState(() => _isGoogleLoading = false);
         return;
       }
 
@@ -140,16 +117,14 @@ class _LoginScreenState extends State<LoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithCredential(credential);
+      final UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
 
-      // Check if user document exists, if not create it
       try {
-        final userDoc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(userCredential.user!.uid)
-                .get();
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
         if (!userDoc.exists) {
           await FirebaseFirestore.instance
               .collection('users')
@@ -177,29 +152,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 'followedRouteIds': [],
                 'hasSeenTutorial': false,
               });
-          print(
-            'Created user document for Google user: ${userCredential.user!.uid}',
-          );
-        } else {
-          print(
-            'User document already exists for Google user: ${userCredential.user!.uid}',
-          );
         }
       } catch (firestoreError) {
         print('Failed to create/check user document: $firestoreError');
-        // Continue anyway, AuthGate will handle missing document
       }
-
-      // AuthGate will handle navigation based on role
     } catch (e) {
-      print('Google sign-in error: $e');
-      setState(() {
-        _errorMessage = 'Failed to sign in with Google: ${e.toString()}';
-      });
+      setState(() => _errorMessage = 'Failed to sign in with Google: ${e.toString()}');
     } finally {
-      setState(() {
-        _isGoogleLoading = false;
-      });
+      setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -260,8 +220,7 @@ class _LoginScreenState extends State<LoginScreen> {
             style: const TextStyle(color: _textPrimary, fontSize: 14),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle:
-                  const TextStyle(color: _textSecondary, fontSize: 14),
+              hintStyle: const TextStyle(color: _textSecondary, fontSize: 14),
               prefixIcon: Icon(prefixIcon, color: _accent, size: 18),
               suffixIcon: suffix,
               border: InputBorder.none,
@@ -423,8 +382,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: BoxDecoration(
                             color: _danger.withOpacity(0.07),
                             borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: _danger.withOpacity(0.3)),
+                            border: Border.all(color: _danger.withOpacity(0.3)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,10 +554,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const Text(
                       "Don't have an account? ",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _textSecondary,
-                      ),
+                      style: TextStyle(fontSize: 13, color: _textSecondary),
                     ),
                     GestureDetector(
                       onTap: () {
@@ -621,6 +576,52 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 28),
+
+                // ── Moderator access link ──────────────────────────────────
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ModeratorLoginScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F4FF),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 14,
+                          color: _textSecondary,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Moderator Access',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
               ],
             ),
           ),

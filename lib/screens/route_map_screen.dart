@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'dart:convert';
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
 import '../services/route_metrics_service.dart';
+import '../services/route_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 
@@ -28,6 +30,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool? _userVote;
+  String? _currentUserId;
+  bool _isApplyingVote = false;
   List<LatLng> _pathPoints = [];
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
@@ -59,12 +63,37 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     super.initState();
     _initLocation();
     _loadReports();
-    _incrementViews();
+    _loadEngagementState();
     _generatePathPoints();
   }
 
-  Future<void> _incrementViews() async {
-    setState(() => widget.route.views++);
+  Future<void> _loadEngagementState() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _currentUserId = uid;
+
+    try {
+      await RouteService.incrementViewForUser(widget.route.id, uid);
+      final results = await Future.wait([
+        RouteService.getRouteById(widget.route.id),
+        RouteService.getUserVote(widget.route.id, uid),
+      ]);
+
+      if (!mounted) return;
+
+      final latestRoute = results[0] as route_model.Route?;
+      final vote = results[1] as bool?;
+
+      setState(() {
+        if (latestRoute != null) {
+          widget.route.views = latestRoute.views;
+          widget.route.upvotes = latestRoute.upvotes;
+          widget.route.downvotes = latestRoute.downvotes;
+        }
+        _userVote = vote;
+      });
+    } catch (_) {}
   }
 
   Future<void> _initLocation() async {
@@ -75,9 +104,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           desiredAccuracy: LocationAccuracy.high,
         );
         setState(() {});
-      } catch (e) {
-        // Handle error silently
-      }
+      } catch (e) {}
     }
   }
 
@@ -129,9 +156,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               })
           .toList();
       await file.writeAsString(jsonEncode(allReports));
-    } catch (e) {
-      // Handle error silently
-    }
+    } catch (e) {}
   }
 
   void _generatePathPoints() {
@@ -159,27 +184,78 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final lngStep = (end.longitude - start.longitude) / numSegments;
     _pathPoints = List.generate(
       numSegments + 1,
-      (i) => LatLng(start.latitude + latStep * i, start.longitude + lngStep * i),
+      (i) => LatLng(
+          start.latitude + latStep * i, start.longitude + lngStep * i),
     );
   }
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
-  void _vote(bool isUpvote) {
-    if (_userVote != null) {
+  Future<void> _vote(bool isUpvote) async {
+    if (_isApplyingVote) return;
+
+    if (_currentUserId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You have already voted on this route')),
+        const SnackBar(content: Text('Sign in to vote on routes')),
       );
       return;
     }
-    setState(() {
-      _userVote = isUpvote;
-      if (isUpvote) {
-        widget.route.upvotes++;
-      } else {
-        widget.route.downvotes++;
-      }
-    });
+
+    if (_userVote != null && _userVote != isUpvote) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Remove your current vote first before voting again'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isApplyingVote = true);
+
+    try {
+      final updatedVote = await RouteService.setUserVote(
+        routeId: widget.route.id,
+        userId: _currentUserId!,
+        isUpvote: isUpvote,
+      );
+
+      final latestRoute =
+          await RouteService.getRouteById(widget.route.id);
+      if (!mounted) return;
+
+      setState(() {
+        _userVote = updatedVote;
+        if (latestRoute != null) {
+          widget.route.upvotes = latestRoute.upvotes;
+          widget.route.downvotes = latestRoute.downvotes;
+          widget.route.views = latestRoute.views;
+        }
+      });
+
+      final message = updatedVote == null
+          ? 'Vote removed'
+          : (updatedVote ? 'Upvoted route' : 'Downvoted route');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 1)),
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      final message = e.message == 'remove_first'
+          ? 'Remove your current vote first before voting again'
+          : 'Unable to save vote right now';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save vote right now')),
+      );
+    } finally {
+      if (mounted) setState(() => _isApplyingVote = false);
+    }
   }
 
   void _showReportDialog() {
@@ -316,8 +392,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       final step = widget.route.steps[i];
       final color = modeColors[step.mode] ?? Colors.blue;
       final startIdx = i == 0 ? 0 : boundaries[i - 1];
-      final endIdx =
-          i < boundaries.length ? boundaries[i] : _pathPoints.length - 1;
+      final endIdx = i < boundaries.length
+          ? boundaries[i]
+          : _pathPoints.length - 1;
       if (endIdx > startIdx) {
         final pts = _pathPoints.sublist(startIdx, endIdx + 1);
         result.add(Polyline(
@@ -353,7 +430,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (_pathPoints.isNotEmpty) {
       result.add(Marker(
         point: _pathPoints.first,
-        child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+        child:
+            const Icon(Icons.location_on, color: Colors.green, size: 40),
       ));
     }
     if (_pathPoints.length > 1) {
@@ -368,7 +446,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           _currentPosition!.latitude,
           _currentPosition!.longitude,
         ),
-        child: const Icon(Icons.my_location, color: Colors.blue, size: 40),
+        child:
+            const Icon(Icons.my_location, color: Colors.blue, size: 40),
       ));
     }
     return result;
@@ -431,11 +510,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
-                Icons.map_outlined,
-                size: 36,
-                color: _textSecondary,
-              ),
+              child: const Icon(Icons.map_outlined,
+                  size: 36, color: _textSecondary),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -468,11 +544,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: _border),
           ),
-          child: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 15,
-            color: _textSecondary,
-          ),
+          child: const Icon(Icons.arrow_back_ios_new,
+              size: 15, color: _textSecondary),
         ),
       ),
       title: Column(
@@ -490,7 +563,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           ),
           Row(
             children: [
-              const Icon(Icons.arrow_forward, size: 11, color: _textSecondary),
+              const Icon(Icons.arrow_forward,
+                  size: 11, color: _textSecondary),
               const SizedBox(width: 3),
               Flexible(
                 child: Text(
@@ -513,14 +587,14 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           count: widget.route.upvotes,
           active: _userVote == true,
           activeColor: _green,
-          onTap: _userVote == null ? () => _vote(true) : null,
+          onTap: _isApplyingVote ? null : () => _vote(true),
         ),
         _VoteButton(
           icon: Icons.arrow_downward_rounded,
           count: widget.route.downvotes,
           active: _userVote == false,
           activeColor: _danger,
-          onTap: _userVote == null ? () => _vote(false) : null,
+          onTap: _isApplyingVote ? null : () => _vote(false),
         ),
         GestureDetector(
           onTap: _showReportDialog,
@@ -533,11 +607,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: _danger.withOpacity(0.25)),
             ),
-            child: const Icon(
-              Icons.report_problem_outlined,
-              color: _danger,
-              size: 17,
-            ),
+            child: const Icon(Icons.report_problem_outlined,
+                color: _danger, size: 17),
           ),
         ),
       ],
@@ -567,7 +638,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           ),
           children: [
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              urlTemplate:
+                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.example.app.transitph_beta',
             ),
             MarkerLayer(markers: markers),
@@ -646,7 +718,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             ),
           ],
         ),
-        child: const Icon(Icons.my_location_rounded, color: _accent, size: 20),
+        child: const Icon(Icons.my_location_rounded,
+            color: _accent, size: 20),
       ),
     );
   }
@@ -662,10 +735,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         children: [
           _buildMetricsRow(),
           const SizedBox(height: 16),
-          _buildSectionLabel('Route Steps (${widget.route.steps.length})'),
+          _buildSectionLabel(
+              'Route Steps (${widget.route.steps.length})'),
           ...widget.route.steps.asMap().entries.map(
-            (e) => _buildStepTile(e.key, e.value),
-          ),
+                (e) => _buildStepTile(e.key, e.value),
+              ),
           if (_routeReports.isNotEmpty) ...[
             const SizedBox(height: 6),
             _buildSectionLabel('Recent Reports'),
@@ -677,7 +751,25 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
+  // ─── FIXED: use saved distance fields instead of recalculating ────────────
   Widget _buildMetricsRow() {
+    // Priority: distanceMeters (most accurate, from ORS snap-to-road)
+    //           → distance string (pre-formatted at submission time)
+    //           → recalculate from path points (last resort only)
+    final distanceValue = () {
+      if (widget.route.distanceMeters != null &&
+          widget.route.distanceMeters! > 0) {
+        return RouteMetricsService.formatDistance(
+            widget.route.distanceMeters! / 1000);
+      }
+      if (widget.route.distance != null &&
+          widget.route.distance!.isNotEmpty) {
+        return widget.route.distance!;
+      }
+      return RouteMetricsService.formatDistance(
+          RouteMetricsService.calculateRouteDistance(_pathPoints));
+    }();
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -686,9 +778,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             icon: Icons.straighten,
             iconColor: const Color(0xFF9B7FE8),
             label: 'Distance',
-            value: RouteMetricsService.formatDistance(
-              RouteMetricsService.calculateRouteDistance(_pathPoints),
-            ),
+            value: distanceValue,
           ),
           if (widget.route.eta != null) ...[
             const SizedBox(width: 10),
@@ -744,9 +834,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   decoration: BoxDecoration(
                     color: modeColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: modeColor.withOpacity(0.3)),
+                    border:
+                        Border.all(color: modeColor.withOpacity(0.3)),
                   ),
-                  child: Icon(_getModeIcon(step.mode), color: modeColor, size: 18),
+                  child: Icon(_getModeIcon(step.mode),
+                      color: modeColor, size: 18),
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -832,7 +924,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                 color: _danger.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(_getReportIcon(report.type), color: _danger, size: 17),
+              child: Icon(_getReportIcon(report.type),
+                  color: _danger, size: 17),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -853,22 +946,19 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     Text(
                       report.description!,
                       style: const TextStyle(
-                        fontSize: 12,
-                        color: _textSecondary,
-                      ),
+                          fontSize: 12, color: _textSecondary),
                     ),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 11, color: _textSecondary),
+                      const Icon(Icons.access_time,
+                          size: 11, color: _textSecondary),
                       const SizedBox(width: 3),
                       Text(
                         _formatTime(report.timestamp),
                         style: const TextStyle(
-                          fontSize: 11,
-                          color: _textSecondary,
-                        ),
+                            fontSize: 11, color: _textSecondary),
                       ),
                     ],
                   ),
@@ -881,8 +971,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
-  // ─── Shared widget helpers ────────────────────────────────────────────────────
-
   Widget _metricCard({
     required IconData icon,
     required Color iconColor,
@@ -890,7 +978,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     required String value,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(14),
@@ -983,17 +1072,21 @@ class _VoteButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: active ? activeColor.withOpacity(0.12) : _surfaceAlt,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color: active ? activeColor.withOpacity(0.4) : _border,
+            color:
+                active ? activeColor.withOpacity(0.4) : _border,
           ),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 15, color: active ? activeColor : _textSecondary),
+            Icon(icon,
+                size: 15,
+                color: active ? activeColor : _textSecondary),
             const SizedBox(width: 4),
             Text(
               '$count',

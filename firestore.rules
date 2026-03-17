@@ -101,9 +101,33 @@ service cloud.firestore {
       allow read: if isAuth();
       allow create: if isAuth();
       allow update: if isAuth() && (
-        resource.data.contributorId == request.auth.uid || isModerator()
+        resource.data.contributorId == request.auth.uid ||
+        isModerator() ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['views', 'upvotes', 'downvotes', 'updatedAt']) &&
+          request.resource.data.views >= 0 &&
+          request.resource.data.upvotes >= 0 &&
+          request.resource.data.downvotes >= 0 &&
+          (request.resource.data.views - resource.data.views) >= -1 &&
+          (request.resource.data.views - resource.data.views) <= 1 &&
+          (request.resource.data.upvotes - resource.data.upvotes) >= -1 &&
+          (request.resource.data.upvotes - resource.data.upvotes) <= 1 &&
+          (request.resource.data.downvotes - resource.data.downvotes) >= -1 &&
+          (request.resource.data.downvotes - resource.data.downvotes) <= 1
+        )
       );
       allow delete: if isModerator();
+
+      // Per-user vote state for one active vote at a time.
+      match /routeVotes/{userId} {
+        allow read, create, update, delete: if isAuth() && isSelf(userId);
+      }
+
+      // Per-user view markers to avoid recounting the same user repeatedly.
+      match /routeViews/{userId} {
+        allow read, create, update, delete: if isAuth() && isSelf(userId);
+      }
     }
 
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────

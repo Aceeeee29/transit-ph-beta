@@ -14,13 +14,18 @@ class ContributeColors {
   static const border = Color(0xFFD4E4F7);
 }
 
-// ─── Shared dialog header ────────────────────────────────────────────────────
+// ─── Shared dialog header ─────────────────────────────────────────────────────
 
 class _DialogHeader extends StatelessWidget {
   final Widget icon;
   final String title;
+  final String? subtitle;
 
-  const _DialogHeader({required this.icon, required this.title});
+  const _DialogHeader({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,13 +42,28 @@ class _DialogHeader extends StatelessWidget {
         children: [
           icon,
           const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              color: ContributeColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: ContributeColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    style: const TextStyle(
+                      color: ContributeColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -51,6 +71,8 @@ class _DialogHeader extends StatelessWidget {
     );
   }
 }
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 
 Widget _iconBox({required Color color, required IconData icon}) {
   return Container(
@@ -152,36 +174,6 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
   );
 }
 
-Widget _styledTextField({
-  required String label,
-  required String hint,
-  required IconData icon,
-  required ValueChanged<String> onChanged,
-  int maxLines = 1,
-}) {
-  return Container(
-    decoration: BoxDecoration(
-      color: ContributeColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: ContributeColors.border),
-    ),
-    child: TextField(
-      maxLines: maxLines,
-      style: const TextStyle(color: ContributeColors.textPrimary, fontSize: 14),
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        labelStyle: const TextStyle(color: ContributeColors.textSecondary, fontSize: 13),
-        hintStyle: const TextStyle(color: ContributeColors.textSecondary, fontSize: 13),
-        prefixIcon: Icon(icon, color: ContributeColors.accent, size: 18),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: 13, horizontal: 4),
-      ),
-    ),
-  );
-}
-
 // ─── Mode Selection Dialog ────────────────────────────────────────────────────
 
 class ModeSelectionDialog extends StatelessWidget {
@@ -207,7 +199,8 @@ class ModeSelectionDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _DialogHeader(
-            icon: _iconBox(color: ContributeColors.accent, icon: Icons.alt_route),
+            icon: _iconBox(
+                color: ContributeColors.accent, icon: Icons.alt_route),
             title: 'Select Transport Mode',
           ),
           Padding(
@@ -215,23 +208,27 @@ class ModeSelectionDialog extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: modes.map((mode) => _ModeTile(
-                  mode: mode,
-                  color: modeColors[mode] ?? ContributeColors.accent,
-                  icon: getModeIcon(mode),
-                  isSelected: mode == currentMode,
-                  onTap: () {
-                    Navigator.pop(context);
-                    onModeSelected(mode);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Tap on the map to select the next point for $mode',
-                        ),
+                children: modes
+                    .map(
+                      (mode) => _ModeTile(
+                        mode: mode,
+                        color: modeColors[mode] ?? ContributeColors.accent,
+                        icon: getModeIcon(mode),
+                        isSelected: mode == currentMode,
+                        onTap: () {
+                          Navigator.pop(context);
+                          onModeSelected(mode);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Tap on the map to select the next point for $mode',
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                )).toList(),
+                    )
+                    .toList(),
               ),
             ),
           ),
@@ -264,10 +261,14 @@ class _ModeTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.08) : ContributeColors.surface,
+          color: isSelected
+              ? color.withOpacity(0.08)
+              : ContributeColors.surface,
           borderRadius: BorderRadius.circular(11),
           border: Border.all(
-            color: isSelected ? color.withOpacity(0.4) : ContributeColors.border,
+            color: isSelected
+                ? color.withOpacity(0.4)
+                : ContributeColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -305,9 +306,9 @@ class _ModeTile extends StatelessWidget {
   }
 }
 
-// ─── Step Dialog ─────────────────────────────────────────────────────────────
+// ─── Step Dialog ──────────────────────────────────────────────────────────────
 
-class StepDialog extends StatelessWidget {
+class StepDialog extends StatefulWidget {
   final String mode;
   final Map<String, Color> modeColors;
   final IconData Function(String) getModeIcon;
@@ -324,80 +325,392 @@ class StepDialog extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    String instruction = '';
-    String details = '';
-    final modeColor = modeColors[mode] ?? ContributeColors.accent;
+  State<StepDialog> createState() => _StepDialogState();
+}
 
-    return _dialogContainer(
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _DialogHeader(
-            icon: _iconBox(color: modeColor, icon: getModeIcon(mode)),
-            title: 'Step: $mode',
+class _StepDialogState extends State<StepDialog> {
+  final _instructionController = TextEditingController();
+  final _detailsController = TextEditingController();
+  final _altRouteController = TextEditingController();
+
+  bool _is24_7 = true;
+  TimeOfDay _startTime = const TimeOfDay(hour: 6, minute: 0);
+  TimeOfDay _endTime = const TimeOfDay(hour: 22, minute: 0);
+
+  static const _warn = Color(0xFFFFF8E1);
+  static const _warnBorder = Color(0xFFFFD54F);
+  static const _warnText = Color(0xFF7A5800);
+
+  @override
+  void dispose() {
+    _instructionController.dispose();
+    _detailsController.dispose();
+    _altRouteController.dispose();
+    super.dispose();
+  }
+
+  /// Converts [TimeOfDay] → "HH:mm" for storage.
+  String _fmt24(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  bool get _endBeforeStart =>
+      (_endTime.hour * 60 + _endTime.minute) <=
+      (_startTime.hour * 60 + _startTime.minute);
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: ContributeColors.accent,
+            onPrimary: Colors.white,
+            surface: ContributeColors.surface,
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _styledTextField(
-                  hint: 'e.g., Ride a jeep with Cubao terminal',
-                  label: 'Instruction',
-                  icon: Icons.info_outline,
-                  maxLines: 2,
-                  onChanged: (v) => instruction = v,
-                ),
-                const SizedBox(height: 10),
-                _styledTextField(
-                  hint: 'e.g., Drop off at Gateway Mall',
-                  label: 'Details',
-                  icon: Icons.location_on_outlined,
-                  maxLines: 2,
-                  onChanged: (v) => details = v,
-                ),
-              ],
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() => isStart ? _startTime = picked : _endTime = picked);
+  }
+
+  void _save() {
+  if (!_is24_7 && _endBeforeStart) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('End time must be after start time')),
+    );
+    return;
+  }
+
+  final step = route_model.Step(
+    mode: widget.mode,
+    instruction: _instructionController.text.trim(),
+    details: _detailsController.text.trim(),
+    is24_7: _is24_7,
+    startTime: _is24_7 ? null : _fmt24(_startTime),
+    endTime: _is24_7 ? null : _fmt24(_endTime),
+    alternateRouteSuggestion:
+        (!_is24_7 && _altRouteController.text.trim().isNotEmpty)
+            ? _altRouteController.text.trim()
+            : null,
+  );
+
+  Navigator.of(context).pop(); // ← pop first, THEN fire the callback
+  widget.onSaved(step);
+}
+
+  @override
+  Widget build(BuildContext context) {
+    final modeColor =
+        widget.modeColors[widget.mode] ?? ContributeColors.accent;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: Container(
+        decoration: BoxDecoration(
+          color: ContributeColors.bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: ContributeColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: ContributeColors.accent.withOpacity(0.08),
+              blurRadius: 32,
+              offset: const Offset(0, 12),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ghostButton(
-                    label: 'Cancel',
-                    onTap: () {
-                      Navigator.pop(context);
-                      onCancel();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: _gradientButton(
-                    label: 'Save Step',
-                    icon: Icons.check_rounded,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSaved(route_model.Step(
-                        mode: mode,
-                        instruction: instruction,
-                        details: details,
-                      ));
-                    },
-                  ),
-                ),
-              ],
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Header ───────────────────────────────────────────────────
+            _DialogHeader(
+              icon: _iconBox(
+                color: modeColor,
+                icon: widget.getModeIcon(widget.mode),
+              ),
+              title: '${widget.mode} Step',
+              subtitle: 'Add step details & schedule',
             ),
-          ),
-        ],
+
+            // ── Scrollable body ───────────────────────────────────────────
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Instruction
+                    const _FieldLabel(label: 'Instruction'),
+                    const SizedBox(height: 6),
+                    _Field(
+                      controller: _instructionController,
+                      hint: 'e.g., Ride a jeep with Cubao terminal',
+                      maxLines: 2,
+                      prefixIcon: Icons.info_outline,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Details
+                    const _FieldLabel(label: 'Details'),
+                    const SizedBox(height: 6),
+                    _Field(
+                      controller: _detailsController,
+                      hint: 'e.g., Drop off at Gateway Mall',
+                      maxLines: 2,
+                      prefixIcon: Icons.location_on_outlined,
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Schedule header row
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Schedule',
+                                style: TextStyle(
+                                  color: ContributeColors.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'Operating hours for this vehicle',
+                                style: TextStyle(
+                                  color: ContributeColors.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // 24/7 toggle pill
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _is24_7 = !_is24_7),
+                          child: AnimatedContainer(
+                            duration:
+                                const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _is24_7
+                                  ? ContributeColors.accent
+                                      .withOpacity(0.12)
+                                  : ContributeColors.surfaceAlt,
+                              borderRadius:
+                                  BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _is24_7
+                                    ? ContributeColors.accent
+                                        .withOpacity(0.4)
+                                    : ContributeColors.border,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _is24_7
+                                      ? Icons.all_inclusive_rounded
+                                      : Icons.schedule_rounded,
+                                  size: 14,
+                                  color: _is24_7
+                                      ? ContributeColors.accent
+                                      : ContributeColors
+                                          .textSecondary,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  _is24_7
+                                      ? '24/7'
+                                      : 'Limited hours',
+                                  style: TextStyle(
+                                    color: _is24_7
+                                        ? ContributeColors.accent
+                                        : ContributeColors
+                                            .textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Time range + alternate route — animated reveal
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      child: _is24_7
+                          ? const SizedBox.shrink()
+                          : Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 12),
+
+                                // Opens / Closes row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _TimePicker(
+                                        label: 'Opens',
+                                        display:
+                                            _startTime.format(context),
+                                        onTap: () => _pickTime(
+                                            isStart: true),
+                                      ),
+                                    ),
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      child: Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 16,
+                                        color: ContributeColors
+                                            .textSecondary,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: _TimePicker(
+                                        label: 'Closes',
+                                        display:
+                                            _endTime.format(context),
+                                        onTap: () => _pickTime(
+                                            isStart: false),
+                                        hasError: _endBeforeStart,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                if (_endBeforeStart) ...[
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'End time must be after start time',
+                                    style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 11),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 12),
+
+                                // Alternate route suggestion card
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: _warn,
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: _warnBorder),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Row(
+                                        children: [
+                                          Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 14,
+                                            color: _warnText,
+                                          ),
+                                          SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'This vehicle has limited hours',
+                                              style: TextStyle(
+                                                color: _warnText,
+                                                fontSize: 12,
+                                                fontWeight:
+                                                    FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Do you know an alternate vehicle or route riders can use outside these hours?',
+                                        style: TextStyle(
+                                          color: _warnText,
+                                          fontSize: 11,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _Field(
+                                        controller:
+                                            _altRouteController,
+                                        hint:
+                                            'e.g., Take the MRT-3 instead, or ride a tricycle to the next terminal',
+                                        maxLines: 2,
+                                        fillColor: Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Footer ───────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: ContributeColors.surface,
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(20)),
+                border: Border(
+                    top: BorderSide(color: ContributeColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ghostButton(
+                      label: 'Cancel',
+                      onTap: () {
+                        widget.onCancel();
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: _gradientButton(
+                      label: 'Save Step',
+                      icon: Icons.check_rounded,
+                      onTap: _save,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── Add Another Step Dialog ─────────────────────────────────────────────────
+// ─── Add Another Step Dialog ──────────────────────────────────────────────────
 
 class AddStepDialog extends StatelessWidget {
   final int stepCount;
@@ -493,4 +806,141 @@ class AddStepDialog extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── Private helper widgets ───────────────────────────────────────────────────
+
+class _FieldLabel extends StatelessWidget {
+  final String label;
+  const _FieldLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Text(
+        label,
+        style: const TextStyle(
+          color: ContributeColors.textPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+}
+
+class _Field extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final int maxLines;
+  final IconData? prefixIcon;
+  final Color? fillColor;
+
+  const _Field({
+    required this.controller,
+    required this.hint,
+    this.maxLines = 1,
+    this.prefixIcon,
+    this.fillColor,
+  });
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+        controller: controller,
+        maxLines: maxLines,
+        style: const TextStyle(
+            color: ContributeColors.textPrimary, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+              color: ContributeColors.textSecondary, fontSize: 12),
+          filled: true,
+          fillColor: fillColor ?? ContributeColors.surface,
+          prefixIcon: prefixIcon != null
+              ? Icon(prefixIcon,
+                  size: 16, color: ContributeColors.textSecondary)
+              : null,
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide:
+                const BorderSide(color: ContributeColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide:
+                const BorderSide(color: ContributeColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+                color: ContributeColors.accent, width: 1.5),
+          ),
+        ),
+      );
+}
+
+class _TimePicker extends StatelessWidget {
+  final String label;
+  final String display;
+  final VoidCallback onTap;
+  final bool hasError;
+
+  const _TimePicker({
+    required this.label,
+    required this.display,
+    required this.onTap,
+    this.hasError = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: ContributeColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: hasError ? Colors.red : ContributeColors.border,
+              width: hasError ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.access_time_rounded,
+                size: 14,
+                color: hasError
+                    ? Colors.red
+                    : ContributeColors.accent,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: ContributeColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      display,
+                      style: TextStyle(
+                        color: hasError
+                            ? Colors.red
+                            : ContributeColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }

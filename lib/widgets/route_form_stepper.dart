@@ -5,39 +5,10 @@ import '../services/media_service.dart'
     hide ImagePreviewWidget, AudioPreviewWidget;
 import 'media_preview_widgets.dart';
 
-const List<String> timeOptions = [
-  '12AM',
-  '1AM',
-  '2AM',
-  '3AM',
-  '4AM',
-  '5AM',
-  '6AM',
-  '7AM',
-  '8AM',
-  '9AM',
-  '10AM',
-  '11AM',
-  '12PM',
-  '1PM',
-  '2PM',
-  '3PM',
-  '4PM',
-  '5PM',
-  '6PM',
-  '7PM',
-  '8PM',
-  '9PM',
-  '10PM',
-  '11PM',
-  '24/7',
-];
-
 class RouteFormStepper extends StatefulWidget {
   final TextEditingController startLocationController;
   final TextEditingController endLocationController;
   final TextEditingController shortDescriptionController;
-  final TextEditingController scheduleController;
   final List<route_model.Step> steps;
   final VoidCallback onSubmit;
   final VoidCallback onReset;
@@ -48,7 +19,6 @@ class RouteFormStepper extends StatefulWidget {
     required this.startLocationController,
     required this.endLocationController,
     required this.shortDescriptionController,
-    required this.scheduleController,
     required this.steps,
     required this.onSubmit,
     required this.onReset,
@@ -64,8 +34,14 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
   File? _landmarkImage;
   File? _voiceNote;
   bool _isRecording = false;
-  String? selectedStartTime;
-  String? selectedEndTime;
+
+  // ─── Color tokens ──────────────────────────────────────────────────────────
+  static const _accent = Color(0xFF2E7CF6);
+  static const _warning = Color(0xFFFFB547);
+  static const _danger = Color(0xFFE05C6A);
+  static const _textSecondary = Color(0xFF7A92B2);
+  static const _border = Color(0xFFD4E4F7);
+  static const _surfaceAlt = Color(0xFFEAF2FF);
 
   @override
   Widget build(BuildContext context) {
@@ -75,63 +51,112 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
       controlsBuilder: (context, details) {
         return Padding(
           padding: const EdgeInsets.only(top: 16.0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_activeStep < 2)
-                ElevatedButton(
-                  onPressed: details.onStepContinue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+              Row(
+                children: [
+                  if (_activeStep < 1)
+                    ElevatedButton(
+                      onPressed: details.onStepContinue,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Next'),
+                    ),
+                  if (_activeStep > 0) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: details.onStepCancel,
+                      child: const Text('Back'),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (widget.selectionMode != 'done')
+                    ElevatedButton(
+                      onPressed: widget.onReset,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _danger,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Reset'),
+                    ),
+                ],
+              ),
+
+              // ── Submit for Review button — only on last step when map is done ──
+              if (_activeStep == 1 && widget.selectionMode == 'done') ...[
+                const SizedBox(height: 12),
+
+                // Pending review info banner
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _warning.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: _warning.withOpacity(0.3)),
                   ),
-                  child: const Text('Next'),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 15, color: _warning),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Your route will be reviewed by a moderator before it appears publicly.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF7A92B2),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              if (_activeStep > 0) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: details.onStepCancel,
-                  child: const Text('Back'),
+
+                const SizedBox(height: 10),
+
+                // Submit for Review button
+                ElevatedButton.icon(
+                  onPressed: widget.onSubmit,
+                  icon: const Icon(Icons.pending_actions_rounded,
+                      size: 18, color: Colors.white),
+                  label: const Text(
+                    'Submit for Review',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _warning,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
                 ),
               ],
-              const Spacer(),
-              if (_activeStep == 2 && widget.selectionMode == 'done')
-                ElevatedButton(
-                  onPressed: widget.onSubmit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Submit Route'),
-                ),
-              if (widget.selectionMode != 'done')
-                ElevatedButton(
-                  onPressed: widget.onReset,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Reset'),
-                ),
             ],
           ),
         );
       },
       onStepContinue: () {
-        if (_activeStep < 2) {
-          setState(() {
-            _activeStep++;
-          });
-        }
+        if (_activeStep < 1) setState(() => _activeStep++);
       },
       onStepCancel: () {
-        if (_activeStep > 0) {
-          setState(() {
-            _activeStep--;
-          });
-        }
+        if (_activeStep > 0) setState(() => _activeStep--);
       },
       steps: [
-        // Step 1: Basic Information
+        // ── Step 1: Basic Information ─────────────────────────────────────────
         Step(
           title: const Text('Basic Information'),
           subtitle: const Text('Route start and end points'),
@@ -140,7 +165,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               TextFormField(
                 controller: widget.startLocationController,
                 decoration: const InputDecoration(
-                  labelText: 'Starting Location (tap map to select or type)',
+                  labelText:
+                      'Starting Location (tap map to select or type)',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -148,7 +174,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               TextFormField(
                 controller: widget.endLocationController,
                 decoration: const InputDecoration(
-                  labelText: 'End Location (tap map to select or type)',
+                  labelText:
+                      'End Location (tap map to select or type)',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -166,91 +193,43 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           isActive: _activeStep == 0,
         ),
 
-        // Step 2: Route Details
-        Step(
-          title: const Text('Route Details'),
-          subtitle: const Text('Time and schedule'),
-          content: Column(
-            children: [
-              Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedStartTime,
-                    decoration: const InputDecoration(
-                      labelText: 'Start Time',
-                      border: OutlineInputBorder(),
-                    ),
-                    items:
-                        timeOptions
-                            .map(
-                              (time) => DropdownMenuItem(
-                                value: time,
-                                child: Text(time),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedStartTime = value;
-                        if (value == '24/7') {
-                          selectedEndTime = null;
-                        }
-                        _updateScheduleController();
-                      });
-                    },
-                    validator:
-                        (value) =>
-                            value == null ? 'Start time is required' : null,
-                  ),
-                  if (selectedStartTime != '24/7') ...[
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedEndTime,
-                      decoration: const InputDecoration(
-                        labelText: 'End Time',
-                        border: OutlineInputBorder(),
-                      ),
-                      items:
-                          timeOptions
-                              .map(
-                                (time) => DropdownMenuItem(
-                                  value: time,
-                                  child: Text(time),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedEndTime = value;
-                          _updateScheduleController();
-                        });
-                      },
-                      validator:
-                          (value) =>
-                              value == null ? 'End time is required' : null,
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-          isActive: _activeStep == 1,
-        ),
-
-        // Step 3: Media and Steps
+        // ── Step 2: Media and Steps ───────────────────────────────────────────
         Step(
           title: const Text('Media & Steps'),
           subtitle: const Text('Add photos and voice notes'),
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Steps added: ${widget.steps.length}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              // Steps count chip
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.directions_rounded,
+                        size: 14, color: _accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Steps added: ${widget.steps.length}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: _accent,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+
               const SizedBox(height: 16),
 
-              // Landmark Photo
+              // ── Landmark Photo ───────────────────────────────────────────
               const Text(
                 'Landmark Photo:',
                 style: TextStyle(fontWeight: FontWeight.bold),
@@ -285,33 +264,32 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   child: ImagePreviewWidget(
                     imageFile: _landmarkImage!,
                     onReplace: _pickLandmarkImage,
-                    onDelete: () => setState(() => _landmarkImage = null),
+                    onDelete: () =>
+                        setState(() => _landmarkImage = null),
                   ),
                 ),
 
               const SizedBox(height: 16),
 
-              // Voice Note
+              // ── Voice Note ───────────────────────────────────────────────
               const Text(
                 'Voice Instructions:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _toggleRecording,
-                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                    label: Text(
-                      _isRecording ? 'Stop Recording' : 'Record Voice Note',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _isRecording ? Colors.red : Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
+              ElevatedButton.icon(
+                onPressed: _toggleRecording,
+                icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                label: Text(
+                  _isRecording
+                      ? 'Stop Recording'
+                      : 'Record Voice Note',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      _isRecording ? Colors.red : Colors.blue.shade700,
+                  foregroundColor: Colors.white,
+                ),
               ),
               if (_voiceNote != null)
                 Padding(
@@ -319,68 +297,39 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   child: AudioPreviewWidget(
                     audioFile: _voiceNote!,
                     onReplace: _toggleRecording,
-                    onDelete: () => setState(() => _voiceNote = null),
+                    onDelete: () =>
+                        setState(() => _voiceNote = null),
                   ),
                 ),
             ],
           ),
-          isActive: _activeStep == 2,
+          isActive: _activeStep == 1,
         ),
       ],
     );
   }
 
-  void _updateScheduleController() {
-    if (selectedStartTime == '24/7') {
-      widget.scheduleController.text = '24/7';
-    } else if (selectedStartTime != null && selectedEndTime != null) {
-      widget.scheduleController.text = '$selectedStartTime-$selectedEndTime';
-    } else {
-      widget.scheduleController.text = '';
-    }
-  }
-
   Future<void> _pickLandmarkImage() async {
     final image = await MediaService.pickImageFromGallery();
-    if (image != null) {
-      setState(() {
-        _landmarkImage = image;
-      });
-    }
+    if (image != null) setState(() => _landmarkImage = image);
   }
 
   Future<void> _takeLandmarkPhoto() async {
     final image = await MediaService.takePhoto();
-    if (image != null) {
-      setState(() {
-        _landmarkImage = image;
-      });
-    }
+    if (image != null) setState(() => _landmarkImage = image);
   }
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      // Stop recording
       final recordedFile = await MediaService.stopRecording();
-      if (recordedFile != null) {
-        setState(() {
-          _voiceNote = recordedFile;
-          _isRecording = false;
-        });
-      } else {
-        setState(() {
-          _isRecording = false;
-        });
-      }
+      setState(() {
+        _voiceNote = recordedFile;
+        _isRecording = false;
+      });
     } else {
-      // Start recording
       final success = await MediaService.startRecording();
       if (success) {
-        setState(() {
-          _isRecording = true;
-        });
-
-        // Show a snackbar to indicate recording
+        setState(() => _isRecording = true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

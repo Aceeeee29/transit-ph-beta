@@ -36,6 +36,8 @@ class RoutingService {
 
   // ── Public API ───────────────────────────────────────────────────────────────
 
+  /// Full GTFS-backed routing for the navigation screen.
+  /// Do NOT call this for simple map drawing — use [snapToRoad] instead.
   static Future<OrsRouteResult> getRoute({
     required String originName,
     required LatLng origin,
@@ -62,6 +64,34 @@ class RoutingService {
     RouteCacheRepository.put(
         originName, destinationName, mode, cacheProfile, result);
     return result;
+  }
+
+  /// Lightweight road-snap between two points for map drawing in the
+  /// Contribute screen.
+  ///
+  /// Calls OSRM directly — no Supabase, no GTFS, no caching.
+  /// Returns null if OSRM is unreachable so the caller can fall back to a
+  /// straight line.
+  static Future<OrsRouteResult?> snapToRoad({
+    required LatLng origin,
+    required LatLng destination,
+    String mode = 'Jeepney',
+  }) async {
+    final profile = _osrmProfileForMode(mode);
+    final pts     = await _osrmSnap(origin, destination, profile);
+    if (pts == null || pts.length < 2) return null;
+
+    final distKm = _polylineDistanceKm(pts);
+    final distM  = distKm * 1000;
+    final durS   = (distKm / _speedForMode(mode)) * 3600;
+
+    return OrsRouteResult(
+      distanceMeters:  distM,
+      durationSeconds: durS,
+      polyline:        pts,
+      steps:           [],
+      bbox:            [],
+    );
   }
 
   // ── GTFS routing with fallback ────────────────────────────────────────────────
@@ -208,9 +238,6 @@ class RoutingService {
   }
 
   // ── Fallback route (no GTFS data) ─────────────────────────────────────────────
-  //
-  // Builds a Walk-in → estimated Vehicle ride → Walk-out route using OSRM
-  // for road-snapped polylines. Clearly marked as estimated.
 
   static Future<OrsRouteResult> _buildFallbackRoute({
     required LatLng origin,
@@ -270,7 +297,6 @@ class RoutingService {
         ? 0
         : combinedPolyline.length - 1;
 
-    // Avoid duplicating junction point
     final rideToAdd = combinedPolyline.isNotEmpty &&
             ridePts.isNotEmpty &&
             _haversineKm(combinedPolyline.last, ridePts.first) < 0.001
@@ -342,14 +368,11 @@ class RoutingService {
   }
 
   // ── OSRM road snapping ────────────────────────────────────────────────────────
-  //
-  // Uses the public OSRM demo server to get a road-following polyline
-  // between two points. Returns null on any error so callers can fallback.
 
   static Future<List<LatLng>?> _osrmSnap(
     LatLng from,
     LatLng to,
-    String profile, // 'driving', 'foot', 'cycling'
+    String profile,
   ) async {
     try {
       final coords =
@@ -369,7 +392,7 @@ class RoutingService {
       final routes = data['routes'] as List?;
       if (routes == null || routes.isEmpty) return null;
 
-      final geometry   = routes[0]['geometry'] as Map<String, dynamic>;
+      final geometry    = routes[0]['geometry'] as Map<String, dynamic>;
       final coordinates = geometry['coordinates'] as List;
 
       return coordinates
@@ -387,7 +410,7 @@ class RoutingService {
   static String _osrmProfileForMode(String mode) {
     switch (mode) {
       case 'Walk':    return 'foot';
-      case 'Train':   return 'driving'; // closest available
+      case 'Train':   return 'driving';
       case 'Ferry':   return 'driving';
       default:        return 'driving'; // Jeepney, Bus, FX/Van, Tricycle
     }

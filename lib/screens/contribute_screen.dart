@@ -16,7 +16,7 @@ import '../services/location_service.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 
 class ContributeScreen extends StatefulWidget {
-  final Function(route_model.Route) onRouteSubmitted;
+  final Future<void> Function(route_model.Route) onRouteSubmitted;
   final route_model.Route? routeToEdit;
   final String? contributorId;
 
@@ -39,12 +39,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   final _startLocationController = TextEditingController();
   final _endLocationController = TextEditingController();
   final _shortDescriptionController = TextEditingController();
-  final _scheduleController = TextEditingController();
 
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
   List<int> stepBoundaries = [];
-  // ORS-provided metrics per saved step (null = straight-line fallback)
   final List<double?> _stepOrsDistM = [];
   final List<double?> _stepOrsDurS = [];
   double? _pendingOrsDistM;
@@ -178,7 +176,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _startLocationController.text = route.startLocation;
         _endLocationController.text = route.endLocation;
         _shortDescriptionController.text = route.shortDescription;
-        _scheduleController.text = route.schedule ?? '';
         selectionMode = 'done';
       });
       _saveToHistory();
@@ -209,7 +206,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _startLocationController.text = exampleRoute.startLocation;
       _endLocationController.text = exampleRoute.endLocation;
       _shortDescriptionController.text = exampleRoute.shortDescription;
-      _scheduleController.text = exampleRoute.schedule ?? '';
       selectionMode = 'done';
     });
     _saveToHistory();
@@ -220,7 +216,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _startLocationController.dispose();
     _endLocationController.dispose();
     _shortDescriptionController.dispose();
-    _scheduleController.dispose();
     super.dispose();
   }
 
@@ -235,7 +230,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       });
       if (_startLocationController.text.isEmpty) {
         final name = await LocationService.getAddressFromCoordinates(
-          point.latitude, point.longitude);
+            point.latitude, point.longitude);
         if (mounted && _startLocationController.text.isEmpty) {
           _startLocationController.text = name ??
               '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
@@ -247,10 +242,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
         if (_snapToRoadEnabled) {
           try {
-            final result = await RoutingService.getRoute(
-              originName: lastPoint.toString(),
+            final result = await RoutingService.snapToRoad(
               origin: lastPoint,
-              destinationName: point.toString(),
               destination: point,
               mode: currentMode,
             );
@@ -265,7 +258,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Snap-to-road failed, using straight line instead'),
+                content: Text(
+                    'Snap-to-road failed, using straight line instead'),
                 duration: Duration(seconds: 2),
               ),
             );
@@ -293,7 +287,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _mapController.move(center, 7.0);
       } else {
         _mapController.fitCamera(
-          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(20)),
+          CameraFit.bounds(
+              bounds: bounds, padding: const EdgeInsets.all(20)),
         );
       }
       setState(() => selectedRegion = region);
@@ -312,9 +307,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
         getModeIcon: _getModeIcon,
         onModeSelected: (mode) {
           setState(() => currentMode = mode);
-          // Do NOT call _showStepDialog here — the user must tap the
-          // end/next location on the map first. _onMapTap will call
-          // _showStepDialog once the point is placed.
         },
       ),
     );
@@ -351,10 +343,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
         onAddAnother: () => _showModeDialog(),
         onFinished: () async {
           setState(() => selectionMode = 'done');
-          if (_endLocationController.text.isEmpty && pathPoints.isNotEmpty) {
+          if (_endLocationController.text.isEmpty &&
+              pathPoints.isNotEmpty) {
             final last = pathPoints.last;
-            final name = await LocationService.getAddressFromCoordinates(
-              last.latitude, last.longitude);
+            final name =
+                await LocationService.getAddressFromCoordinates(
+                    last.latitude, last.longitude);
             if (mounted && _endLocationController.text.isEmpty) {
               _endLocationController.text = name ??
                   '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
@@ -402,7 +396,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
-      _scheduleController.clear();
     });
     _historyService.clear();
   }
@@ -488,14 +481,22 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   double _speedForMode(String mode) {
     switch (mode) {
-      case 'Walk':      return 5.0;
-      case 'Jeepney':   return 20.0;
-      case 'Bus':       return 25.0;
-      case 'Train':     return 40.0;
-      case 'Tricycle':  return 15.0;
-      case 'FX/Van':    return 30.0;
-      case 'Ferry':     return 20.0;
-      default:          return 5.0;
+      case 'Walk':
+        return 5.0;
+      case 'Jeepney':
+        return 20.0;
+      case 'Bus':
+        return 25.0;
+      case 'Train':
+        return 40.0;
+      case 'Tricycle':
+        return 15.0;
+      case 'FX/Van':
+        return 30.0;
+      case 'Ferry':
+        return 20.0;
+      default:
+        return 5.0;
     }
   }
 
@@ -530,31 +531,35 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   route_model.Route _buildRoute({String? existingId}) {
-    final modsList = steps.map((s) => s.mode).toList();
-
-    // Per-step: use ORS data when available, haversine+speed otherwise.
     double totalDurS = 0;
     double totalDistKm = 0;
     double totalFare = 0;
     final Distance distCalc = const Distance();
 
     for (int i = 0; i < steps.length; i++) {
-      final orsDistM = i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
-      final orsDurS = i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
+      final orsDistM =
+          i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
+      final orsDurS =
+          i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
 
       if (orsDistM != null && orsDurS != null) {
         totalDistKm += orsDistM / 1000;
         totalDurS += orsDurS;
         totalFare += RouteMetricsService.calculateFareForMode(
-          steps[i].mode, orsDistM / 1000);
+            steps[i].mode, orsDistM / 1000);
       } else {
-        // Haversine over the path segment for this step
-        final startIdx =
-            (i == 0) ? 0 : (i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
-        final endIdx =
-            (i < stepBoundaries.length) ? stepBoundaries[i] : pathPoints.length - 1;
+        final startIdx = (i == 0)
+            ? 0
+            : (i - 1 < stepBoundaries.length
+                ? stepBoundaries[i - 1]
+                : 0);
+        final endIdx = (i < stepBoundaries.length)
+            ? stepBoundaries[i]
+            : pathPoints.length - 1;
         double segDistKm = 0;
-        for (int j = startIdx; j < endIdx && j + 1 < pathPoints.length; j++) {
+        for (int j = startIdx;
+            j < endIdx && j + 1 < pathPoints.length;
+            j++) {
           segDistKm += distCalc.as(
               LengthUnit.Kilometer, pathPoints[j], pathPoints[j + 1]);
         }
@@ -562,23 +567,23 @@ class _ContributeScreenState extends State<ContributeScreen> {
         final speedKmh = _speedForMode(steps[i].mode);
         totalDurS += (segDistKm / speedKmh) * 3600;
         totalFare += RouteMetricsService.calculateFareForMode(
-          steps[i].mode, segDistKm);
+            steps[i].mode, segDistKm);
       }
     }
-    // Add 2-min transfer wait per handoff
     if (steps.length > 1) totalDurS += (steps.length - 1) * 120;
 
-    final distStr = RouteMetricsService.formatDistance(totalDistKm);
+    final distStr =
+        RouteMetricsService.formatDistance(totalDistKm);
     final etaStr = (totalDurS / 60).ceil().toString();
     final fareStr = 'PHP ${totalFare.round()}';
 
-    String startLoc = _startLocationController.text.isEmpty
+    final startLoc = _startLocationController.text.isEmpty
         ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
         : _startLocationController.text;
-    String endLoc = _endLocationController.text.isEmpty
+    final endLoc = _endLocationController.text.isEmpty
         ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
         : _endLocationController.text;
-    String desc = _shortDescriptionController.text.isEmpty
+    final desc = _shortDescriptionController.text.isEmpty
         ? 'Custom route with ${steps.length} steps'
         : _shortDescriptionController.text;
 
@@ -597,9 +602,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
       eta: etaStr,
       price: fareStr,
       distance: distStr,
-      schedule: _scheduleController.text.isEmpty ? null : _scheduleController.text,
+      schedule: null,
       distanceMeters: totalDistKm > 0 ? totalDistKm * 1000 : null,
-      contributorId: widget.routeToEdit?.contributorId ?? widget.contributorId,
+      contributorId:
+          widget.routeToEdit?.contributorId ?? widget.contributorId,
+      // Always starts as pending — moderator must approve before it goes live
+      approvalStatus: route_model.RouteApprovalStatus.pending,
     );
   }
 
@@ -608,14 +616,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void _submit() async {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Need at least start and end points on map')),
+        const SnackBar(
+            content:
+                Text('Need at least start and end points on map')),
       );
       return;
     }
 
     if (_formKey.currentState!.validate()) {
       final route = _buildRoute(existingId: widget.routeToEdit?.id);
-      widget.onRouteSubmitted(route);
+      try {
+        await widget.onRouteSubmitted(route);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit route: $e')),
+        );
+        return;
+      }
 
       if (widget.routeToEdit == null) {
         final user = await GamificationService.loadUser();
@@ -630,13 +648,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
       }
 
       if (!mounted) return;
-      final message = widget.routeToEdit != null
-          ? 'Route updated successfully!'
-          : 'Route submitted for review!';
 
+      // ── Show the correct dialog depending on new vs edit ──────────────────
       await showDialog(
         context: context,
-        builder: (_) => _SubmitSuccessDialog(message: message),
+        builder: (_) => widget.routeToEdit != null
+            ? const _SubmitSuccessDialog(isEdit: true)
+            : const _SubmitSuccessDialog(isEdit: false),
       );
 
       if (widget.routeToEdit == null) {
@@ -648,7 +666,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
           _startLocationController.clear();
           _endLocationController.clear();
           _shortDescriptionController.clear();
-          _scheduleController.clear();
         });
       }
     }
@@ -660,7 +677,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (pathPoints.length < 2 || steps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Need at least start, end points and one step'),
+          content:
+              Text('Need at least start, end points and one step'),
         ),
       );
       return;
@@ -738,11 +756,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
               color: _accentSoft,
               borderRadius: BorderRadius.circular(9),
             ),
-            child: const Icon(Icons.add_road_rounded, color: _accent, size: 16),
+            child: const Icon(Icons.add_road_rounded,
+                color: _accent, size: 16),
           ),
           const SizedBox(width: 10),
           Text(
-            widget.routeToEdit != null ? 'Edit Route' : 'Contribute a Route',
+            widget.routeToEdit != null
+                ? 'Edit Route'
+                : 'Contribute a Route',
             style: const TextStyle(
               color: _textPrimary,
               fontSize: 17,
@@ -781,9 +802,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
               decoration: BoxDecoration(
                 color: _accentSoft,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _accent.withOpacity(0.3)),
+                border:
+                    Border.all(color: _accent.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.preview_rounded, color: _accent, size: 18),
+              child: const Icon(Icons.preview_rounded,
+                  color: _accent, size: 18),
             ),
           ),
       ],
@@ -812,8 +835,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.app.transitph_beta',
+          urlTemplate:
+              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName:
+              'com.example.app.transitph_beta',
         ),
         PolylineLayer(polylines: polylines),
         MarkerLayer(
@@ -821,12 +846,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
             if (pathPoints.isNotEmpty)
               Marker(
                 point: pathPoints.first,
-                child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+                child: const Icon(Icons.location_on,
+                    color: Colors.green, size: 40),
               ),
             if (pathPoints.length > 1)
               Marker(
                 point: pathPoints.last,
-                child: const Icon(Icons.flag, color: Colors.red, size: 40),
+                child: const Icon(Icons.flag,
+                    color: Colors.red, size: 40),
               ),
           ],
         ),
@@ -835,21 +862,21 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   Widget _buildMapControlsOverlay() {
-    // Calculate total ORS metrics from stored per-step values
     double? totalOrsDistKm;
-    int? totalOrsDurMinutes; // Store as minutes for formatEta
-    
-    // Only calculate if we have ORS data for all steps
-    if (_stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null)) {
-      totalOrsDistKm = _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000;
+    int? totalOrsDurMinutes;
+
+    if (_stepOrsDistM.isNotEmpty &&
+        _stepOrsDistM.every((d) => d != null)) {
+      totalOrsDistKm =
+          _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) /
+              1000;
     }
-    if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
-      double totalSeconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
-      // Add 2-min transfer wait per handoff
-      if (steps.length > 1) {
+    if (_stepOrsDurS.isNotEmpty &&
+        _stepOrsDurS.every((d) => d != null)) {
+      double totalSeconds =
+          _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
+      if (steps.length > 1)
         totalSeconds += ((steps.length - 1) * 120);
-      }
-      // Convert seconds to minutes (formatEta expects minutes)
       totalOrsDurMinutes = (totalSeconds / 60).ceil();
     }
 
@@ -894,7 +921,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
       right: 16,
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: _surface.withOpacity(0.96),
             borderRadius: BorderRadius.circular(30),
@@ -947,7 +975,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
       right: 16,
       child: Container(
         width: 155,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         decoration: BoxDecoration(
           color: _surface.withOpacity(0.97),
           borderRadius: BorderRadius.circular(12),
@@ -964,7 +993,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
           initialValue: selectedRegion,
           hint: const Text(
             'Select Region',
-            style: TextStyle(fontSize: 11, color: _textSecondary),
+            style:
+                TextStyle(fontSize: 11, color: _textSecondary),
           ),
           isExpanded: true,
           icon: const Icon(
@@ -973,7 +1003,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
             size: 18,
           ),
           dropdownColor: _surface,
-          style: const TextStyle(color: _textPrimary, fontSize: 11),
+          style:
+              const TextStyle(color: _textPrimary, fontSize: 11),
           decoration: const InputDecoration(
             border: InputBorder.none,
             contentPadding: EdgeInsets.zero,
@@ -1007,8 +1038,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
             : 40,
         decoration: BoxDecoration(
           color: _surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: _border, width: 1.5)),
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(20)),
+          border:
+              Border(top: BorderSide(color: _border, width: 1.5)),
           boxShadow: [
             BoxShadow(
               color: _accent.withOpacity(0.08),
@@ -1018,7 +1051,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(20)),
           child: Column(
             children: [
               _buildDrawerHandle(),
@@ -1032,8 +1066,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   Widget _buildDrawerHandle() {
     return InkWell(
-      onTap: () => setState(() => _isFormExpanded = !_isFormExpanded),
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      onTap: () =>
+          setState(() => _isFormExpanded = !_isFormExpanded),
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(20)),
       child: SizedBox(
         height: 40,
         child: Row(
@@ -1067,11 +1103,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
             if (!_isFormExpanded && steps.isNotEmpty) ...[
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: _accentSoft,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _accent.withOpacity(0.2)),
+                  border: Border.all(
+                      color: _accent.withOpacity(0.2)),
                 ),
                 child: Text(
                   '${steps.length} step${steps.length > 1 ? 's' : ''}',
@@ -1092,14 +1130,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Widget _buildFormContent() {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 8),
         child: Form(
           key: _formKey,
           child: RouteFormStepper(
             startLocationController: _startLocationController,
             endLocationController: _endLocationController,
             shortDescriptionController: _shortDescriptionController,
-            scheduleController: _scheduleController,
             steps: steps,
             onSubmit: _submit,
             onReset: _onReset,
@@ -1114,16 +1152,17 @@ class _ContributeScreenState extends State<ContributeScreen> {
 // ─── Submit success dialog ────────────────────────────────────────────────────
 
 class _SubmitSuccessDialog extends StatelessWidget {
-  final String message;
+  final bool isEdit;
 
   static const _bg = Color(0xFFF4F8FF);
   static const _accent = Color(0xFF2E7CF6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
+  static const _warning = Color(0xFFFFB547);
   static const _green = Color(0xFF3EC97A);
 
-  const _SubmitSuccessDialog({required this.message});
+  const _SubmitSuccessDialog({required this.isEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -1146,35 +1185,51 @@ class _SubmitSuccessDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 28),
+
+            // ── Icon — green check for edit, warning clock for new ──────────
             Container(
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: _green.withOpacity(0.12),
+                color: isEdit
+                    ? _green.withOpacity(0.12)
+                    : _warning.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _green.withOpacity(0.3)),
+                border: Border.all(
+                  color: isEdit
+                      ? _green.withOpacity(0.3)
+                      : _warning.withOpacity(0.3),
+                ),
               ),
-              child: const Icon(
-                Icons.check_circle_outline_rounded,
-                color: _green,
+              child: Icon(
+                isEdit
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.pending_actions_rounded,
+                color: isEdit ? _green : _warning,
                 size: 34,
               ),
             ),
+
             const SizedBox(height: 16),
-            const Text(
-              'Route Submitted',
-              style: TextStyle(
+
+            Text(
+              isEdit ? 'Route Updated' : 'Pending Review',
+              style: const TextStyle(
                 color: _textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.3,
               ),
             ),
+
             const SizedBox(height: 8),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                message,
+                isEdit
+                    ? 'Your route has been updated successfully.'
+                    : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.',
                 style: const TextStyle(
                   color: _textSecondary,
                   fontSize: 14,
@@ -1183,7 +1238,50 @@ class _SubmitSuccessDialog extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
+
+            // ── Pending status steps (only for new submissions) ─────────────
+            if (!isEdit) ...[
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _warning.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: _warning.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      _step(
+                        icon: Icons.check_circle_rounded,
+                        color: _green,
+                        label: 'Route submitted',
+                        done: true,
+                      ),
+                      const SizedBox(height: 10),
+                      _step(
+                        icon: Icons.shield_outlined,
+                        color: _warning,
+                        label: 'Awaiting moderator review',
+                        done: false,
+                      ),
+                      const SizedBox(height: 10),
+                      _step(
+                        icon: Icons.public_rounded,
+                        color: _textSecondary,
+                        label: 'Goes live after approval',
+                        done: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
+
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
               child: GestureDetector(
@@ -1209,10 +1307,11 @@ class _SubmitSuccessDialog extends StatelessWidget {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_rounded, color: Colors.white, size: 16),
+                      Icon(Icons.check_rounded,
+                          color: Colors.white, size: 16),
                       SizedBox(width: 8),
                       Text(
-                        'OK',
+                        'Got it',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -1227,6 +1326,31 @@ class _SubmitSuccessDialog extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _step({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required bool done,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: done ? _textPrimary : _textSecondary,
+              fontWeight:
+                  done ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
