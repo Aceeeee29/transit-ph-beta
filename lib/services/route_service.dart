@@ -1,8 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/notification.dart';
 import '../models/route.dart' as route_model;
+import '../services/notifications_service.dart';
 
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  static Future<String?> _resolveNotificationRecipientId(
+    String? contributorId,
+  ) async {
+    final raw = contributorId?.trim();
+    if (raw == null || raw.isEmpty) return null;
+
+    if (!raw.contains('@')) {
+      return raw;
+    }
+
+    try {
+      final userByEmail = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: raw)
+          .limit(1)
+          .get();
+      if (userByEmail.docs.isNotEmpty) {
+        final data = userByEmail.docs.first.data();
+        final uidFromField = (data['uid'] as String?)?.trim();
+        if (uidFromField != null && uidFromField.isNotEmpty) {
+          return uidFromField;
+        }
+        return userByEmail.docs.first.id;
+      }
+    } catch (e) {
+      print('Error resolving contributor email to uid ($raw): $e');
+    }
+
+    return null;
+  }
 
   static DocumentReference<Map<String, dynamic>> _routeDoc(String routeId) {
     return _firestore.collection('routes').doc(routeId);
@@ -133,10 +166,42 @@ class RouteService {
   /// Approve a route — called by moderator
   static Future<void> approveRoute(String routeId) async {
     try {
+      String? contributorId;
+      String routeTitle = 'your submitted route';
+
+      final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
+      if (routeSnapshot.exists) {
+        final routeData = routeSnapshot.data();
+        contributorId = (routeData?['contributorId'] as String?)?.trim();
+        final start = routeData?['startLocation'] as String?;
+        final end = routeData?['endLocation'] as String?;
+        if (start != null && end != null) {
+          routeTitle = '$start to $end';
+        }
+      }
+
       await _firestore.collection('routes').doc(routeId).update({
         'approvalStatus': route_model.RouteApprovalStatus.approved.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      final recipientId = await _resolveNotificationRecipientId(contributorId);
+      if (recipientId != null && recipientId.isNotEmpty) {
+        try {
+          await NotificationsService.addNotification(
+            NotificationModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: recipientId,
+              type: 'route_approved',
+              timestamp: DateTime.now(),
+              message: 'Your submitted route ($routeTitle) was approved and is now live.',
+            ),
+          );
+        } catch (e) {
+          print('Error creating approval notification for route $routeId: $e');
+        }
+      }
+
       print('Route $routeId approved');
     } catch (e) {
       print('Error approving route $routeId: $e');

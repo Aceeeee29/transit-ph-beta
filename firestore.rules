@@ -135,11 +135,17 @@ service cloud.firestore {
       allow read, update, delete: if isAuth() &&
         resource.data.userId == request.auth.uid;
 
-      // FIX: Validates required fields and blocks self-targeting.
-      allow create: if isAuth() &&
-        request.resource.data.keys().hasAll(['userId', 'type', 'timestamp']) &&
-        request.resource.data.userId is string &&
-        request.resource.data.userId != request.auth.uid;
+      // FIX: Moderators can create notifications for any userId, including
+      // themselves (e.g. self-approval of a submitted route). Non-moderators
+      // still cannot target themselves to prevent self-spam.
+      allow create: if isAuth() && (
+        isModerator() ||
+        (
+          request.resource.data.keys().hasAll(['userId', 'type', 'timestamp']) &&
+          request.resource.data.userId is string &&
+          request.resource.data.userId != request.auth.uid
+        )
+      );
     }
 
     // ── FEEDBACKS (reports) ───────────────────────────────────────────────────

@@ -1,13 +1,57 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/post.dart';
+import '../models/notification.dart';
 import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
+import '../services/notifications_service.dart';
 
 class ModerationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final firebase_auth.FirebaseAuth _auth =
+      firebase_auth.FirebaseAuth.instance;
+
+  static Future<String?> _resolveNotificationRecipientId(
+    String? contributorId,
+  ) async {
+    final raw = contributorId?.trim();
+    if (raw == null || raw.isEmpty) return null;
+
+    // Already a UID — return directly
+    if (!raw.contains('@')) return raw;
+
+    // Check current user FIRST so self-approval always resolves correctly,
+    // even when the moderator exists in the Firestore users collection.
+    final currentUser = _auth.currentUser;
+    if (currentUser != null &&
+        currentUser.email?.toLowerCase() == raw.toLowerCase()) {
+      return currentUser.uid;
+    }
+
+    // Fall back to Firestore lookup for other contributors stored by email
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: raw)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty) {
+        final data = snap.docs.first.data();
+        final uidFromField = (data['uid'] as String?)?.trim();
+        if (uidFromField != null && uidFromField.isNotEmpty) {
+          return uidFromField;
+        }
+        return snap.docs.first.id;
+      }
+    } catch (e) {
+      print('Error resolving contributor email to uid ($raw): $e');
+    }
+
+    return null;
+  }
 
   static ValueNotifier<List<Post>> postsNotifier = ValueNotifier([]);
   static ValueNotifier<List<User>> usersNotifier = ValueNotifier([]);
@@ -22,9 +66,32 @@ class ModerationService {
   static StreamSubscription<QuerySnapshot>? _usersSubscription;
   static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
   static StreamSubscription<QuerySnapshot>? _routesSubscription;
+  static bool _initialized = false;
 
   /// Initialize all real-time listeners
   static void init() {
+    if (_initialized) return;
+    _initialized = true;
+
+    _auth.authStateChanges().listen((user) {
+      if (user == null) {
+        _stopDataListeners(clearData: true);
+        return;
+      }
+      _startDataListeners();
+    });
+
+    // Also handle the current auth state immediately.
+    if (_auth.currentUser != null) {
+      _startDataListeners();
+    } else {
+      _stopDataListeners(clearData: true);
+    }
+  }
+
+  static void _startDataListeners() {
+    _stopDataListeners(clearData: false);
+
     _postsSubscription =
         _firestore.collection('posts').snapshots().listen((snapshot) {
       final posts =
@@ -77,14 +144,67 @@ class ModerationService {
     );
   }
 
+  static void _stopDataListeners({required bool clearData}) {
+    _postsSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _feedbacksSubscription?.cancel();
+    _routesSubscription?.cancel();
+    _postsSubscription = null;
+    _usersSubscription = null;
+    _feedbacksSubscription = null;
+    _routesSubscription = null;
+
+    if (clearData) {
+      postsNotifier.value = [];
+      usersNotifier.value = [];
+      feedbacksNotifier.value = [];
+      pendingRoutesNotifier.value = [];
+    }
+  }
+
   // ── Route moderation ───────────────────────────────────────────────────────
 
   static Future<void> approveRoute(String routeId) async {
     try {
+      String? contributorId;
+      String routeTitle = 'your submitted route';
+
+      final routeSnapshot =
+          await _firestore.collection('routes').doc(routeId).get();
+      if (routeSnapshot.exists) {
+        final routeData = routeSnapshot.data();
+        contributorId = (routeData?['contributorId'] as String?)?.trim();
+        final start = routeData?['startLocation'] as String?;
+        final end = routeData?['endLocation'] as String?;
+        if (start != null && end != null) {
+          routeTitle = '$start to $end';
+        }
+      }
+
       await _firestore.collection('routes').doc(routeId).update({
         'approvalStatus': route_model.RouteApprovalStatus.approved.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      final recipientId = await _resolveNotificationRecipientId(contributorId);
+      if (recipientId != null && recipientId.isNotEmpty) {
+        // Notification delivery should not block route approval completion.
+        try {
+          await NotificationsService.addNotification(
+            NotificationModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: recipientId,
+              type: 'route_approved',
+              timestamp: DateTime.now(),
+              message:
+                  'Your submitted route ($routeTitle) was approved and is now live.',
+            ),
+          );
+        } catch (e) {
+          print('Error creating approval notification for route $routeId: $e');
+        }
+      }
+
       // Remove from local pending list immediately
       pendingRoutesNotifier.value = pendingRoutesNotifier.value
           .where((r) => r.id != routeId)

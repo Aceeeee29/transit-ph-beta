@@ -49,7 +49,6 @@ class _SearchScreenState extends State<SearchScreen> {
   static const _textPrimary  = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border       = Color(0xFFD4E4F7);
-  static const _verified     = Color(0xFF3EC97A); // verified badge green
 
   // ─── Route state ──────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
@@ -477,49 +476,12 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // ─── Verified badge widget ─────────────────────────────────────────────────
-
-  Widget _verifiedBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: _verified.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _verified.withOpacity(0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.verified_rounded, size: 12, color: _verified),
-          SizedBox(width: 4),
-          Text(
-            'Verified',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: _verified,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Wraps a SearchRouteCard with a verified badge overlaid at the top-right
+  /// Builds a SearchRouteCard with inline verified check in the card header.
   Widget _routeCardWithBadge(route_model.Route route) {
-    return Stack(
-      children: [
-        SearchRouteCard(
-          route: route,
-          onTap: () => _onRouteTap(route),
-        ),
-        if (route.isApproved)
-          Positioned(
-            top: 12,
-            right: 20,
-            child: _verifiedBadge(),
-          ),
-      ],
+    return SearchRouteCard(
+      route: route,
+      onTap: () => _onRouteTap(route),
+      isVerified: route.isApproved,
     );
   }
 

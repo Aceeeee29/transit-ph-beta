@@ -5,6 +5,7 @@ import '../../models/route.dart' as route_model;
 class SearchRouteCard extends StatelessWidget {
   final route_model.Route route;
   final VoidCallback onTap;
+  final bool isVerified;
 
   static const _surface = Color(0xFFFFFFFF);
   static const _accent = Color(0xFF2E7CF6);
@@ -17,6 +18,7 @@ class SearchRouteCard extends StatelessWidget {
     super.key,
     required this.route,
     required this.onTap,
+    this.isVerified = false,
   });
 
   @override
@@ -56,6 +58,22 @@ class SearchRouteCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (isVerified) ...[
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: const BoxDecoration(
+                        color: _accent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 9,

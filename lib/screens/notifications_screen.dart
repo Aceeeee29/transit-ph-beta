@@ -37,11 +37,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  Future<void> _refreshNotifications() async {
+    setState(_loadNotifications);
+    try {
+      await _notificationsFuture;
+    } catch (_) {
+      // UI already handles the error state.
+    }
+  }
+
+  Widget _refreshableCenteredContent(Widget child) {
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshNotifications,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.72,
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Notification type helpers ─────────────────────────────────────────────
   IconData _notifIcon(String type) => switch (type) {
     'like' => Icons.thumb_up_rounded,
     'comment' => Icons.comment_rounded,
     'reply' => Icons.reply_rounded,
+    'route_approved' => Icons.route_rounded,
     _ => Icons.notifications_rounded,
   };
 
@@ -49,6 +75,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'like' => const Color(0xFFE05C6A),
     'comment' => _accent,
     'reply' => const Color(0xFF9B7FE8),
+    'route_approved' => const Color(0xFF2EA56E),
     _ => _textSecondary,
   };
 
@@ -56,6 +83,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'like' => 'Like',
     'comment' => 'Comment',
     'reply' => 'Reply',
+    'route_approved' => 'Route Approved',
     _ => 'Notification',
   };
 
@@ -141,8 +169,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           // ── Error ──
           if (snapshot.hasError) {
-            return Center(
-              child: Column(
+            return _refreshableCenteredContent(
+              Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
@@ -180,8 +208,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           // ── Empty ──
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
+            return _refreshableCenteredContent(
+              Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
@@ -208,7 +236,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'When someone likes or comments\non your posts, it will show here.',
+                    'Likes, comments, replies, and route approvals\nwill appear here.',
                     style: TextStyle(
                       fontSize: 13,
                       color: _textSecondary,
@@ -225,102 +253,102 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           final notifications = snapshot.data!;
           final unreadCount = notifications.where((n) => !n.isRead).length;
 
-          return Column(
-            children: [
-              // Unread summary banner
-              if (unreadCount > 0)
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
+          return RefreshIndicator(
+            color: _accent,
+            onRefresh: _refreshNotifications,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              itemCount: notifications.length + (unreadCount > 0 ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (unreadCount > 0 && index == 0) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accent.withOpacity(0.25),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accent.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                        child: const Icon(
-                          Icons.mark_email_unread_outlined,
-                          color: Colors.white,
-                          size: 17,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '$unreadCount unread notification${unreadCount > 1 ? 's' : ''}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () async {
-                          // Mark all as read
-                          for (final n in notifications.where(
-                            (n) => !n.isRead,
-                          )) {
-                            await NotificationsService.markAsRead(n.id);
-                          }
-                          setState(() => _loadNotifications());
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                          child: const Text(
-                            'Mark all read',
-                            style: TextStyle(
+                          child: const Icon(
+                            Icons.mark_email_unread_outlined,
+                            color: Colors.white,
+                            size: 17,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '$unreadCount unread notification${unreadCount > 1 ? 's' : ''}',
+                            style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                        GestureDetector(
+                          onTap: () async {
+                            for (final n in notifications.where(
+                              (n) => !n.isRead,
+                            )) {
+                              await NotificationsService.markAsRead(n.id);
+                            }
+                            setState(_loadNotifications);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                              ),
+                            ),
+                            child: const Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
-              // List
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    final notification = notifications[index];
-                    final color = _notifColor(notification.type);
-                    final isUnread = !notification.isRead;
+                final dataIndex = unreadCount > 0 ? index - 1 : index;
+                final notification = notifications[dataIndex];
+                final color = _notifColor(notification.type);
+                final isUnread = !notification.isRead;
 
                     return GestureDetector(
                       onTap: () async {
@@ -459,10 +487,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ),
                       ),
                     );
-                  },
-                ),
-              ),
-            ],
+              },
+            ),
           );
         },
       ),

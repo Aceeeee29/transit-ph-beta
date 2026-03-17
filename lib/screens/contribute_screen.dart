@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
@@ -604,8 +605,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
       distance: distStr,
       schedule: null,
       distanceMeters: totalDistKm > 0 ? totalDistKm * 1000 : null,
-      contributorId:
-          widget.routeToEdit?.contributorId ?? widget.contributorId,
+      contributorId: widget.routeToEdit?.contributorId ??
+          widget.contributorId ??
+          FirebaseAuth.instance.currentUser?.uid,
       // Always starts as pending — moderator must approve before it goes live
       approvalStatus: route_model.RouteApprovalStatus.pending,
     );

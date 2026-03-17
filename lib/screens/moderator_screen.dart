@@ -52,6 +52,29 @@ class _ModeratorScreenState extends State<ModeratorScreen>
 
   void _onDataChanged() => setState(() {});
 
+  Future<void> _refreshModeratorPanel() async {
+    await widget.onRoutesModerated?.call();
+    // Keep pull-to-refresh responsive even when realtime listeners are already up-to-date.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (mounted) setState(() {});
+  }
+
+  Widget _refreshableEmptyState(Widget child) {
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshModeratorPanel,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.65,
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Pending route count badge ─────────────────────────────────────────────
   Widget _tabWithBadge(String label, int count) {
     return Tab(
@@ -155,8 +178,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     final pendingRoutes = _routesNotifier.value;
 
     if (pendingRoutes.isEmpty) {
-      return Center(
-        child: Column(
+      return _refreshableEmptyState(
+        Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -187,13 +210,18 @@ class _ModeratorScreenState extends State<ModeratorScreen>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: pendingRoutes.length,
-      itemBuilder: (context, index) {
-        final route = pendingRoutes[index];
-        return _buildRouteReviewCard(route);
-      },
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshModeratorPanel,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(12),
+        itemCount: pendingRoutes.length,
+        itemBuilder: (context, index) {
+          final route = pendingRoutes[index];
+          return _buildRouteReviewCard(route);
+        },
+      ),
     );
   }
 
@@ -602,8 +630,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   Widget _buildPendingPostsTab() {
     final pendingPosts = ModerationService.getPendingPosts();
     if (pendingPosts.isEmpty) {
-      return Center(
-        child: Column(
+      return _refreshableEmptyState(
+        Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -629,97 +657,102 @@ class _ModeratorScreenState extends State<ModeratorScreen>
       );
     }
 
-    return ListView.builder(
-      itemCount: pendingPosts.length,
-      itemBuilder: (context, index) {
-        final post = pendingPosts[index];
-        final reportReasons = ModerationService.getFeedbacks()
-            .where((f) =>
-                f.type == feedback_model.FeedbackType.report &&
-                f.targetId == post.id)
-            .map((f) => f.content)
-            .toList();
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(post.content,
-                    style: const TextStyle(fontSize: 16)),
-                if (post.imageUrls.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 100,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: post.imageUrls.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Image.network(
-                          post.imageUrls[index],
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.error),
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshModeratorPanel,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: pendingPosts.length,
+        itemBuilder: (context, index) {
+          final post = pendingPosts[index];
+          final reportReasons = ModerationService.getFeedbacks()
+              .where((f) =>
+                  f.type == feedback_model.FeedbackType.report &&
+                  f.targetId == post.id)
+              .map((f) => f.content)
+              .toList();
+          return Card(
+            margin: const EdgeInsets.all(8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(post.content,
+                      style: const TextStyle(fontSize: 16)),
+                  if (post.imageUrls.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: post.imageUrls.length,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Image.network(
+                            post.imageUrls[index],
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.error),
+                          ),
                         ),
                       ),
                     ),
+                  ],
+                  if (post.taggedLocation != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Location: ${post.taggedLocation!.name}',
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.blue),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text('By: ${post.userName ?? post.userEmail ?? 'Anonymous'}'),
+                  if (reportReasons.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Reported for: ${reportReasons.join(', ')}',
+                        style: const TextStyle(
+                            color: Colors.red,
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () {
+                          ModerationService.rejectPost(post.id);
+                          setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red),
+                        child: const Text('Remove'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          ModerationService.approvePost(post.id);
+                          setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green),
+                        child: const Text('Dismiss'),
+                      ),
+                    ],
                   ),
                 ],
-                if (post.taggedLocation != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Location: ${post.taggedLocation!.name}',
-                      style: const TextStyle(
-                          fontSize: 14, color: Colors.blue),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Text('By: ${post.userName ?? post.userEmail ?? 'Anonymous'}'),
-                if (reportReasons.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Reported for: ${reportReasons.join(', ')}',
-                      style: const TextStyle(
-                          color: Colors.red,
-                          fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () {
-                        ModerationService.rejectPost(post.id);
-                        setState(() {});
-                      },
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red),
-                      child: const Text('Remove'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        ModerationService.approvePost(post.id);
-                        setState(() {});
-                      },
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green),
-                      child: const Text('Dismiss'),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -727,57 +760,62 @@ class _ModeratorScreenState extends State<ModeratorScreen>
 
   Widget _buildUsersTab() {
     final users = ModerationService.getUsers();
-    return ListView.builder(
-      itemCount: users.length,
-      itemBuilder: (context, index) {
-        final user = users[index];
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user.name,
-                    style: const TextStyle(fontSize: 16)),
-                Text(user.email),
-                Text('Role: ${user.role.name}'),
-                Text('Banned: ${user.isBanned}'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (!user.isBanned)
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (user.uid != null) {
-                            await ModerationService.banUser(user.uid!);
-                            setState(() {});
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red),
-                        child: const Text('Ban'),
-                      )
-                    else
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (user.uid != null) {
-                            await ModerationService.unbanUser(user.uid!);
-                            setState(() {});
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green),
-                        child: const Text('Unban'),
-                      ),
-                  ],
-                ),
-              ],
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshModeratorPanel,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: users.length,
+        itemBuilder: (context, index) {
+          final user = users[index];
+          return Card(
+            margin: const EdgeInsets.all(8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(user.name,
+                      style: const TextStyle(fontSize: 16)),
+                  Text(user.email),
+                  Text('Role: ${user.role.name}'),
+                  Text('Banned: ${user.isBanned}'),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (!user.isBanned)
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (user.uid != null) {
+                              await ModerationService.banUser(user.uid!);
+                              setState(() {});
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red),
+                          child: const Text('Ban'),
+                        )
+                      else
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (user.uid != null) {
+                              await ModerationService.unbanUser(user.uid!);
+                              setState(() {});
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green),
+                          child: const Text('Unban'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -785,98 +823,103 @@ class _ModeratorScreenState extends State<ModeratorScreen>
 
   Widget _buildFeedbacksTab() {
     final feedbacks = ModerationService.getFeedbacks();
-    return ListView.builder(
-      itemCount: feedbacks.length,
-      itemBuilder: (context, index) {
-        final feedback = feedbacks[index];
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Type: ${feedback.type.name}',
-                      style:
-                          const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: feedback.status ==
-                                feedback_model.FeedbackStatus.pending
-                            ? Colors.orange
-                            : feedback.status ==
-                                feedback_model.FeedbackStatus.resolved
-                            ? Colors.green
-                            : Colors.grey,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        feedback.status.name,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(feedback.content),
-                if (feedback.targetId != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Target: ${feedback.targetType?.name ?? 'unknown'} (${feedback.targetId})',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.blue),
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Text('From: ${feedback.userId}'),
-                Text('Time: ${feedback.timestamp}'),
-                if (feedback.status ==
-                    feedback_model.FeedbackStatus.pending) ...[
-                  const SizedBox(height: 8),
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refreshModeratorPanel,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: feedbacks.length,
+        itemBuilder: (context, index) {
+          final feedback = feedbacks[index];
+          return Card(
+            margin: const EdgeInsets.all(8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ElevatedButton(
-                        onPressed: () async {
-                          await ModerationService.updateFeedbackStatus(
-                            feedback.id,
-                            feedback_model.FeedbackStatus.resolved,
-                          );
-                          setState(() {});
-                        },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green),
-                        child: const Text('Resolve'),
+                      Text(
+                        'Type: ${feedback.type.name}',
+                        style:
+                            const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () async {
-                          await ModerationService.updateFeedbackStatus(
-                            feedback.id,
-                            feedback_model.FeedbackStatus.dismissed,
-                          );
-                          setState(() {});
-                        },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey),
-                        child: const Text('Dismiss'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: feedback.status ==
+                                  feedback_model.FeedbackStatus.pending
+                              ? Colors.orange
+                              : feedback.status ==
+                                  feedback_model.FeedbackStatus.resolved
+                              ? Colors.green
+                              : Colors.grey,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          feedback.status.name,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(feedback.content),
+                  if (feedback.targetId != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Target: ${feedback.targetType?.name ?? 'unknown'} (${feedback.targetId})',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.blue),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text('From: ${feedback.userId}'),
+                  Text('Time: ${feedback.timestamp}'),
+                  if (feedback.status ==
+                      feedback_model.FeedbackStatus.pending) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () async {
+                            await ModerationService.updateFeedbackStatus(
+                              feedback.id,
+                              feedback_model.FeedbackStatus.resolved,
+                            );
+                            setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green),
+                          child: const Text('Resolve'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            await ModerationService.updateFeedbackStatus(
+                              feedback.id,
+                              feedback_model.FeedbackStatus.dismissed,
+                            );
+                            setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey),
+                          child: const Text('Dismiss'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
