@@ -12,7 +12,7 @@ class PostActionsService {
     String reason,
     String userId,
   ) async {
-    // Update post status in DB atomically with feedback creation
+    // Create report feedback without auto-changing post visibility.
     final feedbackId = DateTime.now().millisecondsSinceEpoch.toString();
     final feedback = feedback_model.Feedback(
       id: feedbackId,
@@ -24,25 +24,12 @@ class PostActionsService {
       timestamp: DateTime.now(),
     );
 
-    // Use batch write for atomic operation
+    // Single write for the report entry.
     final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
-    batch.update(firestore.collection('posts').doc(post.id), {
-      'moderationStatus': ModerationStatus.pending.name,
-    });
-    batch.set(
-      firestore.collection('feedbacks').doc(feedbackId),
-      feedback.toJson(),
-    );
-
     try {
-      await batch.commit();
-      // Update local notifiers
-      post.moderationStatus = ModerationStatus.pending;
-      ModerationService.postsNotifier.value = List.from(
-        ModerationService.postsNotifier.value,
+      await firestore.collection('feedbacks').doc(feedbackId).set(
+        feedback.toJson(),
       );
-      ModerationService.addFeedback(feedback);
     } catch (e) {
       print('Error reporting post: $e');
     }

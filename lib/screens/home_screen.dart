@@ -945,6 +945,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: TextField(
                       controller: _startController,
+                      readOnly: true,
                       style: const TextStyle(color: _textPrimary, fontSize: 14),
                       decoration: const InputDecoration(
                         prefixIcon: Icon(

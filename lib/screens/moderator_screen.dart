@@ -59,6 +59,50 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     if (mounted) setState(() {});
   }
 
+  Future<void> _deleteFeedbackWithConfirmation(
+    feedback_model.Feedback feedback, {
+    required bool fromDismiss,
+  }) async {
+    final title = fromDismiss ? 'Dismiss Feedback' : 'Delete Feedback';
+    final message = fromDismiss
+        ? 'This will dismiss and permanently delete this feedback from Firebase. Continue?'
+        : 'This will permanently delete this resolved feedback from Firebase. Continue?';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: _danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await ModerationService.deleteFeedback(feedback.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          fromDismiss
+              ? 'Feedback dismissed and deleted'
+              : 'Feedback deleted',
+        ),
+      ),
+    );
+    setState(() {});
+  }
+
   Widget _refreshableEmptyState(Widget child) {
     return RefreshIndicator(
       color: _accent,
@@ -108,7 +152,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   @override
   Widget build(BuildContext context) {
     final pendingRoutesCount = _routesNotifier.value.length;
-    final pendingPostsCount = ModerationService.getPendingPosts().length;
+    final pendingPostsCount = _getReportedPendingPosts().length;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -625,10 +669,26 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     return '${dt.month}/${dt.day}/${dt.year}';
   }
 
+  List<Post> _getReportedPendingPosts() {
+    final reportedPostIds = ModerationService.getFeedbacks()
+        .where((f) =>
+            f.type == feedback_model.FeedbackType.report &&
+            f.targetType == feedback_model.FeedbackTargetType.post &&
+            f.targetId != null)
+        .map((f) => f.targetId!)
+        .toSet();
+
+    return ModerationService.postsNotifier.value
+      .where((p) =>
+        reportedPostIds.contains(p.id) &&
+        p.moderationStatus != ModerationStatus.rejected)
+        .toList();
+  }
+
   // ─── Reported Posts Tab ────────────────────────────────────────────────────
 
   Widget _buildPendingPostsTab() {
-    final pendingPosts = ModerationService.getPendingPosts();
+    final pendingPosts = _getReportedPendingPosts();
     if (pendingPosts.isEmpty) {
       return _refreshableEmptyState(
         Column(
@@ -727,8 +787,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ElevatedButton(
-                        onPressed: () {
-                          ModerationService.rejectPost(post.id);
+                        onPressed: () async {
+                          await ModerationService.removePostPermanently(post.id);
                           setState(() {});
                         },
                         style: ElevatedButton.styleFrom(
@@ -737,8 +797,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: () {
-                          ModerationService.approvePost(post.id);
+                        onPressed: () async {
+                          await ModerationService.dismissReportedPost(post.id);
                           setState(() {});
                         },
                         style: ElevatedButton.styleFrom(
@@ -822,7 +882,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   // ─── Feedbacks Tab ─────────────────────────────────────────────────────────
 
   Widget _buildFeedbacksTab() {
-    final feedbacks = ModerationService.getFeedbacks();
+    final feedbacks = ModerationService.getFeedbacks()
+        .where((f) => f.type == feedback_model.FeedbackType.feedback)
+        .toList();
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
@@ -901,15 +963,34 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                         const SizedBox(width: 8),
                         ElevatedButton(
                           onPressed: () async {
-                            await ModerationService.updateFeedbackStatus(
-                              feedback.id,
-                              feedback_model.FeedbackStatus.dismissed,
+                            await _deleteFeedbackWithConfirmation(
+                              feedback,
+                              fromDismiss: true,
                             );
-                            setState(() {});
                           },
                           style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey),
                           child: const Text('Dismiss'),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (feedback.status ==
+                      feedback_model.FeedbackStatus.resolved) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () async {
+                            await _deleteFeedbackWithConfirmation(
+                              feedback,
+                              fromDismiss: false,
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: _danger),
+                          child: const Text('Delete'),
                         ),
                       ],
                     ),

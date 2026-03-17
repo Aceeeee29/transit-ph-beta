@@ -20,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool routeApprovalUpdates = false;
   bool newDiscussions = false;
   bool weeklyDigest = false;
+  bool _isSubmittingFeedback = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
@@ -737,26 +738,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Expanded(
                           flex: 2,
                           child: GestureDetector(
-                            onTap: () {
-                              if (feedbackController.text.isNotEmpty) {
+                            onTap: () async {
+                              if (_isSubmittingFeedback) return;
+                              final content = feedbackController.text.trim();
+                              if (content.isEmpty) return;
+
+                              setState(() => _isSubmittingFeedback = true);
+                              try {
                                 final feedback = feedback_model.Feedback(
                                   id:
                                       DateTime.now().millisecondsSinceEpoch
                                           .toString(),
                                   userId: widget.userEmail,
                                   type: feedback_model.FeedbackType.feedback,
-                                  content: feedbackController.text,
+                                  content: content,
                                   targetType:
                                       feedback_model.FeedbackTargetType.general,
                                   timestamp: DateTime.now(),
                                 );
-                                ModerationService.addFeedback(feedback);
+                                await ModerationService.addFeedback(feedback);
+                                if (!mounted) return;
                                 Navigator.of(context).pop();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Feedback submitted'),
                                   ),
                                 );
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _isSubmittingFeedback = false);
+                                }
                               }
                             },
                             child: Container(

@@ -255,6 +255,76 @@ class ModerationService {
     }
   }
 
+  static Future<void> dismissReportedPost(String postId) async {
+    try {
+      await _firestore.collection('posts').doc(postId).update({
+        'moderationStatus': ModerationStatus.approved.name,
+      });
+
+      final reportsSnap = await _firestore
+          .collection('feedbacks')
+          .where('targetId', isEqualTo: postId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in reportsSnap.docs) {
+        final data = doc.data();
+        if (data['type'] == feedback_model.FeedbackType.report.name &&
+            data['targetType'] == feedback_model.FeedbackTargetType.post.name) {
+          batch.delete(doc.reference);
+        }
+      }
+      await batch.commit();
+
+      postsNotifier.value = List.from(postsNotifier.value)
+        ..removeWhere((p) => p.id == postId &&
+            p.moderationStatus == ModerationStatus.pending);
+      feedbacksNotifier.value = feedbacksNotifier.value
+          .where((f) =>
+              !(f.type == feedback_model.FeedbackType.report &&
+                  f.targetType == feedback_model.FeedbackTargetType.post &&
+                  f.targetId == postId))
+          .toList();
+
+      print('Dismissed reports for post $postId');
+    } catch (e) {
+      print('Error dismissing reported post $postId: $e');
+    }
+  }
+
+  static Future<void> removePostPermanently(String postId) async {
+    try {
+      final reportsSnap = await _firestore
+          .collection('feedbacks')
+          .where('targetId', isEqualTo: postId)
+          .get();
+
+      final batch = _firestore.batch();
+      batch.delete(_firestore.collection('posts').doc(postId));
+      for (final doc in reportsSnap.docs) {
+        final data = doc.data();
+        if (data['type'] == feedback_model.FeedbackType.report.name &&
+            data['targetType'] == feedback_model.FeedbackTargetType.post.name) {
+          batch.delete(doc.reference);
+        }
+      }
+      await batch.commit();
+
+      postsNotifier.value =
+          postsNotifier.value.where((p) => p.id != postId).toList();
+      feedbacksNotifier.value = feedbacksNotifier.value
+          .where((f) =>
+              !(f.type == feedback_model.FeedbackType.report &&
+                  f.targetType == feedback_model.FeedbackTargetType.post &&
+                  f.targetId == postId))
+          .toList();
+
+      print('Permanently removed post $postId');
+    } catch (e) {
+      print('Error permanently removing post $postId: $e');
+    }
+  }
+
   // ── User moderation ────────────────────────────────────────────────────────
 
   static Future<void> banUser(String uid) async {
@@ -294,7 +364,6 @@ class ModerationService {
           .collection('feedbacks')
           .doc(feedback.id)
           .set(feedback.toJson());
-      feedbacksNotifier.value = [...feedbacksNotifier.value, feedback];
     } catch (e) {
       print('Error adding feedback ${feedback.id}: $e');
     }
@@ -331,6 +400,17 @@ class ModerationService {
       print('Updated feedback $feedbackId status to ${status.name}');
     } catch (e) {
       print('Error updating feedback $feedbackId status: $e');
+    }
+  }
+
+  static Future<void> deleteFeedback(String feedbackId) async {
+    try {
+      await _firestore.collection('feedbacks').doc(feedbackId).delete();
+      feedbacksNotifier.value =
+          feedbacksNotifier.value.where((f) => f.id != feedbackId).toList();
+      print('Deleted feedback $feedbackId');
+    } catch (e) {
+      print('Error deleting feedback $feedbackId: $e');
     }
   }
 
