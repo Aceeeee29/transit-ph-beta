@@ -65,6 +65,17 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                       ),
                       child: const Text('Next'),
                     ),
+                  if (_activeStep == 0) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _clearBasicInfo,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _danger,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Clear'),
+                    ),
+                  ],
                   if (_activeStep > 0) ...[
                     const SizedBox(width: 8),
                     TextButton(
@@ -72,16 +83,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                       child: const Text('Back'),
                     ),
                   ],
-                  const Spacer(),
-                  if (widget.selectionMode != 'done')
-                    ElevatedButton(
-                      onPressed: widget.onReset,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _danger,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Reset'),
-                    ),
                 ],
               ),
 
@@ -340,5 +341,11 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         }
       }
     }
+  }
+
+  void _clearBasicInfo() {
+    widget.startLocationController.clear();
+    widget.endLocationController.clear();
+    widget.shortDescriptionController.clear();
   }
 }
