@@ -64,7 +64,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // ─── Notification type helpers ─────────────────────────────────────────────
   IconData _notifIcon(String type) => switch (type) {
-    'like' => Icons.thumb_up_rounded,
+    'upvote' || 'like' => Icons.thumb_up_rounded,
+    'downvote' => Icons.thumb_down_rounded,
     'comment' => Icons.comment_rounded,
     'reply' => Icons.reply_rounded,
     'route_approved' => Icons.route_rounded,
@@ -72,7 +73,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   };
 
   Color _notifColor(String type) => switch (type) {
-    'like' => const Color(0xFFE05C6A),
+    'upvote' || 'like' => const Color(0xFF2EA56E),
+    'downvote' => const Color(0xFFE05C6A),
     'comment' => _accent,
     'reply' => const Color(0xFF9B7FE8),
     'route_approved' => const Color(0xFF2EA56E),
@@ -80,7 +82,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   };
 
   String _notifTypeLabel(String type) => switch (type) {
-    'like' => 'Like',
+    'upvote' || 'like' => 'Upvote',
+    'downvote' => 'Downvote',
     'comment' => 'Comment',
     'reply' => 'Reply',
     'route_approved' => 'Route Approved',
@@ -236,7 +239,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Likes, comments, replies, and route approvals\nwill appear here.',
+                    'Upvotes, downvotes, comments, replies, and route approvals\nwill appear here.',
                     style: TextStyle(
                       fontSize: 13,
                       color: _textSecondary,

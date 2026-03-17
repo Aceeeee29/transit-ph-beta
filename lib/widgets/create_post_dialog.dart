@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/location.dart';
 import '../services/media_service.dart';
@@ -70,13 +72,28 @@ class _CreatePostDialogState extends State<CreatePostDialog>
 
   // ─── All original functions unchanged ──────────────────────────────────────
 
-  void _createPost() {
+  Future<void> _createPost() async {
     if (_contentController.text.isEmpty) return;
+
+    final authUser = FirebaseAuth.instance.currentUser;
+    final authDisplayName = authUser?.displayName?.trim();
+    final authEmail = authUser?.email?.trim();
+    final authUid = authUser?.uid.trim();
+    final widgetName = widget.currentUserName.trim();
+    final firestoreName = await _resolveFirestoreUserName(
+      uid: authUid,
+      email: authEmail,
+    );
+    final resolvedUserName = widgetName.isNotEmpty && widgetName != 'User'
+        ? widgetName
+        : (authDisplayName != null && authDisplayName.isNotEmpty
+            ? authDisplayName
+            : (firestoreName ?? 'User'));
 
     final post = Post(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      userName: _anonymous ? null : widget.currentUserName,
-      userEmail: _anonymous ? null : 'user@example.com',
+      userName: _anonymous ? null : resolvedUserName,
+      userEmail: _anonymous ? null : authEmail,
       userId: widget.currentUserId,
       anonymous: _anonymous,
       content: _contentController.text,
@@ -97,6 +114,38 @@ class _CreatePostDialogState extends State<CreatePostDialog>
 
     widget.onPostCreated(post);
     Navigator.of(context).pop();
+  }
+
+  Future<String?> _resolveFirestoreUserName({
+    String? uid,
+    String? email,
+  }) async {
+    try {
+      if (uid != null && uid.isNotEmpty) {
+        final byUid = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final name = (byUid.data()?['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) return name;
+      }
+
+      if (email != null && email.isNotEmpty) {
+        final byEmail = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        if (byEmail.docs.isNotEmpty) {
+          final name = (byEmail.docs.first.data()['name'] as String?)?.trim();
+          if (name != null && name.isNotEmpty) return name;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to resolve Firestore user name: $e');
+    }
+
+    return null;
   }
 
   Future<void> _pickImage() async {

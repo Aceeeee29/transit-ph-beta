@@ -67,6 +67,16 @@ class NotificationsService {
     }
   }
 
+  /// Stream unread notification count for a user in realtime.
+  static Stream<int> unreadCountStream(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
   /// Delete a notification
   static Future<void> deleteNotification(String notificationId) async {
     try {

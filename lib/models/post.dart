@@ -12,9 +12,10 @@ class Post {
   final PostCategory category;
   final DateTime timestamp;
   ModerationStatus moderationStatus;
-  int likeCount;
-  final List<String> likedBy;
-  final Map<String, List<String>> reactions;
+  int upvoteCount;
+  int downvoteCount;
+  final List<String> upvotedBy;
+  final List<String> downvotedBy;
   final List<String> imageUrls;
   final String? videoUrl;
   final Location? taggedLocation;
@@ -33,9 +34,10 @@ class Post {
     required this.category,
     required this.timestamp,
     this.moderationStatus = ModerationStatus.approved,
-    this.likeCount = 0,
-    this.likedBy = const [],
-    this.reactions = const {},
+    this.upvoteCount = 0,
+    this.downvoteCount = 0,
+    this.upvotedBy = const [],
+    this.downvotedBy = const [],
     this.imageUrls = const [],
     this.videoUrl,
     this.taggedLocation,
@@ -56,9 +58,10 @@ class Post {
       'category': category.name,
       'timestamp': timestamp.toIso8601String(),
       'moderationStatus': moderationStatus.name,
-      'likeCount': likeCount,
-      'likedBy': likedBy,
-      'reactions': reactions,
+      'upvoteCount': upvoteCount,
+      'downvoteCount': downvoteCount,
+      'upvotedBy': upvotedBy,
+      'downvotedBy': downvotedBy,
       'imageUrls': imageUrls,
       'videoUrl': videoUrl,
       'taggedLocation': taggedLocation?.toJson(),
@@ -89,14 +92,10 @@ class Post {
         (e) => e.name == json['moderationStatus'],
         orElse: () => ModerationStatus.approved,
       ),
-      likeCount: json['likeCount'] ?? 0,
-      likedBy: List<String>.from(json['likedBy'] ?? []),
-      reactions: Map<String, List<String>>.from(
-        json['reactions']?.map(
-              (k, v) => MapEntry(k, List<String>.from(v ?? [])),
-            ) ??
-            {},
-      ),
+      upvoteCount: json['upvoteCount'] ?? json['likeCount'] ?? 0,
+      downvoteCount: json['downvoteCount'] ?? 0,
+      upvotedBy: List<String>.from(json['upvotedBy'] ?? json['likedBy'] ?? []),
+      downvotedBy: List<String>.from(json['downvotedBy'] ?? []),
       imageUrls: List<String>.from(json['imageUrls'] ?? []),
       videoUrl: json['videoUrl'],
       taggedLocation:

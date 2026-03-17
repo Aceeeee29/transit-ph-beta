@@ -56,23 +56,49 @@ service cloud.firestore {
 
       allow create: if isAuth();
 
-      // FIX: Added field-level validation for likes so likeCount
-      // can only change by 1 and likedBy must contain the requesting UID.
+      // FIX: Added field-level validation for post votes.
+      // Vote counters can only move by 1 per operation and voter arrays
+      // are constrained to transitions involving the requesting UID.
       allow update: if isAuth() && (
         request.auth.uid == resource.data.userId ||
         isModerator() ||
         (
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['likeCount', 'likedBy', 'reactions']) &&
+            .hasOnly(['upvoteCount', 'downvoteCount', 'upvotedBy', 'downvotedBy']) &&
+          request.resource.data.upvoteCount >= 0 &&
+          request.resource.data.downvoteCount >= 0 &&
+          (request.resource.data.upvoteCount - resource.data.upvoteCount) >= -1 &&
+          (request.resource.data.upvoteCount - resource.data.upvoteCount) <= 1 &&
+          (request.resource.data.downvoteCount - resource.data.downvoteCount) >= -1 &&
+          (request.resource.data.downvoteCount - resource.data.downvoteCount) <= 1 &&
           (
             (
-              request.resource.data.likeCount == resource.data.likeCount + 1 &&
-              request.resource.data.likedBy.hasAll(resource.data.likedBy) &&
-              request.resource.data.likedBy.hasAll([request.auth.uid])
+              request.resource.data.upvoteCount == resource.data.upvoteCount &&
+              request.resource.data.upvotedBy == resource.data.upvotedBy
             ) ||
             (
-              request.resource.data.likeCount == resource.data.likeCount - 1 &&
-              !request.resource.data.likedBy.hasAny([request.auth.uid])
+              request.resource.data.upvoteCount == resource.data.upvoteCount + 1 &&
+              request.resource.data.upvotedBy.hasAll(resource.data.upvotedBy) &&
+              request.resource.data.upvotedBy.hasAll([request.auth.uid])
+            ) ||
+            (
+              request.resource.data.upvoteCount == resource.data.upvoteCount - 1 &&
+              !request.resource.data.upvotedBy.hasAny([request.auth.uid])
+            )
+          ) &&
+          (
+            (
+              request.resource.data.downvoteCount == resource.data.downvoteCount &&
+              request.resource.data.downvotedBy == resource.data.downvotedBy
+            ) ||
+            (
+              request.resource.data.downvoteCount == resource.data.downvoteCount + 1 &&
+              request.resource.data.downvotedBy.hasAll(resource.data.downvotedBy) &&
+              request.resource.data.downvotedBy.hasAll([request.auth.uid])
+            ) ||
+            (
+              request.resource.data.downvoteCount == resource.data.downvoteCount - 1 &&
+              !request.resource.data.downvotedBy.hasAny([request.auth.uid])
             )
           )
         )

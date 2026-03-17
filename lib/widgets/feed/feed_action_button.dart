@@ -7,6 +7,7 @@ class FeedActionButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   final bool active;
+  final String? label;
 
   const FeedActionButton({
     super.key,
@@ -14,6 +15,7 @@ class FeedActionButton extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.active = false,
+    this.label,
   });
 
   @override
@@ -29,7 +31,23 @@ class FeedActionButton extends StatelessWidget {
             color: active ? color.withOpacity(0.3) : FeedColors.border,
           ),
         ),
-        child: Icon(icon, size: 17, color: color),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: color),
+            if (label != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                label!,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

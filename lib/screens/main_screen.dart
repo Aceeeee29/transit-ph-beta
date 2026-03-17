@@ -36,7 +36,9 @@ class _MainScreenState extends State<MainScreen> {
 
   String get currentUserName {
     final user = FirebaseAuth.instance.currentUser;
-    return user?.displayName ?? user?.email ?? 'User';
+    final displayName = user?.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) return displayName;
+    return 'User';
   }
 
   String get currentUserId {

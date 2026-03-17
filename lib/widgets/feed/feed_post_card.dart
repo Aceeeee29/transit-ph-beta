@@ -10,14 +10,16 @@ import 'post_category_helpers.dart';
 /// Displays a single community post with its action bar, media, and comments.
 class FeedPostCard extends StatefulWidget {
   final Post post;
-  final bool isLiked;
+  final bool isUpvoted;
+  final bool isDownvoted;
+  final int upvoteCount;
+  final int downvoteCount;
   final bool isBookmarked;
-  final Map<String, List<String>> reactions; // emoji -> user IDs
   final String currentUserId;
   final String currentUserName;
-  final VoidCallback onLikeTapped;
+  final VoidCallback onUpvoteTapped;
+  final VoidCallback onDownvoteTapped;
   final VoidCallback onCommentTapped;
-  final VoidCallback onReactTapped;
   final VoidCallback onBookmarkTapped;
   final VoidCallback onReportTapped;
   final VoidCallback? onDeleteTapped;
@@ -25,14 +27,16 @@ class FeedPostCard extends StatefulWidget {
   const FeedPostCard({
     super.key,
     required this.post,
-    required this.isLiked,
+    required this.isUpvoted,
+    required this.isDownvoted,
+    required this.upvoteCount,
+    required this.downvoteCount,
     required this.isBookmarked,
-    required this.reactions,
     required this.currentUserId,
     required this.currentUserName,
-    required this.onLikeTapped,
+    required this.onUpvoteTapped,
+    required this.onDownvoteTapped,
     required this.onCommentTapped,
-    required this.onReactTapped,
     required this.onBookmarkTapped,
     required this.onReportTapped,
     this.onDeleteTapped,
@@ -67,16 +71,18 @@ class _FeedPostCardState extends State<FeedPostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final catColor = postCategoryColor(post.category);
-    final displayName =
-        post.anonymous ? 'Anonymous' : (post.userName ?? post.userEmail ?? 'User');
+    final authorName = post.userName?.trim();
+    final displayName = post.anonymous
+      ? 'Anonymous'
+      : (authorName != null && authorName.isNotEmpty
+        ? authorName
+        : 'User');
     final initials =
         post.anonymous
             ? 'A'
-            : (post.userName?.isNotEmpty == true
-                ? post.userName![0].toUpperCase()
-                : (post.userEmail?.isNotEmpty == true
-                    ? post.userEmail![0].toUpperCase()
-                    : 'U'));
+        : (authorName != null && authorName.isNotEmpty
+          ? authorName[0].toUpperCase()
+          : 'U');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -112,7 +118,6 @@ class _FeedPostCardState extends State<FeedPostCard> {
             Divider(color: FeedColors.border, height: 1),
             const SizedBox(height: 8),
             _buildActionBar(),
-            if (widget.reactions.isNotEmpty) _buildReactions(),
           ],
         ),
       ),
@@ -124,25 +129,34 @@ class _FeedPostCardState extends State<FeedPostCard> {
       children: [
         FeedActionButton(
           icon:
-              widget.isLiked
+              widget.isUpvoted
                   ? Icons.thumb_up
                   : Icons.thumb_up_alt_outlined,
           color:
-              widget.isLiked ? FeedColors.accent : FeedColors.textSecondary,
-          active: widget.isLiked,
-          onTap: widget.onLikeTapped,
+              widget.isUpvoted ? FeedColors.accent : FeedColors.textSecondary,
+          active: widget.isUpvoted,
+          label: '${widget.upvoteCount}',
+          onTap: widget.onUpvoteTapped,
+        ),
+        const SizedBox(width: 6),
+        FeedActionButton(
+          icon:
+              widget.isDownvoted
+                  ? Icons.thumb_down
+                  : Icons.thumb_down_alt_outlined,
+          color:
+              widget.isDownvoted
+                  ? FeedColors.danger
+                  : FeedColors.textSecondary,
+          active: widget.isDownvoted,
+          label: '${widget.downvoteCount}',
+          onTap: widget.onDownvoteTapped,
         ),
         const SizedBox(width: 6),
         FeedActionButton(
           icon: Icons.comment_outlined,
           color: FeedColors.textSecondary,
           onTap: widget.onCommentTapped,
-        ),
-        const SizedBox(width: 6),
-        FeedActionButton(
-          icon: Icons.emoji_emotions_outlined,
-          color: FeedColors.textSecondary,
-          onTap: widget.onReactTapped,
         ),
         const SizedBox(width: 6),
         FeedActionButton(
@@ -162,35 +176,6 @@ class _FeedPostCardState extends State<FeedPostCard> {
           onTap: widget.onReportTapped,
         ),
       ],
-    );
-  }
-
-  Widget _buildReactions() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children:
-            widget.reactions.entries.map((entry) {
-              if (entry.value.isEmpty) return const SizedBox.shrink();
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: FeedColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: FeedColors.border),
-                ),
-                child: Text(
-                  '${entry.key} ${entry.value.length}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              );
-            }).toList(),
-      ),
     );
   }
 

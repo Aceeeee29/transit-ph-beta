@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class NotificationModel {
   final String id;
   final String userId; // recipient
-  final String type; // 'like', 'comment', 'reply', 'achievement', 'system'
+  final String type; // 'upvote', 'downvote', 'comment', 'reply', 'achievement', 'system'
   final String? postId;
   final String? commentId;
   final String? fromUserId;

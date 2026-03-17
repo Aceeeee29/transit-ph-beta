@@ -12,7 +12,6 @@ import '../widgets/feed/feed_colors.dart';
 import '../widgets/feed/feed_post_card.dart';
 import '../screens/comments_screen.dart';
 import '../widgets/feed/report_post_dialog.dart';
-import '../widgets/feed/emoji_picker_dialog.dart';
 
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
@@ -37,9 +36,10 @@ class FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<FeedScreen> {
-  final _likedPosts = <String, bool>{};
+  final _postVotes = <String, bool?>{};
+  final _upvoteCounts = <String, int>{};
+  final _downvoteCounts = <String, int>{};
   final _postComments = <String, List<Comment>>{};
-  final _emojiReactions = <String, Map<String, List<String>>>{};
   final _bookmarkedPosts = <String, bool>{};
   final _loadedPostIds = <String>{};
 
@@ -131,26 +131,38 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-  void _showEmojiPicker(String postId) {
-    showDialog(
-      context: context,
-      builder: (_) => EmojiPickerDialog(
-        postId: postId,
-        currentUserId: widget.currentUserId,
-        reactions: _emojiReactions[postId] ?? {},
-        onReactionToggled: (emoji, removed) {
-          setState(() {
-            _emojiReactions[postId] ??= {};
-            _emojiReactions[postId]![emoji] ??= [];
-            if (removed) {
-              _emojiReactions[postId]![emoji]!.remove(widget.currentUserId);
-            } else {
-              _emojiReactions[postId]![emoji]!.add(widget.currentUserId);
-            }
-          });
-        },
-      ),
-    );
+  bool? _initialVoteForPost(Post post) {
+    if (post.upvotedBy.contains(widget.currentUserId)) return true;
+    if (post.downvotedBy.contains(widget.currentUserId)) return false;
+    return null;
+  }
+
+  int _effectiveUpvoteCount(Post post) => _upvoteCounts[post.id] ?? post.upvoteCount;
+
+  int _effectiveDownvoteCount(Post post) =>
+      _downvoteCounts[post.id] ?? post.downvoteCount;
+
+  bool? _effectiveVote(Post post) => _postVotes[post.id] ?? _initialVoteForPost(post);
+
+  void _applyLocalVoteState(Post post, bool? previousVote, bool? nextVote) {
+    var upvotes = _effectiveUpvoteCount(post);
+    var downvotes = _effectiveDownvoteCount(post);
+
+    if (previousVote == true) {
+      upvotes = (upvotes - 1).clamp(0, 1 << 31);
+    } else if (previousVote == false) {
+      downvotes = (downvotes - 1).clamp(0, 1 << 31);
+    }
+
+    if (nextVote == true) {
+      upvotes += 1;
+    } else if (nextVote == false) {
+      downvotes += 1;
+    }
+
+    _postVotes[post.id] = nextVote;
+    _upvoteCounts[post.id] = upvotes;
+    _downvoteCounts[post.id] = downvotes;
   }
 
   @override
@@ -180,33 +192,67 @@ class _FeedScreenState extends State<FeedScreen> {
   Widget _buildPostCard(Post post) {
     return FeedPostCard(
       post: post,
-      isLiked: _likedPosts[post.id] ?? false,
+      isUpvoted: _effectiveVote(post) == true,
+      isDownvoted: _effectiveVote(post) == false,
+      upvoteCount: _effectiveUpvoteCount(post),
+      downvoteCount: _effectiveDownvoteCount(post),
       isBookmarked: _bookmarkedPosts[post.id] ?? false,
-      reactions: _emojiReactions[post.id] ?? {},
       currentUserId: widget.currentUserId,
       currentUserName: widget.currentUserName,
-      onLikeTapped: () async {
-        await PostActionsService.likePost(post.id, widget.currentUserId);
-        setState(() {
-          _likedPosts[post.id] = !(_likedPosts[post.id] ?? false);
-        });
-        if (post.userId != null && post.userId != widget.currentUserId) {
-          NotificationsService.addNotification(NotificationModel(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            userId: post.userId!,
-            type: 'like',
-            postId: post.id,
-            fromUserName: widget.currentUserName,
-            timestamp: DateTime.now(),
-            message: '${widget.currentUserName} liked your post.',
-          ));
+      onUpvoteTapped: () async {
+        final previousVote = _effectiveVote(post);
+        final nextVote = await PostActionsService.votePost(
+          post.id,
+          widget.currentUserId,
+          isUpvote: true,
+        );
+        if (!mounted) return;
+        setState(() => _applyLocalVoteState(post, previousVote, nextVote));
+        if (nextVote == true &&
+            post.userId != null &&
+            post.userId != widget.currentUserId) {
+          NotificationsService.addNotification(
+            NotificationModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: post.userId!,
+              type: 'upvote',
+              postId: post.id,
+              fromUserName: widget.currentUserName,
+              timestamp: DateTime.now(),
+              message: '${widget.currentUserName} upvoted your post.',
+            ),
+          );
+        }
+      },
+      onDownvoteTapped: () async {
+        final previousVote = _effectiveVote(post);
+        final nextVote = await PostActionsService.votePost(
+          post.id,
+          widget.currentUserId,
+          isUpvote: false,
+        );
+        if (!mounted) return;
+        setState(() => _applyLocalVoteState(post, previousVote, nextVote));
+        if (nextVote == false &&
+            post.userId != null &&
+            post.userId != widget.currentUserId) {
+          NotificationsService.addNotification(
+            NotificationModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: post.userId!,
+              type: 'downvote',
+              postId: post.id,
+              fromUserName: widget.currentUserName,
+              timestamp: DateTime.now(),
+              message: '${widget.currentUserName} downvoted your post.',
+            ),
+          );
         }
       },
       onCommentTapped: () async {
         if (!_loadedPostIds.contains(post.id)) await _loadComments(post.id);
         _showCommentSheet(post.id, post);
       },
-      onReactTapped: () => _showEmojiPicker(post.id),
       onBookmarkTapped: () async {
         await PostActionsService.bookmarkPost(post.id, widget.currentUserId);
         setState(() {
@@ -288,10 +334,54 @@ class _FeedScreenState extends State<FeedScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: FeedColors.border),
             ),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: FeedColors.textPrimary,
-              size: 20,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(
+                  Icons.notifications_outlined,
+                  color: FeedColors.textPrimary,
+                  size: 20,
+                ),
+                Positioned(
+                  right: -6,
+                  top: -6,
+                  child: StreamBuilder<int>(
+                    stream: NotificationsService.unreadCountStream(
+                      widget.currentUserId,
+                    ),
+                    builder: (context, snapshot) {
+                      final unread = snapshot.data ?? 0;
+                      if (unread <= 0) return const SizedBox.shrink();
+
+                      final label = unread > 99 ? '99+' : unread.toString();
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: FeedColors.danger,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: FeedColors.surface,
+                            width: 1.5,
+                          ),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16),
+                        child: Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ),

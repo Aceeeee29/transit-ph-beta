@@ -120,60 +120,84 @@ class PostService {
     }
   }
 
-  /// Like a post
-  static Future<void> likePost(String postId) async {
-    try {
-      await _firestore.collection('posts').doc(postId).update({
-        'likeCount': FieldValue.increment(1),
-      });
-    } catch (e) {
-      print('Error liking post $postId: $e');
-      rethrow;
-    }
-  }
-
-  /// Unlike a post
-  static Future<void> unlikePost(String postId) async {
-    try {
-      await _firestore.collection('posts').doc(postId).update({
-        'likeCount': FieldValue.increment(-1),
-      });
-    } catch (e) {
-      print('Error unliking post $postId: $e');
-      rethrow;
-    }
-  }
-
-  /// Toggle like on a post
-  static Future<void> toggleLike(String postId, String userId) async {
+  /// Toggle an upvote/downvote on a post.
+  /// Returns true for upvote, false for downvote, null for no vote.
+  static Future<bool?> toggleVote(
+    String postId,
+    String userId, {
+    required bool isUpvote,
+  }) async {
     try {
       final postRef = _firestore.collection('posts').doc(postId);
-      await _firestore.runTransaction((transaction) async {
+      return await _firestore.runTransaction<bool?>((transaction) async {
         final postSnapshot = await transaction.get(postRef);
-        if (!postSnapshot.exists) return;
+        if (!postSnapshot.exists) return null;
 
         final data = postSnapshot.data()!;
-        final likedBy = List<String>.from(data['likedBy'] ?? []);
+        final upvotedBy = List<String>.from(
+          data['upvotedBy'] ?? data['likedBy'] ?? [],
+        );
+        final downvotedBy = List<String>.from(data['downvotedBy'] ?? []);
 
-        if (likedBy.contains(userId)) {
-          // Unlike
-          transaction.update(postRef, {
-            'likedBy': FieldValue.arrayRemove([userId]),
-            'likeCount': FieldValue.increment(-1),
-          });
-        } else {
-          // Like
-          transaction.update(postRef, {
-            'likedBy': FieldValue.arrayUnion([userId]),
-            'likeCount': FieldValue.increment(1),
-          });
+        final hasUpvoted = upvotedBy.contains(userId);
+        final hasDownvoted = downvotedBy.contains(userId);
+
+        final updates = <String, dynamic>{
+          'upvotedBy': upvotedBy,
+          'downvotedBy': downvotedBy,
+          'upvoteCount': (data['upvoteCount'] ?? data['likeCount'] ?? 0),
+          'downvoteCount': (data['downvoteCount'] ?? 0),
+        };
+
+        if (isUpvote) {
+          if (hasUpvoted) {
+            updates['upvotedBy'] = List<String>.from(upvotedBy)
+              ..remove(userId);
+            updates['upvoteCount'] = (updates['upvoteCount'] as int) - 1;
+            transaction.update(postRef, updates);
+            return null;
+          }
+
+          final nextUpvotedBy = List<String>.from(upvotedBy)..add(userId);
+          updates['upvotedBy'] = nextUpvotedBy;
+          updates['upvoteCount'] = (updates['upvoteCount'] as int) + 1;
+
+          if (hasDownvoted) {
+            updates['downvotedBy'] = List<String>.from(downvotedBy)
+              ..remove(userId);
+            updates['downvoteCount'] = (updates['downvoteCount'] as int) - 1;
+          }
+
+          transaction.update(postRef, updates);
+          return true;
         }
+
+        if (hasDownvoted) {
+          updates['downvotedBy'] = List<String>.from(downvotedBy)
+            ..remove(userId);
+          updates['downvoteCount'] = (updates['downvoteCount'] as int) - 1;
+          transaction.update(postRef, updates);
+          return null;
+        }
+
+        final nextDownvotedBy = List<String>.from(downvotedBy)..add(userId);
+        updates['downvotedBy'] = nextDownvotedBy;
+        updates['downvoteCount'] = (updates['downvoteCount'] as int) + 1;
+
+        if (hasUpvoted) {
+          updates['upvotedBy'] = List<String>.from(upvotedBy)..remove(userId);
+          updates['upvoteCount'] = (updates['upvoteCount'] as int) - 1;
+        }
+
+        transaction.update(postRef, updates);
+        return false;
       });
     } catch (e) {
-      print('Error toggling like on post $postId: $e');
+      print('Error toggling vote on post $postId: $e');
       rethrow;
     }
   }
+
 
   /// Add a comment to a post
   static Future<void> addComment(Comment comment) async {
@@ -261,35 +285,4 @@ class PostService {
     }
   }
 
-  /// Add a reaction to a post
-  static Future<void> addReaction(
-    String postId,
-    String emoji,
-    String userId,
-  ) async {
-    try {
-      await _firestore.collection('posts').doc(postId).update({
-        'reactions.$emoji': FieldValue.arrayUnion([userId]),
-      });
-    } catch (e) {
-      print('Error adding reaction to post $postId: $e');
-      rethrow;
-    }
-  }
-
-  /// Remove a reaction from a post
-  static Future<void> removeReaction(
-    String postId,
-    String emoji,
-    String userId,
-  ) async {
-    try {
-      await _firestore.collection('posts').doc(postId).update({
-        'reactions.$emoji': FieldValue.arrayRemove([userId]),
-      });
-    } catch (e) {
-      print('Error removing reaction from post $postId: $e');
-      rethrow;
-    }
-  }
 }

@@ -20,6 +20,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   late TabController _tabController;
   late final ValueNotifier<List<Post>> _postsNotifier;
   late final ValueNotifier<List<route_model.Route>> _routesNotifier;
+  final TextEditingController _userSearchController = TextEditingController();
+  String _userSearchQuery = '';
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -48,6 +50,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   void dispose() {
     _postsNotifier.removeListener(_onDataChanged);
     _routesNotifier.removeListener(_onDataChanged);
+    _userSearchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -1065,6 +1068,13 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   f.targetId == post.id)
               .map((f) => f.content)
               .toList();
+            final authorName = post.userName?.trim();
+            final authorEmail = post.userEmail?.trim();
+            final displayAuthor = (authorName != null && authorName.isNotEmpty)
+              ? authorName
+              : ((authorEmail != null && authorEmail.isNotEmpty)
+                ? authorEmail
+                : 'Anonymous');
           return _panelCard(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -1136,7 +1146,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                     children: [
                       _metaChip(
                         Icons.person_outline,
-                        post.userName ?? post.userEmail ?? 'Anonymous',
+                        displayAuthor,
                         _accent,
                       ),
                       if (post.taggedLocation != null)
@@ -1202,7 +1212,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   // ─── Users Tab ─────────────────────────────────────────────────────────────
 
   Widget _buildUsersTab() {
-    final users = [...ModerationService.getUsers()]
+    final users = ModerationService.getUsers()
+      .where((u) => u.role == UserRole.user)
+      .toList()
       ..sort((a, b) {
         final aName = (a.name.trim().isNotEmpty ? a.name : a.email)
             .toLowerCase();
@@ -1210,14 +1222,95 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             .toLowerCase();
         return aName.compareTo(bName);
       });
+
+    final query = _userSearchQuery.trim().toLowerCase();
+    final filteredUsers = users.where((u) {
+      if (query.isEmpty) return true;
+      return u.name.toLowerCase().contains(query) ||
+          u.email.toLowerCase().contains(query);
+    }).toList();
+
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: users.length,
+        itemCount: (filteredUsers.isEmpty ? 2 : filteredUsers.length + 1),
         itemBuilder: (context, index) {
-          final user = users[index];
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: _userSearchController,
+                  onChanged: (value) =>
+                      setState(() => _userSearchQuery = value),
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search users by name or email',
+                    hintStyle: const TextStyle(
+                      color: _textSecondary,
+                      fontSize: 13,
+                    ),
+                    border: InputBorder.none,
+                    icon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: _textSecondary,
+                    ),
+                    suffixIcon: _userSearchQuery.isNotEmpty
+                        ? IconButton(
+                            onPressed: () {
+                              _userSearchController.clear();
+                              setState(() => _userSearchQuery = '');
+                            },
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: _textSecondary,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          if (filteredUsers.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Text(
+                  'No users found',
+                  style: TextStyle(
+                    color: _textSecondary.withOpacity(0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final user = filteredUsers[index - 1];
           return _panelCard(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -1288,6 +1381,15 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                         filled: user.isBanned,
                         onTap: () async {
                           if (user.uid == null) return;
+                          if (user.role != UserRole.user) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Moderator accounts cannot be banned.'),
+                              ),
+                            );
+                            return;
+                          }
                           if (user.isBanned) {
                             await ModerationService.unbanUser(user.uid!);
                           } else {

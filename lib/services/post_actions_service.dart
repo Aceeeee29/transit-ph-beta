@@ -34,8 +34,12 @@ class PostActionsService {
     }
   }
 
-  static Future<void> likePost(String postId, String userId) async {
-    await PostService.toggleLike(postId, userId);
+  static Future<bool?> votePost(
+    String postId,
+    String userId, {
+    required bool isUpvote,
+  }) async {
+    return PostService.toggleVote(postId, userId, isUpvote: isUpvote);
   }
 
   static Future<void> addComment(Comment comment) async {
@@ -50,20 +54,12 @@ class PostActionsService {
     await PostService.deleteComment(postId, commentId, isTopLevel: isTopLevel);
   }
 
-  static Future<void> addReaction(
-    String postId,
-    String emoji,
-    String userId,
-  ) async {
-    await PostService.addReaction(postId, emoji, userId);
+  static Future<bool?> upvotePost(String postId, String userId) {
+    return votePost(postId, userId, isUpvote: true);
   }
 
-  static Future<void> removeReaction(
-    String postId,
-    String emoji,
-    String userId,
-  ) async {
-    await PostService.removeReaction(postId, emoji, userId);
+  static Future<bool?> downvotePost(String postId, String userId) {
+    return votePost(postId, userId, isUpvote: false);
   }
 
   static Future<void> bookmarkPost(String postId, String userId) async {
