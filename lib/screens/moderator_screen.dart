@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/post.dart';
+import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
@@ -25,6 +26,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
   static const _accent = Color(0xFF2E7CF6);
+  static const _accentSoft = Color(0x1A2E7CF6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -65,25 +67,131 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }) async {
     final title = fromDismiss ? 'Dismiss Feedback' : 'Delete Feedback';
     final message = fromDismiss
-        ? 'This will dismiss and permanently delete this feedback from Firebase. Continue?'
-        : 'This will permanently delete this resolved feedback from Firebase. Continue?';
+        ? 'This will dismiss and permanently delete this feedback. Continue?'
+        : 'This will permanently delete this resolved feedback. Continue?';
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _border),
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withOpacity(0.12),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _danger),
-            child: const Text('Delete'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: _danger.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: _danger,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: _textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(false),
+                        child: Container(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _surfaceAlt,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _border),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(true),
+                        child: Container(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _danger,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _danger.withOpacity(0.28),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
 
@@ -101,6 +209,183 @@ class _ModeratorScreenState extends State<ModeratorScreen>
       ),
     );
     setState(() {});
+  }
+
+  Future<bool> _confirmBanUser(User user) async {
+    var typedBan = '';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final canBan = typedBan.trim() == 'BAN';
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              backgroundColor: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withOpacity(0.12),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: _danger.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.gpp_bad_rounded,
+                              color: _danger,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Confirm User Ban',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You are about to ban ${user.name}. Type BAN to confirm this action.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _border),
+                        ),
+                        child: TextField(
+                          onChanged: (value) {
+                            typedBan = value;
+                            setDialogState(() {});
+                          },
+                          style: const TextStyle(
+                            color: _textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Type BAN',
+                            hintStyle: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 13,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => Navigator.of(context).pop(false),
+                              child: Container(
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: _surfaceAlt,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: _border),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: _textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: canBan
+                                  ? () => Navigator.of(context).pop(true)
+                                  : null,
+                              child: Container(
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: canBan
+                                      ? _danger
+                                      : _danger.withOpacity(0.35),
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: canBan
+                                      ? [
+                                          BoxShadow(
+                                            color: _danger.withOpacity(0.28),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'Ban User',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    return confirmed == true;
   }
 
   Widget _refreshableEmptyState(Widget child) {
@@ -644,6 +929,55 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     );
   }
 
+  Widget _panelCard({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required Color color,
+    required Future<void> Function() onTap,
+    bool filled = false,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: filled ? color : color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: filled ? Colors.white : color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Color _accentFor(String mode) {
     switch (mode) {
       case 'Walk':
@@ -731,79 +1065,128 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   f.targetId == post.id)
               .map((f) => f.content)
               .toList();
-          return Card(
-            margin: const EdgeInsets.all(8),
+          return _panelCard(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(post.content,
-                      style: const TextStyle(fontSize: 16)),
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: _danger.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.report_problem_outlined,
+                            size: 16, color: _danger),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Reported Post',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    post.content,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: _textPrimary,
+                      height: 1.4,
+                    ),
+                  ),
                   if (post.imageUrls.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     SizedBox(
-                      height: 100,
+                      height: 90,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: post.imageUrls.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                        itemBuilder: (context, index) => Container(
+                          width: 90,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _border),
+                          ),
+                          clipBehavior: Clip.antiAlias,
                           child: Image.network(
                             post.imageUrls[index],
-                            width: 100,
-                            height: 100,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.error),
+                                const Icon(Icons.broken_image,
+                                    color: _textSecondary),
                           ),
                         ),
                       ),
                     ),
                   ],
-                  if (post.taggedLocation != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Location: ${post.taggedLocation!.name}',
-                        style: const TextStyle(
-                            fontSize: 14, color: Colors.blue),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _metaChip(
+                        Icons.person_outline,
+                        post.userName ?? post.userEmail ?? 'Anonymous',
+                        _accent,
                       ),
-                    ),
-                  const SizedBox(height: 8),
-                  Text('By: ${post.userName ?? post.userEmail ?? 'Anonymous'}'),
-                  if (reportReasons.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                      if (post.taggedLocation != null)
+                        _metaChip(
+                          Icons.location_on_outlined,
+                          post.taggedLocation!.name,
+                          _success,
+                        ),
+                    ],
+                  ),
+                  if (reportReasons.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _danger.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _danger.withOpacity(0.2)),
+                      ),
                       child: Text(
                         'Reported for: ${reportReasons.join(', ')}',
                         style: const TextStyle(
-                            color: Colors.red,
-                            fontStyle: FontStyle.italic),
+                          color: _danger,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ElevatedButton(
-                        onPressed: () async {
+                      _actionButton(
+                        label: 'Remove',
+                        color: _danger,
+                        onTap: () async {
                           await ModerationService.removePostPermanently(post.id);
                           setState(() {});
                         },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red),
-                        child: const Text('Remove'),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () async {
+                      _actionButton(
+                        label: 'Dismiss',
+                        color: _success,
+                        onTap: () async {
                           await ModerationService.dismissReportedPost(post.id);
                           setState(() {});
                         },
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green),
-                        child: const Text('Dismiss'),
+                        filled: true,
                       ),
                     ],
                   ),
@@ -819,7 +1202,14 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   // ─── Users Tab ─────────────────────────────────────────────────────────────
 
   Widget _buildUsersTab() {
-    final users = ModerationService.getUsers();
+    final users = [...ModerationService.getUsers()]
+      ..sort((a, b) {
+        final aName = (a.name.trim().isNotEmpty ? a.name : a.email)
+            .toLowerCase();
+        final bName = (b.name.trim().isNotEmpty ? b.name : b.email)
+            .toLowerCase();
+        return aName.compareTo(bName);
+      });
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
@@ -828,46 +1218,86 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         itemCount: users.length,
         itemBuilder: (context, index) {
           final user = users[index];
-          return Card(
-            margin: const EdgeInsets.all(8),
+          return _panelCard(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(user.name,
-                      style: const TextStyle(fontSize: 16)),
-                  Text(user.email),
-                  Text('Role: ${user.role.name}'),
-                  Text('Banned: ${user.isBanned}'),
-                  const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (!user.isBanned)
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (user.uid != null) {
-                              await ModerationService.banUser(user.uid!);
-                              setState(() {});
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red),
-                          child: const Text('Ban'),
-                        )
-                      else
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (user.uid != null) {
-                              await ModerationService.unbanUser(user.uid!);
-                              setState(() {});
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green),
-                          child: const Text('Unban'),
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: _accentSoft,
+                        child: Text(
+                          (user.name.isNotEmpty ? user.name[0] : '?')
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            color: _accent,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              user.email,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _metaChip(Icons.badge_outlined, user.role.name, _accent),
+                      _metaChip(
+                        user.isBanned
+                            ? Icons.block_outlined
+                            : Icons.verified_user_outlined,
+                        user.isBanned ? 'Banned' : 'Active',
+                        user.isBanned ? _danger : _success,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _actionButton(
+                        label: user.isBanned ? 'Unban' : 'Ban',
+                        color: user.isBanned ? _success : _danger,
+                        filled: user.isBanned,
+                        onTap: () async {
+                          if (user.uid == null) return;
+                          if (user.isBanned) {
+                            await ModerationService.unbanUser(user.uid!);
+                          } else {
+                            final confirmed = await _confirmBanUser(user);
+                            if (!confirmed) return;
+                            await ModerationService.banUser(user.uid!);
+                          }
+                          setState(() {});
+                        },
+                      ),
                     ],
                   ),
                 ],
@@ -893,104 +1323,146 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         itemCount: feedbacks.length,
         itemBuilder: (context, index) {
           final feedback = feedbacks[index];
-          return Card(
-            margin: const EdgeInsets.all(8),
+          final statusColor = feedback.status ==
+                  feedback_model.FeedbackStatus.pending
+              ? _warning
+              : feedback.status == feedback_model.FeedbackStatus.resolved
+                  ? _success
+                  : _textSecondary;
+
+          return _panelCard(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Type: ${feedback.type.name}',
-                        style:
-                            const TextStyle(fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _accentSoft,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.feedback_outlined,
+                                size: 16, color: _accent),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            feedback.type.name.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: feedback.status ==
-                                  feedback_model.FeedbackStatus.pending
-                              ? Colors.orange
-                              : feedback.status ==
-                                  feedback_model.FeedbackStatus.resolved
-                              ? Colors.green
-                              : Colors.grey,
+                          color: statusColor.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: statusColor.withOpacity(0.3)),
                         ),
                         child: Text(
                           feedback.status.name,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(feedback.content),
-                  if (feedback.targetId != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Target: ${feedback.targetType?.name ?? 'unknown'} (${feedback.targetId})',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.blue),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _surfaceAlt,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _border),
                     ),
-                  ],
-                  const SizedBox(height: 4),
-                  Text('From: ${feedback.userId}'),
-                  Text('Time: ${feedback.timestamp}'),
+                    child: Text(
+                      feedback.content,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _metaChip(Icons.person_outline, feedback.userId, _accent),
+                      _metaChip(
+                        Icons.schedule_outlined,
+                        _formatDate(feedback.timestamp),
+                        _textSecondary,
+                      ),
+                      if (feedback.targetId != null)
+                        _metaChip(
+                          Icons.gps_fixed_outlined,
+                          '${feedback.targetType?.name ?? 'unknown'} • ${feedback.targetId}',
+                          _success,
+                        ),
+                    ],
+                  ),
                   if (feedback.status ==
                       feedback_model.FeedbackStatus.pending) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        ElevatedButton(
-                          onPressed: () async {
+                        _actionButton(
+                          label: 'Resolve',
+                          color: _success,
+                          filled: true,
+                          onTap: () async {
                             await ModerationService.updateFeedbackStatus(
                               feedback.id,
                               feedback_model.FeedbackStatus.resolved,
                             );
                             setState(() {});
                           },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green),
-                          child: const Text('Resolve'),
                         ),
                         const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () async {
+                        _actionButton(
+                          label: 'Dismiss',
+                          color: _textSecondary,
+                          onTap: () async {
                             await _deleteFeedbackWithConfirmation(
                               feedback,
                               fromDismiss: true,
                             );
                           },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey),
-                          child: const Text('Dismiss'),
                         ),
                       ],
                     ),
                   ],
                   if (feedback.status ==
                       feedback_model.FeedbackStatus.resolved) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        ElevatedButton(
-                          onPressed: () async {
+                        _actionButton(
+                          label: 'Delete',
+                          color: _danger,
+                          onTap: () async {
                             await _deleteFeedbackWithConfirmation(
                               feedback,
                               fromDismiss: false,
                             );
                           },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: _danger),
-                          child: const Text('Delete'),
                         ),
                       ],
                     ),
