@@ -21,7 +21,6 @@ class User {
   DateTime? createdAt;
   UserRole role;
   bool isBanned;
-  List<String> bookmarkedPostIds;
   List<String> followedRouteIds;
   bool hasSeenTutorial;
   List<String> recentSearches;
@@ -45,7 +44,6 @@ class User {
     this.createdAt,
     this.role = UserRole.user,
     this.isBanned = false,
-    this.bookmarkedPostIds = const [],
     this.followedRouteIds = const [],
     this.hasSeenTutorial = false,
     this.recentSearches = const [],
@@ -71,7 +69,6 @@ class User {
       'createdAt': createdAt?.toIso8601String(),
       'role': role.name,
       'isBanned': isBanned,
-      'bookmarkedPostIds': bookmarkedPostIds,
       'followedRouteIds': followedRouteIds,
       'hasSeenTutorial': hasSeenTutorial,
       'recentSearches': recentSearches,
@@ -109,7 +106,6 @@ class User {
         orElse: () => UserRole.user,
       ),
       isBanned: json['isBanned'] ?? false,
-      bookmarkedPostIds: List<String>.from(json['bookmarkedPostIds'] ?? []),
       followedRouteIds: List<String>.from(json['followedRouteIds'] ?? []),
       hasSeenTutorial: json['hasSeenTutorial'] ?? false,
       recentSearches: List<String>.from(json['recentSearches'] ?? []),

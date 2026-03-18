@@ -40,7 +40,6 @@ class _FeedScreenState extends State<FeedScreen> {
   final _upvoteCounts = <String, int>{};
   final _downvoteCounts = <String, int>{};
   final _postComments = <String, List<Comment>>{};
-  final _bookmarkedPosts = <String, bool>{};
   final _loadedPostIds = <String>{};
 
   @override
@@ -196,7 +195,6 @@ class _FeedScreenState extends State<FeedScreen> {
       isDownvoted: _effectiveVote(post) == false,
       upvoteCount: _effectiveUpvoteCount(post),
       downvoteCount: _effectiveDownvoteCount(post),
-      isBookmarked: _bookmarkedPosts[post.id] ?? false,
       currentUserId: widget.currentUserId,
       currentUserName: widget.currentUserName,
       onUpvoteTapped: () async {
@@ -252,12 +250,6 @@ class _FeedScreenState extends State<FeedScreen> {
       onCommentTapped: () async {
         if (!_loadedPostIds.contains(post.id)) await _loadComments(post.id);
         _showCommentSheet(post.id, post);
-      },
-      onBookmarkTapped: () async {
-        await PostActionsService.bookmarkPost(post.id, widget.currentUserId);
-        setState(() {
-          _bookmarkedPosts[post.id] = !(_bookmarkedPosts[post.id] ?? false);
-        });
       },
       onReportTapped: () => _showReportDialog(post),
       onDeleteTapped: post.userId == widget.currentUserId

@@ -62,11 +62,8 @@ class PostActionsService {
     return votePost(postId, userId, isUpvote: false);
   }
 
-  static Future<void> bookmarkPost(String postId, String userId) async {
-    await BookmarkService.addPostBookmark(postId);
-  }
-
   static Future<void> followRoute(String routeId, String userId) async {
     await BookmarkService.addBookmark(routeId);
   }
+
 }

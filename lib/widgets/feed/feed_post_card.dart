@@ -14,13 +14,11 @@ class FeedPostCard extends StatefulWidget {
   final bool isDownvoted;
   final int upvoteCount;
   final int downvoteCount;
-  final bool isBookmarked;
   final String currentUserId;
   final String currentUserName;
   final VoidCallback onUpvoteTapped;
   final VoidCallback onDownvoteTapped;
   final VoidCallback onCommentTapped;
-  final VoidCallback onBookmarkTapped;
   final VoidCallback onReportTapped;
   final VoidCallback? onDeleteTapped;
 
@@ -31,13 +29,11 @@ class FeedPostCard extends StatefulWidget {
     required this.isDownvoted,
     required this.upvoteCount,
     required this.downvoteCount,
-    required this.isBookmarked,
     required this.currentUserId,
     required this.currentUserName,
     required this.onUpvoteTapped,
     required this.onDownvoteTapped,
     required this.onCommentTapped,
-    required this.onBookmarkTapped,
     required this.onReportTapped,
     this.onDeleteTapped,
   });
@@ -157,17 +153,6 @@ class _FeedPostCardState extends State<FeedPostCard> {
           icon: Icons.comment_outlined,
           color: FeedColors.textSecondary,
           onTap: widget.onCommentTapped,
-        ),
-        const SizedBox(width: 6),
-        FeedActionButton(
-          icon:
-              widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-          color:
-              widget.isBookmarked
-                  ? FeedColors.accent
-                  : FeedColors.textSecondary,
-          active: widget.isBookmarked,
-          onTap: widget.onBookmarkTapped,
         ),
         const Spacer(),
         FeedActionButton(

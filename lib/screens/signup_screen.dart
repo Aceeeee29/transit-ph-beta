@@ -134,7 +134,6 @@ class _SignupScreenState extends State<SignupScreen> {
               'createdAt': FieldValue.serverTimestamp(),
               'badges': [],
               'achievements': [],
-              'bookmarkedPostIds': [],
               'followedRouteIds': [],
               'hasSeenTutorial': false,
             });

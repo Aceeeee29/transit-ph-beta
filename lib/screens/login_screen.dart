@@ -78,7 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 'createdAt': FieldValue.serverTimestamp(),
                 'badges': [],
                 'achievements': [],
-                'bookmarkedPostIds': [],
                 'followedRouteIds': [],
                 'hasSeenTutorial': false,
               });
@@ -148,7 +147,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 'createdAt': FieldValue.serverTimestamp(),
                 'badges': [],
                 'achievements': [],
-                'bookmarkedPostIds': [],
                 'followedRouteIds': [],
                 'hasSeenTutorial': false,
               });
