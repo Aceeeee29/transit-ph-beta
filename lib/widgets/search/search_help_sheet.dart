@@ -124,8 +124,8 @@ class SearchHelpSheet extends StatelessWidget {
                   const SizedBox(height: 10),
                   _info(
                     Icons.map_outlined,
-                    'Generated Routes (ORS)',
-                    'Auto-generated using OpenRouteService. Transit modes and fares are estimated — verify locally.',
+                    'Generated Routes (Supabase + OSRM)',
+                    'Auto-generated from Supabase GTFS transit data, with OSRM used to connect road geometry between stops. Modes/fares are still estimates — verify locally.',
                     Colors.orange.shade700,
                   ),
                 ],

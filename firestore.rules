@@ -35,11 +35,6 @@ service cloud.firestore {
         allow read, write: if isSelf(uid) || isModerator();
       }
 
-      // FIX: Added explicit rules for subcollections the app writes to.
-      match /bookmarks/{bookmarkId} {
-        allow read, write: if isSelf(uid);
-      }
-
       match /routeHistory/{historyId} {
         allow read, write: if isSelf(uid);
       }

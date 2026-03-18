@@ -7,6 +7,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
+import 'dart:math' as math;
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
 import '../services/route_metrics_service.dart';
@@ -25,7 +27,14 @@ class RouteMapScreen extends StatefulWidget {
 
 class _RouteMapScreenState extends State<RouteMapScreen> {
   final MapController _mapController = MapController();
+  StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
+  LatLng? _displayPosition;
+  double _displayHeading = 0;
+  LatLng? _lastCameraTarget;
+  DateTime? _lastCameraMoveAt;
+  bool _isNavigationStarted = false;
+  bool _isAutoFollowEnabled = false;
   List<route_model.Report> _routeReports = [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
@@ -103,9 +112,95 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         _currentPosition = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
+        _displayPosition =
+            LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+        _displayHeading = _normalizeHeading(_currentPosition!.heading);
         setState(() {});
+        _startLocationTracking();
       } catch (e) {}
     }
+  }
+
+  void _startLocationTracking() {
+    _positionSubscription?.cancel();
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 2,
+      ),
+    ).listen(
+      (position) {
+        _handleLocationUpdate(position);
+      },
+      onError: (_) {},
+    );
+  }
+
+  void _handleLocationUpdate(Position position) {
+    if (!mounted) return;
+    if (position.accuracy > 45) return;
+
+    final raw = LatLng(position.latitude, position.longitude);
+    final nextDisplay = _displayPosition == null
+        ? raw
+        : LatLng(
+            _lerp(_displayPosition!.latitude, raw.latitude, 0.28),
+            _lerp(_displayPosition!.longitude, raw.longitude, 0.28),
+          );
+    final nextHeading = _smoothHeading(_displayHeading, position.heading);
+
+    final hasMoved = _displayPosition == null ||
+        const Distance().as(LengthUnit.Meter, _displayPosition!, nextDisplay) >=
+            0.8;
+    final headingChanged = _angularDifference(_displayHeading, nextHeading) >= 2;
+
+    if (!hasMoved && !headingChanged) return;
+
+    setState(() {
+      _currentPosition = position;
+      _displayPosition = nextDisplay;
+      _displayHeading = nextHeading;
+    });
+
+    if (_isNavigationStarted && _isAutoFollowEnabled) {
+      _maybeMoveCamera(nextDisplay);
+    }
+  }
+
+  void _maybeMoveCamera(LatLng target) {
+    final now = DateTime.now();
+    if (_lastCameraMoveAt != null &&
+        now.difference(_lastCameraMoveAt!).inMilliseconds < 450) {
+      return;
+    }
+    if (_lastCameraTarget != null &&
+        const Distance().as(LengthUnit.Meter, _lastCameraTarget!, target) < 2.5) {
+      return;
+    }
+
+    final zoom = _mapController.camera.zoom < 15 ? 15.0 : _mapController.camera.zoom;
+    _lastCameraMoveAt = now;
+    _lastCameraTarget = target;
+    _mapController.move(target, zoom);
+  }
+
+  double _lerp(double from, double to, double factor) => from + (to - from) * factor;
+
+  double _normalizeHeading(double heading) {
+    if (!heading.isFinite || heading < 0) return _displayHeading;
+    final value = heading % 360;
+    return value < 0 ? value + 360 : value;
+  }
+
+  double _smoothHeading(double current, double incoming) {
+    final target = _normalizeHeading(incoming);
+    final delta = ((target - current + 540) % 360) - 180;
+    return (current + (delta * 0.25) + 360) % 360;
+  }
+
+  double _angularDifference(double a, double b) {
+    final diff = (a - b).abs() % 360;
+    return diff > 180 ? 360 - diff : diff;
   }
 
   Future<void> _loadReports() async {
@@ -293,12 +388,30 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   void _centerOnCurrentLocation() {
-    if (_currentPosition != null) {
+    if (_displayPosition != null) {
+      if (_isNavigationStarted && !_isAutoFollowEnabled) {
+        setState(() => _isAutoFollowEnabled = true);
+      }
       _mapController.move(
-        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+        _displayPosition!,
         15.0,
       );
     }
+  }
+
+  void _startNavigation() {
+    if (_displayPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Waiting for live location...')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isNavigationStarted = true;
+      _isAutoFollowEnabled = true;
+    });
+    _centerOnCurrentLocation();
   }
 
   void _onNotificationsDismissed() {
@@ -306,6 +419,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       _showNotificationOverlay = false;
       _pendingNotifications.clear();
     });
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    super.dispose();
   }
 
   // ─── Computed values ──────────────────────────────────────────────────────────
@@ -440,14 +559,17 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         child: const Icon(Icons.flag, color: Colors.red, size: 40),
       ));
     }
-    if (_currentPosition != null) {
+    if (_displayPosition != null) {
       result.add(Marker(
-        point: LatLng(
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
+        point: _displayPosition!,
+        child: Transform.rotate(
+          angle: _displayHeading * (math.pi / 180),
+          child: const Icon(
+            Icons.navigation,
+            color: Colors.blue,
+            size: 38,
+          ),
         ),
-        child:
-            const Icon(Icons.my_location, color: Colors.blue, size: 40),
       ));
     }
     return result;
@@ -629,6 +751,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             initialZoom: 10.0,
             minZoom: 5.0,
             maxZoom: 18.0,
+            onPositionChanged: (_, hasGesture) {
+              if (hasGesture && _isAutoFollowEnabled) {
+                setState(() => _isAutoFollowEnabled = false);
+              }
+            },
             cameraConstraint: CameraConstraint.contain(
               bounds: LatLngBounds(
                 const LatLng(4.5, 116.0),
@@ -647,8 +774,63 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           ],
         ),
         Positioned(top: 12, right: 12, child: _buildMapLegend()),
+        Positioned(bottom: 12, left: 12, child: _buildStartControl()),
         Positioned(bottom: 12, right: 12, child: _buildCenterButton()),
       ],
+    );
+  }
+
+  Widget _buildStartControl() {
+    if (!_isNavigationStarted) {
+      return ElevatedButton.icon(
+        onPressed: _startNavigation,
+        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+        label: const Text('Start'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _accent,
+          foregroundColor: Colors.white,
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isAutoFollowEnabled ? _accent.withOpacity(0.45) : _border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _isAutoFollowEnabled
+                  ? Icons.gps_fixed_rounded
+                  : Icons.gps_not_fixed_rounded,
+              color: _isAutoFollowEnabled ? _accent : _textSecondary,
+              size: 17,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _isAutoFollowEnabled ? 'Following' : 'Follow paused',
+              style: TextStyle(
+                color: _isAutoFollowEnabled ? _accent : _textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

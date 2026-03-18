@@ -3,7 +3,6 @@ import '../models/post.dart';
 import '../models/comment.dart';
 import '../models/feedback.dart' as feedback_model;
 import 'post_service.dart';
-import 'bookmark_service.dart';
 
 class PostActionsService {
   static Future<void> reportPost(
@@ -61,9 +60,4 @@ class PostActionsService {
   static Future<bool?> downvotePost(String postId, String userId) {
     return votePost(postId, userId, isUpvote: false);
   }
-
-  static Future<void> followRoute(String routeId, String userId) async {
-    await BookmarkService.addBookmark(routeId);
-  }
-
 }

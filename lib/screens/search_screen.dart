@@ -356,7 +356,7 @@ class _SearchScreenState extends State<SearchScreen> {
         origin:          origin,
         destinationName: query,
         destination:     destLatLng,
-        mode:            'Jeepney',
+        mode:            'Auto',
       );
 
       setState(() {

@@ -6,7 +6,6 @@ import 'search_screen.dart';
 import '../services/gamification_service.dart';
 import '../services/weather_service.dart';
 import '../services/location_service.dart';
-import '../services/bookmark_service.dart';
 import '../services/recommendation_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
@@ -29,7 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingWeather = true;
   bool _isDetectingLocation = false;
   final Set<String> _selectedModes = {};
-  Set<String> _bookmarkedRouteIds = {};
   Map<String, List<route_model.Route>> _recommendations = {};
   bool _isLoadingRecommendations = true;
   int? _totalUsers;
@@ -53,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _getWeather();
-    _loadBookmarks();
     _loadRecommendations();
     _loadTotalUsers();
   }
@@ -75,11 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // silently ignore — widget simply won't render
     }
-  }
-
-  Future<void> _loadBookmarks() async {
-    final bookmarkedIds = await BookmarkService.getBookmarkedRouteIds();
-    setState(() => _bookmarkedRouteIds = bookmarkedIds.toSet());
   }
 
   Future<void> _loadRecommendations() async {
@@ -189,17 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
 
     _showSearchResultsSheet(matched);
-  }
-
-  Future<void> _toggleBookmark(String routeId) async {
-    final newState = await BookmarkService.toggleBookmark(routeId);
-    setState(() {
-      if (newState) {
-        _bookmarkedRouteIds.add(routeId);
-      } else {
-        _bookmarkedRouteIds.remove(routeId);
-      }
-    });
   }
 
   // ─── Dialogs / modals ────────────────────────────────────────────────────────
@@ -381,8 +362,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─── Widget builders ─────────────────────────────────────────────────────────
 
   Widget _buildRouteCard(route_model.Route route) {
-    final isBookmarked = _bookmarkedRouteIds.contains(route.id);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -419,24 +398,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         letterSpacing: -0.2,
                       ),
                     ),
-                  ),
-                  _BookmarkButton(
-                    isBookmarked: isBookmarked,
-                    onTap: () async {
-                      await _toggleBookmark(route.id);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              _bookmarkedRouteIds.contains(route.id)
-                                  ? 'Route saved for later'
-                                  : 'Route removed from saved',
-                            ),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      }
-                    },
                   ),
                 ],
               ),
@@ -520,7 +481,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecommendationCard(route_model.Route route) {
-    final isBookmarked = _bookmarkedRouteIds.contains(route.id);
     return Container(
       width: 240,
       margin: const EdgeInsets.only(right: 12),
@@ -555,12 +515,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                _BookmarkButton(
-                  isBookmarked: isBookmarked,
-                  size: 28,
-                  iconSize: 14,
-                  onTap: () => _toggleBookmark(route.id),
                 ),
               ],
             ),
@@ -1237,51 +1191,6 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign: TextAlign.center,
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Bookmark button widget ───────────────────────────────────────────────────
-
-class _BookmarkButton extends StatelessWidget {
-  final bool isBookmarked;
-  final VoidCallback onTap;
-  final double size;
-  final double iconSize;
-
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
-
-  const _BookmarkButton({
-    required this.isBookmarked,
-    required this.onTap,
-    this.size = 34,
-    this.iconSize = 17,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: isBookmarked ? _accentSoft : _surfaceAlt,
-          borderRadius: BorderRadius.circular(size * 0.26),
-          border: Border.all(
-            color: isBookmarked ? _accent.withOpacity(0.3) : _border,
-          ),
-        ),
-        child: Icon(
-          isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-          color: isBookmarked ? _accent : _textSecondary,
-          size: iconSize,
-        ),
       ),
     );
   }
