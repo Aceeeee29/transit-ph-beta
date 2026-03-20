@@ -39,7 +39,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
   static const _accent = Color(0xFF2E7CF6);
   static const _warning = Color(0xFFFFB547);
   static const _danger = Color(0xFFE05C6A);
-  static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
   static const _surfaceAlt = Color(0xFFEAF2FF);
 

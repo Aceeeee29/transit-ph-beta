@@ -4,9 +4,6 @@ import '../models/route.dart' as route_model;
 import 'gamification_service.dart';
 
 class TutorialService {
-  static const String _hasSeenContributeTutorialKey =
-      'has_seen_contribute_tutorial';
-
   /// Check if the user has seen the contribute tutorial
   static Future<bool> hasSeenContributeTutorial() async {
     try {

@@ -51,7 +51,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String currentMode = 'Walk';
   String selectionMode = 'start';
   String? selectedRegion;
-  bool _showRoutePreview = false;
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool _isFormExpanded = false;
@@ -430,34 +429,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  // ─── Step management ─────────────────────────────────────────────────────────
-
-  void _onStepsChanged(List<route_model.Step> updatedSteps) {
-    setState(() => steps = updatedSteps);
-    _saveToHistory();
-  }
-
-  void _onStepReordered(int oldIndex, int newIndex) {
-    setState(() {
-      if (oldIndex < newIndex) newIndex -= 1;
-      final step = steps.removeAt(oldIndex);
-      steps.insert(newIndex, step);
-      if (stepBoundaries.isNotEmpty) {
-        final boundary = stepBoundaries.removeAt(oldIndex);
-        stepBoundaries.insert(newIndex, boundary);
-      }
-    });
-    _saveToHistory();
-  }
-
-  void _onStepDeleted(int index) {
-    setState(() {
-      steps.removeAt(index);
-      if (index < stepBoundaries.length) stepBoundaries.removeAt(index);
-    });
-    _saveToHistory();
-  }
-
   // ─── Route utilities ─────────────────────────────────────────────────────────
 
   IconData _getModeIcon(String mode) {
@@ -687,7 +658,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
 
     final route = _buildRoute();
-    setState(() => _showRoutePreview = true);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -695,7 +665,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
           route: route,
           onEdit: () {
             Navigator.pop(context);
-            setState(() => _showRoutePreview = false);
           },
           onSubmit: () {
             Navigator.pop(context);

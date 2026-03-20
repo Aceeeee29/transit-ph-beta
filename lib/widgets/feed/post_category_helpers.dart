@@ -19,7 +19,6 @@ String postCategoryLabel(PostCategory cat) => switch (cat) {
   PostCategory.delayReport => 'Delay Report',
   PostCategory.safetyAlert => 'Safety Alert',
   PostCategory.recommendation => 'Recommendation',
-  _ => 'Unknown',
 };
 
 IconData postCategoryIcon(PostCategory cat) => switch (cat) {
@@ -30,5 +29,4 @@ IconData postCategoryIcon(PostCategory cat) => switch (cat) {
   PostCategory.delayReport => Icons.schedule,
   PostCategory.safetyAlert => Icons.warning_amber_outlined,
   PostCategory.recommendation => Icons.thumb_up_outlined,
-  _ => Icons.label_outline,
 };

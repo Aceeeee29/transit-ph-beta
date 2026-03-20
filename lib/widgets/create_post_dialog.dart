@@ -206,7 +206,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     PostCategory.delayReport => 'Delay Report',
     PostCategory.safetyAlert => 'Safety Alert',
     PostCategory.recommendation => 'Recommendation',
-    _ => 'Unknown',
   };
 
   IconData _categoryIcon(PostCategory cat) => switch (cat) {
@@ -217,7 +216,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     PostCategory.delayReport => Icons.schedule,
     PostCategory.safetyAlert => Icons.warning_amber_outlined,
     PostCategory.recommendation => Icons.thumb_up_outlined,
-    _ => Icons.label_outline,
   };
 
   Color _categoryColor(PostCategory cat) => switch (cat) {

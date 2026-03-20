@@ -1,7 +1,6 @@
 import 'gamification_service.dart';
 
 class SearchService {
-  static const String _recentSearchesKey = 'recent_searches';
   static const int _maxRecentSearches = 10;
 
   /// Save a search query to recent searches

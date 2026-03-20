@@ -15,13 +15,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _categorySelected = false;
-  String? _selectedCategory;
   bool _isLoading = false;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
   static const _accent = Color(0xFF2E7CF6);
   static const _accentSoft = Color(0x1A2E7CF6);
   static const _textPrimary = Color(0xFF0F1D35);
@@ -134,7 +132,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
 
     setState(() {
-      _selectedCategory = category;
       _categorySelected = true;
       _isLoading = false;
     });

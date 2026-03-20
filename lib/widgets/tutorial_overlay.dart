@@ -25,9 +25,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   int _currentStep = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  Offset _targetPosition = Offset.zero;
-  Size _targetSize = Size.zero;
-  final bool _showAnimation = true;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _surface = Color(0xFFFFFFFF);
@@ -49,11 +46,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
-
-    // Calculate initial target position after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateTargetPosition();
-    });
   }
 
   @override
@@ -62,21 +54,12 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     super.dispose();
   }
 
-  void _updateTargetPosition() {
-    final currentStep = widget.steps[_currentStep];
-    setState(() {
-      _targetPosition = currentStep.customPosition ?? Offset.zero;
-      _targetSize = currentStep.customSize ?? Size(100, 100);
-    });
-  }
-
   void _nextStep() {
     if (_currentStep < widget.steps.length - 1) {
       _animationController.reverse().then((_) {
         setState(() {
           _currentStep++;
         });
-        _updateTargetPosition();
         _animationController.forward();
       });
     } else {
@@ -166,14 +149,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   @override
   Widget build(BuildContext context) {
     final currentStep = widget.steps[_currentStep];
-    final screenSize = MediaQuery.of(context).size;
-
-    // Determine tooltip position based on target position
-    final isTargetInTopHalf = _targetPosition.dy < screenSize.height / 2;
-    final tooltipTop =
-        isTargetInTopHalf
-            ? _targetPosition.dy + _targetSize.height + 20
-            : _targetPosition.dy - 150;
 
     final isLast = _currentStep == widget.steps.length - 1;
     final isFirst = _currentStep == 0;

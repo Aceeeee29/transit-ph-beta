@@ -47,7 +47,6 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
     PostCategory.delayReport => 'Delay Report',
     PostCategory.safetyAlert => 'Safety Alert',
     PostCategory.recommendation => 'Recommendation',
-    _ => 'Unknown',
   };
 
   @override
@@ -122,16 +121,6 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
         _showOmnibox = true;
       });
     }
-  }
-
-  void _onSearchUnfocus() {
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        setState(() {
-          _showOmnibox = false;
-        });
-      }
-    });
   }
 
   void _onSearchSubmitted(String query) {

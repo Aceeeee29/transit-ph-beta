@@ -223,12 +223,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _onSearchUnfocus() {
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) setState(() => _showOmnibox = false);
-    });
-  }
-
   Future<void> _onSearchSubmitted(String query) async {
     await _refreshRoutes();
     if (query.trim().isNotEmpty) {

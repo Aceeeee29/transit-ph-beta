@@ -126,8 +126,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   bool get _isError =>
       _message != null && _message!.toLowerCase().contains('failed');
-  bool get _isSuccess =>
-      _message != null && _message!.toLowerCase().contains('verified');
 
   @override
   Widget build(BuildContext context) {

@@ -42,6 +42,7 @@ class _FeedCommentDialogState extends State<FeedCommentDialog> {
   Future<void> _submit() async {
     if (_controller.text.isEmpty) {
       Navigator.pop(context);
+      
       return;
     }
     try {

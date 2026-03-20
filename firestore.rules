@@ -12,6 +12,12 @@ service cloud.firestore {
       return request.auth.uid == uid;
     }
 
+    function isSuperAdmin() {
+      return isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid))
+          .data.get('role', '') == 'superadmin';
+    }
+
     // FIX: Use .get('role', '') to safely handle missing role field,
     // preventing null-dereference crashes in rule evaluation.
     function isModerator() {
@@ -20,19 +26,23 @@ service cloud.firestore {
           .data.get('role', '') == 'moderator';
     }
 
+    function isStaff() {
+      return isModerator() || isSuperAdmin();
+    }
+
     // ── USERS ─────────────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isAuth();
       allow create: if isSelf(uid);
-      allow update: if isSelf(uid) || isModerator();
-      allow delete: if isModerator();
+      allow update: if isSelf(uid) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
 
       match /achievements/{achievementId} {
-        allow read, write: if isSelf(uid) || isModerator();
+        allow read, write: if isSelf(uid) || isStaff();
       }
 
       match /badges/{badgeId} {
-        allow read, write: if isSelf(uid) || isModerator();
+        allow read, write: if isSelf(uid) || isStaff();
       }
 
       match /routeHistory/{historyId} {
@@ -44,6 +54,7 @@ service cloud.firestore {
     match /posts/{postId} {
       // FIX: Pending posts are now only visible to their own author.
       allow read: if isAuth() && (
+        isStaff() ||
         resource.data.moderationStatus == 'approved' ||
         (resource.data.moderationStatus == 'pending' &&
           request.auth.uid == resource.data.userId)
@@ -56,7 +67,7 @@ service cloud.firestore {
       // are constrained to transitions involving the requesting UID.
       allow update: if isAuth() && (
         request.auth.uid == resource.data.userId ||
-        isModerator() ||
+        isStaff() ||
         (
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['upvoteCount', 'downvoteCount', 'upvotedBy', 'downvotedBy']) &&
@@ -101,7 +112,7 @@ service cloud.firestore {
 
       allow delete: if isAuth() && (
         request.auth.uid == resource.data.userId ||
-        isModerator()
+        isStaff()
       );
 
       match /comments/{commentId} {
@@ -112,7 +123,7 @@ service cloud.firestore {
         allow delete: if isAuth() && (
           resource.data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/posts/$(postId)).data.userId == request.auth.uid ||
-          isModerator()
+          isStaff()
         );
       }
     }
@@ -123,7 +134,7 @@ service cloud.firestore {
       allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.contributorId == request.auth.uid ||
-        isModerator() ||
+        isStaff() ||
         (
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['views', 'upvotes', 'downvotes', 'updatedAt']) &&
@@ -138,7 +149,7 @@ service cloud.firestore {
           (request.resource.data.downvotes - resource.data.downvotes) <= 1
         )
       );
-      allow delete: if isModerator();
+      allow delete: if isStaff();
 
       // Per-user vote state for one active vote at a time.
       match /routeVotes/{userId} {
@@ -161,6 +172,7 @@ service cloud.firestore {
       // still cannot target themselves to prevent self-spam.
       allow create: if isAuth() && (
         isModerator() ||
+        isSuperAdmin() ||
         (
           request.resource.data.keys().hasAll(['userId', 'type', 'timestamp']) &&
           request.resource.data.userId is string &&
@@ -175,9 +187,9 @@ service cloud.firestore {
       // FIX: Users can now read their own feedback to see its status.
       allow read: if isAuth() && (
         resource.data.userId == request.auth.uid ||
-        isModerator()
+        isStaff()
       );
-      allow update, delete: if isModerator();
+      allow update, delete: if isStaff();
     }
 
     // ── LOCATIONS ─────────────────────────────────────────────────────────────
@@ -186,11 +198,23 @@ service cloud.firestore {
       allow create: if isAuth();
       // FIX: Restricted update/delete to creator or moderator only.
       allow update: if isAuth() && (
-        resource.data.userId == request.auth.uid || isModerator()
+        resource.data.userId == request.auth.uid || isStaff()
       );
       allow delete: if isAuth() && (
-        resource.data.userId == request.auth.uid || isModerator()
+        resource.data.userId == request.auth.uid || isStaff()
       );
+    }
+
+    // ── ANNOUNCEMENTS (superadmin only writes) ──────────────────────────────
+    match /announcements/{announcementId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // ── APP CONFIG (superadmin only writes) ─────────────────────────────────
+    match /app_config/{configId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isSuperAdmin();
     }
   }
 }
