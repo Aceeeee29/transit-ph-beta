@@ -85,5 +85,17 @@ export interface DashboardStats {
   posts: { approved: number; pending: number; flagged: number }
   userGrowth: Array<{ label: string; count: number }>
   routesPerWeek: Array<{ label: string; count: number }>
-  recentActivity: Array<{ id: string; type: string; description: string; time: string }>
+  recentActivity: DashboardActivity[]
+}
+
+export type DashboardActivityType = 'signup' | 'route' | 'post' | 'report'
+export type DashboardActivitySeverity = 'info' | 'warning' | 'critical'
+
+export interface DashboardActivity {
+  id: string
+  type: DashboardActivityType
+  description: string
+  time: string
+  timestampMs: number
+  severity: DashboardActivitySeverity
 }

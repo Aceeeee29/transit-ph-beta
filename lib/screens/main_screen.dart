@@ -11,6 +11,7 @@ import '../services/moderation_service.dart';
 import '../services/gamification_service.dart';
 import '../services/post_service.dart';
 import '../services/route_service.dart';
+import '../widgets/announcement_dialog.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -23,6 +24,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isLoading = false;
+  bool _didCheckAnnouncements = false;
 
   List<Post> posts = [];
   List<route_model.Route> routes = [];
@@ -52,6 +54,13 @@ class _MainScreenState extends State<MainScreen> {
     ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
     _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAnnouncements());
+  }
+
+  Future<void> _checkAnnouncements() async {
+    if (_didCheckAnnouncements || !mounted) return;
+    _didCheckAnnouncements = true;
+    await AnnouncementDialog.checkAndShow(context);
   }
 
   /// Fetches the latest routes and posts from Firestore.

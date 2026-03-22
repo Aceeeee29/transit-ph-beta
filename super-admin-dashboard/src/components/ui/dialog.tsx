@@ -7,15 +7,37 @@ export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
 export function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  const { style, ...contentProps } = props
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#0f1d3590]" />
+      <DialogPrimitive.Overlay
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1100,
+          background: 'rgba(15, 29, 53, 0.56)',
+        }}
+      />
       <DialogPrimitive.Content
-        className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[95vw] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border)] bg-white p-5 shadow-xl',
-          className,
-        )}
-        {...props}
+        className={cn(className)}
+        style={{
+          position: 'fixed',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 1101,
+          width: '95vw',
+          maxWidth: '40rem',
+          borderRadius: 16,
+          border: '1px solid var(--border)',
+          background: '#fff',
+          padding: 20,
+          boxShadow: '0 16px 48px rgba(15, 29, 53, 0.12)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          ...style,
+        }}
+        {...contentProps}
       >
         {children}
       </DialogPrimitive.Content>

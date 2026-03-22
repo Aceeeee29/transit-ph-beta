@@ -1010,6 +1010,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     final reportedPostIds = ModerationService.getFeedbacks()
         .where((f) =>
             f.type == feedback_model.FeedbackType.report &&
+        f.status == feedback_model.FeedbackStatus.pending &&
             f.targetType == feedback_model.FeedbackTargetType.post &&
             f.targetId != null)
         .map((f) => f.targetId!)
@@ -1065,6 +1066,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           final reportReasons = ModerationService.getFeedbacks()
               .where((f) =>
                   f.type == feedback_model.FeedbackType.report &&
+                f.status == feedback_model.FeedbackStatus.pending &&
                   f.targetId == post.id)
               .map((f) => f.content)
               .toList();

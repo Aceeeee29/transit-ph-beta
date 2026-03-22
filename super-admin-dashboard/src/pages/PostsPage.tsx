@@ -2,122 +2,271 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deletePost, getFeedback, getPosts, updateFeedbackStatus, updatePostStatus } from '@/lib/firestoreApi'
 import { useAuth } from '@/hooks/useAuth'
-import { Card } from '@/components/ui/card'
-import { Select } from '@/components/ui/select'
-import { Table, Td, Th } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Flag, MessageSquare } from 'lucide-react'
 import type { PostItem } from '@/types/models'
+
+function StatusBadge({ status }: { status?: string }) {
+  if (status === 'approved') return <span className="badge badge-approved"><span className="badge-dot" />Approved</span>
+  if (status === 'rejected') return <span className="badge badge-rejected"><span className="badge-dot" />Removed</span>
+  if (status === 'flagged') return <span className="badge badge-flagged"><span className="badge-dot" />Flagged</span>
+  return <span className="badge badge-pending"><span className="badge-dot" />Pending</span>
+}
 
 export function PostsPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
   const { data: posts = [], isLoading, isError, error } = useQuery({ queryKey: ['posts'], queryFn: getPosts })
   const { data: feedback = [] } = useQuery({ queryKey: ['feedback'], queryFn: getFeedback })
-  const [statusFilter, setStatusFilter] = useState('all')
   const [preview, setPreview] = useState<PostItem | null>(null)
+  const [activeTab, setActiveTab] = useState<'reported' | 'all'>('reported')
 
-  const list = useMemo(() => posts.filter((p) => statusFilter === 'all' ? true : p.moderationStatus === statusFilter), [posts, statusFilter])
-
-  const reportsByPost = useMemo(() => {
+  const pendingReportsByPost = useMemo(() => {
     const map = new Map<string, string[]>()
-    feedback.filter((f) => f.type === 'report' && f.postId).forEach((f) => {
-      const entry = map.get(f.postId!) ?? []
-      entry.push(f.reason ?? f.message)
-      map.set(f.postId!, entry)
-    })
+    feedback
+      .filter((f) => f.type === 'report' && f.status === 'pending' && f.postId)
+      .forEach((f) => {
+        const arr = map.get(f.postId!) ?? []
+        arr.push(f.reason ?? f.message ?? '')
+        map.set(f.postId!, arr)
+      })
     return map
   }, [feedback])
+
+  const reportedPosts = useMemo(() => {
+    const pendingPostIds = new Set(pendingReportsByPost.keys())
+    return posts.filter((p) => pendingPostIds.has(p.id))
+  }, [posts, pendingReportsByPost])
+
+  const list = activeTab === 'reported' ? reportedPosts : posts
+
+  const postIds = useMemo(() => new Set(posts.map((p) => p.id)), [posts])
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['posts'] })
     await qc.invalidateQueries({ queryKey: ['feedback'] })
   }
 
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'approved' | 'rejected' | 'flagged' }) => updatePostStatus(id, status, user?.uid ?? ''),
+  const removePost = useMutation({
+    mutationFn: async ({ postId, feedbackIds }: { postId: string; feedbackIds: string[] }) => {
+      if (feedbackIds.length > 0) {
+        await Promise.all(feedbackIds.map((id) => updateFeedbackStatus(id, 'dismissed')))
+      }
+      await deletePost(postId)
+    },
+    onSuccess: refresh,
+  })
+  const dismissReport = useMutation({
+    mutationFn: async ({ postId, feedbackIds }: { postId: string; feedbackIds: string[] }) => {
+      await updatePostStatus(postId, 'approved', user?.uid ?? '')
+      await Promise.all(feedbackIds.map((id) => updateFeedbackStatus(id, 'dismissed')))
+    },
     onSuccess: refresh,
   })
 
-  const remove = useMutation({ mutationFn: (id: string) => deletePost(id), onSuccess: refresh })
-  const dismissReport = useMutation({ mutationFn: (id: string) => updateFeedbackStatus(id, 'dismissed'), onSuccess: refresh })
+  const pendingReportCount = feedback.filter(
+    (f) =>
+      f.type === 'report' &&
+      f.status === 'pending' &&
+      Boolean(f.postId) &&
+      postIds.has(f.postId!),
+  ).length
 
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
+    <div style={{ display: 'grid', gap: 20 }} className="stagger">
       <div className="page-head">
         <div>
-          <h2 style={{ margin: 0 }}>Post & Content Moderation</h2>
-          <div style={{ color: 'var(--text-secondary)' }}>Moderate community posts, reports, and visibility</div>
+          <div className="page-head-title">Post Moderation</div>
+          <div className="page-head-subtitle">Review community posts, reports, and content visibility</div>
         </div>
+        {pendingReportCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'var(--danger-soft)', border: '1px solid rgba(224,92,106,0.2)', borderRadius: 10 }}>
+            <Flag size={14} color="var(--danger)" />
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--danger)' }}>
+              {pendingReportCount} pending report{pendingReportCount > 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
       </div>
-      <Card style={{ display: 'grid', gap: '0.7rem' }}>
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ maxWidth: 240 }}>
-          <option value="all">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="flagged">Flagged</option>
-          <option value="rejected">Rejected</option>
-        </Select>
 
-        <div className="table-wrap">
-          {isLoading ? <p>Loading posts...</p> : isError ? (
-            <div className="state-banner error">Failed to load posts. {(error as Error | undefined)?.message ?? 'Check permissions and retry.'}</div>
-          ) : !list.length ? (
-            <div className="state-banner">No posts found for this status filter.</div>
-          ) : (
-            <Table>
-              <thead>
-                <tr>
-                  <Th>Author</Th>
-                  <Th>Category</Th>
-                  <Th>Content</Th>
-                  <Th>Status</Th>
-                  <Th>Reports</Th>
-                  <Th>Actions</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((p) => {
-                  const reasons = reportsByPost.get(p.id) ?? []
-                  return (
-                    <tr key={p.id}>
-                      <Td>{p.userName || p.userEmail || 'Anonymous'}</Td>
-                      <Td>{p.category}</Td>
-                      <Td>{p.content.slice(0, 80)}{p.content.length > 80 ? '...' : ''}</Td>
-                      <Td>{p.moderationStatus}</Td>
-                      <Td>{reasons.length ? reasons.join('; ') : '-'}</Td>
-                      <Td>
-                        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                          <Button size="sm" onClick={() => updateStatus.mutate({ id: p.id, status: 'approved' })}>Approve</Button>
-                          <Button size="sm" variant="danger" onClick={() => updateStatus.mutate({ id: p.id, status: 'rejected' })}>Remove</Button>
-                          <Button size="sm" variant="secondary" onClick={() => updateStatus.mutate({ id: p.id, status: 'flagged' })}>Flag</Button>
-                          <Button size="sm" variant="outline" onClick={() => setPreview(p)}>View</Button>
-                          {feedback.filter((f) => f.postId === p.id && f.status === 'pending').map((f) => (
-                            <Button key={f.id} size="sm" variant="outline" onClick={() => dismissReport.mutate(f.id)}>Dismiss Report</Button>
-                          ))}
-                          <Button size="sm" variant="danger" onClick={() => { if (confirm('Delete post?')) remove.mutate(p.id) }}>Delete</Button>
-                        </div>
-                      </Td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </Table>
-          )}
+      {/* Filter toolbar */}
+      <div className="toolbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${activeTab === 'reported' ? 'btn-primary' : 'btn-outline'}`}
+            data-confirm-skip="true"
+            onClick={() => setActiveTab('reported')}
+          >
+            Reported ({reportedPosts.length})
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${activeTab === 'all' ? 'btn-primary' : 'btn-outline'}`}
+            data-confirm-skip="true"
+            onClick={() => setActiveTab('all')}
+          >
+            All Posts ({posts.length})
+          </button>
         </div>
-      </Card>
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+          {list.length} post{list.length !== 1 ? 's' : ''}
+        </span>
+      </div>
 
+      {/* Table */}
+      {isLoading ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Author</th>
+                <th>Category</th>
+                <th>Content</th>
+                {activeTab === 'all' ? <th>Status</th> : null}
+                <th>Reports</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>{Array.from({ length: activeTab === 'all' ? 6 : 5 }).map((_, j) => <td key={j}><div className="skeleton" /></td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : isError ? (
+        <div className="state-banner error">
+          Failed to load posts. {(error as Error | undefined)?.message ?? 'Check permissions.'}
+        </div>
+      ) : !list.length ? (
+        <div className="table-wrap">
+          <div className="empty-state">
+            <div className="empty-icon"><MessageSquare size={22} /></div>
+            <div className="empty-title">{activeTab === 'reported' ? 'No reported posts' : 'No posts found'}</div>
+            <div className="empty-sub">
+              {activeTab === 'reported'
+                ? 'There are no posts with pending reports right now'
+                : 'There are no current posts to display'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Author</th>
+                <th>Category</th>
+                <th>Content Preview</th>
+                {activeTab === 'all' ? <th>Status</th> : null}
+                <th>Reports</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((p) => {
+                const reasons = pendingReportsByPost.get(p.id) ?? []
+                const pendingReports = feedback.filter(
+                  (f) => f.type === 'report' && f.postId === p.id && f.status === 'pending',
+                )
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <span style={{ fontWeight: 600 }}>{p.userName || p.userEmail || 'Anonymous'}</span>
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 5, fontSize: '0.73rem', fontWeight: 700,
+                        background: 'var(--accent-soft)', color: 'var(--accent)',
+                      }}>
+                        {p.category}
+                      </span>
+                    </td>
+                    <td style={{ maxWidth: 280 }}>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.content.slice(0, 90)}{p.content.length > 90 ? '…' : ''}
+                      </span>
+                    </td>
+                    {activeTab === 'all' ? (
+                      <td>
+                        <StatusBadge status={p.moderationStatus} />
+                      </td>
+                    ) : null}
+                    <td>
+                      {reasons.length > 0 ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--danger)', fontSize: '0.8rem', fontWeight: 600 }}>
+                          <Flag size={12} />{reasons.length} report{reasons.length > 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="action-group">
+                        <button
+                          className="btn btn-sm btn-outline"
+                          data-confirm-skip="true"
+                          onClick={() => setPreview(p)}
+                        >
+                          View
+                        </button>
+
+                        {activeTab === 'reported' && reasons.length > 0 ? (
+                          <>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => {
+                                if (confirm('Remove this reported post?')) {
+                                  removePost.mutate({
+                                    postId: p.id,
+                                    feedbackIds: pendingReports.map((f) => f.id),
+                                  })
+                                }
+                              }}
+                            >
+                              Remove
+                            </button>
+                            <button
+                              className="btn btn-sm btn-outline"
+                              onClick={() => dismissReport.mutate({ postId: p.id, feedbackIds: pendingReports.map((f) => f.id) })}
+                            >
+                              Dismiss
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Post detail dialog */}
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Post Details</DialogTitle></DialogHeader>
-          {preview ? (
-            <div style={{ display: 'grid', gap: '0.45rem' }}>
-              <div><strong>Author:</strong> {preview.userName || preview.userEmail || 'Anonymous'}</div>
-              <div><strong>Category:</strong> {preview.category}</div>
-              <div><strong>Content:</strong> {preview.content}</div>
-              <div><strong>Images:</strong> {(preview.images ?? []).join(', ') || 'No images'}</div>
+          {preview && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0 14px', borderBottom: '1px solid var(--border-soft)', marginBottom: 4 }}>
+                <span style={{ fontWeight: 700 }}>{preview.userName || preview.userEmail || 'Anonymous'}</span>
+                <StatusBadge status={preview.moderationStatus} />
+              </div>
+              {[
+                ['Category', preview.category],
+                ['Content', preview.content],
+                ['Images', (preview.images ?? []).join(', ') || 'No images attached'],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="dialog-field">
+                  <span className="dialog-field-label">{label}</span>
+                  <span className="dialog-field-value">{value}</span>
+                </div>
+              ))}
             </div>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
     </div>

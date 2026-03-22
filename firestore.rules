@@ -213,7 +213,8 @@ service cloud.firestore {
 
     // ── APP CONFIG (superadmin only writes) ─────────────────────────────────
     match /app_config/{configId} {
-      allow read: if isAuth();
+      // Allow startup update checks before authentication for this single doc.
+      allow read: if configId == 'update_checker' || isAuth();
       allow create, update, delete: if isSuperAdmin();
     }
   }

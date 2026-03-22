@@ -217,15 +217,12 @@ class ModerationService {
 
   static Future<void> rejectRoute(String routeId) async {
     try {
-      await _firestore.collection('routes').doc(routeId).update({
-        'approvalStatus': route_model.RouteApprovalStatus.rejected.name,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _firestore.collection('routes').doc(routeId).delete();
       // Remove from local pending list immediately
       pendingRoutesNotifier.value = pendingRoutesNotifier.value
           .where((r) => r.id != routeId)
           .toList();
-      print('Rejected route $routeId');
+      print('Rejected route $routeId (deleted)');
     } catch (e) {
       print('Error rejecting route $routeId: $e');
     }

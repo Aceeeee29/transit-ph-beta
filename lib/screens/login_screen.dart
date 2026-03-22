@@ -103,6 +103,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
+
+      // Clear cached selection so account picker is shown every time.
+      try {
+        await googleSignIn.signOut();
+      } catch (_) {
+        // Continue with sign-in even if local sign-out fails.
+      }
+
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         setState(() => _isGoogleLoading = false);

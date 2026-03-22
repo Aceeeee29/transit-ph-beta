@@ -1,9 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getModeratorStats, updateUserRole } from '@/lib/firestoreApi'
-import { Table, Td, Th } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Shield, UserMinus } from 'lucide-react'
 
+/* ── Avatar ───────────────────────────────────────────────────────────────── */
+const PALETTE = ['#2E7CF6', '#9B7FE8', '#3EC97A', '#E05C6A', '#FFB547']
+const avatarBg = (s?: string) => PALETTE[(s?.charCodeAt(0) ?? 0) % PALETTE.length]
+const getInitials = (name?: string, email?: string) => {
+  if (name) {
+    const p = name.trim().split(' ')
+    return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
+  }
+  return (email ?? 'MO').slice(0, 2).toUpperCase()
+}
+
+function Avatar({ name, email, size = 32 }: { name?: string; email?: string; size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, minWidth: size, maxWidth: size,
+      borderRadius: Math.round(size * 0.28),
+      background: avatarBg(email),
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.22, fontWeight: 800, color: '#fff',
+      flexShrink: 0, flexGrow: 0, letterSpacing: '0.02em',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+    }}>
+      {getInitials(name, email)}
+    </div>
+  )
+}
+
+/* ── Page ─────────────────────────────────────────────────────────────────── */
 export function ModeratorsPage() {
   const qc = useQueryClient()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['moderators'], queryFn: getModeratorStats })
@@ -17,46 +43,97 @@ export function ModeratorsPage() {
   })
 
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
+    <div style={{ display: 'grid', gap: 20 }} className="stagger">
+      {/* Header */}
       <div className="page-head">
         <div>
-          <h2 style={{ margin: 0 }}>Moderator Management</h2>
-          <div style={{ color: 'var(--text-secondary)' }}>Superadmin-only controls for moderator roles and activity</div>
+          <div className="page-head-title">Moderator Management</div>
+          <div className="page-head-subtitle">Superadmin-only controls for moderator roles and activity</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'rgba(155,127,232,0.10)', border:'1px solid rgba(155,127,232,0.2)', borderRadius:10 }}>
+          <Shield size={14} color="#9B7FE8" />
+          <span style={{ fontSize:'0.82rem', fontWeight:700, color:'#9B7FE8' }}>{data.length} moderator{data.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
-      <Card className="table-wrap">
-        {isLoading ? <p>Loading moderators...</p> : isError ? (
-          <div className="state-banner error">Failed to load moderators. {(error as Error | undefined)?.message ?? 'Try again.'}</div>
-        ) : !data.length ? (
-          <div className="state-banner">No moderators found.</div>
-        ) : (
-          <Table>
+      {isLoading ? (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Moderator</th><th>Email</th><th>Routes Approved</th><th>Posts Moderated</th><th>Actions</th></tr></thead>
+            <tbody>{Array.from({length:4}).map((_,i) => (
+              <tr key={i}>{Array.from({length:5}).map((_,j) => <td key={j}><div className="skeleton" /></td>)}</tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : isError ? (
+        <div className="state-banner error">
+          Failed to load moderators. {(error as Error | undefined)?.message ?? 'Try again.'}
+        </div>
+      ) : !data.length ? (
+        <div className="table-wrap">
+          <div className="empty-state">
+            <div className="empty-icon"><Shield size={22} /></div>
+            <div className="empty-title">No moderators yet</div>
+            <div className="empty-sub">Promote users from User Management to assign the moderator role.</div>
+          </div>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
             <thead>
               <tr>
-                <Th>Name</Th>
-                <Th>Email</Th>
-                <Th>Routes Approved</Th>
-                <Th>Posts Moderated</Th>
-                <Th>Action</Th>
+                <th>Moderator</th>
+                <th>Email</th>
+                <th>Routes Approved</th>
+                <th>Posts Moderated</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.map((m) => (
                 <tr key={m.id}>
-                  <Td>{m.name}</Td>
-                  <Td>{m.email}</Td>
-                  <Td>{m.routesApproved}</Td>
-                  <Td>{m.postsModerated}</Td>
-                  <Td>
-                    <Button variant="danger" size="sm" onClick={() => demote.mutate(m.id)}>Remove Moderator</Button>
-                  </Td>
+                  <td>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'nowrap' }}>
+                      <Avatar name={m.name} email={m.email} />
+                      <span style={{ fontWeight:600, fontSize:'0.84rem' }}>{m.name ?? 'Unknown'}</span>
+                    </div>
+                  </td>
+                  <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{m.email}</td>
+                  <td>
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, background:'rgba(62,201,122,0.12)', color:'#3EC97A', border:'1px solid rgba(62,201,122,0.22)', whiteSpace:'nowrap' }}>
+                      {m.routesApproved ?? 0} approved
+                    </span>
+                  </td>
+                  <td>
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, background:'rgba(46,124,246,0.10)', color:'#2E7CF6', border:'1px solid rgba(46,124,246,0.2)', whiteSpace:'nowrap' }}>
+                      {m.postsModerated ?? 0} moderated
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => { if (confirm(`Remove moderator role from ${m.name}?`)) demote.mutate(m.id) }}
+                      style={{
+                        display:'inline-flex', alignItems:'center', gap:5,
+                        padding:'5px 12px', borderRadius:7,
+                        background:'rgba(224,92,106,0.10)', color:'#E05C6A',
+                        border:'1px solid rgba(224,92,106,0.25)',
+                        fontSize:'0.75rem', fontWeight:600, fontFamily:'Manrope, sans-serif',
+                        cursor:'pointer', whiteSpace:'nowrap', lineHeight:1,
+                        transition:'all 0.17s ease',
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#E05C6A'; (e.currentTarget as HTMLButtonElement).style.color = '#fff' }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(224,92,106,0.10)'; (e.currentTarget as HTMLButtonElement).style.color = '#E05C6A' }}
+                    >
+                      <UserMinus size={13} /> Remove
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
-          </Table>
-        )}
-      </Card>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

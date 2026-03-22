@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -30,21 +31,104 @@ class UpdateChecker {
   static const String _keyForceUpdate = 'force_update';
   static const String _keyUpdateMessage = 'update_message';
 
+  // Firestore settings document used by the admin dashboard.
+  static const String _configCollection = 'app_config';
+  static const String _configDoc = 'update_checker';
+
   /// Initialises Remote Config with sensible defaults and fetch settings,
   /// then fetches & activates the latest values from Firebase.
   ///
   /// Returns an [UpdateInfo] describing whether an update is available.
   static Future<UpdateInfo> checkForUpdate() async {
+    const defaultMessage =
+        'A new version of TransitPH is available. Please update to enjoy '
+        'the latest features and improvements.';
+
     final remoteConfig = FirebaseRemoteConfig.instance;
+
+    final firestoreConfig = await _readFromFirestore();
+    final remoteConfigData = await _readFromRemoteConfig(
+      remoteConfig,
+      defaultMessage,
+    );
+
+    final latestVersion =
+        (firestoreConfig?[_keyLatestVersion] as String?) ??
+        (remoteConfigData?[_keyLatestVersion] as String?) ??
+        '1.0.0';
+    final updateUrl =
+        (firestoreConfig?[_keyUpdateUrl] as String?) ??
+        (remoteConfigData?[_keyUpdateUrl] as String?) ??
+        '';
+    final forceUpdate =
+        (firestoreConfig?[_keyForceUpdate] as bool?) ??
+        (remoteConfigData?[_keyForceUpdate] as bool?) ??
+        false;
+    final updateMessage =
+        (firestoreConfig?[_keyUpdateMessage] as String?) ??
+        (remoteConfigData?[_keyUpdateMessage] as String?) ??
+        '';
+
+    // If all upstream config sources fail, skip prompting.
+    if (latestVersion.trim().isEmpty) {
+      return const UpdateInfo(
+        updateAvailable: false,
+        forceUpdate: false,
+        updateUrl: '',
+        updateMessage: '',
+      );
+    }
+
+    // ── Get the version currently installed on the device. ──
+    final packageInfo = await PackageInfo.fromPlatform();
+    final currentVersion = packageInfo.version.trim();
+
+    // ── Compare versions using semantic versioning logic. ──
+    final updateAvailable = _isNewerVersion(
+      current: currentVersion,
+      latest: latestVersion.trim(),
+    );
+
+    return UpdateInfo(
+      updateAvailable: updateAvailable,
+      forceUpdate: forceUpdate,
+      updateUrl: updateUrl.trim(),
+      updateMessage: updateMessage.trim(),
+    );
+  }
+
+  static Future<Map<String, Object?>?> _readFromFirestore() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection(_configCollection)
+          .doc(_configDoc)
+          .get();
+
+      if (!snap.exists) return null;
+
+      final data = snap.data() ?? <String, dynamic>{};
+      return {
+        _keyLatestVersion: _asString(data[_keyLatestVersion], fallback: '1.0.0'),
+        _keyUpdateUrl: _asString(data[_keyUpdateUrl]),
+        _keyForceUpdate: _asBool(data[_keyForceUpdate]),
+        _keyUpdateMessage: _asString(data[_keyUpdateMessage]),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Map<String, Object?>?> _readFromRemoteConfig(
+    FirebaseRemoteConfig remoteConfig,
+    String defaultMessage,
+  ) async {
 
     // ── 1. Set default values so the app works even without a network call. ──
     await remoteConfig.setDefaults({
       _keyLatestVersion: '1.0.0',
       _keyUpdateUrl: '',
       _keyForceUpdate: false,
-      _keyUpdateMessage:
-          'A new version of TransitPH is available. Please update to enjoy '
-          'the latest features and improvements.',
+      _keyUpdateMessage: defaultMessage,
     });
 
     // ── 2. Configure fetch settings. ──
@@ -61,39 +145,17 @@ class UpdateChecker {
     // ── 3. Fetch the latest values from Firebase and activate them. ──
     try {
       await remoteConfig.fetchAndActivate();
-    } catch (e) {
-      // If the fetch fails (e.g. no internet), we fall back to cached /
-      // default values and skip the update prompt gracefully.
-      return const UpdateInfo(
-        updateAvailable: false,
-        forceUpdate: false,
-        updateUrl: '',
-        updateMessage: '',
-      );
+    } catch (_) {
+      // Continue with cached/default Remote Config values.
     }
 
     // ── 4. Read the Remote Config values. ──
-    final latestVersion = remoteConfig.getString(_keyLatestVersion).trim();
-    final updateUrl = remoteConfig.getString(_keyUpdateUrl).trim();
-    final forceUpdate = remoteConfig.getBool(_keyForceUpdate);
-    final updateMessage = remoteConfig.getString(_keyUpdateMessage).trim();
-
-    // ── 5. Get the version currently installed on the device. ──
-    final packageInfo = await PackageInfo.fromPlatform();
-    final currentVersion = packageInfo.version.trim();
-
-    // ── 6. Compare versions using semantic versioning logic. ──
-    final updateAvailable = _isNewerVersion(
-      current: currentVersion,
-      latest: latestVersion,
-    );
-
-    return UpdateInfo(
-      updateAvailable: updateAvailable,
-      forceUpdate: forceUpdate,
-      updateUrl: updateUrl,
-      updateMessage: updateMessage,
-    );
+    return {
+      _keyLatestVersion: remoteConfig.getString(_keyLatestVersion).trim(),
+      _keyUpdateUrl: remoteConfig.getString(_keyUpdateUrl).trim(),
+      _keyForceUpdate: remoteConfig.getBool(_keyForceUpdate),
+      _keyUpdateMessage: remoteConfig.getString(_keyUpdateMessage).trim(),
+    };
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -126,5 +188,21 @@ class UpdateChecker {
   static List<int> _parseVersion(String version) {
     final parts = version.split('.');
     return List.generate(3, (i) => i < parts.length ? int.parse(parts[i]) : 0);
+  }
+
+  static String _asString(Object? value, {String fallback = ''}) {
+    if (value is String) return value.trim();
+    if (value == null) return fallback;
+    return value.toString().trim();
+  }
+
+  static bool _asBool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' || normalized == '1' || normalized == 'yes';
+    }
+    return false;
   }
 }
