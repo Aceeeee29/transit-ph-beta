@@ -12,6 +12,7 @@ import '../services/gamification_service.dart';
 import '../services/post_service.dart';
 import '../services/route_service.dart';
 import '../widgets/announcement_dialog.dart';
+import '../widgets/translate_chathead.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -154,7 +155,14 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: screens),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(index: _selectedIndex, children: screens),
+          ),
+          const TranslateChatHead(),
+        ],
+      ),
       bottomNavigationBar: _buildNavBar(navItems),
     );
   }

@@ -2,8 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useState } from 'react'
 import { db } from '@/lib/firebase'
-import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle, ExternalLink, Settings } from 'lucide-react'
+import { CheckCircle, ExternalLink, Settings } from 'lucide-react'
 
 type UpdateSettings = {
   latest_version: string
@@ -129,31 +128,6 @@ export function SettingsPage() {
             />
           </div>
 
-          {/* Force update toggle */}
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 14, padding: 14,
-            background: model.force_update ? 'var(--danger-soft)' : 'var(--background)',
-            border: `1px solid ${model.force_update ? 'rgba(224,92,106,0.2)' : 'var(--border-soft)'}`,
-            borderRadius: 10, transition: 'all 0.2s',
-          }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: 3, color: model.force_update ? 'var(--danger)' : 'var(--text-primary)' }}>
-                Force Update
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                When enabled, users must update before continuing to use the app
-              </div>
-            </div>
-            <Switch checked={model.force_update} onCheckedChange={(checked) => setForm({ ...model, force_update: checked })} />
-          </div>
-
-          {model.force_update && (
-            <div className="state-banner error" style={{ fontSize: '0.8rem' }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0 }} />
-              Force update is active — all users below v{model.latest_version} will be blocked until they update.
-            </div>
-          )}
-
           {/* Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
@@ -177,9 +151,6 @@ export function SettingsPage() {
             )}
           </div>
 
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-            Note: Values are written to Firestore at <strong>app_config/update_checker</strong> and synced to Firebase Remote Config by the <strong>syncUpdateCheckerToRemoteConfig</strong> Cloud Function.
-          </div>
         </div>
       </div>
     </div>
