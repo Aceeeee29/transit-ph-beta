@@ -35,7 +35,7 @@ class Comment {
     );
   }
 
-  // Remove a reply by id
+  // Remove a reply
   Comment removeReply(String replyId) {
     return Comment(
       id: id,

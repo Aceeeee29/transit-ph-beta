@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
-// ── Approval status enum ───────────────────────────────────────────────────
 enum RouteApprovalStatus { pending, approved, rejected }
 
 class Route {
@@ -30,7 +29,6 @@ class Route {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  // ── New field ──────────────────────────────────────────────────────────────
   final RouteApprovalStatus approvalStatus;
 
   Route({
@@ -58,7 +56,7 @@ class Route {
     this.downvotes = 0,
     this.createdAt,
     this.updatedAt,
-    this.approvalStatus = RouteApprovalStatus.pending, // default: pending
+    this.approvalStatus = RouteApprovalStatus.pending,
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
@@ -114,8 +112,6 @@ class Route {
   }
 
   factory Route.fromJson(Map<String, dynamic> json) {
-    // ── Parse approvalStatus safely — old docs without the field default to approved
-    // so existing live routes don't disappear after the update
     RouteApprovalStatus parsedStatus = RouteApprovalStatus.approved;
     final rawStatus = json['approvalStatus'] as String?;
     if (rawStatus != null) {

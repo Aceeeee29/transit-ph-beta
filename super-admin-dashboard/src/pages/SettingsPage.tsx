@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useState } from 'react'
 import { db } from '@/lib/firebase'
@@ -80,7 +80,6 @@ export function SettingsPage() {
       </div>
 
       <div style={{ display: 'grid', gap: 14, maxWidth: 680 }}>
-        {/* Update Checker Config */}
         <div className="settings-section">
           <div className="settings-title">Update Checker</div>
 
@@ -99,7 +98,7 @@ export function SettingsPage() {
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
-                placeholder="https://play.google.com/store/apps/…"
+                placeholder="https://play.google.com/store/apps/..."
                 value={model.update_url}
                 onChange={(e) => setForm({ ...model, update_url: e.target.value })}
                 style={{ paddingRight: 38 }}
@@ -121,21 +120,20 @@ export function SettingsPage() {
             <label>Update Message</label>
             <textarea
               rows={3}
-              placeholder="Describe what's new in this version…"
+              placeholder="Describe what's new in this version..."
               value={model.update_message}
               onChange={(e) => setForm({ ...model, update_message: e.target.value })}
               style={{ resize: 'vertical' }}
             />
           </div>
 
-          {/* Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               className="btn btn-primary"
               disabled={!isDirty || save.isPending}
               onClick={() => save.mutate(model)}
             >
-              {save.isPending ? 'Saving…' : 'Save Configuration'}
+              {save.isPending ? 'Saving...' : 'Save Configuration'}
             </button>
 
             {form && isDirty && (

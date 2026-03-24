@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
@@ -29,7 +29,6 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        {/* Logo */}
         <div className="login-logo">
           <div className="login-brand-badge">TPH</div>
           <div>
@@ -38,7 +37,6 @@ export function LoginPage() {
           </div>
         </div>
 
-        {/* Heading */}
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 4 }}>
             Welcome back
@@ -49,7 +47,6 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
-          {/* Email */}
           <div className="form-group">
             <label htmlFor="email">Email address</label>
             <div style={{ position: 'relative' }}>
@@ -72,7 +69,6 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Password */}
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <div style={{ position: 'relative' }}>
@@ -86,7 +82,7 @@ export function LoginPage() {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
+                placeholder="********"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -106,14 +102,12 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="state-banner error" style={{ fontSize: '0.8rem' }}>
               {error}
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             className="btn btn-primary"
@@ -123,7 +117,7 @@ export function LoginPage() {
             {loading ? (
               <>
                 <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                Signing in…
+                Signing in...
               </>
             ) : 'Sign in to console'}
           </button>

@@ -1,8 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getModeratorStats, updateUserRole } from '@/lib/firestoreApi'
 import { Shield, UserMinus } from 'lucide-react'
 
-/* ── Avatar ───────────────────────────────────────────────────────────────── */
 const PALETTE = ['#2E7CF6', '#9B7FE8', '#3EC97A', '#E05C6A', '#FFB547']
 const avatarBg = (s?: string) => PALETTE[(s?.charCodeAt(0) ?? 0) % PALETTE.length]
 const getInitials = (name?: string, email?: string) => {
@@ -29,7 +28,6 @@ function Avatar({ name, email, size = 32 }: { name?: string; email?: string; siz
   )
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
 export function ModeratorsPage() {
   const qc = useQueryClient()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['moderators'], queryFn: getModeratorStats })
@@ -44,7 +42,6 @@ export function ModeratorsPage() {
 
   return (
     <div style={{ display: 'grid', gap: 20 }} className="stagger">
-      {/* Header */}
       <div className="page-head">
         <div>
           <div className="page-head-title">Moderator Management</div>

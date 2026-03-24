@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+﻿import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteUser, getUsers, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -7,7 +7,6 @@ import type { AppUser } from '@/types/models'
 
 const PAGE_SIZE = 12
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
 const PALETTE = ['#2E7CF6', '#9B7FE8', '#3EC97A', '#E05C6A', '#FFB547', '#4ECDC4', '#FF6B9D']
 const avatarBg = (s?: string) => PALETTE[(s?.charCodeAt(0) ?? 0) % PALETTE.length]
 const getInitials = (name?: string, email?: string) => {
@@ -18,7 +17,6 @@ const getInitials = (name?: string, email?: string) => {
   return (email ?? 'U?').slice(0, 2).toUpperCase()
 }
 
-/* ── Avatar ───────────────────────────────────────────────────────────────── */
 function Avatar({ name, email, size = 32 }: { name?: string; email?: string; size?: number }) {
   return (
     <div style={{
@@ -35,7 +33,6 @@ function Avatar({ name, email, size = 32 }: { name?: string; email?: string; siz
   )
 }
 
-/* ── Button ───────────────────────────────────────────────────────────────── */
 type BtnVariant = 'primary' | 'outline' | 'danger' | 'success'
 const BTN_STYLES: Record<BtnVariant, React.CSSProperties> = {
   primary: { background: 'linear-gradient(135deg,#4A7CE0,#6A9EFF)', color: '#fff', border: '1px solid transparent', boxShadow: '0 3px 10px rgba(46,124,246,0.3)' },
@@ -63,7 +60,6 @@ function Btn({ variant = 'outline', sm, icon, children, disabled, onClick, style
   )
 }
 
-/* ── Badges ───────────────────────────────────────────────────────────────── */
 function RoleBadge({ role }: { role?: string }) {
   const s: React.CSSProperties =
     role === 'superadmin' ? { background: 'rgba(46,124,246,0.12)', color: '#2E7CF6', border: '1px solid rgba(46,124,246,0.2)' }
@@ -88,7 +84,6 @@ function StatusBadge({ status }: { status?: string }) {
   )
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
 export function UsersPage() {
   const qc = useQueryClient()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['users'], queryFn: getUsers })
@@ -141,7 +136,6 @@ export function UsersPage() {
 
   return (
     <div style={{ display: 'grid', gap: 20 }} className="stagger">
-      {/* Header */}
       <div className="page-head">
         <div>
           <div className="page-head-title">User Management</div>
@@ -153,11 +147,10 @@ export function UsersPage() {
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div style={{ flex:1, minWidth:200, position:'relative' }}>
           <Search size={14} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)', pointerEvents:'none' }} />
-          <input type="text" placeholder="Search by name or email…" value={search}
+          <input type="text" placeholder="Search by name or email..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             style={{ paddingLeft:32 }} />
         </div>
@@ -173,7 +166,6 @@ export function UsersPage() {
         </select>
       </div>
 
-      {/* States */}
       {isLoading ? (
         <div className="table-wrap">
           <table>
@@ -195,7 +187,6 @@ export function UsersPage() {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
           <div className="table-wrap">
             <table>
               <thead>
@@ -228,7 +219,7 @@ export function UsersPage() {
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.email}</td>
                     <td><RoleBadge role={u.role} /></td>
                     <td><StatusBadge status={u.status} /></td>
-                    <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.createdAt?.toDate().toLocaleDateString() ?? '—'}</td>
+                    <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.createdAt?.toDate().toLocaleDateString() ?? '-'}</td>
                     <td style={{ fontWeight:600 }}>{u.routesContributed ?? 0}</td>
                     <td>
                       <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'nowrap' }}>
@@ -251,7 +242,6 @@ export function UsersPage() {
             </table>
           </div>
 
-          {/* Mobile cards */}
           <div className="mobile-cards">
             {paginated.map((u) => (
               <div key={`m-${u.id}`} className="mobile-user-card">
@@ -282,19 +272,17 @@ export function UsersPage() {
         </>
       )}
 
-      {/* Pagination */}
       {!isLoading && !isError && list.length > 0 && (
         <div className="pagination">
-          <span className="pagination-info">Showing {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE,list.length)} of {list.length}</span>
+          <span className="pagination-info">Showing {((page-1)*PAGE_SIZE)+1}-{Math.min(page*PAGE_SIZE,list.length)} of {list.length}</span>
           <div className="pagination-controls">
-            <button className="page-btn" disabled={page<=1} onClick={() => setPage(p=>p-1)}>‹</button>
+            <button className="page-btn" disabled={page<=1} onClick={() => setPage(p=>p-1)}>{'<'}</button>
             <span className="page-indicator">Page {page} / {totalPages}</span>
-            <button className="page-btn" disabled={page>=totalPages} onClick={() => setPage(p=>p+1)}>›</button>
+            <button className="page-btn" disabled={page>=totalPages} onClick={() => setPage(p=>p+1)}>{'>'}</button>
           </div>
         </div>
       )}
 
-      {/* Profile dialog */}
       <Dialog open={Boolean(selectedUser)} onOpenChange={(open) => !open && setSelectedUser(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>User Profile</DialogTitle></DialogHeader>
@@ -324,7 +312,6 @@ export function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Ban confirm dialog */}
       <Dialog open={Boolean(banConfirmId)} onOpenChange={(open) => { if (!open) { setBanConfirmId(null); setBanTypedText('') } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Confirm Ban</DialogTitle></DialogHeader>

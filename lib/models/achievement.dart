@@ -75,7 +75,7 @@ class Achievement {
   }
 }
 
-// Predefined achievements
+//achievements
 List<Achievement> getPredefinedAchievements() {
   return [
     Achievement(

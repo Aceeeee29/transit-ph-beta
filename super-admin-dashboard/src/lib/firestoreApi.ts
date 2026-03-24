@@ -1,4 +1,4 @@
-import {
+﻿import {
   Timestamp,
   addDoc,
   collection,
@@ -125,7 +125,6 @@ function subscribeWithTimestampFallback(
       emitMerged()
     },
     () => {
-      // Some collections may not index/use timestamp; keep stream alive from other sources.
       timestampDocs = []
       emitMerged()
     },

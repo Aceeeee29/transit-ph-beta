@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createAnnouncement, deleteAnnouncement, getAnnouncements, updateAnnouncement } from '@/lib/firestoreApi'
@@ -7,14 +7,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Switch } from '@/components/ui/switch'
 import { Megaphone, Plus, Trash2 } from 'lucide-react'
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
 function toIsoLocalValue(date: Date) {
   const off = date.getTimezoneOffset()
   const local = new Date(date.getTime() - off * 60_000)
   return local.toISOString().slice(0, 16)
 }
 
-/* ── Inline Button ────────────────────────────────────────────────────────── */
 type BtnVariant = 'primary' | 'outline' | 'danger' | 'success'
 const BTN_BASE: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -48,7 +46,6 @@ function Btn({ variant = 'outline', sm, icon, children, disabled, onClick, style
   )
 }
 
-/* ── Type Badge ───────────────────────────────────────────────────────────── */
 function TypeBadge({ type }: { type?: string }) {
   const s: React.CSSProperties =
     type === 'critical' ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.2)' }
@@ -61,7 +58,6 @@ function TypeBadge({ type }: { type?: string }) {
   )
 }
 
-/* ── Status Badge ─────────────────────────────────────────────────────────── */
 function StatusBadge({ active }: { active?: boolean }) {
   const s: React.CSSProperties = active
     ? { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }
@@ -74,7 +70,6 @@ function StatusBadge({ active }: { active?: boolean }) {
   )
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
 export function AnnouncementsPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -112,7 +107,6 @@ export function AnnouncementsPage() {
   return (
     <div style={{ display: 'grid', gap: 20 }} className="stagger">
 
-      {/* ── Header ── */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <div className="page-head">
           <div>
@@ -124,7 +118,6 @@ export function AnnouncementsPage() {
           </Btn>
         </div>
 
-      {/* ── Table ── */}
       {isLoading ? (
         <div className="table-wrap">
           <table>
@@ -175,10 +168,10 @@ export function AnnouncementsPage() {
                   </td>
                   <td><StatusBadge active={a.isActive} /></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {a.scheduledAt?.toDate().toLocaleString() ?? '—'}
+                    {a.scheduledAt?.toDate().toLocaleString() ?? '-'}
                   </td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {a.expiresAt?.toDate().toLocaleString() ?? '—'}
+                    {a.expiresAt?.toDate().toLocaleString() ?? '-'}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'nowrap' }}>
@@ -201,7 +194,6 @@ export function AnnouncementsPage() {
         </div>
       )}
 
-      {/* ── Create dialog ── */}
         <DialogContent style={{ maxWidth: 520 }}>
           <DialogHeader><DialogTitle>New Announcement</DialogTitle></DialogHeader>
 
@@ -213,7 +205,7 @@ export function AnnouncementsPage() {
 
             <div className="form-group">
               <label>Message</label>
-              <textarea rows={4} placeholder="Write your message here…" value={message} onChange={(e) => setMessage(e.target.value)} style={{ resize: 'vertical' }} />
+              <textarea rows={4} placeholder="Write your message here..." value={message} onChange={(e) => setMessage(e.target.value)} style={{ resize: 'vertical' }} />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -275,7 +267,7 @@ export function AnnouncementsPage() {
                 disabled={!title || !message || create.isPending}
                 onClick={() => create.mutate()}
               >
-                {create.isPending ? 'Creating…' : 'Create Announcement'}
+                {create.isPending ? 'Creating...' : 'Create Announcement'}
               </Btn>
             </div>
           </div>

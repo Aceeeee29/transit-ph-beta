@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteFeedback, getFeedback, updateFeedbackStatus } from '@/lib/firestoreApi'
 import { Bell, CheckCircle, MessageSquare, XCircle } from 'lucide-react'
@@ -60,7 +60,6 @@ export function FeedbackPage() {
         )}
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-filters">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 'auto' }}>
@@ -75,7 +74,6 @@ export function FeedbackPage() {
         </span>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="table-wrap">
           <table>
@@ -113,11 +111,11 @@ export function FeedbackPage() {
                     <td><StatusBadge status={f.status} /></td>
                     <td style={{ maxWidth: 260 }}>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {f.reason || f.message || '—'}
+                        {f.reason || f.message || '-'}
                       </span>
                     </td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {f.createdAt?.toDate().toLocaleDateString() ?? '—'}
+                      {f.createdAt?.toDate().toLocaleDateString() ?? '-'}
                     </td>
                     <td>
                       <div className="action-group">

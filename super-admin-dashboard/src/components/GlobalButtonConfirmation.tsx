@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from 'react'
+﻿import { type ReactNode, useEffect } from 'react'
 
 export function GlobalButtonConfirmation({ children }: { children: ReactNode }) {
   useEffect(() => {

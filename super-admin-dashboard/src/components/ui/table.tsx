@@ -1,4 +1,4 @@
-import type { TableHTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react'
+﻿import type { TableHTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
 export function Table(props: TableHTMLAttributes<HTMLTableElement>) {

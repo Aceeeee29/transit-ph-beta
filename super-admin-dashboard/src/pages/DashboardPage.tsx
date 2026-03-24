@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Bar, BarChart, CartesianGrid, Line, LineChart,
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import type { DashboardActivitySeverity, DashboardActivityType, DashboardStats } from '@/types/models'
 
-/* ── Stat card config —*/
 const buildCards = (data: any) => [
   { label: 'Total Users',     value: data.totalUsers,      icon: Users,       bg: 'rgba(46,124,246,0.10)', color: '#2E7CF6' },
   { label: 'Active Users',    value: data.activeUsers,     icon: Activity,    bg: 'rgba(62,201,122,0.10)', color: '#3EC97A' },
@@ -20,7 +19,6 @@ const buildCards = (data: any) => [
   { label: 'Rejected Routes', value: data.routes.rejected, icon: TrendingUp,  bg: 'rgba(224,92,106,0.10)', color: '#E05C6A' },
 ]
 
-/* ── Custom chart tooltip  */
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
@@ -34,7 +32,6 @@ function ChartTooltip({ active, payload, label }: any) {
   )
 }
 
-/* ── Stat card*/
 function StatCard({ label, value, icon: Icon, bg, color }: {
   label: string; value: number; icon: React.ElementType;
   bg: string; color: string
@@ -83,7 +80,6 @@ function StatCard({ label, value, icon: Icon, bg, color }: {
   )
 }
 
-/* ── Skeleton card  */
 function SkeletonCard() {
   return (
     <div style={{
@@ -100,7 +96,6 @@ function SkeletonCard() {
   )
 }
 
-/* ── Chart card wrapper  */
 function ChartCard({ title, subtitle, children }: {
   title: string; subtitle: string; children: React.ReactNode
 }) {
@@ -116,7 +111,6 @@ function ChartCard({ title, subtitle, children }: {
   )
 }
 
-/* ── Page  */
 export function DashboardPage() {
   const { data: initialData, isLoading, error } = useQuery({ queryKey: ['dashboard-stats'], queryFn: getDashboardStats })
   const [liveData, setLiveData] = useState<DashboardStats | undefined>(undefined)
@@ -158,7 +152,6 @@ export function DashboardPage() {
     return { dot: '#2E7CF6', pillBg: 'rgba(46,124,246,0.10)', pillText: '#1E63C7' }
   }
 
-  /* Loading skeleton */
   if (isLoading && !data) {
     return (
       <div style={{ display: 'grid', gap: 20 }}>
@@ -182,7 +175,6 @@ export function DashboardPage() {
     )
   }
 
-  /* Error */
   if ((error && !data) || !data) {
     return (
       <div className="state-banner error">
@@ -196,7 +188,6 @@ export function DashboardPage() {
   return (
     <div style={{ display: 'grid', gap: 20 }} className="stagger">
 
-      {/* ── Header ── */}
       <div className="page-head">
         <div>
           <div className="page-head-title">Dashboard</div>
@@ -233,14 +224,12 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
       <div className="grid-stats">
         {cards.map((card) => (
           <StatCard key={card.label} {...card} />
         ))}
       </div>
 
-      {/* ── Charts ── */}
       <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' }}>
         <ChartCard title="User Growth" subtitle="Registered users over time">
           <ResponsiveContainer width="100%" height={220}>
@@ -271,7 +260,6 @@ export function DashboardPage() {
         </ChartCard>
       </div>
 
-      {/* ── Activity feed ── */}
       <div style={{
         background: '#fff', border: '1px solid #E8F0FC', borderRadius: 16,
         padding: 20, boxShadow: '0 1px 3px rgba(15,29,53,0.06)',

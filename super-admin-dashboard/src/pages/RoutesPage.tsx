@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteRoute, getRoutes, updateRouteStatus } from '@/lib/firestoreApi'
 import { useAuth } from '@/hooks/useAuth'
@@ -70,13 +70,12 @@ export function RoutesPage() {
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-search" style={{ position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
           <input
             type="text"
-            placeholder="Search origin or destination…"
+            placeholder="Search origin or destination..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             style={{ paddingLeft: 32 }}
@@ -100,7 +99,6 @@ export function RoutesPage() {
         </div>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="table-wrap">
           <table>
@@ -130,7 +128,11 @@ export function RoutesPage() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={allChecked} onChange={(e) => toggleAll(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={(e) => toggleAll(e.target.checked)}
+                  />
                 </th>
                 <th>Origin</th>
                 <th>Destination</th>
@@ -162,10 +164,10 @@ export function RoutesPage() {
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>{r.endLocation}</td>
                   <td style={{ fontSize: '0.81rem', color: 'var(--text-secondary)' }}>
-                    {r.contributorName ?? r.contributorId ?? '—'}
+                    {r.contributorName ?? r.contributorId ?? '-'}
                   </td>
                   <td style={{ fontSize: '0.81rem', color: 'var(--text-secondary)' }}>
-                    {r.createdAt?.toDate().toLocaleDateString() ?? '—'}
+                    {r.createdAt?.toDate().toLocaleDateString() ?? '-'}
                   </td>
                   <td><StatusBadge status={r.status} /></td>
                   <td style={{ fontWeight: 600 }}>{r.views ?? 0}</td>
@@ -206,19 +208,17 @@ export function RoutesPage() {
         </div>
       )}
 
-      {/* Pagination */}
       {!isLoading && !isError && (
         <div className="pagination">
-          <span className="pagination-info">Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, list.length)} of {list.length}</span>
+          <span className="pagination-info">Showing {((page - 1) * PAGE_SIZE) + 1}-{Math.min(page * PAGE_SIZE, list.length)} of {list.length}</span>
           <div className="pagination-controls">
-            <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹</button>
+            <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{'<'}</button>
             <span className="page-indicator">Page {page} / {totalPages}</span>
-            <button className="page-btn" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>›</button>
+            <button className="page-btn" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{'>'}</button>
           </div>
         </div>
       )}
 
-      {/* Preview dialog */}
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Route Preview</DialogTitle></DialogHeader>
@@ -227,13 +227,13 @@ export function RoutesPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 16px', borderBottom: '1px solid var(--border-soft)', marginBottom: 4 }}>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontWeight: 700 }}>{preview.startLocation}</span>
-                  <span style={{ color: 'var(--text-muted)', margin: '0 8px' }}>→</span>
+                  <span style={{ color: 'var(--text-muted)', margin: '0 8px' }}>{'->'}</span>
                   <span style={{ fontWeight: 700 }}>{preview.endLocation}</span>
                 </div>
                 <StatusBadge status={preview.status} />
               </div>
               {[
-                ['Steps', (preview.steps ?? []).join(' → ') || 'No step data'],
+                ['Steps', (preview.steps ?? []).join(' -> ') || 'No step data'],
                 ['Transport Modes', (preview.transportModes ?? []).join(', ') || 'N/A'],
                 ['ETA', `${preview.etaMinutes ?? 'N/A'} mins`],
                 ['Fare Estimate', preview.fareEstimate ?? 'N/A'],

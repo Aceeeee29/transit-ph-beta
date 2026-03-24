@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deletePost, getFeedback, getPosts, updateFeedbackStatus, updatePostStatus } from '@/lib/firestoreApi'
 import { useAuth } from '@/hooks/useAuth'
@@ -89,7 +89,6 @@ export function PostsPage() {
         )}
       </div>
 
-      {/* Filter toolbar */}
       <div className="toolbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
@@ -114,7 +113,6 @@ export function PostsPage() {
         </span>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="table-wrap">
           <table>
@@ -185,7 +183,7 @@ export function PostsPage() {
                     </td>
                     <td style={{ maxWidth: 280 }}>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.content.slice(0, 90)}{p.content.length > 90 ? '…' : ''}
+                        {p.content.slice(0, 90)}{p.content.length > 90 ? '...' : ''}
                       </span>
                     </td>
                     {activeTab === 'all' ? (
@@ -199,7 +197,7 @@ export function PostsPage() {
                           <Flag size={12} />{reasons.length} report{reasons.length > 1 ? 's' : ''}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
                       )}
                     </td>
                     <td>
@@ -245,7 +243,6 @@ export function PostsPage() {
         </div>
       )}
 
-      {/* Post detail dialog */}
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Post Details</DialogTitle></DialogHeader>

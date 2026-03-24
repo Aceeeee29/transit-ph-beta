@@ -1,4 +1,4 @@
-import type { Timestamp } from 'firebase/firestore'
+﻿import type { Timestamp } from 'firebase/firestore'
 
 export type UserRole = 'user' | 'moderator' | 'superadmin'
 export type UserStatus = 'active' | 'banned'

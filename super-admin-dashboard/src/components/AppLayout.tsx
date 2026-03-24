@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+﻿import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Bell, LogOut, Megaphone,
   MessageSquareWarning, Route, Settings, Shield, Users,
@@ -66,7 +66,6 @@ export function AppLayout() {
     <div className="layout">
       <aside className="sidebar">
 
-        {/* ── Brand ── */}
         <div className="sidebar-brand">
           <div className="brand-badge">TPH</div>
           <div className="sidebar-brand-text">
@@ -75,7 +74,6 @@ export function AppLayout() {
           </div>
         </div>
 
-        {/* ── Profile ── */}
         <div className="profile-card">
           <div style={{
             width: 36, height: 36, minWidth: 36, maxWidth: 36,
@@ -93,7 +91,6 @@ export function AppLayout() {
           </div>
         </div>
 
-        {/* ── Nav sections ── */}
         {NAV_SECTIONS.map((section) => (
           <div key={section.label} style={{ display: 'grid', gap: 2 }}>
             <div className="nav-section-label">{section.label}</div>
@@ -116,7 +113,6 @@ export function AppLayout() {
           </div>
         ))}
 
-        {/* ── Logout ── */}
         <div className="sidebar-footer">
           <button
             onClick={onLogout}
