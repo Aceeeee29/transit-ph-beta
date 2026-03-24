@@ -88,6 +88,24 @@ class LocationService {
     return await getAddressFromCoordinates(position.latitude, position.longitude);
   }
 
+  /// Forward geocode a location name into coordinates
+  static Future<Location?> getCoordinatesFromAddress(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    try {
+      final matches = await locationFromAddress(trimmed);
+      if (matches.isEmpty) {
+        return null;
+      }
+      return matches.first;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Check if it's rush hour (7-9 AM or 5-7 PM)
   static bool isRushHour() {
     final now = DateTime.now();

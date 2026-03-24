@@ -41,10 +41,6 @@ class NotificationModel {
   }
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
-    // FIX: Handle both Firestore Timestamp and ISO string gracefully.
-    // addNotification() overwrites timestamp with FieldValue.serverTimestamp()
-    // so Firestore stores it as a Timestamp, but toJson() serialises it as a
-    // String — support both to avoid a cast crash on read.
     DateTime parsedTimestamp;
     final raw = json['timestamp'];
     if (raw is Timestamp) {

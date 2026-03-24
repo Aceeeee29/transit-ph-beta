@@ -15,6 +15,7 @@ import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../services/location_service.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
+import '../widgets/contribute/location_search_bar.dart';
 
 class ContributeScreen extends StatefulWidget {
   final Future<void> Function(route_model.Route) onRouteSubmitted;
@@ -56,8 +57,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _isFormExpanded = false;
   bool _snapToRoadEnabled = true;
   bool _showTutorial = false;
+  LatLng? _searchedLocation;
 
-  // ─── Color tokens ────────────────────────────────────────────────────────────
+  // ─── Color tokens 
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
@@ -67,7 +69,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
 
-  // ─── Philippine regions ──────────────────────────────────────────────────────
+  // ─── Philippine regions 
   final Map<String, LatLngBounds> philippineRegions = {
     'Philippines': LatLngBounds(
       const LatLng(4.5, 116.0),
@@ -295,6 +297,33 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
   }
 
+  Future<bool> _onLocationSearched(String query) async {
+    final match = await LocationService.getCoordinatesFromAddress(query);
+    if (match == null) {
+      return false;
+    }
+
+    final target = LatLng(match.latitude, match.longitude);
+    if (!mounted) {
+      return true;
+    }
+
+    _mapController.move(target, 15.0);
+    setState(() {
+      _searchedLocation = target;
+      selectedRegion = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Location found and map locked to that place'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    return true;
+  }
+
   // ─── Dialog launchers ────────────────────────────────────────────────────────
 
   void _showModeDialog() {
@@ -396,6 +425,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
+      _searchedLocation = null;
     });
     _historyService.clear();
   }
@@ -690,6 +720,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                 _buildMapLayer(),
                 _buildMapControlsOverlay(),
                 if (selectionMode != 'done') _buildInstructionPill(),
+                _buildLocationSearchBar(),
                 _buildRegionSelector(),
                 _buildFormDrawer(context),
               ],
@@ -825,6 +856,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
                 point: pathPoints.last,
                 child: const Icon(Icons.flag,
                     color: Colors.red, size: 40),
+              ),
+            if (_searchedLocation != null)
+              Marker(
+                point: _searchedLocation!,
+                child: const Icon(Icons.my_location_rounded,
+                    color: _accent, size: 34),
               ),
           ],
         ),
@@ -993,6 +1030,22 @@ class _ContributeScreenState extends State<ContributeScreen> {
           }).toList(),
           onChanged: _onRegionChanged,
         ),
+      ),
+    );
+  }
+
+  Widget _buildLocationSearchBar() {
+    return Positioned(
+      top: 10,
+      left: 16,
+      right: 180,
+      child: ContributeLocationSearchBar(
+        onSearch: _onLocationSearched,
+        surface: _surface,
+        border: _border,
+        accent: _accent,
+        textPrimary: _textPrimary,
+        textSecondary: _textSecondary,
       ),
     );
   }

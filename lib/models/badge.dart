@@ -51,7 +51,7 @@ class Badge {
   }
 }
 
-// Predefined badges
+//badges
 List<Badge> getPredefinedBadges() {
   return [
     Badge(
