@@ -4,7 +4,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
-import 'moderator_login_screen.dart'; // ← new import
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -581,50 +580,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
-                ),
-
-                const SizedBox(height: 28),
-
-                // ── Moderator access link ──────────────────────────────────
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ModeratorLoginScreen(),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F4FF),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: _border),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          Icons.shield_outlined,
-                          size: 14,
-                          color: _textSecondary,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Moderator Access',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
 
                 const SizedBox(height: 20),

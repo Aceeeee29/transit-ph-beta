@@ -196,6 +196,27 @@ function getFeedbackReason(data: DocumentData): string {
   return 'No reason provided'
 }
 
+function resolveUserStatus(data: DocumentData): AppUser['status'] {
+  if (data.isBanned || data.status === 'banned') return 'banned'
+
+  if (data.status === 'active' || data.status === 'offline') {
+    return data.status
+  }
+
+  const lastActive = normalizeTimestamp(
+    data.lastActiveDate ?? data.lastSeenAt ?? data.updatedAt ?? data.timestamp,
+  )
+
+  if (!lastActive) return 'offline'
+
+  const minutesSinceLastActive = Math.max(
+    0,
+    Math.floor((Date.now() - lastActive.toMillis()) / 60000),
+  )
+
+  return minutesSinceLastActive <= 15 ? 'active' : 'offline'
+}
+
 function mapUserDoc(d: QueryDocumentSnapshot<DocumentData>): AppUser {
   const data = d.data()
   return {
@@ -203,7 +224,7 @@ function mapUserDoc(d: QueryDocumentSnapshot<DocumentData>): AppUser {
     name: data.displayName ?? data.name ?? data.userName ?? 'Unknown User',
     email: data.email ?? '',
     role: data.role ?? 'user',
-    status: data.isBanned ? 'banned' : (data.status ?? 'active'),
+    status: resolveUserStatus(data),
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
     routesContributed: data.routesContributed ?? data.contributionCount ?? 0,
     badges: data.badges ?? [],
@@ -333,7 +354,7 @@ function buildDashboardStatsFromData(
 
   return {
     totalUsers: users.length,
-    activeUsers: users.filter((u) => u.status !== 'banned').length,
+    activeUsers: users.filter((u) => u.status === 'active').length,
     bannedUsers: users.filter((u) => u.status === 'banned').length,
     routes: {
       approved: routes.filter((r) => r.status === 'approved').length,

@@ -75,7 +75,9 @@ function RoleBadge({ role }: { role?: string }) {
 function StatusBadge({ status }: { status?: string }) {
   const s: React.CSSProperties = status === 'banned'
     ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.22)' }
-    : { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }
+    : status === 'offline'
+      ? { background: 'rgba(122,146,178,0.12)', color: '#7A92B2', border: '1px solid rgba(122,146,178,0.22)' }
+      : { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }
   return (
     <span style={{ ...s, display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, whiteSpace:'nowrap' }}>
       <span style={{ width:5, height:5, borderRadius:'50%', background:'currentColor', flexShrink:0 }} />
@@ -89,7 +91,6 @@ export function UsersPage() {
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['users'], queryFn: getUsers })
 
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sortBy, setSortBy] = useState<keyof AppUser>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -100,14 +101,13 @@ export function UsersPage() {
   const [mutationError, setMutationError] = useState<string | null>(null)
 
   const list = useMemo(() => data
-    .filter((u) => u.role !== 'superadmin')
-    .filter((u) => roleFilter === 'all' || u.role === roleFilter)
+    .filter((u) => u.role !== 'superadmin' && u.role !== 'moderator')
     .filter((u) => statusFilter === 'all' || u.status === statusFilter)
     .filter((u) => `${u.name ?? ''} ${u.email ?? ''}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const av = String(a[sortBy] ?? ''), bv = String(b[sortBy] ?? '')
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-    }), [data, roleFilter, statusFilter, search, sortBy, sortDir])
+    }), [data, statusFilter, search, sortBy, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE))
   const paginated = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -124,11 +124,6 @@ export function UsersPage() {
     mutationFn: (id: string) => updateUserRole(id, 'moderator'),
     onSuccess: async () => { setMutationError(null); await invalidate() },
     onError: (err) => setMutationError(toErrorText('Failed to promote user', err)),
-  })
-  const demote = useMutation({
-    mutationFn: (id: string) => updateUserRole(id, 'user'),
-    onSuccess: async () => { setMutationError(null); await invalidate() },
-    onError: (err) => setMutationError(toErrorText('Failed to demote user', err)),
   })
   const ban = useMutation({
     mutationFn: (id: string) => setUserBanStatus(id, true),
@@ -179,14 +174,10 @@ export function UsersPage() {
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             style={{ paddingLeft:32 }} />
         </div>
-        <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1) }} style={{ width:'auto' }}>
-          <option value="all">All Roles</option>
-          <option value="user">User</option>
-          <option value="moderator">Moderator</option>
-        </select>
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} style={{ width:'auto' }}>
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
+          <option value="offline">Offline</option>
           <option value="banned">Banned</option>
         </select>
       </div>
@@ -198,9 +189,9 @@ export function UsersPage() {
       {isLoading ? (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Routes</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Joined</th><th>Routes</th><th>Actions</th></tr></thead>
             <tbody>{Array.from({length:6}).map((_,i) => (
-              <tr key={i}>{Array.from({length:7}).map((_,j) => <td key={j}><div className="skeleton" /></td>)}</tr>
+              <tr key={i}>{Array.from({length:6}).map((_,j) => <td key={j}><div className="skeleton" /></td>)}</tr>
             ))}</tbody>
           </table>
         </div>
@@ -222,7 +213,6 @@ export function UsersPage() {
                 <tr>
                   <SortTh field="name">Name</SortTh>
                   <SortTh field="email">Email</SortTh>
-                  <th>Role</th>
                   <th>Status</th>
                   <SortTh field="createdAt">Joined</SortTh>
                   <th>Routes</th>
@@ -246,16 +236,12 @@ export function UsersPage() {
                       </div>
                     </td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.email}</td>
-                    <td><RoleBadge role={u.role} /></td>
                     <td><StatusBadge status={u.status} /></td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.createdAt?.toDate().toLocaleDateString() ?? '-'}</td>
                     <td style={{ fontWeight:600 }}>{u.routesContributed ?? 0}</td>
                     <td>
                       <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'nowrap' }}>
-                        {u.role !== 'moderator'
-                          ? <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
-                          : <Btn sm variant="outline" onClick={() => demote.mutate(u.id)}>Demote</Btn>
-                        }
+                        <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
                         {u.status === 'banned'
                           ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                           : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
@@ -281,15 +267,11 @@ export function UsersPage() {
                       {u.name ?? 'Unknown'}
                     </button>
                   </div>
-                  <RoleBadge role={u.role} />
                 </div>
                 <div style={{ color:'var(--text-secondary)', fontSize:'0.8rem' }}>{u.email}</div>
                 <div style={{ display:'flex', gap:6 }}><StatusBadge status={u.status} /></div>
                 <div style={{ display:'flex', gap:5 }}>
-                  {u.role !== 'moderator'
-                    ? <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
-                    : <Btn sm variant="outline" onClick={() => demote.mutate(u.id)}>Demote</Btn>
-                  }
+                  <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
                   {u.status === 'banned'
                     ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                     : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>

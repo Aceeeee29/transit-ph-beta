@@ -1,7 +1,7 @@
 ﻿import type { Timestamp } from 'firebase/firestore'
 
 export type UserRole = 'user' | 'moderator' | 'superadmin'
-export type UserStatus = 'active' | 'banned'
+export type UserStatus = 'active' | 'offline' | 'banned'
 export type RouteStatus = 'pending' | 'approved' | 'rejected'
 export type PostStatus = 'pending' | 'approved' | 'flagged' | 'rejected'
 export type AnnouncementType = 'info' | 'warning' | 'critical'

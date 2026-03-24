@@ -28,6 +28,20 @@ function Avatar({ name, email, size = 32 }: { name?: string; email?: string; siz
   )
 }
 
+function StatusBadge({ status }: { status?: string }) {
+  const s: React.CSSProperties = status === 'banned'
+    ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.22)' }
+    : status === 'offline'
+      ? { background: 'rgba(122,146,178,0.12)', color: '#7A92B2', border: '1px solid rgba(122,146,178,0.22)' }
+      : { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }
+  return (
+    <span style={{ ...s, display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, whiteSpace:'nowrap' }}>
+      <span style={{ width:5, height:5, borderRadius:'50%', background:'currentColor', flexShrink:0 }} />
+      {status ?? 'offline'}
+    </span>
+  )
+}
+
 export function ModeratorsPage() {
   const qc = useQueryClient()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['moderators'], queryFn: getModeratorStats })
@@ -56,9 +70,9 @@ export function ModeratorsPage() {
       {isLoading ? (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Moderator</th><th>Email</th><th>Routes Approved</th><th>Posts Moderated</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Moderator</th><th>Email</th><th>Status</th><th>Routes Approved</th><th>Posts Moderated</th><th>Actions</th></tr></thead>
             <tbody>{Array.from({length:4}).map((_,i) => (
-              <tr key={i}>{Array.from({length:5}).map((_,j) => <td key={j}><div className="skeleton" /></td>)}</tr>
+              <tr key={i}>{Array.from({length:6}).map((_,j) => <td key={j}><div className="skeleton" /></td>)}</tr>
             ))}</tbody>
           </table>
         </div>
@@ -81,6 +95,7 @@ export function ModeratorsPage() {
               <tr>
                 <th>Moderator</th>
                 <th>Email</th>
+                <th>Status</th>
                 <th>Routes Approved</th>
                 <th>Posts Moderated</th>
                 <th>Actions</th>
@@ -96,6 +111,7 @@ export function ModeratorsPage() {
                     </div>
                   </td>
                   <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{m.email}</td>
+                  <td><StatusBadge status={m.status} /></td>
                   <td>
                     <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, background:'rgba(62,201,122,0.12)', color:'#3EC97A', border:'1px solid rgba(62,201,122,0.22)', whiteSpace:'nowrap' }}>
                       {m.routesApproved ?? 0} approved
