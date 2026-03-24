@@ -97,6 +97,7 @@ export function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null)
   const [banConfirmId, setBanConfirmId] = useState<string | null>(null)
   const [banTypedText, setBanTypedText] = useState('')
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const list = useMemo(() => data
     .filter((u) => u.role !== 'superadmin')
@@ -115,11 +116,35 @@ export function UsersPage() {
     await qc.invalidateQueries({ queryKey: ['users'] })
     await qc.invalidateQueries({ queryKey: ['moderators'] })
   }
-  const promote = useMutation({ mutationFn: (id: string) => updateUserRole(id, 'moderator'), onSuccess: invalidate })
-  const demote  = useMutation({ mutationFn: (id: string) => updateUserRole(id, 'user'), onSuccess: invalidate })
-  const ban     = useMutation({ mutationFn: (id: string) => setUserBanStatus(id, true), onSuccess: invalidate })
-  const unban   = useMutation({ mutationFn: (id: string) => setUserBanStatus(id, false), onSuccess: invalidate })
-  const remove  = useMutation({ mutationFn: (id: string) => deleteUser(id), onSuccess: invalidate })
+  const toErrorText = (prefix: string, err: unknown) => {
+    const detail = err instanceof Error ? err.message : 'Unexpected error'
+    return `${prefix}. ${detail}`
+  }
+  const promote = useMutation({
+    mutationFn: (id: string) => updateUserRole(id, 'moderator'),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to promote user', err)),
+  })
+  const demote = useMutation({
+    mutationFn: (id: string) => updateUserRole(id, 'user'),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to demote user', err)),
+  })
+  const ban = useMutation({
+    mutationFn: (id: string) => setUserBanStatus(id, true),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to ban user', err)),
+  })
+  const unban = useMutation({
+    mutationFn: (id: string) => setUserBanStatus(id, false),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to unban user', err)),
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteUser(id),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to delete account', err)),
+  })
 
   const toggleSort = (field: keyof AppUser) => {
     if (field === sortBy) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
@@ -165,6 +190,10 @@ export function UsersPage() {
           <option value="banned">Banned</option>
         </select>
       </div>
+
+      {mutationError && (
+        <div className="state-banner error">{mutationError}</div>
+      )}
 
       {isLoading ? (
         <div className="table-wrap">

@@ -359,7 +359,10 @@ class ModerationService {
 
   static Future<void> banUser(String uid) async {
     try {
-      await _firestore.collection('users').doc(uid).update({'isBanned': true});
+      await _firestore.collection('users').doc(uid).update({
+        'isBanned': true,
+        'status': 'banned',
+      });
       final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
       user.isBanned = true;
       print('Banned user $uid');
@@ -373,7 +376,10 @@ class ModerationService {
       await _firestore
           .collection('users')
           .doc(uid)
-          .update({'isBanned': false});
+          .update({
+        'isBanned': false,
+        'status': 'active',
+      });
       final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
       user.isBanned = false;
       print('Unbanned user $uid');

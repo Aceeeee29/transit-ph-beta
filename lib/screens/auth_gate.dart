@@ -11,7 +11,12 @@ class AuthGate extends StatelessWidget {
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
+  static const _surface = Color(0xFFFFFFFF);
   static const _accent = Color(0xFF2E7CF6);
+  static const _textPrimary = Color(0xFF0F1D35);
+  static const _textSecondary = Color(0xFF7A92B2);
+  static const _border = Color(0xFFD4E4F7);
+  static const _danger = Color(0xFFE05C6A);
 
   // ─── Shared loading scaffold ───────────────────────────────────────────────
   static Widget _loadingScaffold() {
@@ -58,14 +63,15 @@ class AuthGate extends StatelessWidget {
           final user = snapshot.data!;
           print('User signed in: ${user.uid}, email: ${user.email}, emailVerified: ${user.emailVerified}');
 
-          // ── Fetch role FIRST before any other checks ───────────────────────
-          return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance
+          // ── Keep user role/ban state live so moderation applies immediately ─
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
                 .collection('users')
                 .doc(user.uid)
-                .get(),
+                .snapshots(),
             builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
+              if (userSnapshot.connectionState == ConnectionState.waiting &&
+                  !userSnapshot.hasData) {
                 return _loadingScaffold();
               }
 
@@ -76,13 +82,18 @@ class AuthGate extends StatelessWidget {
               }
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final data =
-                    userSnapshot.data!.data() as Map<String, dynamic>;
+                final data = userSnapshot.data!.data() ?? <String, dynamic>{};
                 final role = data['role'] as String?;
                 final isAdmin =
                     role == 'moderator' || role == 'admin';
+                final isBanned = (data['isBanned'] as bool? ?? false) ||
+                    (data['status'] as String? ?? '') == 'banned';
                 final hasSeenTutorial =
                     data['hasSeenTutorial'] as bool? ?? false;
+
+                if (isBanned) {
+                  return const _BannedAccountHandler();
+                }
 
                 // ── Moderators/admins skip email verification & onboarding ──
                 if (isAdmin) {
@@ -132,8 +143,12 @@ class AuthGate extends StatelessWidget {
                       final role = data['role'] as String?;
                       final isAdmin =
                           role == 'moderator' || role == 'admin';
+                      final isBanned = (data['isBanned'] as bool? ?? false) ||
+                        (data['status'] as String? ?? '') == 'banned';
                       final hasSeenTutorial =
                           data['hasSeenTutorial'] as bool? ?? false;
+
+                      if (isBanned) return const _BannedAccountHandler();
 
                       // Moderators skip verification & onboarding on retry too
                       if (isAdmin) return MainScreen(isAdmin: true);
@@ -159,5 +174,125 @@ class AuthGate extends StatelessWidget {
         }
       },
     );
+  }
+}
+
+class _BannedAccountHandler extends StatefulWidget {
+  const _BannedAccountHandler();
+
+  @override
+  State<_BannedAccountHandler> createState() => _BannedAccountHandlerState();
+}
+
+class _BannedAccountHandlerState extends State<_BannedAccountHandler> {
+  bool _dialogShown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_dialogShown) return;
+    _dialogShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+            decoration: BoxDecoration(
+              color: AuthGate._surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AuthGate._border),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1A2E7CF6),
+                  blurRadius: 24,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AuthGate._danger.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.gpp_bad_rounded,
+                        color: AuthGate._danger,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Account Banned',
+                        style: TextStyle(
+                          color: AuthGate._textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Your TransitPH account has been banned. Please contact support if you think this was a mistake.',
+                  style: TextStyle(
+                    color: AuthGate._textSecondary,
+                    fontSize: 14,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AuthGate._accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                    },
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+      await FirebaseAuth.instance.signOut();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthGate._loadingScaffold();
   }
 }

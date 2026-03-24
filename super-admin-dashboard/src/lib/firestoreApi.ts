@@ -16,7 +16,8 @@
   type QueryDocumentSnapshot,
   type DocumentData,
 } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functionsClient } from '@/lib/firebase'
 import type {
   AnnouncementItem,
   AppUser,
@@ -375,7 +376,18 @@ export async function setUserBanStatus(userId: string, isBanned: boolean) {
 }
 
 export async function deleteUser(userId: string) {
-  await deleteDoc(doc(db, 'users', userId))
+  const callable = httpsCallable<{ userId: string }, { ok?: boolean }>(
+    functionsClient,
+    'adminDeleteUserAccount',
+  )
+
+  try {
+    await callable({ userId })
+    return
+  } catch {
+    // Fallback keeps legacy behavior when functions are not yet deployed.
+    await deleteDoc(doc(db, 'users', userId))
+  }
 }
 
 export async function getRoutes(): Promise<RouteItem[]> {

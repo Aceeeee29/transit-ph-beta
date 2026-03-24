@@ -1,5 +1,6 @@
 const admin = require('firebase-admin');
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const logger = require('firebase-functions/logger');
 
 admin.initializeApp();
@@ -16,6 +17,38 @@ function toSafeString(value, fallback = '') {
 
 function toSafeBoolean(value) {
   return Boolean(value);
+}
+
+async function deleteByField(collectionName, field, value) {
+  const db = admin.firestore();
+  const snapshot = await db
+    .collection(collectionName)
+    .where(field, '==', value)
+    .get();
+
+  if (snapshot.empty) return 0;
+
+  let deleted = 0;
+  let batch = db.batch();
+  let ops = 0;
+
+  for (const doc of snapshot.docs) {
+    batch.delete(doc.ref);
+    deleted += 1;
+    ops += 1;
+
+    if (ops === 450) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  }
+
+  if (ops > 0) {
+    await batch.commit();
+  }
+
+  return deleted;
 }
 
 exports.syncUpdateCheckerToRemoteConfig = onDocumentWritten(
@@ -66,3 +99,66 @@ exports.syncUpdateCheckerToRemoteConfig = onDocumentWritten(
     }
   },
 );
+
+exports.adminDeleteUserAccount = onCall(async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to perform this action.');
+  }
+
+  const requesterSnap = await admin.firestore().collection('users').doc(request.auth.uid).get();
+  const requesterRole = requesterSnap.exists ? requesterSnap.data()?.role : null;
+  if (requesterRole !== 'superadmin') {
+    throw new HttpsError('permission-denied', 'Only superadmin can delete user accounts.');
+  }
+
+  const userId = toSafeString(request.data?.userId);
+  if (!userId) {
+    throw new HttpsError('invalid-argument', 'Missing userId.');
+  }
+
+  if (userId === request.auth.uid) {
+    throw new HttpsError('failed-precondition', 'You cannot delete your own superadmin account from this action.');
+  }
+
+  const db = admin.firestore();
+
+  const [postsDeleted, routesDeleted, feedbackDeleted, notificationsDeleted] = await Promise.all([
+    deleteByField('posts', 'userId', userId),
+    deleteByField('routes', 'contributorId', userId),
+    deleteByField('feedbacks', 'userId', userId),
+    deleteByField('notifications', 'userId', userId),
+  ]);
+
+  await db.collection('users').doc(userId).delete().catch((error) => {
+    if (error?.code !== 5) {
+      throw error;
+    }
+  });
+
+  await admin.auth().deleteUser(userId).catch((error) => {
+    if (error?.code !== 'auth/user-not-found') {
+      throw error;
+    }
+  });
+
+  logger.info('adminDeleteUserAccount completed', {
+    deletedBy: request.auth.uid,
+    userId,
+    postsDeleted,
+    routesDeleted,
+    feedbackDeleted,
+    notificationsDeleted,
+  });
+
+  return {
+    ok: true,
+    deleted: {
+      posts: postsDeleted,
+      routes: routesDeleted,
+      feedbacks: feedbackDeleted,
+      notifications: notificationsDeleted,
+      userDoc: true,
+      authUser: true,
+    },
+  };
+});
