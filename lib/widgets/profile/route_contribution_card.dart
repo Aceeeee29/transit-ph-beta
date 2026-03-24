@@ -8,11 +8,13 @@ import 'profile_colors.dart';
 class RouteContributionCard extends StatelessWidget {
   final route_model.Route route;
   final String userEmail;
+  final String distanceUnit;
 
   const RouteContributionCard({
     super.key,
     required this.route,
     required this.userEmail,
+    required this.distanceUnit,
   });
 
   double _calculateAverageRating() {
@@ -25,6 +27,10 @@ class RouteContributionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final distance = RouteMetricsService.calculateRouteDistance(route.pathPoints);
     final avgRating = _calculateAverageRating();
+    final distanceLabel = RouteMetricsService.formatDistanceForUnit(
+      distance,
+      distanceUnit: distanceUnit,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -55,7 +61,7 @@ class RouteContributionCard extends StatelessWidget {
               children: [
                 _infoPill(
                   icon: Icons.straighten,
-                  label: '${distance.toStringAsFixed(1)} km',
+                  label: distanceLabel,
                 ),
                 const SizedBox(width: 8),
                 _infoPill(

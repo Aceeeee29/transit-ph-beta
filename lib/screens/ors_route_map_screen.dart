@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import '../models/ors_route_result.dart';
+import '../services/route_metrics_service.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -402,7 +403,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
               children: [
                 _summaryChip(
                   Icons.straighten,
-                  widget.result.distanceLabel,
+                  RouteMetricsService.formatDistanceMeters(
+                    widget.result.distanceMeters,
+                  ),
                   Colors.green.shade700,
                 ),
                 const SizedBox(width: 8),
@@ -797,8 +800,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   }
 
   String _formatStepDistance(double meters) {
-    if (meters >= 1000) return '${(meters / 1000).toStringAsFixed(1)} km';
-    return '${meters.toInt()} m';
+    return RouteMetricsService.formatDistanceMeters(meters);
   }
 
   String _totalFareLabel() {

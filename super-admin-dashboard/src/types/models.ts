@@ -28,6 +28,7 @@ export interface RouteItem {
   endLocation: string
   contributorId: string
   contributorName?: string
+  contributorEmail?: string
   createdAt?: Timestamp
   status: RouteStatus
   views: number

@@ -2,6 +2,11 @@ import 'package:latlong2/latlong.dart' show LatLng, Distance, LengthUnit;
 import 'dart:math' as math;
 
 class RouteMetricsService {
+  static const String kilometersUnit = 'Kilometers';
+  static const String milesUnit = 'Miles';
+
+  static String _currentDistanceUnit = milesUnit;
+
   static const double _walkingSpeedKmh = 5.0; // Average walking speed in km/h
   static const double _jeepneySpeedKmh = 20.0; // Average jeepney speed in km/h
   static const double _busSpeedKmh = 25.0; // Average bus speed in km/h
@@ -10,6 +15,15 @@ class RouteMetricsService {
       15.0; // Average tricycle speed in km/h
   static const double _vanSpeedKmh = 30.0; // Average FX/Van speed in km/h
   static const double _ferrySpeedKmh = 20.0; // Average ferry speed in km/h
+
+  static String get currentDistanceUnit => _currentDistanceUnit;
+
+  static void setDistanceUnit(String? distanceUnit) {
+    if (distanceUnit == null) return;
+    if (distanceUnit == milesUnit || distanceUnit == kilometersUnit) {
+      _currentDistanceUnit = distanceUnit;
+    }
+  }
 
   /// Calculate the total distance of a route in kilometers
   static double calculateRouteDistance(List<LatLng> points) {
@@ -105,15 +119,79 @@ class RouteMetricsService {
 
   /// Format distance for display
   static String formatDistance(double distanceKm) {
-    if (distanceKm < 1) {
-      // Convert to meters for short distances
-      final meters = (distanceKm * 1000).round();
-      return '$meters m';
-    } else {
-      // Round to one decimal place for kilometers
-      final km = (distanceKm * 10).round() / 10;
-      return '$km km';
+    return formatDistanceForUnit(distanceKm, distanceUnit: _currentDistanceUnit);
+  }
+
+  /// Format distance for display using a selected unit preference.
+  static String formatDistanceForUnit(
+    double distanceKm, {
+    String? distanceUnit,
+  }) {
+    final selectedUnit = distanceUnit ?? _currentDistanceUnit;
+    final useMiles = selectedUnit == milesUnit;
+    final convertedDistance = useMiles ? distanceKm * 0.621371 : distanceKm;
+    final shortUnit = useMiles ? 'mi' : 'km';
+
+    if (convertedDistance < 1) {
+      if (!useMiles) {
+        final meters = (convertedDistance * 1000).round();
+        return '$meters m';
+      }
+
+      final milesRounded = (convertedDistance * 100).round() / 100;
+      return '$milesRounded mi';
     }
+
+    final roundedValue = (convertedDistance * 10).round() / 10;
+    return '$roundedValue $shortUnit';
+  }
+
+  /// Format a distance value represented in meters for a selected unit.
+  static String formatDistanceMetersForUnit(
+    double distanceMeters, {
+    String? distanceUnit,
+  }) {
+    return formatDistanceForUnit(
+      distanceMeters / 1000,
+      distanceUnit: distanceUnit,
+    );
+  }
+
+  static String formatDistanceMeters(double distanceMeters) {
+    return formatDistanceMetersForUnit(
+      distanceMeters,
+      distanceUnit: _currentDistanceUnit,
+    );
+  }
+
+  static double? parseDistanceToKm(String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+
+    final match = RegExp(
+      r'^\s*(\d+(?:\.\d+)?)\s*(km|kilometers?|m|meters?|mi|miles?|ft|feet)?\s*$',
+      caseSensitive: false,
+    ).firstMatch(text.trim());
+
+    if (match == null) return null;
+
+    final value = double.tryParse(match.group(1)!);
+    if (value == null) return null;
+
+    final unit = (match.group(2) ?? 'km').toLowerCase();
+    if (unit == 'km' || unit == 'kilometer' || unit == 'kilometers') {
+      return value;
+    }
+    if (unit == 'm' || unit == 'meter' || unit == 'meters') {
+      return value / 1000;
+    }
+    if (unit == 'mi' || unit == 'mile' || unit == 'miles') {
+      return value * 1.60934;
+    }
+    if (unit == 'ft' || unit == 'feet') {
+      return value * 0.0003048;
+    }
+
+    return null;
   }
 
   /// Format ETA for display

@@ -64,7 +64,7 @@ class PostService {
       final data = post.toJson()..remove('timestamp');
       data['timestamp'] = FieldValue.serverTimestamp();
       data['expiresAt'] = Timestamp.fromDate(
-        DateTime.now().add(const Duration(hours: 24)),
+        DateTime.now().add(const Duration(days: 3)),
       );
       await _firestore.collection('posts').doc(post.id).set(data);
     } catch (e) {

@@ -6,8 +6,13 @@ import 'route_contribution_card.dart';
 
 class ContributionsTab extends StatelessWidget {
   final String userEmail;
+  final String distanceUnit;
 
-  const ContributionsTab({super.key, required this.userEmail});
+  const ContributionsTab({
+    super.key,
+    required this.userEmail,
+    required this.distanceUnit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +40,7 @@ class ContributionsTab extends StatelessWidget {
           itemBuilder: (context, index) => RouteContributionCard(
             route: routes[index],
             userEmail: userEmail,
+            distanceUnit: distanceUnit,
           ),
         );
       },

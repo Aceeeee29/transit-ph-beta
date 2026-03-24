@@ -214,7 +214,7 @@ export function DashboardPage() {
               borderRadius: '50%',
               background: isLiveConnected ? '#3EC97A' : '#FFB547',
             }} />
-            {isLiveConnected ? 'Live stream on' : 'Live reconnecting'}
+            {isLiveConnected ? 'Live' : 'Live reconnecting'}
           </span>
           {streamError && (
             <span style={{ fontSize: '0.72rem', color: '#A36A07' }}>

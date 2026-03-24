@@ -69,6 +69,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'comment' => Icons.comment_rounded,
     'reply' => Icons.reply_rounded,
     'route_approved' => Icons.route_rounded,
+    'route_rejected' => Icons.route_rounded,
     _ => Icons.notifications_rounded,
   };
 
@@ -78,6 +79,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'comment' => _accent,
     'reply' => const Color(0xFF9B7FE8),
     'route_approved' => const Color(0xFF2EA56E),
+    'route_rejected' => _danger,
     _ => _textSecondary,
   };
 
@@ -87,6 +89,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'comment' => 'Comment',
     'reply' => 'Reply',
     'route_approved' => 'Route Approved',
+    'route_rejected' => 'Route Rejected',
     _ => 'Notification',
   };
 

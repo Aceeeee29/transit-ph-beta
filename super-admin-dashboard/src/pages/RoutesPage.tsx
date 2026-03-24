@@ -164,7 +164,7 @@ export function RoutesPage() {
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>{r.endLocation}</td>
                   <td style={{ fontSize: '0.81rem', color: 'var(--text-secondary)' }}>
-                    {r.contributorName ?? r.contributorId ?? '-'}
+                    {r.contributorName?.trim() || r.contributorEmail?.trim() || '-'}
                   </td>
                   <td style={{ fontSize: '0.81rem', color: 'var(--text-secondary)' }}>
                     {r.createdAt?.toDate().toLocaleDateString() ?? '-'}

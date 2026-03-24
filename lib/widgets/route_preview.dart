@@ -35,10 +35,20 @@ class RoutePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Distance: prefer ORS-derived distance string, fall back to haversine calculation
-    final formattedDistance = (route.distance != null && route.distance!.isNotEmpty)
-        ? route.distance!
-        : RouteMetricsService.formatDistance(
-            RouteMetricsService.calculateRouteDistance(route.pathPoints));
+    final formattedDistance = () {
+      if (route.distanceMeters != null && route.distanceMeters! > 0) {
+        return RouteMetricsService.formatDistanceMeters(route.distanceMeters!);
+      }
+
+      final parsedKm = RouteMetricsService.parseDistanceToKm(route.distance);
+      if (parsedKm != null) {
+        return RouteMetricsService.formatDistance(parsedKm);
+      }
+
+      return RouteMetricsService.formatDistance(
+        RouteMetricsService.calculateRouteDistance(route.pathPoints),
+      );
+    }();
 
     // Prefer ORS-derived ETA/fare stored on the route over recalculating
     final formattedEta = route.eta != null && route.eta!.isNotEmpty

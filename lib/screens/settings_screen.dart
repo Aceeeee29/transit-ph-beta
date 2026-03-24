@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
+import '../services/settings_service.dart';
+import '../services/gamification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userName;
@@ -21,12 +24,284 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool newDiscussions = false;
   bool weeklyDigest = false;
   bool _isSubmittingFeedback = false;
+  bool _isLoadingPreferences = true;
+  bool _isSavingPreferences = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
 
   bool showEmailInProfile = false;
-  bool allowDirectMessages = true;
+  late String _displayName;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayName = widget.userName;
+    _loadPreferences();
+  }
+
+  Future<void> _showEditProfileDialog() async {
+    final controller = TextEditingController(text: _displayName);
+
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.08),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      border: Border(bottom: BorderSide(color: _border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _accentSoft,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: const Icon(
+                            Icons.edit_outlined,
+                            color: _accent,
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Edit Profile Name',
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        textInputAction: TextInputAction.done,
+                        style: const TextStyle(
+                          color: _textPrimary,
+                          fontSize: 14,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Name',
+                          labelStyle: TextStyle(color: _textSecondary),
+                          prefixIcon: Icon(
+                            Icons.person_outline,
+                            color: _accent,
+                            size: 18,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 13,
+                            horizontal: 4,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(dialogContext).pop(),
+                            child: Container(
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: _surface,
+                                borderRadius: BorderRadius.circular(11),
+                                border: Border.all(color: _border),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final updatedName = controller.text.trim();
+                              if (updatedName.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Name cannot be empty.'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              try {
+                                final user = await GamificationService.loadUser();
+                                user.name = updatedName;
+                                await GamificationService.saveUser(user);
+
+                                final authUser =
+                                    firebase_auth.FirebaseAuth.instance.currentUser;
+                                if (authUser != null) {
+                                  await authUser.updateDisplayName(updatedName);
+                                }
+
+                                if (!mounted) return;
+                                setState(() {
+                                  _displayName = updatedName;
+                                });
+
+                                Navigator.of(dialogContext).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Profile updated successfully.'),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to update profile: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Container(
+                              height: 44,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                borderRadius: BorderRadius.circular(11),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _accent.withOpacity(0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Save',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final preferences = await SettingsService.loadPreferences();
+      if (!mounted) return;
+
+      setState(() {
+        routeApprovalUpdates =
+            preferences['routeApprovalUpdates'] as bool? ?? false;
+        newDiscussions = preferences['newDiscussions'] as bool? ?? false;
+        weeklyDigest = preferences['weeklyDigest'] as bool? ?? false;
+        distanceUnit = preferences['distanceUnit'] as String? ?? 'Miles';
+        showEmailInProfile = preferences['showEmailInProfile'] as bool? ?? false;
+        _isLoadingPreferences = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPreferences = false;
+      });
+    }
+  }
+
+  Future<void> _savePreferences() async {
+    setState(() {
+      _isSavingPreferences = true;
+    });
+
+    await SettingsService.savePreferences({
+      'routeApprovalUpdates': routeApprovalUpdates,
+      'newDiscussions': newDiscussions,
+      'weeklyDigest': weeklyDigest,
+      'distanceUnit': distanceUnit,
+      'showEmailInProfile': showEmailInProfile,
+    });
+
+    if (!mounted) return;
+    setState(() {
+      _isSavingPreferences = false;
+    });
+  }
+
+  void _updateBooleanPreference({
+    required void Function(bool value) updater,
+    required bool value,
+  }) {
+    setState(() {
+      updater(value);
+    });
+    _savePreferences();
+  }
+
+  void _updateDistanceUnit(String value) {
+    setState(() {
+      distanceUnit = value;
+    });
+    _savePreferences();
+  }
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -332,6 +607,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingPreferences) {
+      return Scaffold(
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          foregroundColor: _textPrimary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          title: const Text(
+            'Settings',
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _bg,
       // ─── AppBar ──────────────────────────────────────────────────────────
@@ -424,8 +722,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         child: Center(
                           child: Text(
-                            widget.userName.isNotEmpty
-                                ? widget.userName[0].toUpperCase()
+                            _displayName.isNotEmpty
+                                ? _displayName[0].toUpperCase()
                                 : '?',
                             style: const TextStyle(
                               color: Colors.white,
@@ -441,7 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.userName,
+                              _displayName,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -462,9 +760,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(width: 10),
                       GestureDetector(
-                        onTap: () {
-                          // TODO: Implement Edit Profile functionality
-                        },
+                        onTap: _showEditProfileDialog,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -505,19 +801,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Get notified when your routes are approved/rejected',
                   value: routeApprovalUpdates,
                   onChanged:
-                      (val) => setState(() => routeApprovalUpdates = val),
+                      (val) => _updateBooleanPreference(
+                        updater: (value) => routeApprovalUpdates = value,
+                        value: val,
+                      ),
                 ),
                 _toggleRow(
                   title: 'New Discussions',
-                  subtitle: 'Be notified of new community discussions',
+                  subtitle: 'Be notified on your posts in community discussions',
                   value: newDiscussions,
-                  onChanged: (val) => setState(() => newDiscussions = val),
+                  onChanged:
+                      (val) => _updateBooleanPreference(
+                        updater: (value) => newDiscussions = value,
+                        value: val,
+                      ),
                 ),
                 _toggleRow(
                   title: 'Weekly Digest',
                   subtitle: 'Summary of community activity',
                   value: weeklyDigest,
-                  onChanged: (val) => setState(() => weeklyDigest = val),
+                  onChanged:
+                      (val) => _updateBooleanPreference(
+                        updater: (value) => weeklyDigest = value,
+                        value: val,
+                      ),
                   isLast: true,
                 ),
               ],
@@ -544,7 +851,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: distanceUnit,
                   items: ['Miles', 'Kilometers'],
                   onChanged: (val) {
-                    if (val != null) setState(() => distanceUnit = val);
+                    if (val != null) _updateDistanceUnit(val);
                   },
                   isLast: true,
                 ),
@@ -561,26 +868,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Show Email in Profile',
                   subtitle: 'Allow others to see your email address',
                   value: showEmailInProfile,
-                  onChanged: (val) => setState(() => showEmailInProfile = val),
-                ),
-                _toggleRow(
-                  title: 'Allow Direct Messages',
-                  subtitle: 'Let community members message you',
-                  value: allowDirectMessages,
-                  onChanged: (val) => setState(() => allowDirectMessages = val),
+                  onChanged:
+                      (val) => _updateBooleanPreference(
+                        updater: (value) => showEmailInProfile = value,
+                        value: val,
+                      ),
                   isLast: true,
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
+            if (_isSavingPreferences)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Saving settings...',
+                    style: TextStyle(fontSize: 12, color: _textSecondary),
+                  ),
+                ),
+              ),
+
             // ─── About ─────────────────────────────────────────────────
             _section(
               title: 'About',
               icon: Icons.info_outline_rounded,
               children: [
-                _infoRow(label: 'Version', value: '1.0.0'),
-                _infoRow(label: 'Last Updated', value: 'December 2024'),
+                _infoRow(label: 'Version', value: '0.1.10'),
+                _infoRow(label: 'Last Updated', value: 'March 2026'),
                 Divider(color: _border, height: 1),
                 _actionRow(
                   label: 'Privacy Policy',

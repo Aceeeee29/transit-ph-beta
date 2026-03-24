@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'settings_screen.dart';
 import '../services/gamification_service.dart';
+import '../services/settings_service.dart';
+import '../services/route_metrics_service.dart';
 import '../models/user.dart' as gamification_user;
 import '../widgets/profile/profile_colors.dart';
 import '../widgets/profile/achievements_tab.dart';
@@ -17,13 +19,15 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   gamification_user.User? user;
-  final _editNameController = TextEditingController();
   bool _isLoggingOut = false;
+  bool _showEmailInProfile = false;
+  String _distanceUnit = 'Miles';
 
   @override
   void initState() {
     super.initState();
     _loadUser();
+    _loadPreferences();
   }
 
   Future<void> _loadUser() async {
@@ -32,24 +36,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       user = loadedUser;
     });
-    _editNameController.text = user?.name ?? 'N/A';
+  }
+
+  Future<void> _loadPreferences() async {
+    final preferences = await SettingsService.loadPreferences();
+    if (!mounted) return;
+    setState(() {
+      _showEmailInProfile = preferences['showEmailInProfile'] as bool? ?? false;
+      _distanceUnit = preferences['distanceUnit'] as String? ?? 'Miles';
+    });
   }
 
   @override
   void dispose() {
-    _editNameController.dispose();
     super.dispose();
-  }
-
-  void _showEditNameDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => _EditNameDialog(
-        controller: _editNameController,
-        user: user,
-        onSaved: () => setState(() {}),
-      ),
-    );
   }
 
   void _logout() async {
@@ -93,7 +93,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             user: user!,
             initials: initials,
             isLoggingOut: _isLoggingOut,
-            onEditName: _showEditNameDialog,
+            showEmailInProfile: _showEmailInProfile,
+            distanceDisplay: RouteMetricsService.formatDistanceForUnit(
+              user!.totalDistance,
+              distanceUnit: _distanceUnit,
+            ),
             onLogout: _logout,
           ),
           Expanded(
@@ -108,7 +112,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         AchievementsTab(userAchievements: user!.achievements),
                         const BadgesTab(),
-                        ContributionsTab(userEmail: user!.email),
+                        ContributionsTab(
+                          userEmail: user!.email,
+                          distanceUnit: _distanceUnit,
+                        ),
                       ],
                     ),
                   ),
@@ -157,15 +164,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       actions: [
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SettingsScreen(
-                userName: user!.name,
-                userEmail: user!.email,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(
+                  userName: user!.name,
+                  userEmail: user!.email,
+                ),
               ),
-            ),
-          ),
+            );
+            if (!mounted) return;
+            await _loadPreferences();
+          },
           child: Container(
             margin: const EdgeInsets.only(right: 16),
             width: 36,
@@ -216,7 +227,8 @@ class _ProfileHeaderCard extends StatelessWidget {
   final gamification_user.User user;
   final String initials;
   final bool isLoggingOut;
-  final VoidCallback onEditName;
+  final bool showEmailInProfile;
+  final String distanceDisplay;
   final VoidCallback onLogout;
 
   static const _green = Color(0xFF3EC97A);
@@ -225,7 +237,8 @@ class _ProfileHeaderCard extends StatelessWidget {
     required this.user,
     required this.initials,
     required this.isLoggingOut,
-    required this.onEditName,
+    required this.showEmailInProfile,
+    required this.distanceDisplay,
     required this.onLogout,
   });
 
@@ -250,7 +263,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            user.email,
+            showEmailInProfile ? user.email : 'Email hidden',
             style: const TextStyle(fontSize: 13, color: ProfileColors.textSecondary),
             overflow: TextOverflow.ellipsis,
           ),
@@ -273,55 +286,34 @@ class _ProfileHeaderCard extends StatelessWidget {
       user.streakDays > 0;
 
   Widget _avatar() {
-    return Stack(
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: ProfileColors.accent.withOpacity(0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: ProfileColors.accent.withOpacity(0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-          child: Center(
-            child: Text(
-              initials,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
           ),
         ),
-        Positioned(
-          bottom: 0,
-          right: 0,
-          child: GestureDetector(
-            onTap: onEditName,
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: ProfileColors.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: ProfileColors.border, width: 2),
-              ),
-              child: const Icon(Icons.edit, size: 13, color: ProfileColors.accent),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -370,7 +362,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           ),
           Container(width: 1, height: 48, color: ProfileColors.border),
           _statItem(
-            value: '${user.totalDistance.toStringAsFixed(1)} km',
+            value: distanceDisplay,
             label: 'Distance',
             icon: Icons.straighten,
             color: _green,
@@ -491,186 +483,3 @@ class _ProfileHeaderCard extends StatelessWidget {
   }
 }
 
-// ─── Edit name dialog ─────────────────────────────────────────────────────────
-
-class _EditNameDialog extends StatelessWidget {
-  final TextEditingController controller;
-  final gamification_user.User? user;
-  final VoidCallback onSaved;
-
-  const _EditNameDialog({
-    required this.controller,
-    required this.user,
-    required this.onSaved,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: ProfileColors.bg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: ProfileColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: ProfileColors.accent.withOpacity(0.08),
-              blurRadius: 32,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(),
-            _textField(),
-            _actions(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _header() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
-      decoration: BoxDecoration(
-        color: ProfileColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(bottom: BorderSide(color: ProfileColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: ProfileColors.accentSoft,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.edit_outlined,
-              color: ProfileColors.accent,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Text(
-            'Edit Profile Name',
-            style: TextStyle(
-              color: ProfileColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _textField() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: ProfileColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ProfileColors.border),
-        ),
-        child: TextField(
-          controller: controller,
-          style: const TextStyle(color: ProfileColors.textPrimary, fontSize: 14),
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            labelStyle: TextStyle(color: ProfileColors.textSecondary),
-            prefixIcon: Icon(
-              Icons.person_outline,
-              color: ProfileColors.accent,
-              size: 18,
-            ),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(vertical: 13, horizontal: 4),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _actions(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: ProfileColors.surface,
-                  borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: ProfileColors.border),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: ProfileColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: GestureDetector(
-              onTap: () async {
-                if (user != null) {
-                  user!.name = controller.text.trim().isEmpty
-                      ? 'N/A'
-                      : controller.text.trim();
-                  await GamificationService.saveUser(user!);
-                  onSaved();
-                }
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              child: Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: [
-                    BoxShadow(
-                      color: ProfileColors.accent.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'Save',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

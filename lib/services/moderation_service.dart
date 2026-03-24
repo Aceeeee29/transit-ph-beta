@@ -217,6 +217,39 @@ class ModerationService {
 
   static Future<void> rejectRoute(String routeId) async {
     try {
+      String? contributorId;
+      String routeTitle = 'your submitted route';
+
+      final routeSnapshot =
+          await _firestore.collection('routes').doc(routeId).get();
+      if (routeSnapshot.exists) {
+        final routeData = routeSnapshot.data();
+        contributorId = (routeData?['contributorId'] as String?)?.trim();
+        final start = routeData?['startLocation'] as String?;
+        final end = routeData?['endLocation'] as String?;
+        if (start != null && end != null) {
+          routeTitle = '$start to $end';
+        }
+      }
+
+      final recipientId = await _resolveNotificationRecipientId(contributorId);
+      if (recipientId != null && recipientId.isNotEmpty) {
+        try {
+          await NotificationsService.addNotification(
+            NotificationModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: recipientId,
+              type: 'route_rejected',
+              timestamp: DateTime.now(),
+              message:
+                  'Your submitted route ($routeTitle) was rejected by moderators.',
+            ),
+          );
+        } catch (e) {
+          print('Error creating rejection notification for route $routeId: $e');
+        }
+      }
+
       await _firestore.collection('routes').doc(routeId).delete();
       // Remove from local pending list immediately
       pendingRoutesNotifier.value = pendingRoutesNotifier.value

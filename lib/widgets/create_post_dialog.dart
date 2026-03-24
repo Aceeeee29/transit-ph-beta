@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import '../models/post.dart';
 import '../models/location.dart';
 import '../services/media_service.dart';
@@ -24,6 +25,7 @@ class CreatePostDialog extends StatefulWidget {
 
 class _CreatePostDialogState extends State<CreatePostDialog>
     with SingleTickerProviderStateMixin {
+  static const int _maxPostContentLength = 500;
   final TextEditingController _contentController = TextEditingController();
   PostCategory _selectedCategory = PostCategory.discussion;
   bool _anonymous = false;
@@ -73,7 +75,14 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   // ─── All original functions unchanged ──────────────────────────────────────
 
   Future<void> _createPost() async {
-    if (_contentController.text.isEmpty) return;
+    final trimmedContent = _contentController.text.trim();
+    if (trimmedContent.isEmpty) return;
+    if (trimmedContent.length > _maxPostContentLength) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post must be 500 characters or less.')),
+      );
+      return;
+    }
 
     final authUser = FirebaseAuth.instance.currentUser;
     final authDisplayName = authUser?.displayName?.trim();
@@ -96,7 +105,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
       userEmail: _anonymous ? null : authEmail,
       userId: widget.currentUserId,
       anonymous: _anonymous,
-      content: _contentController.text,
+      content: trimmedContent,
       type:
           _selectedVideo != null
               ? PostType.video
@@ -355,6 +364,9 @@ class _CreatePostDialogState extends State<CreatePostDialog>
           ),
           child: TextField(
             controller: _contentController,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(_maxPostContentLength),
+            ],
             style: const TextStyle(
               color: _textPrimary,
               fontSize: 15,
@@ -368,6 +380,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             ),
             maxLines: 4,
             minLines: 3,
+            maxLength: _maxPostContentLength,
           ),
         ),
       ],

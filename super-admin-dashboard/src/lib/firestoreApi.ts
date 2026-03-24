@@ -221,6 +221,7 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
     endLocation: data.endLocation ?? data.to ?? 'Unknown',
     contributorId: data.contributorId ?? data.userId ?? '',
     contributorName: data.contributorName ?? data.userName,
+    contributorEmail: data.contributorEmail ?? data.userEmail ?? data.email,
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
     status: data.approvalStatus ?? data.status ?? 'pending',
     views: data.views ?? 0,
@@ -378,8 +379,33 @@ export async function deleteUser(userId: string) {
 }
 
 export async function getRoutes(): Promise<RouteItem[]> {
-  const docs = await getDocsWithCreatedAtFallback(routesCol)
-  return docs.map(mapRouteDoc)
+  const [routeDocs, userDocs] = await Promise.all([
+    getDocsWithCreatedAtFallback(routesCol),
+    getDocsWithCreatedAtFallback(usersCol),
+  ])
+
+  const contributorLookup = new Map<string, { name?: string; email?: string }>()
+  userDocs.forEach((userDoc) => {
+    const data = userDoc.data()
+    const nameRaw = data.displayName ?? data.name ?? data.userName
+    const emailRaw = data.email
+    const name = typeof nameRaw === 'string' ? nameRaw.trim() : ''
+    const email = typeof emailRaw === 'string' ? emailRaw.trim() : ''
+    contributorLookup.set(userDoc.id, {
+      name: name || undefined,
+      email: email || undefined,
+    })
+  })
+
+  return routeDocs.map((docSnap) => {
+    const route = mapRouteDoc(docSnap)
+    const lookup = route.contributorId ? contributorLookup.get(route.contributorId) : undefined
+    return {
+      ...route,
+      contributorName: route.contributorName?.trim() || lookup?.name,
+      contributorEmail: route.contributorEmail?.trim() || lookup?.email,
+    }
+  })
 }
 
 export async function updateRouteStatus(routeId: string, status: 'approved' | 'rejected', reviewerUid: string) {

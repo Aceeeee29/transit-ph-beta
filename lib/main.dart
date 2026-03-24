@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/moderation_service.dart';
+import 'services/settings_service.dart';
 import 'widgets/update_dialog.dart';
 import 'config.dart';
 
@@ -66,6 +67,9 @@ void main() async {
 
   // Initialize moderation service listeners
   ModerationService.init();
+
+  // Prime user preference cache so distance displays use the last selected unit.
+  await SettingsService.loadPreferences();
 
   runApp(const TransitPHApp());
 }

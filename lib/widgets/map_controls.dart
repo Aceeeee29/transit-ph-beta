@@ -508,7 +508,7 @@ class RoutePreviewOverlay extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${distance.toStringAsFixed(2)} km',
+                        RouteMetricsService.formatDistance(distance),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(width: 16),

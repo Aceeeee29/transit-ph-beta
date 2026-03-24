@@ -945,6 +945,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       }
       if (widget.route.distance != null &&
           widget.route.distance!.isNotEmpty) {
+        final parsedKm =
+            RouteMetricsService.parseDistanceToKm(widget.route.distance);
+        if (parsedKm != null) {
+          return RouteMetricsService.formatDistance(parsedKm);
+        }
         return widget.route.distance!;
       }
       return RouteMetricsService.formatDistance(

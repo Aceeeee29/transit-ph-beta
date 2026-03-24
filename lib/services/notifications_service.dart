@@ -3,10 +3,54 @@ import '../models/notification.dart';
 
 class NotificationsService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const Set<String> _routeApprovalNotificationTypes = {
+    'route_approved',
+    'route_rejected',
+  };
+  static const Set<String> _discussionNotificationTypes = {
+    'upvote',
+    'downvote',
+    'comment',
+    'reply',
+  };
+
+  static Future<Map<String, dynamic>> _getUserPreferences(String userId) async {
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    final rawPreferences = userDoc.data()?['preferences'];
+    if (rawPreferences is Map<String, dynamic>) {
+      return rawPreferences;
+    }
+    return const <String, dynamic>{};
+  }
+
+  static bool _isTypeAllowed(
+    String type,
+    Map<String, dynamic> preferences,
+  ) {
+    if (_routeApprovalNotificationTypes.contains(type)) {
+      return preferences['routeApprovalUpdates'] as bool? ?? true;
+    }
+
+    if (_discussionNotificationTypes.contains(type)) {
+      return preferences['newDiscussions'] as bool? ?? true;
+    }
+
+    return true;
+  }
+
+  static Future<bool> _shouldDeliverNotification(NotificationModel notification) async {
+    final preferences = await _getUserPreferences(notification.userId);
+    return _isTypeAllowed(notification.type, preferences);
+  }
 
   /// Add a notification to Firestore
   static Future<void> addNotification(NotificationModel notification) async {
     try {
+      final shouldDeliver = await _shouldDeliverNotification(notification);
+      if (!shouldDeliver) {
+        return;
+      }
+
       final data = notification.toJson();
       data['timestamp'] = FieldValue.serverTimestamp();
       await _firestore
