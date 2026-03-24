@@ -896,7 +896,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'About',
               icon: Icons.info_outline_rounded,
               children: [
-                _infoRow(label: 'Version', value: '0.1.11'),
+                _infoRow(label: 'Version', value: '0.1.12'),
                 _infoRow(label: 'Last Updated', value: 'March 2026'),
                 Divider(color: _border, height: 1),
                 _actionRow(
