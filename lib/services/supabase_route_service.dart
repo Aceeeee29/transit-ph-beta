@@ -164,9 +164,9 @@ class SupabaseRouteService {
   static const _dijkstraMaxBufferKm = 8.0;
   static const _dijkstraStopLimit = 900;
   static const _walkSpeedKmh = 5.0;
-  static const _transferRadiusKm = 0.25;
+  static const _transferRadiusKm = 0.6;
   static const _transferBasePenaltySec = 90.0;
-  static const _maxAccessWalkKm = 1.4;
+  static const _maxAccessWalkKm = 2.4;
   static const _boardingPenaltySec = 180.0;
   static const _maxRideStopsSpan = 30;
 
@@ -255,8 +255,9 @@ class SupabaseRouteService {
       if (trip == null) continue;
       final routeId = trip['route_id']?.toString();
       final route = routeId != null ? routeById[routeId] : null;
+      final routeType = _parseRouteType(route?['route_type']);
       final inferredMode = _inferRouteMode(
-        routeType: route?['route_type'] as int?,
+        routeType: routeType,
         routeShortName: route?['route_short_name'] as String?,
         routeLongName: route?['route_long_name'] as String?,
       );
@@ -331,7 +332,7 @@ class SupabaseRouteService {
             routeShortName: route?['route_short_name'] as String?,
             routeLongName: route?['route_long_name'] as String?,
             routeColor: route?['route_color'] as String?,
-            routeType: route?['route_type'] as int?,
+            routeType: routeType,
           ));
         }
       }
@@ -615,6 +616,12 @@ class SupabaseRouteService {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  static double _asDouble(dynamic value, {double fallback = 0.0}) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
   static double _gtfsTimeDiffSeconds(String? from, String? to) {
     final a = _parseGtfsClock(from);
     final b = _parseGtfsClock(to);
@@ -641,7 +648,7 @@ class SupabaseRouteService {
     required String? routeShortName,
     required String? routeLongName,
   }) {
-    if (routeType == 0 || routeType == 1 || routeType == 2) return 'Train';
+    if (_isTrainRouteType(routeType)) return 'Train';
     if (routeType == 4) return 'Ferry';
 
     final name = '${routeShortName ?? ''} ${routeLongName ?? ''}'.toLowerCase();
@@ -661,6 +668,31 @@ class SupabaseRouteService {
       return 'Tricycle';
     }
     return 'Jeepney';
+  }
+
+  static bool _isTrainRouteType(int? routeType) {
+    if (routeType == null) return false;
+
+    // Core GTFS rail types + monorail.
+    if (routeType == 0 || routeType == 1 || routeType == 2 || routeType == 12) {
+      return true;
+    }
+
+    // GTFS extended rail/urban-rail categories frequently used by some feeds.
+    if ((routeType >= 100 && routeType <= 117) ||
+        (routeType >= 400 && routeType <= 405) ||
+        (routeType >= 900 && routeType <= 906)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static int? _parseRouteType(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString().trim());
   }
 
   static double _fallbackSpeedForMode(String mode) {
@@ -705,8 +737,14 @@ class SupabaseRouteService {
 
     final mapped = results.map((e) => Map<String, dynamic>.from(e)).toList();
     mapped.sort((a, b) {
-      final dA = _haversineKm(point, LatLng(a['stop_lat'], a['stop_lon']));
-      final dB = _haversineKm(point, LatLng(b['stop_lat'], b['stop_lon']));
+      final dA = _haversineKm(
+        point,
+        LatLng(_asDouble(a['stop_lat']), _asDouble(a['stop_lon'])),
+      );
+      final dB = _haversineKm(
+        point,
+        LatLng(_asDouble(b['stop_lat']), _asDouble(b['stop_lon'])),
+      );
       return dA.compareTo(dB);
     });
 
@@ -819,7 +857,7 @@ class SupabaseRouteService {
       routeShortName: routeRow?['route_short_name'] as String?,
       routeLongName:  routeRow?['route_long_name']  as String?,
       routeColor:     routeRow?['route_color']       as String?,
-      routeType:      routeRow?['route_type']        as int?,
+      routeType:      _parseRouteType(routeRow?['route_type']),
       boardStopId:    boardStopId,
       alightStopId:   alightStopId,
       boardStopName:  boardStop['stop_name']  as String? ?? 'Stop',

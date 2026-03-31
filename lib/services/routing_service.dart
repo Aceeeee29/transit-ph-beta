@@ -47,7 +47,7 @@ class RoutingService {
     required LatLng destination,
     String mode = 'Jeepney',
   }) async {
-    const cacheProfile = 'supabase-gtfs-v7';
+    const cacheProfile = 'supabase-gtfs-v8';
 
     final cached = await RouteCacheRepository.get(
       originName, destinationName, mode, cacheProfile,
@@ -731,7 +731,7 @@ class RoutingService {
     required String preferredMode,
   }) {
     // GTFS route_type is authoritative for rail/ferry and usually bus-like modes.
-    if (routeType == 0 || routeType == 1 || routeType == 2) return 'Train';
+    if (_isTrainRouteType(routeType)) return 'Train';
     if (routeType == 4) {
       return _allowFerrySuggestions ? 'Ferry' : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
@@ -786,6 +786,22 @@ class RoutingService {
 
     // Neutral fallback when no stronger signal exists.
     return 'Jeepney';
+  }
+
+  static bool _isTrainRouteType(int? routeType) {
+    if (routeType == null) return false;
+
+    if (routeType == 0 || routeType == 1 || routeType == 2 || routeType == 12) {
+      return true;
+    }
+
+    if ((routeType >= 100 && routeType <= 117) ||
+        (routeType >= 400 && routeType <= 405) ||
+        (routeType >= 900 && routeType <= 906)) {
+      return true;
+    }
+
+    return false;
   }
 
   static List<LatLng> _clipShapeToStops(

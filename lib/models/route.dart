@@ -121,6 +121,12 @@ class Route {
       );
     }
 
+    double? asNullableDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
+    }
+
     return Route(
       id: json['id'],
       startLocation: json['startLocation'],
@@ -140,12 +146,17 @@ class Route {
             ),
           )
           .toList(),
-      startLat: json['startLat'],
-      startLng: json['startLng'],
-      endLat: json['endLat'],
-      endLng: json['endLng'],
+      startLat: asNullableDouble(json['startLat']),
+      startLng: asNullableDouble(json['startLng']),
+      endLat: asNullableDouble(json['endLat']),
+      endLng: asNullableDouble(json['endLng']),
       pathPoints: (json['pathPoints'] as List)
-          .map((p) => LatLng(p['lat'], p['lng']))
+          .map(
+            (p) => LatLng(
+              asNullableDouble(p['lat']) ?? 0.0,
+              asNullableDouble(p['lng']) ?? 0.0,
+            ),
+          )
           .toList(),
       stepBoundaries:
           (json['stepBoundaries'] as List?)?.map((b) => b as int).toList() ??
