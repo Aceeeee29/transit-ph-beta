@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
+import '../repositories/route_cache_repository.dart';
 import '../services/search_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
@@ -39,6 +40,13 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _showOmnibox = false;
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
+
+  static const Set<String> _otherSuggestionTags = {
+    'Tourist',
+    'Budget',
+    'Fast',
+    'Accessible',
+  };
 
   // ─── Color tokens ─────────────────────────────────────────────────────────
   static const _bg           = Color(0xFFF4F8FF);
@@ -189,6 +197,13 @@ class _SearchScreenState extends State<SearchScreen> {
         final suggestion = '${route.startLocation} to ${route.endLocation}';
         if (!newSuggestions.contains(suggestion)) newSuggestions.add(suggestion);
       }
+      for (final tag in route.audienceTags) {
+        if (_otherSuggestionTags.contains(tag) &&
+            tag.toLowerCase().contains(searchTerm) &&
+            !newSuggestions.contains(tag)) {
+          newSuggestions.add(tag);
+        }
+      }
     }
 
     setState(() {
@@ -200,8 +215,14 @@ class _SearchScreenState extends State<SearchScreen> {
         return r.isApproved &&
             (r.endLocation.trim().toLowerCase().contains(searchTerm) ||
              r.startLocation.trim().toLowerCase().contains(searchTerm) ||
-             r.shortDescription.trim().toLowerCase().contains(searchTerm));
-      }).toList();
+             r.shortDescription.trim().toLowerCase().contains(searchTerm) ||
+             r.audienceTags.any((t) => t.toLowerCase().contains(searchTerm)));
+      }).toList()
+        ..sort((a, b) {
+          final scoreB = _communityReliabilityScore(b) + _suggestionTagScore(b);
+          final scoreA = _communityReliabilityScore(a) + _suggestionTagScore(a);
+          return scoreB.compareTo(scoreA);
+        });
       if (query.trim() != _lastOrsQuery) {
         _orsResult       = null;
         _orsError        = false;
@@ -264,6 +285,21 @@ class _SearchScreenState extends State<SearchScreen> {
     await _loadRecentSearches();
   }
 
+  Future<void> _onClearRouteCache() async {
+    try {
+      final deleted = await RouteCacheRepository.clearAll();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Route cache cleared ($deleted entries).')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to clear route cache.')),
+      );
+    }
+  }
+
   void _onRouteTap(route_model.Route route) {
     Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)));
@@ -273,11 +309,38 @@ class _SearchScreenState extends State<SearchScreen> {
     // Only show approved routes in top searches
     final sorted = _routes.where((r) => r.isApproved).toList();
     sorted.sort((a, b) {
-      final scoreA = a.views + a.upvotes - a.downvotes;
-      final scoreB = b.views + b.upvotes - b.downvotes;
+      final scoreA = _communityReliabilityScore(a) + _suggestionTagScore(a);
+      final scoreB = _communityReliabilityScore(b) + _suggestionTagScore(b);
       return scoreB.compareTo(scoreA);
     });
     return sorted.take(10).toList();
+  }
+
+  int _suggestionTagScore(route_model.Route route) {
+    if (route.audienceTags.isEmpty) return 0;
+    final matches = route.audienceTags.where((t) => _otherSuggestionTags.contains(t)).length;
+    return matches * 10;
+  }
+
+  int _communityReliabilityScore(route_model.Route route) {
+    final engagement = route.views + route.upvotes - route.downvotes;
+    final hasRouteSchedule = (route.schedule?.trim().isNotEmpty ?? false) ? 25 : 0;
+
+    final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
+    final hasAnyTransportStep = transportSteps.isNotEmpty;
+
+    final scheduleComplete = hasAnyTransportStep &&
+        transportSteps.every((s) => s.is24_7 ||
+            ((s.startTime?.trim().isNotEmpty ?? false) &&
+                (s.endTime?.trim().isNotEmpty ?? false)));
+    final fareComplete = hasAnyTransportStep &&
+        transportSteps.every((s) => s.actualFare != null && s.actualFare! >= 0);
+
+    return engagement +
+        hasRouteSchedule +
+        (scheduleComplete ? 40 : 0) +
+        (fareComplete ? 35 : 0) +
+        (route.isApproved ? 1000 : 0);
   }
 
   // ─── Route generation ─────────────────────────────────────────────────────
@@ -766,8 +829,9 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Auto-generated route from transit stop data — not yet verified by the community. '
-                  'Distances and fares are estimated.',
+                  'Fallback auto-generated route from transit stop data. '
+                  'Use community-verified routes first whenever available. '
+                  'Distances and fares here are estimates.',
                   style: TextStyle(
                       fontSize: 13, color: Colors.blue.shade800),
                 ),
@@ -876,6 +940,21 @@ class _SearchScreenState extends State<SearchScreen> {
           style:
               TextStyle(fontSize: 12, color: Colors.grey.shade500),
         ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _onClearRouteCache,
+            icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+            label: const Text('Clear route cache'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue.shade700,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
@@ -925,7 +1004,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Generate a route from transit stop data instead.',
+          'You can use fallback generated guidance from transit stop data.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: _textSecondary),
         ),

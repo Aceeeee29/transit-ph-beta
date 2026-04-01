@@ -121,6 +121,7 @@ class _SignupScreenState extends State<SignupScreen> {
               'email': _emailController.text.trim(),
               'photoUrl': userCredential.user!.photoURL,
               'userCategory': null,
+              'userTags': [],
               'role': 'user',
               'isBanned': false,
               'routesContributed': 0,

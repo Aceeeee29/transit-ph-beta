@@ -115,11 +115,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.user.uid)
-          .update({'userCategory': category});
+          .update({'userCategory': category, 'userTags': [category]});
 
       // Also save to SharedPreferences via GamificationService
       final appUser = await GamificationService.loadUser();
       appUser.userCategory = category;
+      appUser.userTags = [category];
       appUser.name =
           widget.user.displayName ??
           widget.user.email?.split('@').first ??

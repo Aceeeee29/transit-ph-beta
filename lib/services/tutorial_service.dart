@@ -96,22 +96,22 @@ class TutorialService {
         customSize: const Size(150, 50),
       ),
       TutorialStep(
-        title: 'Step 6: Fill Route Details',
+        title: 'Step 6: Select Route Tags',
+        description:
+            'Choose tags that best match who this route helps and the route style (budget, fast, accessible, etc.).',
+        targetKey: 'route_form',
+        animationAsset: 'select_tags',
+        customPosition: const Offset(50, 400), // Form area
+        customSize: const Size(300, 200),
+      ),
+      TutorialStep(
+        title: 'Step 7: Fill Route Details',
         description:
             'Add a description, estimated time, price, and schedule to help others.',
         targetKey: 'route_form',
         animationAsset: 'fill_details',
         customPosition: const Offset(50, 400), // Form area
         customSize: const Size(300, 200),
-      ),
-      TutorialStep(
-        title: 'Step 7: Add Photos & Voice Notes',
-        description:
-            'You can add landmark photos and record voice instructions to make your route easier to follow.',
-        targetKey: 'media_buttons',
-        animationAsset: 'add_media',
-        customPosition: const Offset(100, 450), // Media buttons in form
-        customSize: const Size(200, 50),
       ),
       TutorialStep(
         title: 'Step 8: Preview Your Route',

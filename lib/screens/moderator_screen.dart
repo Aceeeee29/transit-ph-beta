@@ -703,6 +703,27 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   ],
                 ),
 
+                if (route.audienceTags.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'SUBMITTED TAGS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _textSecondary,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: route.audienceTags
+                        .map((tag) => _metaChip(Icons.sell_outlined, tag, _accent))
+                        .toList(),
+                  ),
+                ],
+
                 const SizedBox(height: 12),
 
                 // ── Steps preview ────────────────────────────────────────

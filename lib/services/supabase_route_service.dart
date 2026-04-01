@@ -523,6 +523,7 @@ class SupabaseRouteService {
     var from = 0;
     while (true) {
       final rows = await _client
+          .schema('gtfs')
           .from('stops')
           .select('stop_id, stop_name, stop_lat, stop_lon')
           .gte('stop_lat', minLat)
@@ -564,6 +565,7 @@ class SupabaseRouteService {
       var from = 0;
       while (true) {
         final rows = await _client
+          .schema('gtfs')
             .from('stop_times')
             .select('trip_id, stop_id, stop_sequence, arrival_time, departure_time')
             .inFilter('stop_id', chunk)
@@ -586,6 +588,7 @@ class SupabaseRouteService {
     for (var i = 0; i < tripIds.length; i += _inFilterChunk) {
       final chunk = tripIds.sublist(i, math.min(i + _inFilterChunk, tripIds.length));
       final rows = await _client
+          .schema('gtfs')
           .from('trips')
           .select('trip_id, route_id, shape_id')
           .inFilter('trip_id', chunk);
@@ -602,6 +605,7 @@ class SupabaseRouteService {
     for (var i = 0; i < routeIds.length; i += _inFilterChunk) {
       final chunk = routeIds.sublist(i, math.min(i + _inFilterChunk, routeIds.length));
       final rows = await _client
+          .schema('gtfs')
           .from('routes')
           .select('route_id, route_short_name, route_long_name, route_color, route_type')
           .inFilter('route_id', chunk);
@@ -726,6 +730,7 @@ class SupabaseRouteService {
         radiusKm / (111.0 * math.cos(point.latitude * math.pi / 180));
 
     final results = await _client
+      .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .gte('stop_lat', point.latitude - latDelta)
@@ -818,6 +823,7 @@ class SupabaseRouteService {
     required String alightStopId,
   }) async {
     final tripRow = await _client
+      .schema('gtfs')
         .from('trips')
         .select('trip_id, route_id, shape_id')
         .eq('trip_id', tripId)
@@ -829,11 +835,13 @@ class SupabaseRouteService {
     final shapeId = tripRow['shape_id']?.toString();
 
     final stopRows = await _client
+      .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .inFilter('stop_id', [boardStopId, alightStopId]);
 
     final routeRow = await _client
+      .schema('gtfs')
         .from('routes')
         .select('route_id, route_short_name, route_long_name, route_color, route_type')
         .eq('route_id', routeId)
@@ -872,6 +880,7 @@ class SupabaseRouteService {
   // ── Get shape polyline for a trip ─────────────────────────────────────────
   static Future<List<LatLng>> getShapePolyline(String shapeId) async {
     final points = await _client
+      .schema('gtfs')
         .from('shapes')
         .select('shape_pt_lat, shape_pt_lon, shape_pt_sequence')
         .eq('shape_id', shapeId)
@@ -889,6 +898,7 @@ class SupabaseRouteService {
   static Future<List<Map<String, dynamic>>> getStopsForTrip(
       String tripId) async {
     final stopTimes = await _client
+      .schema('gtfs')
         .from('stop_times')
         .select('stop_id, stop_sequence, arrival_time, departure_time')
         .eq('trip_id', tripId)
@@ -897,6 +907,7 @@ class SupabaseRouteService {
     final stopIds = stopTimes.map((s) => s['stop_id'].toString()).toList();
 
     final stops = await _client
+      .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .inFilter('stop_id', stopIds);

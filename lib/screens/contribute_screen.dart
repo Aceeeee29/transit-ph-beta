@@ -44,12 +44,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   List<LatLng> pathPoints = [];
   List<route_model.Step> steps = [];
+  List<String> _selectedRouteTags = [];
   List<int> stepBoundaries = [];
   final List<double?> _stepOrsDistM = [];
   final List<double?> _stepOrsDurS = [];
   double? _pendingOrsDistM;
   double? _pendingOrsDurS;
-  String currentMode = 'Walk';
+  String currentMode = 'Jeepney';
   String selectionMode = 'start';
   String? selectedRegion;
   List<String> _pendingNotifications = [];
@@ -146,7 +147,26 @@ class _ContributeScreenState extends State<ContributeScreen> {
   };
 
   static const List<String> modes = [
-    'Walk', 'Jeepney', 'Bus', 'Train', 'Tricycle', 'FX/Van', 'Ferry',
+    'Jeepney', 'Bus', 'Train', 'Tricycle', 'FX/Van', 'Walk', 'Ferry',
+  ];
+
+  static const List<String> onboardingUserTags = [
+    'Student',
+    'Employee',
+    'Foreigner',
+    'New to Area',
+  ];
+
+  static const List<String> otherRouteTags = [
+    'Tourist',
+    'Budget',
+    'Fast',
+    'Accessible',
+  ];
+
+  static const List<String> routeAudienceTags = [
+    ...onboardingUserTags,
+    ...otherRouteTags,
   ];
 
   final Map<String, Color> modeColors = {
@@ -174,6 +194,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       setState(() {
         pathPoints = List<LatLng>.from(route.pathPoints);
         steps = List<route_model.Step>.from(route.steps);
+        _selectedRouteTags = List<String>.from(route.audienceTags);
         stepBoundaries = List<int>.from(route.stepBoundaries);
         _startLocationController.text = route.startLocation;
         _endLocationController.text = route.endLocation;
@@ -204,6 +225,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() {
       pathPoints = List<LatLng>.from(exampleRoute.pathPoints);
       steps = List<route_model.Step>.from(exampleRoute.steps);
+      _selectedRouteTags = List<String>.from(exampleRoute.audienceTags);
       stepBoundaries = List<int>.from(exampleRoute.stepBoundaries);
       _startLocationController.text = exampleRoute.startLocation;
       _endLocationController.text = exampleRoute.endLocation;
@@ -425,6 +447,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
+      _selectedRouteTags = [];
       _searchedLocation = null;
     });
     _historyService.clear();
@@ -502,6 +525,52 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
   }
 
+  DateTime? _parseTimeValue(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    return DateTime(2000, 1, 1, hour, minute);
+  }
+
+  String _deriveRouteSchedule(List<route_model.Step> routeSteps) {
+    if (routeSteps.isEmpty) return 'Schedule not provided';
+
+    final transportSteps = routeSteps.where((s) => s.mode != 'Walk').toList();
+    if (transportSteps.isEmpty) return 'Walk-only route';
+
+    final has24x7Leg = transportSteps.any((s) => s.is24_7);
+    DateTime? earliest;
+    DateTime? latest;
+
+    for (final step in transportSteps) {
+      if (step.is24_7) continue;
+      final start = _parseTimeValue(step.startTime);
+      final end = _parseTimeValue(step.endTime);
+      if (start != null && (earliest == null || start.isBefore(earliest))) {
+        earliest = start;
+      }
+      if (end != null && (latest == null || end.isAfter(latest))) {
+        latest = end;
+      }
+    }
+
+    if (earliest != null && latest != null) {
+      final startLabel = TimeOfDay(hour: earliest.hour, minute: earliest.minute)
+          .format(context);
+      final endLabel = TimeOfDay(hour: latest.hour, minute: latest.minute)
+          .format(context);
+      return has24x7Leg
+          ? '$startLabel - $endLabel (some legs run 24/7)'
+          : '$startLabel - $endLabel';
+    }
+
+    if (has24x7Leg) return '24/7';
+    return 'Schedule varies by step';
+  }
+
   List<Polyline> get polylines {
     final result = <Polyline>[];
     for (int i = 0; i < steps.length; i++) {
@@ -547,7 +616,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
       if (orsDistM != null && orsDurS != null) {
         totalDistKm += orsDistM / 1000;
         totalDurS += orsDurS;
-        totalFare += RouteMetricsService.calculateFareForMode(
+        totalFare += steps[i].actualFare ??
+          RouteMetricsService.calculateFareForMode(
             steps[i].mode, orsDistM / 1000);
       } else {
         final startIdx = (i == 0)
@@ -568,7 +638,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
         totalDistKm += segDistKm;
         final speedKmh = _speedForMode(steps[i].mode);
         totalDurS += (segDistKm / speedKmh) * 3600;
-        totalFare += RouteMetricsService.calculateFareForMode(
+        totalFare += steps[i].actualFare ??
+          RouteMetricsService.calculateFareForMode(
             steps[i].mode, segDistKm);
       }
     }
@@ -578,6 +649,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         RouteMetricsService.formatDistance(totalDistKm);
     final etaStr = (totalDurS / 60).ceil().toString();
     final fareStr = 'PHP ${totalFare.round()}';
+    final schedule = _deriveRouteSchedule(steps);
 
     final startLoc = _startLocationController.text.isEmpty
         ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
@@ -604,7 +676,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
       eta: etaStr,
       price: fareStr,
       distance: distStr,
-      schedule: null,
+      schedule: schedule,
+      audienceTags: _selectedRouteTags,
       distanceMeters: totalDistKm > 0 ? totalDistKm * 1000 : null,
       contributorId: widget.routeToEdit?.contributorId ??
           widget.contributorId ??
@@ -612,6 +685,48 @@ class _ContributeScreenState extends State<ContributeScreen> {
       // Always starts as pending — moderator must approve before it goes live
       approvalStatus: route_model.RouteApprovalStatus.pending,
     );
+  }
+
+  bool _validateStepReliability() {
+    for (int i = 0; i < steps.length; i++) {
+      final step = steps[i];
+      final stepNo = i + 1;
+      final isMotorized = step.mode != 'Walk';
+
+      if (step.instruction.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Step $stepNo is missing an instruction.')),
+        );
+        return false;
+      }
+
+      if (!isMotorized) continue;
+
+      if (step.details.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Step $stepNo needs details for ${step.mode}.')),
+        );
+        return false;
+      }
+
+      final hasSchedule = step.is24_7 ||
+          ((step.startTime?.trim().isNotEmpty ?? false) &&
+              (step.endTime?.trim().isNotEmpty ?? false));
+      if (!hasSchedule) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Step $stepNo needs operating hours for ${step.mode}.')),
+        );
+        return false;
+      }
+
+      if (step.actualFare == null || step.actualFare! < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Step $stepNo needs a valid actual fare for ${step.mode}.')),
+        );
+        return false;
+      }
+    }
+    return true;
   }
 
   // ─── Submit ──────────────────────────────────────────────────────────────────
@@ -627,6 +742,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
 
     if (_formKey.currentState!.validate()) {
+      if (!_validateStepReliability()) {
+        return;
+      }
       final route = _buildRoute(existingId: widget.routeToEdit?.id);
       try {
         await widget.onRouteSubmitted(route);
@@ -669,6 +787,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
           _startLocationController.clear();
           _endLocationController.clear();
           _shortDescriptionController.clear();
+          _selectedRouteTags = [];
         });
       }
     }
@@ -1162,7 +1281,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
             startLocationController: _startLocationController,
             endLocationController: _endLocationController,
             shortDescriptionController: _shortDescriptionController,
-            steps: steps,
+            selectedRouteTags: _selectedRouteTags,
+            userTagOptions: onboardingUserTags,
+            otherTagOptions: otherRouteTags,
+            onRouteTagsChanged: (tags) {
+              setState(() => _selectedRouteTags = tags);
+            },
             onSubmit: _submit,
             onReset: _onReset,
             selectionMode: selectionMode,

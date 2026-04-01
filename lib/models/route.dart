@@ -19,6 +19,7 @@ class Route {
   final String? distance;
   final String? schedule;
   final String? imageUrl;
+  final List<String> audienceTags;
   final List<Report> reports;
   final List<int> stepBoundaries;
   final String? contributorId;
@@ -47,6 +48,7 @@ class Route {
     this.distance,
     this.schedule,
     this.imageUrl,
+    this.audienceTags = const [],
     this.reports = const [],
     this.stepBoundaries = const [],
     this.contributorId,
@@ -76,6 +78,7 @@ class Route {
               'is24_7': s.is24_7,
               'startTime': s.startTime,
               'endTime': s.endTime,
+              'actualFare': s.actualFare,
               'alternateRouteSuggestion': s.alternateRouteSuggestion,
             },
           )
@@ -93,6 +96,7 @@ class Route {
       'distance': distance,
       'schedule': schedule,
       'imageUrl': imageUrl,
+      'audienceTags': audienceTags,
       'distanceMeters': distanceMeters,
       'reports': reports
           .map(
@@ -141,6 +145,7 @@ class Route {
               is24_7: s['is24_7'] as bool? ?? true,
               startTime: s['startTime'] as String?,
               endTime: s['endTime'] as String?,
+                actualFare: (s['actualFare'] as num?)?.toDouble(),
               alternateRouteSuggestion:
                   s['alternateRouteSuggestion'] as String?,
             ),
@@ -166,6 +171,7 @@ class Route {
       distance: json['distance'],
       schedule: json['schedule'],
       imageUrl: json['imageUrl'],
+      audienceTags: List<String>.from(json['audienceTags'] ?? const []),
       distanceMeters: json['distanceMeters'] != null
           ? (json['distanceMeters'] as num).toDouble()
           : null,
@@ -206,6 +212,7 @@ class Step {
   final bool is24_7;
   final String? startTime;
   final String? endTime;
+  final double? actualFare;
   final String? alternateRouteSuggestion;
 
   Step({
@@ -215,6 +222,7 @@ class Step {
     this.is24_7 = true,
     this.startTime,
     this.endTime,
+    this.actualFare,
     this.alternateRouteSuggestion,
   });
 }

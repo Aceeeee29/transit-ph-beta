@@ -82,4 +82,35 @@ class RouteCacheRepository {
       debugPrint('Route cache invalidate error: $e');
     }
   }
+
+  static Future<int> clearAll({int pageSize = 200}) async {
+    var deleted = 0;
+
+    try {
+      while (true) {
+        final snapshot = await _db
+            .collection(_collection)
+            .limit(pageSize)
+            .get();
+
+        if (snapshot.docs.isEmpty) break;
+
+        final batch = _db.batch();
+        for (final doc in snapshot.docs) {
+          batch.delete(doc.reference);
+        }
+
+        await batch.commit();
+        deleted += snapshot.docs.length;
+
+        if (snapshot.docs.length < pageSize) break;
+      }
+
+      debugPrint('Route cache cleared: $deleted docs deleted');
+      return deleted;
+    } catch (e) {
+      debugPrint('Route cache clear error: $e');
+      rethrow;
+    }
+  }
 }

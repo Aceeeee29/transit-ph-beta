@@ -281,6 +281,7 @@ class _ProfileHeaderCard extends StatelessWidget {
   }
 
   bool _hasTagData() =>
+      user.userTags.isNotEmpty ||
       (user.userCategory?.isNotEmpty ?? false) ||
       user.mostActiveRegion != null ||
       user.streakDays > 0;
@@ -323,7 +324,15 @@ class _ProfileHeaderCard extends StatelessWidget {
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
-        if (user.userCategory?.isNotEmpty ?? false)
+        ...user.userTags.map(
+          (tag) => _pill(
+            label: tag,
+            icon: Icons.sell_outlined,
+            color: ProfileColors.accent,
+          ),
+        ),
+        if ((user.userCategory?.isNotEmpty ?? false) &&
+            !user.userTags.contains(user.userCategory))
           _pill(
             label: user.userCategory!,
             icon: Icons.category_outlined,

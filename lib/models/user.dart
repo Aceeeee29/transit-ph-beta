@@ -8,6 +8,7 @@ class User {
   String email;
   String? photoUrl;
   String? userCategory;
+  List<String> userTags;
   List<String> badges;
   List<String> achievements;
   int routesContributed;
@@ -31,6 +32,7 @@ class User {
     required this.email,
     this.photoUrl,
     this.userCategory,
+    this.userTags = const [],
     this.badges = const [],
     this.achievements = const [],
     this.routesContributed = 0,
@@ -56,6 +58,7 @@ class User {
       'email': email,
       'photoUrl': photoUrl,
       'userCategory': userCategory,
+      'userTags': userTags,
       'badges': badges,
       'achievements': achievements,
       'routesContributed': routesContributed,
@@ -82,6 +85,7 @@ class User {
       email: json['email'] ?? 'N/A',
       photoUrl: json['photoUrl'],
       userCategory: json['userCategory'],
+      userTags: List<String>.from(json['userTags'] ?? const []),
       badges: List<String>.from(json['badges'] ?? []),
       achievements: List<String>.from(json['achievements'] ?? []),
       routesContributed: json['routesContributed'] ?? 0,

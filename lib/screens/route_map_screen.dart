@@ -932,6 +932,63 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
+  String? _routeScheduleText() {
+    final saved = widget.route.schedule?.trim();
+    if (saved != null && saved.isNotEmpty) return saved;
+
+    final transportSteps = widget.route.steps.where((s) => s.mode != 'Walk').toList();
+    if (transportSteps.isEmpty) return null;
+
+    final has24x7Leg = transportSteps.any((s) => s.is24_7);
+    int? earliest;
+    int? latest;
+
+    for (final step in transportSteps) {
+      if (step.is24_7) continue;
+      final start = _parseTimeToMinutes(step.startTime);
+      final end = _parseTimeToMinutes(step.endTime);
+      if (start == null || end == null) continue;
+      earliest = earliest == null ? start : math.min(earliest, start);
+      latest = latest == null ? end : math.max(latest, end);
+    }
+
+    if (has24x7Leg && earliest != null && latest != null) {
+      return '24/7 (some steps: ${_minutesToText(earliest)}-${_minutesToText(latest)})';
+    }
+    if (has24x7Leg) return '24/7';
+    if (earliest != null && latest != null) {
+      return '${_minutesToText(earliest)}-${_minutesToText(latest)}';
+    }
+    return null;
+  }
+
+  int? _parseTimeToMinutes(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
+  String _minutesToText(int minutes) {
+    final h = (minutes ~/ 60).toString().padLeft(2, '0');
+    final m = (minutes % 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String? _stepScheduleText(route_model.Step step) {
+    if (step.mode == 'Walk') return null;
+    if (step.is24_7) return '24/7';
+    final start = step.startTime?.trim();
+    final end = step.endTime?.trim();
+    if (start == null || start.isEmpty || end == null || end.isEmpty) return null;
+    return '$start-$end';
+  }
+
   // ─── FIXED: use saved distance fields instead of recalculating ────────────
   Widget _buildMetricsRow() {
     // Priority: distanceMeters (most accurate, from ORS snap-to-road)
@@ -955,6 +1012,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       return RouteMetricsService.formatDistance(
           RouteMetricsService.calculateRouteDistance(_pathPoints));
     }();
+
+    final scheduleText = _routeScheduleText();
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -984,13 +1043,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               value: '${widget.route.price}',
             ),
           ],
-          if (widget.route.schedule != null) ...[
+          if (scheduleText != null) ...[
             const SizedBox(width: 10),
             _metricCard(
               icon: Icons.schedule_outlined,
               iconColor: const Color(0xFFE89A3C),
               label: 'Schedule',
-              value: widget.route.schedule!,
+              value: scheduleText,
             ),
           ],
         ],
@@ -1000,6 +1059,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   Widget _buildStepTile(int idx, route_model.Step step) {
     final modeColor = modeColors[step.mode] ?? _accent;
+    final stepSchedule = _stepScheduleText(step);
+    final altSuggestion = step.alternateRouteSuggestion?.trim();
+    final isTransport = step.mode != 'Walk';
+    final estimatedFare = isTransport
+        ? RouteMetricsService.calculateFareForMode(step.mode, 1)
+        : 0.0;
+    final fareValue = step.actualFare ?? estimatedFare;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1078,6 +1144,78 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                         fontSize: 12,
                         color: _textSecondary,
                         height: 1.4,
+                      ),
+                    ),
+                  ],
+                  if (stepSchedule != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF4E8),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFFD9AE)),
+                      ),
+                      child: Text(
+                        'Schedule: $stepSchedule',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF9A5A17),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (altSuggestion != null && altSuggestion.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF8E1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFFD54F)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 14,
+                            color: Color(0xFF7A5800),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              altSuggestion,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF7A5800),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (isTransport) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF8F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFB9E4C6)),
+                      ),
+                      child: Text(
+                        'Fare: PHP ${fareValue.toStringAsFixed(0)} '
+                        '(${step.actualFare != null ? 'actual' : 'estimated'})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2D9F63),
+                        ),
                       ),
                     ),
                   ],

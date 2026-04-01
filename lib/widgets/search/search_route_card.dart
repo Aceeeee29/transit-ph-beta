@@ -24,6 +24,9 @@ class SearchRouteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final score = route.views + route.upvotes - route.downvotes;
+    final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
+    final hasActualFare = hasTransportSteps &&
+        route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -60,16 +63,32 @@ class SearchRouteCard extends StatelessWidget {
                   ),
                   if (isVerified) ...[
                     Container(
-                      width: 20,
-                      height: 20,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
                       decoration: const BoxDecoration(
                         color: _accent,
-                        shape: BoxShape.circle,
+                        borderRadius: BorderRadius.all(Radius.circular(8)),
                       ),
-                      child: const Icon(
-                        Icons.check,
-                        size: 13,
-                        color: Colors.white,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Verified',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -106,6 +125,31 @@ class SearchRouteCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (route.audienceTags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: route.audienceTags.take(4).map((tag) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _accentSoft,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: _accent.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        tag,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -123,6 +167,35 @@ class SearchRouteCard extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text('${route.downvotes}',
                       style: const TextStyle(fontSize: 12, color: _textSecondary)),
+                  if (route.price != null) ...[
+                    const SizedBox(width: 14),
+                    const Icon(Icons.payments_outlined, size: 14, color: Color(0xFF3EC97A)),
+                    const SizedBox(width: 4),
+                    Text(route.price!,
+                        style: const TextStyle(fontSize: 12, color: _textSecondary)),
+                  ],
+                  if (hasTransportSteps) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: hasActualFare
+                            ? const Color(0x143EC97A)
+                            : const Color(0x14E89A3C),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        hasActualFare ? 'Actual fare' : 'Estimated fare',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: hasActualFare
+                              ? const Color(0xFF2D9F63)
+                              : const Color(0xFFB8732F),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],

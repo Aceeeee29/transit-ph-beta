@@ -41,6 +41,7 @@ class RouteHistoryService {
           is24_7: step.is24_7,
           startTime: step.startTime,
           endTime: step.endTime,
+          actualFare: step.actualFare,
           alternateRouteSuggestion: step.alternateRouteSuggestion,
         ),
       ),

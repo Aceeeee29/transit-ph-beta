@@ -133,10 +133,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
         return Icons.edit_note;
       case 'finish_route':
         return Icons.check_circle;
+      case 'select_tags':
+        return Icons.sell_rounded;
       case 'fill_details':
         return Icons.description;
-      case 'add_media':
-        return Icons.photo_camera;
       case 'preview_route':
         return Icons.preview;
       case 'submit_route':

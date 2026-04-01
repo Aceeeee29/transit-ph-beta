@@ -176,7 +176,7 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
 
 // ─── Mode Selection Dialog ────────────────────────────────────────────────────
 
-class ModeSelectionDialog extends StatelessWidget {
+class ModeSelectionDialog extends StatefulWidget {
   final String currentMode;
   final List<String> modes;
   final Map<String, Color> modeColors;
@@ -193,7 +193,21 @@ class ModeSelectionDialog extends StatelessWidget {
   });
 
   @override
+  State<ModeSelectionDialog> createState() => _ModeSelectionDialogState();
+}
+
+class _ModeSelectionDialogState extends State<ModeSelectionDialog> {
+  bool _showAdvancedModes = false;
+
+  static const _advancedModes = {'Walk', 'Ferry'};
+
+  @override
   Widget build(BuildContext context) {
+    final visibleModes = widget.modes.where((mode) {
+      if (_showAdvancedModes) return true;
+      return !_advancedModes.contains(mode);
+    }).toList();
+
     return _dialogContainer(
       Column(
         mainAxisSize: MainAxisSize.min,
@@ -208,16 +222,16 @@ class ModeSelectionDialog extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: modes
+                children: visibleModes
                     .map(
                       (mode) => _ModeTile(
                         mode: mode,
-                        color: modeColors[mode] ?? ContributeColors.accent,
-                        icon: getModeIcon(mode),
-                        isSelected: mode == currentMode,
+                        color: widget.modeColors[mode] ?? ContributeColors.accent,
+                        icon: widget.getModeIcon(mode),
+                        isSelected: mode == widget.currentMode,
                         onTap: () {
                           Navigator.pop(context);
-                          onModeSelected(mode);
+                          widget.onModeSelected(mode);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
@@ -230,6 +244,17 @@ class ModeSelectionDialog extends StatelessWidget {
                     )
                     .toList(),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: _ghostButton(
+              label: _showAdvancedModes
+                  ? 'Hide Advanced Modes (Walk / Ferry)'
+                  : 'Show Advanced Modes (Walk / Ferry)',
+              onTap: () {
+                setState(() => _showAdvancedModes = !_showAdvancedModes);
+              },
             ),
           ),
         ],
@@ -332,8 +357,9 @@ class _StepDialogState extends State<StepDialog> {
   final _instructionController = TextEditingController();
   final _detailsController = TextEditingController();
   final _altRouteController = TextEditingController();
+  final _actualFareController = TextEditingController();
 
-  bool _is24_7 = true;
+  late bool _is24_7;
   TimeOfDay _startTime = const TimeOfDay(hour: 6, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 22, minute: 0);
 
@@ -341,11 +367,20 @@ class _StepDialogState extends State<StepDialog> {
   static const _warnBorder = Color(0xFFFFD54F);
   static const _warnText = Color(0xFF7A5800);
 
+  bool get _isMotorizedMode => widget.mode != 'Walk';
+
+  @override
+  void initState() {
+    super.initState();
+    _is24_7 = widget.mode == 'Walk';
+  }
+
   @override
   void dispose() {
     _instructionController.dispose();
     _detailsController.dispose();
     _altRouteController.dispose();
+    _actualFareController.dispose();
     super.dispose();
   }
 
@@ -377,29 +412,65 @@ class _StepDialogState extends State<StepDialog> {
   }
 
   void _save() {
-  if (!_is24_7 && _endBeforeStart) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('End time must be after start time')),
+    final instruction = _instructionController.text.trim();
+    final details = _detailsController.text.trim();
+    final fareText = _actualFareController.text.trim();
+
+    if (instruction.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Instruction is required.')),
+      );
+      return;
+    }
+
+    if (_isMotorizedMode && details.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Details are required for this transport mode.')),
+      );
+      return;
+    }
+
+    if (_isMotorizedMode && !_is24_7 && _endBeforeStart) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('End time must be after start time')),
+      );
+      return;
+    }
+
+    double? actualFare;
+    if (_isMotorizedMode) {
+      if (fareText.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actual fare is required for this transport mode.')),
+        );
+        return;
+      }
+      actualFare = double.tryParse(fareText);
+      if (actualFare == null || actualFare < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actual fare must be a valid non-negative number.')),
+        );
+        return;
+      }
+    }
+
+    final step = route_model.Step(
+      mode: widget.mode,
+      instruction: instruction,
+      details: details,
+      is24_7: _is24_7,
+      startTime: _is24_7 ? null : _fmt24(_startTime),
+      endTime: _is24_7 ? null : _fmt24(_endTime),
+      actualFare: actualFare,
+      alternateRouteSuggestion:
+          (!_is24_7 && _altRouteController.text.trim().isNotEmpty)
+              ? _altRouteController.text.trim()
+              : null,
     );
-    return;
+
+    Navigator.of(context).pop();
+    widget.onSaved(step);
   }
-
-  final step = route_model.Step(
-    mode: widget.mode,
-    instruction: _instructionController.text.trim(),
-    details: _detailsController.text.trim(),
-    is24_7: _is24_7,
-    startTime: _is24_7 ? null : _fmt24(_startTime),
-    endTime: _is24_7 ? null : _fmt24(_endTime),
-    alternateRouteSuggestion:
-        (!_is24_7 && _altRouteController.text.trim().isNotEmpty)
-            ? _altRouteController.text.trim()
-            : null,
-  );
-
-  Navigator.of(context).pop(); // ← pop first, THEN fire the callback
-  widget.onSaved(step);
-}
 
   @override
   Widget build(BuildContext context) {
@@ -462,6 +533,19 @@ class _StepDialogState extends State<StepDialog> {
                       hint: 'e.g., Drop off at Gateway Mall',
                       maxLines: 2,
                       prefixIcon: Icons.location_on_outlined,
+                    ),
+                    const SizedBox(height: 18),
+
+                    const _FieldLabel(label: 'Actual Fare (PHP)'),
+                    const SizedBox(height: 6),
+                    _Field(
+                      controller: _actualFareController,
+                      hint: _isMotorizedMode
+                          ? 'e.g., 20'
+                          : 'Optional for walk',
+                      maxLines: 1,
+                      prefixIcon: Icons.payments_outlined,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 18),
 
@@ -546,6 +630,16 @@ class _StepDialogState extends State<StepDialog> {
                         ),
                       ],
                     ),
+                    if (_isMotorizedMode) ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Set operating hours for this transport leg. 24/7 is allowed when applicable.',
+                        style: TextStyle(
+                          color: ContributeColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
 
                     // Time range + alternate route — animated reveal
                     AnimatedSize(
@@ -831,6 +925,7 @@ class _Field extends StatelessWidget {
   final int maxLines;
   final IconData? prefixIcon;
   final Color? fillColor;
+  final TextInputType? keyboardType;
 
   const _Field({
     required this.controller,
@@ -838,12 +933,14 @@ class _Field extends StatelessWidget {
     this.maxLines = 1,
     this.prefixIcon,
     this.fillColor,
+    this.keyboardType,
   });
 
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
         maxLines: maxLines,
+        keyboardType: keyboardType,
         style: const TextStyle(
             color: ContributeColors.textPrimary, fontSize: 13),
         decoration: InputDecoration(

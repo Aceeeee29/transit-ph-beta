@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/route.dart' as route_model;
 import 'route_map_screen.dart';
@@ -30,9 +31,17 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _selectedModes = {};
   Map<String, List<route_model.Route>> _recommendations = {};
   bool _isLoadingRecommendations = true;
+  List<String> _userTags = [];
   int? _totalUsers;
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
+
+  static const Set<String> _personaTags = {
+    'Student',
+    'Employee',
+    'Foreigner',
+    'New to Area',
+  };
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -51,8 +60,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _getWeather();
+    _loadUserTags();
     _loadRecommendations();
     _loadTotalUsers();
+  }
+
+  Future<void> _loadUserTags() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = snap.data();
+      if (data == null || !mounted) return;
+      final tags = List<String>.from(data['userTags'] ?? const []);
+      final category = (data['userCategory'] as String?)?.trim();
+      if (category != null && category.isNotEmpty && !tags.contains(category)) {
+        tags.add(category);
+      }
+      setState(() => _userTags = tags);
+    } catch (_) {
+      // Keep empty tags when user profile load fails.
+    }
   }
 
   @override
@@ -78,8 +106,14 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoadingRecommendations = true);
     try {
       final recs = await RecommendationService.getAllRecommendations(widget.routes);
+      final sortedRecs = <String, List<route_model.Route>>{};
+      recs.forEach((key, value) {
+        final sorted = List<route_model.Route>.from(value)
+          ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+        sortedRecs[key] = sorted;
+      });
       setState(() {
-        _recommendations = recs;
+        _recommendations = sortedRecs;
         _isLoadingRecommendations = false;
       });
     } catch (e) {
@@ -178,9 +212,49 @@ class _HomeScreenState extends State<HomeScreen> {
             route.steps.any((s) => _selectedModes.contains(s.mode));
       }
       return matchesDest;
-    }).toList();
+    }).toList()
+      ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
 
     _showSearchResultsSheet(matched);
+  }
+
+  int _tagMatchScore(route_model.Route route) {
+    if (_userTags.isEmpty || route.audienceTags.isEmpty) return 0;
+    final personaUserTags = _userTags
+        .where((tag) => _personaTags.contains(tag))
+        .toList();
+    if (personaUserTags.isEmpty) return 0;
+
+    final userTagsLower = personaUserTags.map((e) => e.toLowerCase()).toSet();
+    final matches = route.audienceTags
+        .where((t) => userTagsLower.contains(t.toLowerCase()))
+        .length;
+    return matches * 120;
+  }
+
+  int _routePriorityScore(route_model.Route route) {
+    return _tagMatchScore(route) + route.views + route.upvotes - route.downvotes;
+  }
+
+  List<String> get _activePersonaTags {
+    return _userTags.where((tag) => _personaTags.contains(tag)).toList();
+  }
+
+  List<route_model.Route> get _tagMatchedRoutes {
+    final activeTags = _activePersonaTags;
+    if (activeTags.isEmpty) return [];
+
+    final activeTagsLower = activeTags.map((t) => t.toLowerCase()).toSet();
+
+    final matched = widget.routes.where((route) {
+      if (route.audienceTags.isEmpty) return false;
+      return route.audienceTags
+          .map((t) => t.toLowerCase())
+          .any((t) => activeTagsLower.contains(t));
+    }).toList()
+      ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+
+    return matched.take(8).toList();
   }
 
   // ─── Dialogs / modals ────────────────────────────────────────────────────────
@@ -362,6 +436,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─── Widget builders ─────────────────────────────────────────────────────────
 
   Widget _buildRouteCard(route_model.Route route) {
+    final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
+    final hasActualFare = hasTransportSteps &&
+        route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -413,6 +490,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (route.audienceTags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: route.audienceTags.take(4).map((tag) => _audienceTagChip(tag)).toList(),
+                ),
+              ],
               const SizedBox(height: 10),
               Wrap(
                 spacing: 4,
@@ -440,6 +525,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (route.price != null) ...[
                       const SizedBox(width: 14),
                       _statItem(Icons.payments_outlined, route.price!, const Color(0xFF3EC97A)),
+                    ],
+                    if (hasTransportSteps) ...[
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: hasActualFare
+                              ? const Color(0x143EC97A)
+                              : const Color(0x14E89A3C),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          hasActualFare ? 'Actual' : 'Estimated',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: hasActualFare
+                                ? const Color(0xFF2D9F63)
+                                : const Color(0xFFB8732F),
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -481,6 +588,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecommendationCard(route_model.Route route) {
+    final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
+    final hasActualFare = hasTransportSteps &&
+        route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
     return Container(
       width: 240,
       margin: const EdgeInsets.only(right: 12),
@@ -530,12 +640,37 @@ class _HomeScreenState extends State<HomeScreen> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (route.audienceTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: route.audienceTags.take(3).map((tag) => _audienceTagChip(tag)).toList(),
+              ),
+            ],
             const Spacer(),
             Row(
               children: [
                 _statItem(Icons.visibility_outlined, '${route.views}', _textSecondary),
                 const SizedBox(width: 10),
                 _statItem(Icons.thumb_up_outlined, '${route.upvotes}', const Color(0xFF3EC97A)),
+                if (route.price != null) ...[
+                  const SizedBox(width: 10),
+                  _statItem(Icons.payments_outlined, route.price!, const Color(0xFF3EC97A)),
+                ],
+                if (hasTransportSteps) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    hasActualFare ? 'Actual fare' : 'Estimated fare',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: hasActualFare
+                          ? const Color(0xFF2D9F63)
+                          : const Color(0xFFB8732F),
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 10),
@@ -594,6 +729,25 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
         ),
       ],
+    );
+  }
+
+  Widget _audienceTagChip(String tag) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _accentSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _accent.withOpacity(0.2)),
+      ),
+      child: Text(
+        tag,
+        style: const TextStyle(
+          fontSize: 11,
+          color: _accent,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -1135,6 +1289,61 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_tagMatchedRoutes.isNotEmpty) ...[
+          Row(
+            children: [
+              const Text(
+                '🏷️ Routes Matching Your Tags',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                  color: _textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _activePersonaTags
+                        .map(
+                          (tag) => Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _accentSoft,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: _accent.withOpacity(0.2)),
+                            ),
+                            child: Text(
+                              tag,
+                              style: const TextStyle(
+                                color: _accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _tagMatchedRoutes.length,
+              itemBuilder: (context, index) =>
+                  _buildRecommendationCard(_tagMatchedRoutes[index]),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
         if (_recommendations['rushHourAlternatives']?.isNotEmpty == true)
           _buildRecommendationSection(
             '🚗 Rush Hour Alternatives',
