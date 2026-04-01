@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
+import '../services/schedule_window_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../widgets/notification_overlay.dart';
@@ -42,6 +43,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   String? _currentUserId;
   bool _isApplyingVote = false;
   List<LatLng> _pathPoints = [];
+  RouteScheduleSnapshot? _scheduleSnapshot;
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -73,6 +75,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _loadReports();
     _loadEngagementState();
     _generatePathPoints();
+    _loadScheduleWindowSnapshot();
+  }
+
+  Future<void> _loadScheduleWindowSnapshot() async {
+    final snapshot = await ScheduleWindowService.getRouteScheduleSnapshot(
+      widget.route,
+    );
+    if (!mounted) return;
+    setState(() => _scheduleSnapshot = snapshot);
   }
 
   Future<void> _loadEngagementState() async {
@@ -109,14 +120,18 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (permission.isGranted) {
       try {
         _currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
         );
         _displayPosition =
             LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
         _displayHeading = _normalizeHeading(_currentPosition!.heading);
         setState(() {});
         _startLocationTracking();
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('RouteMapScreen: failed to get current position: $e');
+      }
     }
   }
 
@@ -250,7 +265,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               })
           .toList();
       await file.writeAsString(jsonEncode(allReports));
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('RouteMapScreen: failed to save reports locally: $e');
+    }
   }
 
   void _generatePathPoints() {
@@ -724,9 +741,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: _danger.withOpacity(0.08),
+              color: _danger.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _danger.withOpacity(0.25)),
+              border: Border.all(color: _danger.withValues(alpha: 0.25)),
             ),
             child: const Icon(Icons.report_problem_outlined,
                 color: _danger, size: 17),
@@ -805,7 +822,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           color: _surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _isAutoFollowEnabled ? _accent.withOpacity(0.45) : _border,
+            color: _isAutoFollowEnabled ? _accent.withValues(alpha: 0.45) : _border,
           ),
         ),
         child: Row(
@@ -837,12 +854,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: _surface.withOpacity(0.95),
+        color: _surface.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.08),
+            color: _accent.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -893,7 +910,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           border: Border.all(color: _border),
           boxShadow: [
             BoxShadow(
-              color: _accent.withOpacity(0.12),
+              color: _accent.withValues(alpha: 0.12),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -915,6 +932,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _buildMetricsRow(),
+          if (_scheduleSnapshot != null) ...[
+            const SizedBox(height: 10),
+            _buildScheduleSummaryChip(),
+          ],
           const SizedBox(height: 16),
           _buildSectionLabel(
               'Route Steps (${widget.route.steps.length})'),
@@ -989,6 +1010,52 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     return '$start-$end';
   }
 
+  Widget _buildScheduleSummaryChip() {
+    final snapshot = _scheduleSnapshot;
+    if (snapshot == null) return const SizedBox.shrink();
+
+    final color = _scheduleStateColor(snapshot.state);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timelapse_rounded, size: 14, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              snapshot.summaryText,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _scheduleStateColor(ScheduleWindowState state) {
+    switch (state) {
+      case ScheduleWindowState.live:
+        return const Color(0xFF2D9F63);
+      case ScheduleWindowState.stale:
+        return const Color(0xFFB8732F);
+      case ScheduleWindowState.scheduled:
+        return const Color(0xFF2E7CF6);
+      case ScheduleWindowState.estimated:
+        return const Color(0xFF9B7FE8);
+      case ScheduleWindowState.unavailable:
+        return _textSecondary;
+    }
+  }
+
   // ─── FIXED: use saved distance fields instead of recalculating ────────────
   Widget _buildMetricsRow() {
     // Priority: distanceMeters (most accurate, from ORS snap-to-road)
@@ -1059,7 +1126,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   Widget _buildStepTile(int idx, route_model.Step step) {
     final modeColor = modeColors[step.mode] ?? _accent;
-    final stepSchedule = _stepScheduleText(step);
+    final scheduleView = ScheduleWindowService.findStepView(_scheduleSnapshot, idx);
+    final stepSchedule = scheduleView?.displayText ?? _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
     final estimatedFare = isTransport
@@ -1084,10 +1152,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: modeColor.withOpacity(0.1),
+                    color: modeColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                     border:
-                        Border.all(color: modeColor.withOpacity(0.3)),
+                        Border.all(color: modeColor.withValues(alpha: 0.3)),
                   ),
                   child: Icon(_getModeIcon(step.mode),
                       color: modeColor, size: 18),
@@ -1152,16 +1220,28 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF4E8),
+                        color: (scheduleView != null
+                                ? _scheduleStateColor(scheduleView.state)
+                                : const Color(0xFFE89A3C))
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFFFD9AE)),
+                        border: Border.all(
+                          color: (scheduleView != null
+                                  ? _scheduleStateColor(scheduleView.state)
+                                  : const Color(0xFFFFD9AE))
+                              .withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Text(
-                        'Schedule: $stepSchedule',
-                        style: const TextStyle(
+                        scheduleView == null
+                            ? 'Schedule: $stepSchedule'
+                            : stepSchedule,
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF9A5A17),
+                          color: scheduleView != null
+                              ? _scheduleStateColor(scheduleView.state)
+                              : const Color(0xFF9A5A17),
                         ),
                       ),
                     ),
@@ -1234,7 +1314,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _danger.withOpacity(0.2)),
+        border: Border.all(color: _danger.withValues(alpha: 0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -1245,7 +1325,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               width: 34,
               height: 34,
               decoration: BoxDecoration(
-                color: _danger.withOpacity(0.08),
+                color: _danger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Icon(_getReportIcon(report.type),
@@ -1310,7 +1390,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.04),
+            color: _accent.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -1322,7 +1402,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, color: iconColor, size: 17),
@@ -1399,11 +1479,11 @@ class _VoteButton extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? activeColor.withOpacity(0.12) : _surfaceAlt,
+          color: active ? activeColor.withValues(alpha: 0.12) : _surfaceAlt,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
             color:
-                active ? activeColor.withOpacity(0.4) : _border,
+                active ? activeColor.withValues(alpha: 0.4) : _border,
           ),
         ),
         child: Row(

@@ -62,6 +62,32 @@ class DijkstraTripPlanResult {
   });
 }
 
+enum RouteOptimizationMode {
+  budget,
+  fastest,
+  balanced,
+}
+
+class DijkstraRouteAlternative {
+  final DijkstraTripPlanResult result;
+  final double estimatedFarePhp;
+  final double estimatedTimeMinutes;
+  final double budgetScore;
+  final double fastestScore;
+  final double balancedScore;
+  final double selectedScore;
+
+  const DijkstraRouteAlternative({
+    required this.result,
+    required this.estimatedFarePhp,
+    required this.estimatedTimeMinutes,
+    required this.budgetScore,
+    required this.fastestScore,
+    required this.balancedScore,
+    required this.selectedScore,
+  });
+}
+
 class _GraphEdge {
   final String from;
   final String to;
@@ -95,6 +121,28 @@ class _QueueNode {
   final double cost;
 
   const _QueueNode(this.node, this.cost);
+}
+
+class _DijkstraGraphContext {
+  final Map<String, List<_GraphEdge>> adjacency;
+  final Map<String, Map<String, dynamic>> allStopsById;
+
+  const _DijkstraGraphContext({
+    required this.adjacency,
+    required this.allStopsById,
+  });
+}
+
+class _DijkstraPathResult {
+  final List<_GraphEdge> edges;
+  final double weightedCostSeconds;
+  final double baseCostSeconds;
+
+  const _DijkstraPathResult({
+    required this.edges,
+    required this.weightedCostSeconds,
+    required this.baseCostSeconds,
+  });
 }
 
 class _MinHeap {
@@ -181,8 +229,195 @@ class SupabaseRouteService {
     required List<Map<String, dynamic>> destCandidates,
     bool allowFerry = false,
   }) async {
-    if (originCandidates.isEmpty || destCandidates.isEmpty) return null;
+    final alternatives = await findTripPlanDijkstraAlternatives(
+      origin: origin,
+      destination: destination,
+      originCandidates: originCandidates,
+      destCandidates: destCandidates,
+      allowFerry: allowFerry,
+      maxAlternatives: 1,
+      optimizationMode: RouteOptimizationMode.fastest,
+    );
+    if (alternatives.isEmpty) return null;
+    return alternatives.first.result;
+  }
 
+  static Future<List<DijkstraRouteAlternative>> findTripPlanDijkstraAlternatives({
+    required LatLng origin,
+    required LatLng destination,
+    required List<Map<String, dynamic>> originCandidates,
+    required List<Map<String, dynamic>> destCandidates,
+    bool allowFerry = false,
+    int maxAlternatives = 3,
+    RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
+    double edgePenaltyFactor = 0.45,
+  }) async {
+    if (originCandidates.isEmpty || destCandidates.isEmpty) {
+      return const <DijkstraRouteAlternative>[];
+    }
+
+    final context = await _buildDijkstraGraphContext(
+      origin: origin,
+      destination: destination,
+      originCandidates: originCandidates,
+      destCandidates: destCandidates,
+      allowFerry: allowFerry,
+    );
+    if (context == null) return const <DijkstraRouteAlternative>[];
+
+    final results = <DijkstraTripPlanResult>[];
+    final uniquePathSignatures = <String>{};
+    final edgePenalties = <String, double>{};
+
+    final targetCount = maxAlternatives.clamp(1, 6);
+    final maxIterations = targetCount * 5;
+
+    for (var i = 0; i < maxIterations && results.length < targetCount; i++) {
+      final path = _runDijkstra(
+        context.adjacency,
+        _originNode,
+        _destNode,
+        edgePenalties: edgePenalties,
+      );
+      if (path == null) break;
+
+      final signature = _pathTransitSignature(path.edges);
+
+      if (signature.isNotEmpty && uniquePathSignatures.add(signature)) {
+        final materialized = _materializeDijkstraResult(
+          pathEdges: path.edges,
+          totalCostSeconds: path.baseCostSeconds,
+          allStopsById: context.allStopsById,
+        );
+        if (materialized != null) {
+          results.add(materialized);
+        }
+      }
+
+      for (final edge in path.edges) {
+        final key = _edgeSignature(edge);
+        final addPenalty = edge.costSeconds * edgePenaltyFactor;
+        edgePenalties[key] = (edgePenalties[key] ?? 0) + addPenalty;
+      }
+    }
+
+    if (results.isEmpty) return const <DijkstraRouteAlternative>[];
+    return _scoreAndSortAlternatives(results, optimizationMode);
+  }
+
+  /// K-shortest approximation using repeated Dijkstra runs with edge penalties.
+  ///
+  /// This keeps the code modular while producing diverse alternatives without
+  /// a full Yen/Eppstein implementation.
+  static Future<List<DijkstraRouteAlternative>> findTripPlanKShortestApprox({
+    required LatLng origin,
+    required LatLng destination,
+    required List<Map<String, dynamic>> originCandidates,
+    required List<Map<String, dynamic>> destCandidates,
+    int k = 3,
+    RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
+    bool allowFerry = false,
+  }) {
+    return findTripPlanDijkstraAlternatives(
+      origin: origin,
+      destination: destination,
+      originCandidates: originCandidates,
+      destCandidates: destCandidates,
+      allowFerry: allowFerry,
+      maxAlternatives: k,
+      optimizationMode: optimizationMode,
+    );
+  }
+
+  static TransitLeg? _legFromEdges(
+    _GraphEdge start,
+    _GraphEdge end,
+    Map<String, Map<String, dynamic>> stopById,
+  ) {
+    final boardStop = stopById[start.from];
+    final alightStop = stopById[end.to];
+    if (boardStop == null || alightStop == null || start.tripId == null || start.routeId == null) {
+      return null;
+    }
+
+    return TransitLeg(
+      tripId: start.tripId!,
+      routeId: start.routeId!,
+      shapeId: start.shapeId,
+      routeShortName: start.routeShortName,
+      routeLongName: start.routeLongName,
+      routeColor: start.routeColor,
+      routeType: start.routeType,
+      boardStopId: start.from,
+      alightStopId: end.to,
+      boardStopName: boardStop['stop_name'] as String? ?? 'Stop',
+      alightStopName: alightStop['stop_name'] as String? ?? 'Stop',
+      boardLat: (boardStop['stop_lat'] as num).toDouble(),
+      boardLon: (boardStop['stop_lon'] as num).toDouble(),
+      alightLat: (alightStop['stop_lat'] as num).toDouble(),
+      alightLon: (alightStop['stop_lon'] as num).toDouble(),
+    );
+  }
+
+  static _DijkstraPathResult? _runDijkstra(
+    Map<String, List<_GraphEdge>> adjacency,
+    String start,
+    String target,
+    {Map<String, double>? edgePenalties}
+  ) {
+    final dist = <String, double>{start: 0.0};
+    final prev = <String, _GraphEdge>{};
+    final heap = _MinHeap()..add(_QueueNode(start, 0.0));
+
+    while (!heap.isEmpty) {
+      final current = heap.pop();
+      final best = dist[current.node];
+      if (best == null || current.cost > best) continue;
+      if (current.node == target) break;
+
+      final edges = adjacency[current.node] ?? const <_GraphEdge>[];
+      for (final edge in edges) {
+        final penalty = edgePenalties == null
+            ? 0.0
+            : (edgePenalties[_edgeSignature(edge)] ?? 0.0);
+        final nextCost = current.cost + edge.costSeconds + penalty;
+        final known = dist[edge.to];
+        if (known == null || nextCost < known) {
+          dist[edge.to] = nextCost;
+          prev[edge.to] = edge;
+          heap.add(_QueueNode(edge.to, nextCost));
+        }
+      }
+    }
+
+    final total = dist[target];
+    if (total == null) return null;
+
+    final reversed = <_GraphEdge>[];
+    var node = target;
+    while (node != start) {
+      final edge = prev[node];
+      if (edge == null) return null;
+      reversed.add(edge);
+      node = edge.from;
+    }
+
+    final edges = reversed.reversed.toList();
+    final base = edges.fold<double>(0.0, (sum, e) => sum + e.costSeconds);
+    return _DijkstraPathResult(
+      edges: edges,
+      weightedCostSeconds: total,
+      baseCostSeconds: base,
+    );
+  }
+
+  static Future<_DijkstraGraphContext?> _buildDijkstraGraphContext({
+    required LatLng origin,
+    required LatLng destination,
+    required List<Map<String, dynamic>> originCandidates,
+    required List<Map<String, dynamic>> destCandidates,
+    required bool allowFerry,
+  }) async {
     final corridorStops = await _fetchCorridorStops(origin, destination);
     if (corridorStops.isEmpty) return null;
 
@@ -261,12 +496,9 @@ class SupabaseRouteService {
         routeShortName: route?['route_short_name'] as String?,
         routeLongName: route?['route_long_name'] as String?,
       );
-      if (!allowFerry && inferredMode == 'Ferry') {
-        continue;
-      }
+      if (!allowFerry && inferredMode == 'Ferry') continue;
       final fallbackSpeedKmh = _fallbackSpeedForMode(inferredMode);
 
-      // Build segment travel times between adjacent stops.
       final segmentSeconds = <double>[];
       for (var i = 0; i < seq.length - 1; i++) {
         final a = seq[i];
@@ -300,15 +532,11 @@ class SupabaseRouteService {
         segmentSeconds.add(segSec);
       }
 
-      // Prefix sum for O(1) cumulative segment cost lookup.
       final prefix = List<double>.filled(segmentSeconds.length + 1, 0.0);
       for (var i = 0; i < segmentSeconds.length; i++) {
         prefix[i + 1] = prefix[i] + segmentSeconds[i];
       }
 
-      // Add ride edges from each stop to downstream stops on the same trip.
-      // Boarding penalty is applied once per chosen trip edge, discouraging
-      // excessive transfers while still allowing them when truly beneficial.
       for (var i = 0; i < seq.length - 1; i++) {
         final fromId = seq[i]['stop_id']?.toString();
         if (fromId == null) continue;
@@ -391,12 +619,14 @@ class SupabaseRouteService {
       }
     }
 
-    final dijkstra = _runDijkstra(adjacency, _originNode, _destNode);
-    if (dijkstra == null) return null;
+    return _DijkstraGraphContext(adjacency: adjacency, allStopsById: allStopsById);
+  }
 
-    final pathEdges = dijkstra.$1;
-    final totalCostSeconds = dijkstra.$2;
-
+  static DijkstraTripPlanResult? _materializeDijkstraResult({
+    required List<_GraphEdge> pathEdges,
+    required double totalCostSeconds,
+    required Map<String, Map<String, dynamic>> allStopsById,
+  }) {
     final transitEdges = pathEdges.where((e) => !e.isWalk && e.tripId != null).toList();
     if (transitEdges.isEmpty) return null;
 
@@ -432,76 +662,88 @@ class SupabaseRouteService {
     );
   }
 
-  static TransitLeg? _legFromEdges(
-    _GraphEdge start,
-    _GraphEdge end,
-    Map<String, Map<String, dynamic>> stopById,
-  ) {
-    final boardStop = stopById[start.from];
-    final alightStop = stopById[end.to];
-    if (boardStop == null || alightStop == null || start.tripId == null || start.routeId == null) {
-      return null;
-    }
-
-    return TransitLeg(
-      tripId: start.tripId!,
-      routeId: start.routeId!,
-      shapeId: start.shapeId,
-      routeShortName: start.routeShortName,
-      routeLongName: start.routeLongName,
-      routeColor: start.routeColor,
-      routeType: start.routeType,
-      boardStopId: start.from,
-      alightStopId: end.to,
-      boardStopName: boardStop['stop_name'] as String? ?? 'Stop',
-      alightStopName: alightStop['stop_name'] as String? ?? 'Stop',
-      boardLat: (boardStop['stop_lat'] as num).toDouble(),
-      boardLon: (boardStop['stop_lon'] as num).toDouble(),
-      alightLat: (alightStop['stop_lat'] as num).toDouble(),
-      alightLon: (alightStop['stop_lon'] as num).toDouble(),
-    );
+  static String _edgeSignature(_GraphEdge edge) {
+    return '${edge.from}|${edge.to}|${edge.tripId ?? '-'}|${edge.routeId ?? '-'}|${edge.isWalk ? 'w' : 'r'}';
   }
 
-  static (List<_GraphEdge>, double)? _runDijkstra(
-    Map<String, List<_GraphEdge>> adjacency,
-    String start,
-    String target,
+  static String _pathTransitSignature(List<_GraphEdge> edges) {
+    final transit = edges.where((e) => !e.isWalk).toList();
+    if (transit.isEmpty) return '';
+    return transit.map(_edgeSignature).join('>');
+  }
+
+  static List<DijkstraRouteAlternative> _scoreAndSortAlternatives(
+    List<DijkstraTripPlanResult> results,
+    RouteOptimizationMode mode,
   ) {
-    final dist = <String, double>{start: 0.0};
-    final prev = <String, _GraphEdge>{};
-    final heap = _MinHeap()..add(const _QueueNode(_originNode, 0.0));
+    final fares = results.map(_estimateFarePhp).toList();
+    final times = results.map((r) => r.totalCostSeconds / 60.0).toList();
 
-    while (!heap.isEmpty) {
-      final current = heap.pop();
-      final best = dist[current.node];
-      if (best == null || current.cost > best) continue;
-      if (current.node == target) break;
+    final minFare = fares.reduce(math.min);
+    final maxFare = fares.reduce(math.max);
+    final minTime = times.reduce(math.min);
+    final maxTime = times.reduce(math.max);
 
-      final edges = adjacency[current.node] ?? const <_GraphEdge>[];
-      for (final edge in edges) {
-        final nextCost = current.cost + edge.costSeconds;
-        final known = dist[edge.to];
-        if (known == null || nextCost < known) {
-          dist[edge.to] = nextCost;
-          prev[edge.to] = edge;
-          heap.add(_QueueNode(edge.to, nextCost));
-        }
-      }
+    final out = <DijkstraRouteAlternative>[];
+    for (var i = 0; i < results.length; i++) {
+      final budgetScore = _normalizeLowerIsBetter(fares[i], minFare, maxFare);
+      final fastestScore = _normalizeLowerIsBetter(times[i], minTime, maxTime);
+      const fareWeight = 0.6;
+      const timeWeight = 0.4;
+      final balancedScore = (budgetScore * fareWeight) + (fastestScore * timeWeight);
+
+      final selectedScore = switch (mode) {
+        RouteOptimizationMode.budget => budgetScore,
+        RouteOptimizationMode.fastest => fastestScore,
+        RouteOptimizationMode.balanced => balancedScore,
+      };
+
+      out.add(
+        DijkstraRouteAlternative(
+          result: results[i],
+          estimatedFarePhp: fares[i],
+          estimatedTimeMinutes: times[i],
+          budgetScore: budgetScore,
+          fastestScore: fastestScore,
+          balancedScore: balancedScore,
+          selectedScore: selectedScore,
+        ),
+      );
     }
 
-    final total = dist[target];
-    if (total == null) return null;
+    out.sort((a, b) {
+      final bySelected = a.selectedScore.compareTo(b.selectedScore);
+      if (bySelected != 0) return bySelected;
+      return a.estimatedTimeMinutes.compareTo(b.estimatedTimeMinutes);
+    });
+    return out;
+  }
 
-    final reversed = <_GraphEdge>[];
-    var node = target;
-    while (node != start) {
-      final edge = prev[node];
-      if (edge == null) return null;
-      reversed.add(edge);
-      node = edge.from;
+  static double _normalizeLowerIsBetter(double value, double min, double max) {
+    final range = max - min;
+    if (range.abs() < 0.0001) return 0.0;
+    return (value - min) / range;
+  }
+
+  static double _estimateFarePhp(DijkstraTripPlanResult result) {
+    var total = 0.0;
+    for (final leg in result.plan.legs) {
+      final mode = _inferRouteMode(
+        routeType: leg.routeType,
+        routeShortName: leg.routeShortName,
+        routeLongName: leg.routeLongName,
+      );
+      total += switch (mode) {
+        'Jeepney' => 13.0,
+        'Bus' => 15.0,
+        'Train' => 20.0,
+        'FX/Van' => 25.0,
+        'Tricycle' => 24.0,
+        'Ferry' => 30.0,
+        _ => 15.0,
+      };
     }
-
-    return (reversed.reversed.toList(), total);
+    return total;
   }
 
   static Future<List<Map<String, dynamic>>> _fetchCorridorStops(

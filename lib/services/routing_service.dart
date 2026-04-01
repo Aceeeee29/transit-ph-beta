@@ -68,6 +68,124 @@ class RoutingService {
     return result;
   }
 
+  /// Returns up to 3 GTFS alternatives from Dijkstra with optimization scoring.
+  ///
+  /// This is a modular hook for route search UIs that want multiple options
+  /// (budget / fastest / balanced) without changing the existing getRoute flow.
+  static Future<List<DijkstraRouteAlternative>> getRouteAlternatives({
+    required LatLng origin,
+    required LatLng destination,
+    String optimization = 'balanced',
+    int maxAlternatives = 3,
+  }) async {
+    List<List<Map<String, dynamic>>> candidates;
+    try {
+      candidates = await Future.wait([
+        SupabaseRouteService.findNearestStops(
+          origin,
+          radiusKm: _stopSearchRadiusKm,
+          limit: _candidateStopsLimit,
+        ),
+        SupabaseRouteService.findNearestStops(
+          destination,
+          radiusKm: _stopSearchRadiusKm,
+          limit: _candidateStopsLimit,
+        ),
+      ]).timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      throw const RoutingException(
+          'Stop lookup timed out. Check your internet connection.');
+    }
+
+    if (candidates[0].isEmpty || candidates[1].isEmpty) {
+      try {
+        candidates = await Future.wait([
+          candidates[0].isNotEmpty
+              ? Future.value(candidates[0])
+              : SupabaseRouteService.findNearestStops(
+                  origin,
+                  radiusKm: _stopSearchRadiusExpandedKm,
+                  limit: _candidateStopsLimit,
+                ),
+          candidates[1].isNotEmpty
+              ? Future.value(candidates[1])
+              : SupabaseRouteService.findNearestStops(
+                  destination,
+                  radiusKm: _stopSearchRadiusExpandedKm,
+                  limit: _candidateStopsLimit,
+                ),
+        ]).timeout(const Duration(seconds: 8));
+      } on TimeoutException {
+        throw const RoutingException(
+            'Stop lookup timed out. Check your internet connection.');
+      }
+    }
+
+    final originCandidates = candidates[0];
+    final destCandidates = candidates[1];
+    if (originCandidates.isEmpty || destCandidates.isEmpty) {
+      return const <DijkstraRouteAlternative>[];
+    }
+
+    return SupabaseRouteService.findTripPlanDijkstraAlternatives(
+      origin: origin,
+      destination: destination,
+      originCandidates: originCandidates,
+      destCandidates: destCandidates,
+      allowFerry: _allowFerrySuggestions,
+      maxAlternatives: maxAlternatives,
+      optimizationMode: _parseOptimizationMode(optimization),
+    );
+  }
+
+  /// Build a full map-ready route from one selected Dijkstra alternative.
+  static Future<OrsRouteResult> buildRouteFromDijkstraAlternative({
+    required LatLng origin,
+    required LatLng destination,
+    required DijkstraTripPlanResult alternative,
+    String preferredMode = 'Auto',
+  }) async {
+    final shapePolylines = await Future.wait(
+      alternative.plan.legs.map((leg) async {
+        final board = LatLng(leg.boardLat, leg.boardLon);
+        final alight = LatLng(leg.alightLat, leg.alightLon);
+        final osrmMode = _osrmProfileForMode(
+          _inferModeFromRoute(
+            routeType: leg.routeType,
+            routeShortName: leg.routeShortName,
+            routeLongName: leg.routeLongName,
+            preferredMode: preferredMode,
+          ),
+        );
+
+        final snapped = await _osrmSnap(board, alight, osrmMode);
+        if (snapped != null && snapped.length >= 2) return snapped;
+
+        if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
+          try {
+            final pts = await SupabaseRouteService.getShapePolyline(leg.shapeId!)
+                .timeout(const Duration(seconds: 8));
+            if (pts.length >= 2) {
+              return _clipShapeToStops(pts, board, alight);
+            }
+          } catch (_) {}
+        }
+
+        return [board, alight];
+      }),
+    );
+
+    return _buildResult(
+      origin: origin,
+      destination: destination,
+      legs: alternative.plan.legs,
+      shapePolylines: shapePolylines,
+      preferredMode: preferredMode,
+      selectedOriginStop: alternative.selectedOriginStop,
+      selectedDestStop: alternative.selectedDestStop,
+    );
+  }
+
   /// Lightweight road-snap between two points for map drawing in the
   /// Contribute screen.
   ///
@@ -94,6 +212,17 @@ class RoutingService {
       steps:           [],
       bbox:            [],
     );
+  }
+
+  static RouteOptimizationMode _parseOptimizationMode(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'budget':
+        return RouteOptimizationMode.budget;
+      case 'fastest':
+        return RouteOptimizationMode.fastest;
+      default:
+        return RouteOptimizationMode.balanced;
+    }
   }
 
   // ── GTFS routing with fallback ────────────────────────────────────────────────

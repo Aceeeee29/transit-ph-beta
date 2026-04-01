@@ -8,8 +8,11 @@ import '../services/gamification_service.dart';
 import '../services/weather_service.dart';
 import '../services/location_service.dart';
 import '../services/recommendation_service.dart';
+import '../services/route_metrics_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
+
+enum RouteSortMode { community, budget, fastest, balanced }
 
 class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
@@ -35,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _totalUsers;
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
+  RouteSortMode _routeSortMode = RouteSortMode.community;
 
   static const Set<String> _personaTags = {
     'Student',
@@ -212,8 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
             route.steps.any((s) => _selectedModes.contains(s.mode));
       }
       return matchesDest;
-    }).toList()
-      ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+    }).toList();
 
     _showSearchResultsSheet(matched);
   }
@@ -234,6 +237,78 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _routePriorityScore(route_model.Route route) {
     return _tagMatchScore(route) + route.views + route.upvotes - route.downvotes;
+  }
+
+  double _routeEstimatedFare(route_model.Route route) {
+    final fromPrice = _extractFirstNumber(route.price);
+    if (fromPrice != null) return fromPrice;
+
+    final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
+    if (transportSteps.isEmpty) return 0;
+
+    final totalDistanceKm = route.distanceMeters != null && route.distanceMeters! > 0
+        ? route.distanceMeters! / 1000
+        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final perStepDistance = totalDistanceKm / transportSteps.length;
+
+    var total = 0.0;
+    for (final step in transportSteps) {
+      total += step.actualFare ??
+          RouteMetricsService.calculateFareForMode(step.mode, perStepDistance);
+    }
+    return total;
+  }
+
+  int _routeEstimatedMinutes(route_model.Route route) {
+    final parsedEta = int.tryParse((route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    if (parsedEta != null && parsedEta > 0) return parsedEta;
+
+    final distanceKm = route.distanceMeters != null && route.distanceMeters! > 0
+        ? route.distanceMeters! / 1000
+        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+
+    final hasTrain = route.steps.any((s) => s.mode == 'Train');
+    final speed = hasTrain ? 28.0 : 20.0;
+    final minutes = ((distanceKm / speed) * 60).ceil();
+    final transferPenalty = (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
+    return (minutes + transferPenalty).clamp(8, 180);
+  }
+
+  List<route_model.Route> _sortRoutesByMode(
+    List<route_model.Route> source,
+    RouteSortMode mode,
+  ) {
+    final sorted = List<route_model.Route>.from(source);
+    switch (mode) {
+      case RouteSortMode.community:
+        sorted.sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+        break;
+      case RouteSortMode.budget:
+        sorted.sort((a, b) {
+          final fareCmp = _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
+          if (fareCmp != 0) return fareCmp;
+          return _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
+        });
+        break;
+      case RouteSortMode.fastest:
+        sorted.sort((a, b) => _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b)));
+        break;
+      case RouteSortMode.balanced:
+        sorted.sort((a, b) {
+          final aScore = _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
+          final bScore = _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
+          return aScore.compareTo(bScore);
+        });
+        break;
+    }
+    return sorted;
+  }
+
+  double? _extractFirstNumber(String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+    final match = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(text);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
   }
 
   List<String> get _activePersonaTags {
@@ -320,125 +395,182 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSearchResultsSheet(List<route_model.Route> matchedRoutes) {
+    RouteSortMode sheetSortMode = _routeSortMode;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final sortedRoutes = _sortRoutesByMode(matchedRoutes, sheetSortMode);
+          final cheapestFare = sortedRoutes.isEmpty
+              ? null
+              : sortedRoutes.map(_routeEstimatedFare).reduce((a, b) => a < b ? a : b);
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder: (context, scrollController) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Search Results (${matchedRoutes.length})',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    TextButton.icon(
-                      onPressed: _showFilterDialog,
-                      icon: const Icon(Icons.filter_list),
-                      label: Text(
-                        'Filter${_selectedModes.isNotEmpty ? ' (${_selectedModes.length})' : ''}',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_selectedModes.isNotEmpty)
-                SizedBox(
-                  height: 40,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: _selectedModes
-                        .map((mode) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Chip(
-                                label: Text(mode),
-                                deleteIcon: const Icon(Icons.close, size: 18),
-                                onDeleted: () {
-                                  setState(() => _selectedModes.remove(mode));
-                                  _findRoute();
-                                },
-                              ),
-                            ))
-                        .toList(),
                   ),
-                ),
-              const Divider(),
-              Expanded(
-                child: matchedRoutes.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              size: 64,
-                              color: Colors.grey.shade400,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No routes found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Try adjusting your filters',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Search Results (${sortedRoutes.length})',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: matchedRoutes.length,
-                        itemBuilder: (context, index) =>
-                            _buildRouteCard(matchedRoutes[index]),
+                        TextButton.icon(
+                          onPressed: _showFilterDialog,
+                          icon: const Icon(Icons.filter_list),
+                          label: Text(
+                            'Filter${_selectedModes.isNotEmpty ? ' (${_selectedModes.length})' : ''}',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 38,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        _sortChip(
+                          label: 'Community',
+                          active: sheetSortMode == RouteSortMode.community,
+                          onTap: () => setSheetState(() {
+                            sheetSortMode = RouteSortMode.community;
+                            _routeSortMode = sheetSortMode;
+                          }),
+                        ),
+                        _sortChip(
+                          label: 'Budget',
+                          active: sheetSortMode == RouteSortMode.budget,
+                          onTap: () => setSheetState(() {
+                            sheetSortMode = RouteSortMode.budget;
+                            _routeSortMode = sheetSortMode;
+                          }),
+                        ),
+                        _sortChip(
+                          label: 'Fastest',
+                          active: sheetSortMode == RouteSortMode.fastest,
+                          onTap: () => setSheetState(() {
+                            sheetSortMode = RouteSortMode.fastest;
+                            _routeSortMode = sheetSortMode;
+                          }),
+                        ),
+                        _sortChip(
+                          label: 'Balanced',
+                          active: sheetSortMode == RouteSortMode.balanced,
+                          onTap: () => setSheetState(() {
+                            sheetSortMode = RouteSortMode.balanced;
+                            _routeSortMode = sheetSortMode;
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_selectedModes.isNotEmpty)
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: _selectedModes
+                            .map((mode) => Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Chip(
+                                    label: Text(mode),
+                                    deleteIcon: const Icon(Icons.close, size: 18),
+                                    onDeleted: () {
+                                      setState(() => _selectedModes.remove(mode));
+                                      _findRoute();
+                                    },
+                                  ),
+                                ))
+                            .toList(),
                       ),
+                    ),
+                  const Divider(),
+                  Expanded(
+                    child: sortedRoutes.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off,
+                                  size: 64,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No routes found',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Try adjusting your filters',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: sortedRoutes.length,
+                            itemBuilder: (context, index) => _buildRouteCard(
+                              sortedRoutes[index],
+                              cheapestFare: cheapestFare,
+                            ),
+                          ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 
   // ─── Widget builders ─────────────────────────────────────────────────────────
 
-  Widget _buildRouteCard(route_model.Route route) {
+  Widget _buildRouteCard(route_model.Route route, {double? cheapestFare}) {
     final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
     final hasActualFare = hasTransportSteps &&
         route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
+    final estimatedFare = _routeEstimatedFare(route);
+    final estimatedMins = _routeEstimatedMinutes(route);
+    final possibleSavings = cheapestFare != null ? (estimatedFare - cheapestFare) : 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -504,6 +636,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 runSpacing: 4,
                 children: route.steps.map((step) => _modeChip(step.mode)).toList(),
               ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _statItem(Icons.payments_outlined, 'PHP ${estimatedFare.toStringAsFixed(0)}', const Color(0xFF2D9F63)),
+                  const SizedBox(width: 14),
+                  _statItem(Icons.timer_outlined, '${estimatedMins} min', _textSecondary),
+                ],
+              ),
+              if (possibleSavings > 0.9) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x143EC97A),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'You save PHP ${possibleSavings.toStringAsFixed(0)} vs higher-fare options',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2D9F63),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -770,6 +928,38 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return const Icon(Icons.directions_walk, color: Colors.green, size: 20);
     }
+  }
+
+  Widget _sortChip({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? _accentSoft : _surfaceAlt,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: active ? _accent.withOpacity(0.35) : _border,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: active ? _accent : _textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _modeChip(String mode) {

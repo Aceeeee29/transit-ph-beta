@@ -10,12 +10,16 @@ import '../services/search_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
 import '../services/location_service.dart';
+import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
+import '../services/supabase_route_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/search/search_help_sheet.dart';
 import '../widgets/search/search_route_card.dart';
 import 'route_map_screen.dart';
 import 'ors_route_map_screen.dart';
+
+enum ContributedRouteSortMode { balanced, budget, fastest }
 
 class SearchScreen extends StatefulWidget {
   final List<route_model.Route> routes;
@@ -40,6 +44,8 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _showOmnibox = false;
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
+  ContributedRouteSortMode _contributedSortMode =
+      ContributedRouteSortMode.balanced;
 
   static const Set<String> _otherSuggestionTags = {
     'Tourist',
@@ -64,6 +70,10 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _orsError          = false;
   String _orsErrorMessage = '';
   String _lastOrsQuery    = '';
+  List<DijkstraRouteAlternative> _routeAlternatives = [];
+  int _selectedAlternativeIndex = 0;
+  LatLng? _lastOriginForAlternatives;
+  LatLng? _lastDestinationForAlternatives;
 
   // ─── Origin state ─────────────────────────────────────────────────────────
   bool _useCurrentLocation  = true;
@@ -227,6 +237,10 @@ class _SearchScreenState extends State<SearchScreen> {
         _orsResult       = null;
         _orsError        = false;
         _orsErrorMessage = '';
+        _routeAlternatives = [];
+        _selectedAlternativeIndex = 0;
+        _lastOriginForAlternatives = null;
+        _lastDestinationForAlternatives = null;
       }
     });
   }
@@ -343,6 +357,98 @@ class _SearchScreenState extends State<SearchScreen> {
         (route.isApproved ? 1000 : 0);
   }
 
+  double? _extractFirstNumber(String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+    final match = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(text);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
+  }
+
+  double _routeEstimatedFare(route_model.Route route) {
+    final fromPrice = _extractFirstNumber(route.price);
+    if (fromPrice != null) return fromPrice;
+
+    final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
+    if (transportSteps.isEmpty) return 0;
+
+    final totalDistanceKm = route.distanceMeters != null && route.distanceMeters! > 0
+        ? route.distanceMeters! / 1000
+        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final perStepDistance = totalDistanceKm / transportSteps.length;
+
+    var total = 0.0;
+    for (final step in transportSteps) {
+      total += step.actualFare ??
+          RouteMetricsService.calculateFareForMode(step.mode, perStepDistance);
+    }
+    return total;
+  }
+
+  int _routeEstimatedMinutes(route_model.Route route) {
+    final parsedEta = int.tryParse((route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    if (parsedEta != null && parsedEta > 0) return parsedEta;
+
+    final distanceKm = route.distanceMeters != null && route.distanceMeters! > 0
+        ? route.distanceMeters! / 1000
+        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+
+    final hasTrain = route.steps.any((s) => s.mode == 'Train');
+    final speed = hasTrain ? 28.0 : 20.0;
+    final minutes = ((distanceKm / speed) * 60).ceil();
+    final transferPenalty = (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
+    return (minutes + transferPenalty).clamp(8, 180);
+  }
+
+  List<route_model.Route> _sortContributedRoutes(
+    List<route_model.Route> routes,
+    ContributedRouteSortMode mode,
+  ) {
+    final sorted = List<route_model.Route>.from(routes);
+    sorted.sort((a, b) {
+      switch (mode) {
+        case ContributedRouteSortMode.budget:
+          final fareCmp = _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
+          if (fareCmp != 0) return fareCmp;
+          return _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
+        case ContributedRouteSortMode.fastest:
+          final timeCmp = _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
+          if (timeCmp != 0) return timeCmp;
+          return _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
+        case ContributedRouteSortMode.balanced:
+          final aScore = _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
+          final bScore = _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
+          final cmp = aScore.compareTo(bScore);
+          if (cmp != 0) return cmp;
+          return _communityReliabilityScore(b).compareTo(_communityReliabilityScore(a));
+      }
+    });
+    return sorted;
+  }
+
+  List<route_model.Route> _topThreeModePicks(List<route_model.Route> routes) {
+    if (routes.isEmpty) return const <route_model.Route>[];
+
+    final budgetTop = _sortContributedRoutes(routes, ContributedRouteSortMode.budget).first;
+    final fastestTop = _sortContributedRoutes(routes, ContributedRouteSortMode.fastest).first;
+    final balancedTop = _sortContributedRoutes(routes, ContributedRouteSortMode.balanced).first;
+
+    final picks = <route_model.Route>[];
+    final seen = <String>{};
+    for (final r in [balancedTop, budgetTop, fastestTop]) {
+      if (seen.add(r.id)) picks.add(r);
+    }
+
+    if (picks.length < 3) {
+      final byBalanced = _sortContributedRoutes(routes, ContributedRouteSortMode.balanced);
+      for (final r in byBalanced) {
+        if (seen.add(r.id)) picks.add(r);
+        if (picks.length == 3) break;
+      }
+    }
+
+    return picks;
+  }
+
   // ─── Route generation ─────────────────────────────────────────────────────
 
   Future<void> _fetchOrsRoute() async {
@@ -408,17 +514,40 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
 
-      final result = await RoutingService.getRoute(
-        originName:      originName,
-        origin:          origin,
-        destinationName: query,
-        destination:     destLatLng,
-        mode:            'Auto',
-      );
+      List<DijkstraRouteAlternative> alternatives = [];
+      try {
+        alternatives = await RoutingService.getRouteAlternatives(
+          origin: origin,
+          destination: destLatLng,
+          optimization: 'balanced',
+          maxAlternatives: 3,
+        );
+      } catch (e) {
+        debugPrint('[SearchScreen] Alternative lookup failed: $e');
+      }
+
+      final result = alternatives.isNotEmpty
+          ? await RoutingService.buildRouteFromDijkstraAlternative(
+              origin: origin,
+              destination: destLatLng,
+              alternative: alternatives.first.result,
+              preferredMode: 'Auto',
+            )
+          : await RoutingService.getRoute(
+              originName: originName,
+              origin: origin,
+              destinationName: query,
+              destination: destLatLng,
+              mode: 'Auto',
+            );
 
       setState(() {
         _isLoadingOrs = false;
         _orsResult    = result;
+        _routeAlternatives = alternatives;
+        _selectedAlternativeIndex = 0;
+        _lastOriginForAlternatives = origin;
+        _lastDestinationForAlternatives = destLatLng;
       });
     } on RoutingException catch (e) {
       setState(() {
@@ -431,6 +560,44 @@ class _SearchScreenState extends State<SearchScreen> {
         _isLoadingOrs    = false;
         _orsError        = true;
         _orsErrorMessage = 'Unexpected error: $e';
+      });
+    }
+  }
+
+  Future<void> _selectAlternative(int index) async {
+    if (_isLoadingOrs) return;
+    if (index < 0 || index >= _routeAlternatives.length) return;
+    if (_lastOriginForAlternatives == null ||
+        _lastDestinationForAlternatives == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingOrs = true;
+      _orsError = false;
+      _orsErrorMessage = '';
+    });
+
+    try {
+      final next = await RoutingService.buildRouteFromDijkstraAlternative(
+        origin: _lastOriginForAlternatives!,
+        destination: _lastDestinationForAlternatives!,
+        alternative: _routeAlternatives[index].result,
+        preferredMode: 'Auto',
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _orsResult = next;
+        _selectedAlternativeIndex = index;
+        _isLoadingOrs = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingOrs = false;
+        _orsError = true;
+        _orsErrorMessage = 'Failed to build selected alternative route: $e';
       });
     }
   }
@@ -475,9 +642,9 @@ class _SearchScreenState extends State<SearchScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -499,7 +666,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Container(
       width: 26, height: 26,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
         border: Border.all(color: color, width: 1.2),
       ),
@@ -711,7 +878,7 @@ class _SearchScreenState extends State<SearchScreen> {
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-              color: _accent.withOpacity(0.08),
+              color: _accent.withValues(alpha: 0.08),
               blurRadius: 16,
               offset: const Offset(0, 6))
         ],
@@ -720,7 +887,7 @@ class _SearchScreenState extends State<SearchScreen> {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _suggestions.length,
-        separatorBuilder: (_, __) => Divider(color: _border, height: 1),
+        separatorBuilder: (_, index) => Divider(color: _border, height: 1),
         itemBuilder: (context, index) {
           final suggestion = _suggestions[index];
           final isRecent   = _recentSearches.contains(suggestion);
@@ -774,12 +941,22 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSearchResults() {
     if (_filteredRoutes.isNotEmpty) {
-      return ListView.builder(
+      final sortedRoutes =
+          _sortContributedRoutes(_filteredRoutes, _contributedSortMode);
+      final topPicks = _topThreeModePicks(_filteredRoutes);
+
+      return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        itemCount: _filteredRoutes.length,
-        itemBuilder: (_, index) =>
-            _routeCardWithBadge(_filteredRoutes[index]),
+        children: [
+          _buildContributedFilterRow(),
+          const SizedBox(height: 10),
+          if (topPicks.isNotEmpty) ...[
+            _buildTopPicksCard(topPicks),
+            const SizedBox(height: 12),
+          ],
+          ...sortedRoutes.map(_routeCardWithBadge),
+        ],
       );
     }
 
@@ -803,6 +980,129 @@ class _SearchScreenState extends State<SearchScreen> {
           ] else ...[
             _buildOrsEmptyState(),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContributedFilterRow() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _sortFilterChip(
+          label: 'Balanced',
+          active: _contributedSortMode == ContributedRouteSortMode.balanced,
+          onTap: () => setState(
+            () => _contributedSortMode = ContributedRouteSortMode.balanced,
+          ),
+        ),
+        _sortFilterChip(
+          label: 'Budget',
+          active: _contributedSortMode == ContributedRouteSortMode.budget,
+          onTap: () => setState(
+            () => _contributedSortMode = ContributedRouteSortMode.budget,
+          ),
+        ),
+        _sortFilterChip(
+          label: 'Fastest',
+          active: _contributedSortMode == ContributedRouteSortMode.fastest,
+          onTap: () => setState(
+            () => _contributedSortMode = ContributedRouteSortMode.fastest,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sortFilterChip({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? _accentSoft : _surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? _accent.withValues(alpha: 0.35) : _border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: active ? _accent : _textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopPicksCard(List<route_model.Route> topPicks) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Top route picks',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue.shade800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Best picks for Balanced, Budget, and Fastest based on available contributed routes.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 10),
+          ...topPicks.asMap().entries.map((entry) {
+            final route = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                onTap: () => _onRouteTap(route),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${route.startLocation} to ${route.endLocation}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'PHP ${_routeEstimatedFare(route).toStringAsFixed(0)} • ${_routeEstimatedMinutes(route)} min',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -839,6 +1139,10 @@ class _SearchScreenState extends State<SearchScreen> {
             ],
           ),
         ),
+        if (_routeAlternatives.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildAlternativesPanel(),
+        ],
         const SizedBox(height: 16),
         Card(
           elevation: 2,
@@ -979,6 +1283,114 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAlternativesPanel() {
+    int budgetIdx = 0;
+    int fastestIdx = 0;
+    int balancedIdx = 0;
+
+    for (var i = 1; i < _routeAlternatives.length; i++) {
+      if (_routeAlternatives[i].estimatedFarePhp < _routeAlternatives[budgetIdx].estimatedFarePhp) {
+        budgetIdx = i;
+      }
+      if (_routeAlternatives[i].estimatedTimeMinutes < _routeAlternatives[fastestIdx].estimatedTimeMinutes) {
+        fastestIdx = i;
+      }
+      if (_routeAlternatives[i].balancedScore < _routeAlternatives[balancedIdx].balancedScore) {
+        balancedIdx = i;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Top ${_routeAlternatives.length} alternatives',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue.shade800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Generated via repeated Dijkstra with edge penalties (k-shortest approximation).',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 10),
+          ..._routeAlternatives.asMap().entries.map((entry) {
+            final index = entry.key;
+            final alt = entry.value;
+            final selected = index == _selectedAlternativeIndex;
+
+            final tags = <String>[];
+            if (index == budgetIdx) tags.add('Budget');
+            if (index == fastestIdx) tags.add('Fastest');
+            if (index == balancedIdx) tags.add('Balanced');
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                onTap: () => _selectAlternative(index),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.blue.shade50 : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: selected ? Colors.blue.shade400 : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Option ${index + 1}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Fare: PHP ${alt.estimatedFarePhp.toStringAsFixed(0)} • Time: ${alt.estimatedTimeMinutes.toStringAsFixed(0)} min',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                            ),
+                            if (tags.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                tags.join(' • '),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (selected)
+                        Icon(Icons.check_circle, color: Colors.blue.shade700, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 
