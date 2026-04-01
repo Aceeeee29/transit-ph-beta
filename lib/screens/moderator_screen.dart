@@ -4,6 +4,8 @@ import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
+import '../services/route_service.dart';
+import '../services/route_trust_service.dart';
 import '../widgets/route_preview.dart';
 
 class ModeratorScreen extends StatefulWidget {
@@ -39,7 +41,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _postsNotifier = ModerationService.postsNotifier;
     _routesNotifier = ModerationService.pendingRoutesNotifier;
     _postsNotifier.addListener(_onDataChanged);
@@ -415,9 +417,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         children: [
           Text(label),
           if (count > 0) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
                 color: _danger,
                 borderRadius: BorderRadius.circular(10),
@@ -426,7 +428,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                 '$count',
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -480,15 +482,17 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           unselectedLabelColor: _textSecondary,
           indicatorColor: _accent,
           indicatorWeight: 2.5,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
           labelStyle: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700),
+              fontSize: 11, fontWeight: FontWeight.w700),
           unselectedLabelStyle: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w500),
+              fontSize: 11, fontWeight: FontWeight.w500),
           tabs: [
             _tabWithBadge('Routes', pendingRoutesCount),
+            const Tab(text: 'Trust'),
             _tabWithBadge('Posts', pendingPostsCount),
             const Tab(text: 'Users'),
-            const Tab(text: 'Feedbacks'),
+            const Tab(text: 'Feedback'),
           ],
         ),
       ),
@@ -496,6 +500,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         controller: _tabController,
         children: [
           _buildPendingRoutesTab(),
+          _buildRouteTrustTab(),
           _buildPendingPostsTab(),
           _buildUsersTab(),
           _buildFeedbacksTab(),
@@ -927,6 +932,108 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     );
   }
 
+  Widget _buildRouteTrustTab() {
+    return StreamBuilder<List<route_model.Route>>(
+      stream: RouteService.watchAllRoutes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final routes = snapshot.data ?? const <route_model.Route>[];
+        if (routes.isEmpty) {
+          return _refreshableEmptyState(
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: _surfaceAlt,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(
+                    Icons.verified_user_outlined,
+                    size: 32,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'No routes with trust data',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Approved routes will appear here with confidence scores.',
+                  style: TextStyle(fontSize: 13, color: _textSecondary),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          color: _accent,
+          onRefresh: _refreshModeratorPanel,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(12),
+            itemCount: routes.length,
+            itemBuilder: (context, index) {
+              final route = routes[index];
+              return _buildRouteTrustCard(route);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRouteTrustCard(route_model.Route route) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${route.startLocation} -> ${route.endLocation}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildTrustConfidenceChip(route),
+              _metaChip(
+                Icons.verified,
+                route.approvalStatus.name.toUpperCase(),
+                route.isApproved ? _success : _warning,
+              ),
+              _metaChip(Icons.directions_rounded, '${route.steps.length} steps', _textSecondary),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _metaChip(IconData icon, String label, Color color) {
     return Container(
       padding:
@@ -950,6 +1057,69 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTrustConfidenceChip(route_model.Route route) {
+    return StreamBuilder<Map<String, int>>(
+      stream: RouteService.watchRouteFeedbackSummary(route.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _metaChip(Icons.verified_user_outlined, 'Trust loading...', _textSecondary);
+        }
+
+        final summary = snapshot.data ?? const {
+          'fareAccurateYes': 0,
+          'fareAccurateNo': 0,
+          'scheduleAccurateYes': 0,
+          'scheduleAccurateNo': 0,
+          'stillOperatingYes': 0,
+          'stillOperatingNo': 0,
+        };
+
+        final score = RouteTrustService.computeConfidence(
+          route: route,
+          feedbackSummary: summary,
+        );
+        final isCritical = score.total < 30;
+        final label = RouteTrustService.confidenceLabel(score.total);
+        final color = score.total >= 85
+            ? _success
+            : score.total >= 65
+                ? _accent
+                : _warning;
+
+        final trustChip = isCritical
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _metaChip(
+                    Icons.warning_amber_rounded,
+                    'Trust ${score.total}/100 ($label)',
+                    _danger,
+                  ),
+                  const SizedBox(width: 6),
+                  _metaChip(
+                    Icons.notification_important_rounded,
+                    'ALERT',
+                    _danger,
+                  ),
+                ],
+              )
+            : _metaChip(
+                Icons.verified_user_outlined,
+                'Trust ${score.total}/100 ($label)',
+                color,
+              );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            trustChip,
+          ],
+        );
+      },
     );
   }
 

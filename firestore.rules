@@ -154,6 +154,10 @@ service cloud.firestore {
           (request.resource.data.upvotes - resource.data.upvotes) <= 1 &&
           (request.resource.data.downvotes - resource.data.downvotes) >= -1 &&
           (request.resource.data.downvotes - resource.data.downvotes) <= 1
+        ) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['feedbackSummary', 'updatedAt'])
         )
       );
       allow delete: if isStaff();
@@ -166,6 +170,28 @@ service cloud.firestore {
       // Per-user view markers to avoid recounting the same user repeatedly.
       match /routeViews/{userId} {
         allow read, create, update, delete: if isAuth() && isSelf(userId);
+      }
+
+      // Per-user trust feedback answers for route reliability.
+      match /routeFeedback/{userId} {
+        allow read: if isAuth() && isSelf(userId);
+        allow create: if isAuth() && isSelf(userId);
+        allow update: if isAuth() && isSelf(userId);
+        allow delete: if false;
+      }
+
+      // Route audit logs are visible to staff; regular users can only write
+      // self-authored commuter feedback log entries.
+      match /auditLogs/{logId} {
+        allow read: if isStaff();
+        allow create: if isAuth() && (
+          isStaff() ||
+          (
+            request.resource.data.action == 'commuter_feedback_submitted' &&
+            request.resource.data.actorId == request.auth.uid
+          )
+        );
+        allow update, delete: if isStaff();
       }
     }
 

@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/notification.dart';
 import '../models/route.dart' as route_model;
 import '../services/notifications_service.dart';
 
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const int _staleReviewDays = 45;
 
   static Future<String?> _resolveNotificationRecipientId(
     String? contributorId,
@@ -55,6 +57,90 @@ class RouteService {
     return _routeDoc(routeId).collection('routeViews').doc(userId);
   }
 
+  static DocumentReference<Map<String, dynamic>> _routeFeedbackDoc(
+    String routeId,
+    String userId,
+  ) {
+    return _routeDoc(routeId).collection('routeFeedback').doc(userId);
+  }
+
+  static Future<String> _currentActorIdOrSystem() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return (uid == null || uid.trim().isEmpty) ? 'system' : uid;
+  }
+
+  static Future<void> _writeRouteAuditLog({
+    required String routeId,
+    required String action,
+    required String actorId,
+    Map<String, dynamic>? meta,
+  }) async {
+    try {
+      await _routeDoc(routeId).collection('auditLogs').add({
+        'routeId': routeId,
+        'action': action,
+        'actorId': actorId,
+        'meta': meta ?? const <String, dynamic>{},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error writing route audit log for $routeId ($action): $e');
+    }
+  }
+
+  static Future<void> _markStaleRoutesForReviewIfNeeded({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  }) async {
+    final now = DateTime.now();
+    for (final doc in docs) {
+      final data = doc.data();
+      final routeId = data['id']?.toString() ?? doc.id;
+      final approvalStatus = data['approvalStatus']?.toString();
+      if (approvalStatus != route_model.RouteApprovalStatus.approved.name) {
+        continue;
+      }
+
+      final updatedTs = data['updatedAt'] as Timestamp?;
+      final createdTs = data['createdAt'] as Timestamp?;
+      final referenceTime = (updatedTs ?? createdTs)?.toDate();
+      if (referenceTime == null) continue;
+
+      final ageDays = now.difference(referenceTime).inDays;
+      if (ageDays < _staleReviewDays) continue;
+
+      final alreadyFlagged = data['staleNeedsReview'] == true;
+      if (alreadyFlagged) continue;
+
+      final hasFare = (data['price']?.toString().trim().isNotEmpty ?? false);
+      final hasSchedule = (data['schedule']?.toString().trim().isNotEmpty ?? false);
+
+      final patch = <String, dynamic>{
+        'staleNeedsReview': true,
+        'staleReason': 'Auto-flagged: fare/schedule data older than $_staleReviewDays days.',
+        'staleFlaggedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (hasFare) {
+        patch['fareExpired'] = true;
+      }
+      if (hasSchedule) {
+        patch['scheduleExpired'] = true;
+      }
+
+      await _routeDoc(routeId).update(patch);
+      await _writeRouteAuditLog(
+        routeId: routeId,
+        action: 'auto_stale_flagged',
+        actorId: 'system',
+        meta: {
+          'staleDays': ageDays,
+          'fareExpired': hasFare,
+          'scheduleExpired': hasSchedule,
+        },
+      );
+    }
+  }
+
   /// Get only APPROVED community routes — what regular users see.
   /// We filter client-side (not in the query) so that legacy routes
   /// without an approvalStatus field are correctly defaulted to approved
@@ -66,6 +152,12 @@ class RouteService {
           .orderBy('createdAt', descending: true)
           .get();
 
+      try {
+        await _markStaleRoutesForReviewIfNeeded(docs: querySnapshot.docs);
+      } catch (e) {
+        print('Skipped stale-route auto-flagging due to permissions/runtime issue: $e');
+      }
+
       return querySnapshot.docs
           .map((doc) => route_model.Route.fromJson(doc.data()))
           .where((r) => r.isApproved)
@@ -74,6 +166,17 @@ class RouteService {
       print('Error fetching approved routes: $e');
       return [];
     }
+  }
+
+  static Stream<List<route_model.Route>> watchAllRoutes() {
+    return _firestore
+        .collection('routes')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((querySnapshot) => querySnapshot.docs
+            .map((doc) => route_model.Route.fromJson(doc.data()))
+            .where((r) => r.isApproved)
+            .toList());
   }
 
   /// Get PENDING routes — for the moderator review tab
@@ -143,7 +246,21 @@ class RouteService {
       data['approvalStatus'] = route_model.RouteApprovalStatus.pending.name;
       data['createdAt'] = FieldValue.serverTimestamp();
       data['updatedAt'] = FieldValue.serverTimestamp();
+      data['feedbackSummary'] = {
+        'fareAccurateYes': 0,
+        'fareAccurateNo': 0,
+        'scheduleAccurateYes': 0,
+        'scheduleAccurateNo': 0,
+        'stillOperatingYes': 0,
+        'stillOperatingNo': 0,
+      };
       await _firestore.collection('routes').doc(route.id).set(data);
+      final actorId = await _currentActorIdOrSystem();
+      await _writeRouteAuditLog(
+        routeId: route.id,
+        action: 'route_created',
+        actorId: actorId,
+      );
       print('Route ${route.id} saved with status: pending');
     } catch (e) {
       print('Error saving route ${route.id}: $e');
@@ -154,9 +271,22 @@ class RouteService {
   /// Update an existing route
   static Future<void> updateRoute(route_model.Route route) async {
     try {
+      final before = await _firestore.collection('routes').doc(route.id).get();
       final data = route.toJson();
       data['updatedAt'] = FieldValue.serverTimestamp();
       await _firestore.collection('routes').doc(route.id).update(data);
+      final actorId = await _currentActorIdOrSystem();
+      await _writeRouteAuditLog(
+        routeId: route.id,
+        action: 'route_updated',
+        actorId: actorId,
+        meta: {
+          'beforeApprovalStatus': before.data()?['approvalStatus'],
+          'afterApprovalStatus': data['approvalStatus'],
+          'changedPrice': before.data()?['price'] != data['price'],
+          'changedSchedule': before.data()?['schedule'] != data['schedule'],
+        },
+      );
     } catch (e) {
       print('Error updating route ${route.id}: $e');
       rethrow;
@@ -182,8 +312,16 @@ class RouteService {
 
       await _firestore.collection('routes').doc(routeId).update({
         'approvalStatus': route_model.RouteApprovalStatus.approved.name,
+        'staleNeedsReview': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      final actorId = await _currentActorIdOrSystem();
+      await _writeRouteAuditLog(
+        routeId: routeId,
+        action: 'moderator_approved',
+        actorId: actorId,
+      );
 
       final recipientId = await _resolveNotificationRecipientId(contributorId);
       if (recipientId != null && recipientId.isNotEmpty) {
@@ -230,6 +368,13 @@ class RouteService {
         'approvalStatus': route_model.RouteApprovalStatus.rejected.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      final actorId = await _currentActorIdOrSystem();
+      await _writeRouteAuditLog(
+        routeId: routeId,
+        action: 'moderator_rejected',
+        actorId: actorId,
+      );
 
       final recipientId = await _resolveNotificationRecipientId(contributorId);
       if (recipientId != null && recipientId.isNotEmpty) {
@@ -428,6 +573,117 @@ class RouteService {
     } catch (e) {
       print('Error searching routes from $startLocation to $endLocation: $e');
       return [];
+    }
+  }
+
+  static Future<Map<String, int>> getRouteFeedbackSummary(String routeId) async {
+    try {
+      final doc = await _routeDoc(routeId).get();
+      final summary = doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
+          const <String, dynamic>{};
+      return {
+        'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
+        'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateYes': (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateNo': (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
+        'stillOperatingYes': (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
+        'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
+      };
+    } catch (e) {
+      print('Error loading route feedback summary for $routeId: $e');
+      return {
+        'fareAccurateYes': 0,
+        'fareAccurateNo': 0,
+        'scheduleAccurateYes': 0,
+        'scheduleAccurateNo': 0,
+        'stillOperatingYes': 0,
+        'stillOperatingNo': 0,
+      };
+    }
+  }
+
+  static Stream<Map<String, int>> watchRouteFeedbackSummary(String routeId) {
+    return _routeDoc(routeId).snapshots().map((doc) {
+      final summary = doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
+          const <String, dynamic>{};
+      return {
+        'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
+        'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateYes': (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateNo': (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
+        'stillOperatingYes': (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
+        'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
+      };
+    });
+  }
+
+  static Future<void> submitRouteQualityFeedback({
+    required String routeId,
+    required String userId,
+    required bool fareAccurate,
+    required bool scheduleAccurate,
+    required bool stillOperating,
+  }) async {
+    final routeRef = _routeDoc(routeId);
+    final feedbackRef = _routeFeedbackDoc(routeId, userId);
+
+    await _firestore.runTransaction((transaction) async {
+      final routeSnap = await transaction.get(routeRef);
+      if (!routeSnap.exists) throw StateError('route_not_found');
+      final prevSnap = await transaction.get(feedbackRef);
+
+      final updates = <String, dynamic>{
+        'updatedAt': FieldValue.serverTimestamp(),
+        'feedbackSummary.lastFeedbackAt': FieldValue.serverTimestamp(),
+        'feedbackSummary.fareAccurateYes': FieldValue.increment(fareAccurate ? 1 : 0),
+        'feedbackSummary.fareAccurateNo': FieldValue.increment(fareAccurate ? 0 : 1),
+        'feedbackSummary.scheduleAccurateYes': FieldValue.increment(scheduleAccurate ? 1 : 0),
+        'feedbackSummary.scheduleAccurateNo': FieldValue.increment(scheduleAccurate ? 0 : 1),
+        'feedbackSummary.stillOperatingYes': FieldValue.increment(stillOperating ? 1 : 0),
+        'feedbackSummary.stillOperatingNo': FieldValue.increment(stillOperating ? 0 : 1),
+      };
+
+      transaction.set(feedbackRef, {
+        'routeId': routeId,
+        'userId': userId,
+        'fareAccurate': fareAccurate,
+        'scheduleAccurate': scheduleAccurate,
+        'stillOperating': stillOperating,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (!prevSnap.exists) 'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      transaction.update(routeRef, updates);
+    });
+
+    await _writeRouteAuditLog(
+      routeId: routeId,
+      action: 'commuter_feedback_submitted',
+      actorId: userId,
+      meta: {
+        'fareAccurate': fareAccurate,
+        'scheduleAccurate': scheduleAccurate,
+        'stillOperating': stillOperating,
+      },
+    );
+  }
+
+  static Future<Map<String, bool>?> getUserRouteQualityFeedback({
+    required String routeId,
+    required String userId,
+  }) async {
+    try {
+      final doc = await _routeFeedbackDoc(routeId, userId).get();
+      if (!doc.exists) return null;
+      final data = doc.data() ?? const <String, dynamic>{};
+      return {
+        'fareAccurate': (data['fareAccurate'] as bool?) ?? true,
+        'scheduleAccurate': (data['scheduleAccurate'] as bool?) ?? true,
+        'stillOperating': (data['stillOperating'] as bool?) ?? true,
+      };
+    } catch (e) {
+      print('Error loading user route quality feedback for $routeId: $e');
+      return null;
     }
   }
 }

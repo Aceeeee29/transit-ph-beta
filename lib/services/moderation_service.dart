@@ -14,6 +14,29 @@ class ModerationService {
   static final firebase_auth.FirebaseAuth _auth =
       firebase_auth.FirebaseAuth.instance;
 
+  static Future<void> _writeRouteAuditLog({
+    required String routeId,
+    required String action,
+    Map<String, dynamic>? meta,
+  }) async {
+    final actorId = _auth.currentUser?.uid ?? 'moderator_unknown';
+    try {
+      await _firestore
+          .collection('routes')
+          .doc(routeId)
+          .collection('auditLogs')
+          .add({
+        'routeId': routeId,
+        'action': action,
+        'actorId': actorId,
+        'meta': meta ?? const <String, dynamic>{},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error writing moderation audit log for route $routeId: $e');
+    }
+  }
+
   static Future<String?> _resolveNotificationRecipientId(
     String? contributorId,
   ) async {
@@ -183,8 +206,14 @@ class ModerationService {
 
       await _firestore.collection('routes').doc(routeId).update({
         'approvalStatus': route_model.RouteApprovalStatus.approved.name,
+        'staleNeedsReview': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      await _writeRouteAuditLog(
+        routeId: routeId,
+        action: 'moderator_approved',
+      );
 
       final recipientId = await _resolveNotificationRecipientId(contributorId);
       if (recipientId != null && recipientId.isNotEmpty) {
@@ -251,6 +280,12 @@ class ModerationService {
       }
 
       await _firestore.collection('routes').doc(routeId).delete();
+
+      await _writeRouteAuditLog(
+        routeId: routeId,
+        action: 'moderator_rejected_deleted',
+      );
+
       // Remove from local pending list immediately
       pendingRoutesNotifier.value = pendingRoutesNotifier.value
           .where((r) => r.id != routeId)

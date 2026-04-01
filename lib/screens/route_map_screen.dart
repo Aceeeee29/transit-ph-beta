@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
@@ -14,6 +15,7 @@ import '../services/gamification_service.dart';
 import '../services/schedule_window_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
+import '../services/route_trust_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 
@@ -27,6 +29,8 @@ class RouteMapScreen extends StatefulWidget {
 }
 
 class _RouteMapScreenState extends State<RouteMapScreen> {
+  static const _skipTrustPromptDateKey = 'route_trust_feedback_skip_until_date';
+
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
@@ -44,6 +48,20 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _isApplyingVote = false;
   List<LatLng> _pathPoints = [];
   RouteScheduleSnapshot? _scheduleSnapshot;
+  Map<String, int> _feedbackSummary = const {
+    'fareAccurateYes': 0,
+    'fareAccurateNo': 0,
+    'scheduleAccurateYes': 0,
+    'scheduleAccurateNo': 0,
+    'stillOperatingYes': 0,
+    'stillOperatingNo': 0,
+  };
+  RouteTrustScore? _trustScore;
+  bool _isSubmittingTrustFeedback = false;
+  bool _fareAccurate = true;
+  bool _scheduleAccurate = true;
+  bool _stillOperating = true;
+  bool _isExitPromptOpen = false;
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -76,6 +94,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _loadEngagementState();
     _generatePathPoints();
     _loadScheduleWindowSnapshot();
+    _loadRouteTrustState();
   }
 
   Future<void> _loadScheduleWindowSnapshot() async {
@@ -112,6 +131,339 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         }
         _userVote = vote;
       });
+    } catch (_) {}
+  }
+
+  Future<void> _loadRouteTrustState() async {
+    final summary = await RouteService.getRouteFeedbackSummary(widget.route.id);
+    final score = RouteTrustService.computeConfidence(
+      route: widget.route,
+      feedbackSummary: summary,
+    );
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    Map<String, bool>? mine;
+    if (uid != null && uid.trim().isNotEmpty) {
+      mine = await RouteService.getUserRouteQualityFeedback(
+        routeId: widget.route.id,
+        userId: uid,
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _feedbackSummary = summary;
+      _trustScore = score;
+      if (mine != null) {
+        _fareAccurate = mine['fareAccurate'] ?? _fareAccurate;
+        _scheduleAccurate = mine['scheduleAccurate'] ?? _scheduleAccurate;
+        _stillOperating = mine['stillOperating'] ?? _stillOperating;
+      }
+    });
+  }
+
+  Future<bool> _submitTrustFeedbackValues({
+    required bool fareAccurate,
+    required bool scheduleAccurate,
+    required bool stillOperating,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.trim().isEmpty) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to submit route trust feedback.')),
+      );
+      return false;
+    }
+    if (_isSubmittingTrustFeedback) return false;
+
+    setState(() => _isSubmittingTrustFeedback = true);
+    try {
+      await RouteService.submitRouteQualityFeedback(
+        routeId: widget.route.id,
+        userId: uid,
+        fareAccurate: fareAccurate,
+        scheduleAccurate: scheduleAccurate,
+        stillOperating: stillOperating,
+      );
+      await _loadRouteTrustState();
+      if (!mounted) return true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks! Route trust feedback saved.')),
+      );
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not submit feedback: $e')),
+      );
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingTrustFeedback = false);
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showExitTrustFeedbackDialog() async {
+    bool fare = _fareAccurate;
+    bool schedule = _scheduleAccurate;
+    bool operating = _stillOperating;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final score = _trustScore ??
+                RouteTrustService.computeConfidence(
+                  route: widget.route,
+                  feedbackSummary: _feedbackSummary,
+                );
+            final trustLabel = RouteTrustService.confidenceLabel(score.total);
+            final trustColor = score.total >= 85
+                ? const Color(0xFF2D9F63)
+                : score.total >= 65
+                    ? const Color(0xFF2E7CF6)
+                    : const Color(0xFFE89A3C);
+
+            Widget questionRow({
+              required String label,
+              required bool value,
+              required ValueChanged<bool> onChanged,
+            }) {
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => setDialogState(() => onChanged(true)),
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: value ? _accent.withValues(alpha: 0.12) : _surfaceAlt,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: value ? _accent.withValues(alpha: 0.35) : _border,
+                        ),
+                      ),
+                      child: Text(
+                        'Yes',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: value ? _accent : _textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => setDialogState(() => onChanged(false)),
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: !value ? _accent.withValues(alpha: 0.12) : _surfaceAlt,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: !value ? _accent.withValues(alpha: 0.35) : _border,
+                        ),
+                      ),
+                      child: Text(
+                        'No',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: !value ? _accent : _textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _border),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.verified_outlined, size: 16, color: trustColor),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Route confidence: ${score.total}/100 ($trustLabel)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: trustColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Before leaving, help improve route reliability with quick trust feedback.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    questionRow(
+                      label: 'Fare accurate?',
+                      value: fare,
+                      onChanged: (v) => fare = v,
+                    ),
+                    const SizedBox(height: 8),
+                    questionRow(
+                      label: 'Schedule accurate?',
+                      value: schedule,
+                      onChanged: (v) => schedule = v,
+                    ),
+                    const SizedBox(height: 8),
+                    questionRow(
+                      label: 'Still operating?',
+                      value: operating,
+                      onChanged: (v) => operating = v,
+                    ),
+                    const SizedBox(height: 12),
+                    OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 6,
+                      overflowSpacing: 6,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop({
+                            'action': 'dismiss',
+                            'fareAccurate': fare,
+                            'scheduleAccurate': schedule,
+                            'stillOperating': operating,
+                          }),
+                          child: const Text('Dismiss'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop({
+                            'action': 'skip_today',
+                            'fareAccurate': fare,
+                            'scheduleAccurate': schedule,
+                            'stillOperating': operating,
+                          }),
+                          child: const Text('Don\'t ask again today'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(dialogContext).pop({
+                            'action': 'submit',
+                            'fareAccurate': fare,
+                            'scheduleAccurate': schedule,
+                            'stillOperating': operating,
+                          }),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _accent,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Submit'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _handleBackPressed() async {
+    if (await _isTrustPromptSkippedToday()) {
+      return true;
+    }
+
+    if (_isExitPromptOpen) return false;
+    _isExitPromptOpen = true;
+    try {
+      final result = await _showExitTrustFeedbackDialog();
+      if (!mounted || result == null) return false;
+
+      final action = (result['action'] as String?) ?? 'dismiss';
+      final fare = (result['fareAccurate'] as bool?) ?? _fareAccurate;
+      final schedule =
+          (result['scheduleAccurate'] as bool?) ?? _scheduleAccurate;
+      final operating =
+          (result['stillOperating'] as bool?) ?? _stillOperating;
+
+      setState(() {
+        _fareAccurate = fare;
+        _scheduleAccurate = schedule;
+        _stillOperating = operating;
+      });
+
+      if (action == 'submit') {
+        final ok = await _submitTrustFeedbackValues(
+          fareAccurate: fare,
+          scheduleAccurate: schedule,
+          stillOperating: operating,
+        );
+        return ok;
+      }
+
+      if (action == 'skip_today') {
+        await _setTrustPromptSkipToday();
+      }
+
+      return true;
+    } finally {
+      _isExitPromptOpen = false;
+    }
+  }
+
+  String _todayToken() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<bool> _isTrustPromptSkippedToday() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getString(_skipTrustPromptDateKey);
+      return value == _todayToken();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _setTrustPromptSkipToday() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_skipTrustPromptDateKey, _todayToken());
     } catch (_) {}
   }
 
@@ -604,7 +956,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     return Stack(
       children: [
-        Scaffold(
+        PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final navigator = Navigator.of(context);
+            final canLeave = await _handleBackPressed();
+            if (!mounted || !canLeave) return;
+            navigator.pop();
+          },
+          child: Scaffold(
           backgroundColor: _bg,
           appBar: _buildAppBar(),
           body: Column(
@@ -613,6 +974,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               Expanded(flex: 1, child: _buildInfoPanel()),
             ],
           ),
+        ),
         ),
         if (_showNotificationOverlay)
           NotificationOverlay(
@@ -674,7 +1036,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () async {
+          final canLeave = await _handleBackPressed();
+          if (!mounted || !canLeave) return;
+          Navigator.of(context).pop();
+        },
         child: Container(
           margin: const EdgeInsets.all(10),
           decoration: BoxDecoration(
