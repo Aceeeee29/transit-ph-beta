@@ -237,6 +237,7 @@ function mapUserDoc(d: QueryDocumentSnapshot<DocumentData>): AppUser {
 
 function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
   const data = d.data()
+  const feedbackSummaryRaw = data.feedbackSummary as Record<string, unknown> | undefined
   return {
     id: d.id,
     startLocation: data.startLocation ?? data.from ?? 'Unknown',
@@ -245,10 +246,21 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
     contributorName: data.contributorName ?? data.userName,
     contributorEmail: data.contributorEmail ?? data.userEmail ?? data.email,
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
+    updatedAt: normalizeTimestamp(data.updatedAt),
     status: data.approvalStatus ?? data.status ?? 'pending',
     views: data.views ?? 0,
     upvotes: data.upvotes ?? 0,
     downvotes: data.downvotes ?? 0,
+    feedbackSummary: feedbackSummaryRaw
+      ? {
+          fareAccurateYes: Number(feedbackSummaryRaw.fareAccurateYes ?? 0),
+          fareAccurateNo: Number(feedbackSummaryRaw.fareAccurateNo ?? 0),
+          scheduleAccurateYes: Number(feedbackSummaryRaw.scheduleAccurateYes ?? 0),
+          scheduleAccurateNo: Number(feedbackSummaryRaw.scheduleAccurateNo ?? 0),
+          stillOperatingYes: Number(feedbackSummaryRaw.stillOperatingYes ?? 0),
+          stillOperatingNo: Number(feedbackSummaryRaw.stillOperatingNo ?? 0),
+        }
+      : undefined,
     steps: data.steps ?? [],
     transportModes: data.transportModes ?? [],
     etaMinutes: data.etaMinutes,

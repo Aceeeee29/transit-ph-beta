@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'transport_mode_inference.dart';
 
 /// A single vehicle ride between two stops.
 class TransitLeg {
@@ -11,15 +12,15 @@ class TransitLeg {
   final String? routeShortName;
   final String? routeLongName;
   final String? routeColor;
-  final int?    routeType;
-  final String  boardStopId;
-  final String  alightStopId;
-  final String  boardStopName;
-  final String  alightStopName;
-  final double  boardLat;
-  final double  boardLon;
-  final double  alightLat;
-  final double  alightLon;
+  final int? routeType;
+  final String boardStopId;
+  final String alightStopId;
+  final String boardStopName;
+  final String alightStopName;
+  final double boardLat;
+  final double boardLon;
+  final double alightLat;
+  final double alightLon;
 
   const TransitLeg({
     required this.tripId,
@@ -44,7 +45,7 @@ class TransitLeg {
 class TripPlan {
   final List<TransitLeg> legs;
   const TripPlan(this.legs);
-  bool get isDirect    => legs.length == 1;
+  bool get isDirect => legs.length == 1;
   bool get hasTransfer => legs.length == 2;
 }
 
@@ -62,11 +63,7 @@ class DijkstraTripPlanResult {
   });
 }
 
-enum RouteOptimizationMode {
-  budget,
-  fastest,
-  balanced,
-}
+enum RouteOptimizationMode { budget, fastest, balanced }
 
 class DijkstraRouteAlternative {
   final DijkstraTripPlanResult result;
@@ -92,6 +89,7 @@ class _GraphEdge {
   final String from;
   final String to;
   final double costSeconds;
+  final double distanceMeters;
   final bool isWalk;
   final String? tripId;
   final String? routeId;
@@ -105,6 +103,7 @@ class _GraphEdge {
     required this.from,
     required this.to,
     required this.costSeconds,
+    required this.distanceMeters,
     required this.isWalk,
     this.tripId,
     this.routeId,
@@ -236,13 +235,14 @@ class SupabaseRouteService {
       destCandidates: destCandidates,
       allowFerry: allowFerry,
       maxAlternatives: 1,
-      optimizationMode: RouteOptimizationMode.fastest,
+      optimizationMode: RouteOptimizationMode.balanced,
     );
     if (alternatives.isEmpty) return null;
     return alternatives.first.result;
   }
 
-  static Future<List<DijkstraRouteAlternative>> findTripPlanDijkstraAlternatives({
+  static Future<List<DijkstraRouteAlternative>>
+  findTripPlanDijkstraAlternatives({
     required LatLng origin,
     required LatLng destination,
     required List<Map<String, dynamic>> originCandidates,
@@ -277,6 +277,7 @@ class SupabaseRouteService {
         context.adjacency,
         _originNode,
         _destNode,
+        optimizationMode: optimizationMode,
         edgePenalties: edgePenalties,
       );
       if (path == null) break;
@@ -296,7 +297,8 @@ class SupabaseRouteService {
 
       for (final edge in path.edges) {
         final key = _edgeSignature(edge);
-        final addPenalty = edge.costSeconds * edgePenaltyFactor;
+        final addPenalty =
+            _edgeWeight(edge, optimizationMode) * edgePenaltyFactor;
         edgePenalties[key] = (edgePenalties[key] ?? 0) + addPenalty;
       }
     }
@@ -336,7 +338,10 @@ class SupabaseRouteService {
   ) {
     final boardStop = stopById[start.from];
     final alightStop = stopById[end.to];
-    if (boardStop == null || alightStop == null || start.tripId == null || start.routeId == null) {
+    if (boardStop == null ||
+        alightStop == null ||
+        start.tripId == null ||
+        start.routeId == null) {
       return null;
     }
 
@@ -362,9 +367,10 @@ class SupabaseRouteService {
   static _DijkstraPathResult? _runDijkstra(
     Map<String, List<_GraphEdge>> adjacency,
     String start,
-    String target,
-    {Map<String, double>? edgePenalties}
-  ) {
+    String target, {
+    required RouteOptimizationMode optimizationMode,
+    Map<String, double>? edgePenalties,
+  }) {
     final dist = <String, double>{start: 0.0};
     final prev = <String, _GraphEdge>{};
     final heap = _MinHeap()..add(_QueueNode(start, 0.0));
@@ -377,10 +383,12 @@ class SupabaseRouteService {
 
       final edges = adjacency[current.node] ?? const <_GraphEdge>[];
       for (final edge in edges) {
-        final penalty = edgePenalties == null
-            ? 0.0
-            : (edgePenalties[_edgeSignature(edge)] ?? 0.0);
-        final nextCost = current.cost + edge.costSeconds + penalty;
+        final edgeWeight = _edgeWeight(edge, optimizationMode);
+        final penalty =
+            edgePenalties == null
+                ? 0.0
+                : (edgePenalties[_edgeSignature(edge)] ?? 0.0);
+        final nextCost = current.cost + edgeWeight + penalty;
         final known = dist[edge.to];
         if (known == null || nextCost < known) {
           dist[edge.to] = nextCost;
@@ -411,6 +419,25 @@ class SupabaseRouteService {
     );
   }
 
+  static double _edgeWeight(_GraphEdge edge, RouteOptimizationMode mode) {
+    switch (mode) {
+      case RouteOptimizationMode.balanced:
+        return edge.costSeconds;
+      case RouteOptimizationMode.fastest:
+        return edge.isWalk ? edge.costSeconds * 3.0 : edge.costSeconds * 0.5;
+      case RouteOptimizationMode.budget:
+        final inferredMode =
+            edge.isWalk
+                ? 'Walk'
+                : _inferRouteMode(
+                  routeType: edge.routeType,
+                  routeShortName: edge.routeShortName,
+                  routeLongName: edge.routeLongName,
+                );
+        return PhFareCalculator.compute(inferredMode, edge.distanceMeters);
+    }
+  }
+
   static Future<_DijkstraGraphContext?> _buildDijkstraGraphContext({
     required LatLng origin,
     required LatLng destination,
@@ -438,21 +465,23 @@ class SupabaseRouteService {
     final stopTimes = await _fetchStopTimesForStopIds(stopIds);
     if (stopTimes.isEmpty) return null;
 
-    final tripIds = stopTimes
-        .map((r) => r['trip_id']?.toString())
-        .whereType<String>()
-        .toSet()
-        .toList();
+    final tripIds =
+        stopTimes
+            .map((r) => r['trip_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
     if (tripIds.isEmpty) return null;
 
     final tripRows = await _fetchTripsByIds(tripIds);
     if (tripRows.isEmpty) return null;
 
-    final routeIds = tripRows
-        .map((r) => r['route_id']?.toString())
-        .whereType<String>()
-        .toSet()
-        .toList();
+    final routeIds =
+        tripRows
+            .map((r) => r['route_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
     final routeRows = await _fetchRoutesByIds(routeIds);
 
     final tripById = <String, Map<String, dynamic>>{};
@@ -483,7 +512,10 @@ class SupabaseRouteService {
     for (final entry in stopTimesByTrip.entries) {
       final tripId = entry.key;
       final seq = entry.value;
-      seq.sort((a, b) => _asInt(a['stop_sequence']).compareTo(_asInt(b['stop_sequence'])));
+      seq.sort(
+        (a, b) =>
+            _asInt(a['stop_sequence']).compareTo(_asInt(b['stop_sequence'])),
+      );
       if (seq.length < 2) continue;
 
       final trip = tripById[tripId];
@@ -500,6 +532,7 @@ class SupabaseRouteService {
       final fallbackSpeedKmh = _fallbackSpeedForMode(inferredMode);
 
       final segmentSeconds = <double>[];
+      final segmentMeters = <double>[];
       for (var i = 0; i < seq.length - 1; i++) {
         final a = seq[i];
         final b = seq[i + 1];
@@ -507,6 +540,7 @@ class SupabaseRouteService {
         final toId = b['stop_id']?.toString();
         if (fromId == null || toId == null) {
           segmentSeconds.add(double.infinity);
+          segmentMeters.add(0.0);
           continue;
         }
 
@@ -514,8 +548,20 @@ class SupabaseRouteService {
         final toStop = allStopsById[toId];
         if (fromStop == null || toStop == null) {
           segmentSeconds.add(double.infinity);
+          segmentMeters.add(0.0);
           continue;
         }
+
+        final segKm = _haversineKm(
+          LatLng(
+            (fromStop['stop_lat'] as num).toDouble(),
+            (fromStop['stop_lon'] as num).toDouble(),
+          ),
+          LatLng(
+            (toStop['stop_lat'] as num).toDouble(),
+            (toStop['stop_lon'] as num).toDouble(),
+          ),
+        );
 
         var segSec = _gtfsTimeDiffSeconds(
           a['departure_time']?.toString(),
@@ -523,18 +569,19 @@ class SupabaseRouteService {
         );
 
         if (segSec <= 0 || segSec > 7200) {
-          final segKm = _haversineKm(
-            LatLng((fromStop['stop_lat'] as num).toDouble(), (fromStop['stop_lon'] as num).toDouble()),
-            LatLng((toStop['stop_lat'] as num).toDouble(), (toStop['stop_lon'] as num).toDouble()),
-          );
           segSec = ((segKm / fallbackSpeedKmh) * 3600).clamp(20, 2400);
         }
         segmentSeconds.add(segSec);
+        segmentMeters.add(segKm * 1000.0);
       }
 
       final prefix = List<double>.filled(segmentSeconds.length + 1, 0.0);
       for (var i = 0; i < segmentSeconds.length; i++) {
         prefix[i + 1] = prefix[i] + segmentSeconds[i];
+      }
+      final prefixMeters = List<double>.filled(segmentMeters.length + 1, 0.0);
+      for (var i = 0; i < segmentMeters.length; i++) {
+        prefixMeters[i + 1] = prefixMeters[i] + segmentMeters[i];
       }
 
       for (var i = 0; i < seq.length - 1; i++) {
@@ -547,21 +594,26 @@ class SupabaseRouteService {
           if (toId == null || toId == fromId) continue;
 
           final runSec = prefix[j] - prefix[i];
+          final runMeters = prefixMeters[j] - prefixMeters[i];
           if (!runSec.isFinite || runSec <= 0) continue;
+          if (!runMeters.isFinite || runMeters <= 0) continue;
 
-          addEdge(_GraphEdge(
-            from: fromId,
-            to: toId,
-            costSeconds: runSec + _boardingPenaltySec,
-            isWalk: false,
-            tripId: tripId,
-            routeId: routeId,
-            shapeId: trip['shape_id']?.toString(),
-            routeShortName: route?['route_short_name'] as String?,
-            routeLongName: route?['route_long_name'] as String?,
-            routeColor: route?['route_color'] as String?,
-            routeType: routeType,
-          ));
+          addEdge(
+            _GraphEdge(
+              from: fromId,
+              to: toId,
+              costSeconds: runSec + _boardingPenaltySec,
+              distanceMeters: runMeters,
+              isWalk: false,
+              tripId: tripId,
+              routeId: routeId,
+              shapeId: trip['shape_id']?.toString(),
+              routeShortName: route?['route_short_name'] as String?,
+              routeLongName: route?['route_long_name'] as String?,
+              routeColor: route?['route_color'] as String?,
+              routeType: routeType,
+            ),
+          );
         }
       }
     }
@@ -570,56 +622,92 @@ class SupabaseRouteService {
     for (var i = 0; i < stopList.length; i++) {
       final a = stopList[i];
       final aId = a['stop_id'].toString();
-      final aPt = LatLng((a['stop_lat'] as num).toDouble(), (a['stop_lon'] as num).toDouble());
+      final aPt = LatLng(
+        (a['stop_lat'] as num).toDouble(),
+        (a['stop_lon'] as num).toDouble(),
+      );
 
       for (var j = i + 1; j < stopList.length; j++) {
         final b = stopList[j];
         final bId = b['stop_id'].toString();
-        final bPt = LatLng((b['stop_lat'] as num).toDouble(), (b['stop_lon'] as num).toDouble());
+        final bPt = LatLng(
+          (b['stop_lat'] as num).toDouble(),
+          (b['stop_lon'] as num).toDouble(),
+        );
         final dKm = _haversineKm(aPt, bPt);
         if (dKm > _transferRadiusKm) continue;
 
         final walkSec = (dKm / _walkSpeedKmh) * 3600 + _transferBasePenaltySec;
-        addEdge(_GraphEdge(from: aId, to: bId, costSeconds: walkSec, isWalk: true));
-        addEdge(_GraphEdge(from: bId, to: aId, costSeconds: walkSec, isWalk: true));
+        addEdge(
+          _GraphEdge(
+            from: aId,
+            to: bId,
+            costSeconds: walkSec,
+            distanceMeters: dKm * 1000.0,
+            isWalk: true,
+          ),
+        );
+        addEdge(
+          _GraphEdge(
+            from: bId,
+            to: aId,
+            costSeconds: walkSec,
+            distanceMeters: dKm * 1000.0,
+            isWalk: true,
+          ),
+        );
       }
     }
 
-    final originCandidateIds = originCandidates
-        .map((s) => s['stop_id']?.toString())
-        .whereType<String>()
-        .toSet();
-    final destCandidateIds = destCandidates
-        .map((s) => s['stop_id']?.toString())
-        .whereType<String>()
-        .toSet();
+    final originCandidateIds =
+        originCandidates
+            .map((s) => s['stop_id']?.toString())
+            .whereType<String>()
+            .toSet();
+    final destCandidateIds =
+        destCandidates
+            .map((s) => s['stop_id']?.toString())
+            .whereType<String>()
+            .toSet();
 
     for (final stop in stopList) {
       final stopId = stop['stop_id'].toString();
-      final pt = LatLng((stop['stop_lat'] as num).toDouble(), (stop['stop_lon'] as num).toDouble());
+      final pt = LatLng(
+        (stop['stop_lat'] as num).toDouble(),
+        (stop['stop_lon'] as num).toDouble(),
+      );
 
       final walkInKm = _haversineKm(origin, pt);
       if (walkInKm <= _maxAccessWalkKm || originCandidateIds.contains(stopId)) {
-        addEdge(_GraphEdge(
-          from: _originNode,
-          to: stopId,
-          costSeconds: (walkInKm / _walkSpeedKmh) * 3600,
-          isWalk: true,
-        ));
+        addEdge(
+          _GraphEdge(
+            from: _originNode,
+            to: stopId,
+            costSeconds: (walkInKm / _walkSpeedKmh) * 3600,
+            distanceMeters: walkInKm * 1000.0,
+            isWalk: true,
+          ),
+        );
       }
 
       final walkOutKm = _haversineKm(pt, destination);
       if (walkOutKm <= _maxAccessWalkKm || destCandidateIds.contains(stopId)) {
-        addEdge(_GraphEdge(
-          from: stopId,
-          to: _destNode,
-          costSeconds: (walkOutKm / _walkSpeedKmh) * 3600,
-          isWalk: true,
-        ));
+        addEdge(
+          _GraphEdge(
+            from: stopId,
+            to: _destNode,
+            costSeconds: (walkOutKm / _walkSpeedKmh) * 3600,
+            distanceMeters: walkOutKm * 1000.0,
+            isWalk: true,
+          ),
+        );
       }
     }
 
-    return _DijkstraGraphContext(adjacency: adjacency, allStopsById: allStopsById);
+    return _DijkstraGraphContext(
+      adjacency: adjacency,
+      allStopsById: allStopsById,
+    );
   }
 
   static DijkstraTripPlanResult? _materializeDijkstraResult({
@@ -627,7 +715,8 @@ class SupabaseRouteService {
     required double totalCostSeconds,
     required Map<String, Map<String, dynamic>> allStopsById,
   }) {
-    final transitEdges = pathEdges.where((e) => !e.isWalk && e.tripId != null).toList();
+    final transitEdges =
+        pathEdges.where((e) => !e.isWalk && e.tripId != null).toList();
     if (transitEdges.isEmpty) return null;
 
     final legs = <TransitLeg>[];
@@ -690,7 +779,8 @@ class SupabaseRouteService {
       final fastestScore = _normalizeLowerIsBetter(times[i], minTime, maxTime);
       const fareWeight = 0.6;
       const timeWeight = 0.4;
-      final balancedScore = (budgetScore * fareWeight) + (fastestScore * timeWeight);
+      final balancedScore =
+          (budgetScore * fareWeight) + (fastestScore * timeWeight);
 
       final selectedScore = switch (mode) {
         RouteOptimizationMode.budget => budgetScore,
@@ -751,15 +841,20 @@ class SupabaseRouteService {
     LatLng destination,
   ) async {
     final directKm = _haversineKm(origin, destination);
-    final bufferKm = (directKm * 0.35).clamp(_dijkstraMinBufferKm, _dijkstraMaxBufferKm);
+    final bufferKm = (directKm * 0.35).clamp(
+      _dijkstraMinBufferKm,
+      _dijkstraMaxBufferKm,
+    );
     final latBuffer = bufferKm / 111.0;
     final avgLat = (origin.latitude + destination.latitude) / 2;
     final lngBuffer = bufferKm / (111.0 * math.cos(avgLat * math.pi / 180));
 
     final minLat = math.min(origin.latitude, destination.latitude) - latBuffer;
     final maxLat = math.max(origin.latitude, destination.latitude) + latBuffer;
-    final minLng = math.min(origin.longitude, destination.longitude) - lngBuffer;
-    final maxLng = math.max(origin.longitude, destination.longitude) + lngBuffer;
+    final minLng =
+        math.min(origin.longitude, destination.longitude) - lngBuffer;
+    final maxLng =
+        math.max(origin.longitude, destination.longitude) + lngBuffer;
 
     final out = <Map<String, dynamic>>[];
     var from = 0;
@@ -784,8 +879,14 @@ class SupabaseRouteService {
     if (out.length <= _dijkstraStopLimit) return out;
 
     out.sort((a, b) {
-      final aPt = LatLng((a['stop_lat'] as num).toDouble(), (a['stop_lon'] as num).toDouble());
-      final bPt = LatLng((b['stop_lat'] as num).toDouble(), (b['stop_lon'] as num).toDouble());
+      final aPt = LatLng(
+        (a['stop_lat'] as num).toDouble(),
+        (a['stop_lon'] as num).toDouble(),
+      );
+      final bPt = LatLng(
+        (b['stop_lat'] as num).toDouble(),
+        (b['stop_lon'] as num).toDouble(),
+      );
       final da = _haversineKm(origin, aPt) + _haversineKm(aPt, destination);
       final db = _haversineKm(origin, bPt) + _haversineKm(bPt, destination);
       return da.compareTo(db);
@@ -807,9 +908,11 @@ class SupabaseRouteService {
       var from = 0;
       while (true) {
         final rows = await _client
-          .schema('gtfs')
+            .schema('gtfs')
             .from('stop_times')
-            .select('trip_id, stop_id, stop_sequence, arrival_time, departure_time')
+            .select(
+              'trip_id, stop_id, stop_sequence, arrival_time, departure_time',
+            )
             .inFilter('stop_id', chunk)
             .range(from, from + _pageSize - 1);
 
@@ -828,7 +931,10 @@ class SupabaseRouteService {
   ) async {
     final out = <Map<String, dynamic>>[];
     for (var i = 0; i < tripIds.length; i += _inFilterChunk) {
-      final chunk = tripIds.sublist(i, math.min(i + _inFilterChunk, tripIds.length));
+      final chunk = tripIds.sublist(
+        i,
+        math.min(i + _inFilterChunk, tripIds.length),
+      );
       final rows = await _client
           .schema('gtfs')
           .from('trips')
@@ -845,11 +951,16 @@ class SupabaseRouteService {
     if (routeIds.isEmpty) return const <Map<String, dynamic>>[];
     final out = <Map<String, dynamic>>[];
     for (var i = 0; i < routeIds.length; i += _inFilterChunk) {
-      final chunk = routeIds.sublist(i, math.min(i + _inFilterChunk, routeIds.length));
+      final chunk = routeIds.sublist(
+        i,
+        math.min(i + _inFilterChunk, routeIds.length),
+      );
       final rows = await _client
           .schema('gtfs')
           .from('routes')
-          .select('route_id, route_short_name, route_long_name, route_color, route_type')
+          .select(
+            'route_id, route_short_name, route_long_name, route_color, route_type',
+          )
           .inFilter('route_id', chunk);
       out.addAll(rows.map((r) => Map<String, dynamic>.from(r)));
     }
@@ -898,13 +1009,19 @@ class SupabaseRouteService {
     if (routeType == 4) return 'Ferry';
 
     final name = '${routeShortName ?? ''} ${routeLongName ?? ''}'.toLowerCase();
-    if (name.contains('edsa') || name.contains('carousel') || name.contains('bus') || name.contains('brt')) {
+    if (name.contains('edsa') ||
+        name.contains('carousel') ||
+        name.contains('bus') ||
+        name.contains('brt')) {
       return 'Bus';
     }
     if (name.contains('uv') || name.contains('fx') || name.contains('van')) {
       return 'FX/Van';
     }
-    if (name.contains('mrt') || name.contains('lrt') || name.contains('pnr') || name.contains('rail')) {
+    if (name.contains('mrt') ||
+        name.contains('lrt') ||
+        name.contains('pnr') ||
+        name.contains('rail')) {
       return 'Train';
     }
     if (name.contains('ferry') || name.contains('pier')) {
@@ -972,7 +1089,7 @@ class SupabaseRouteService {
         radiusKm / (111.0 * math.cos(point.latitude * math.pi / 180));
 
     final results = await _client
-      .schema('gtfs')
+        .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .gte('stop_lat', point.latitude - latDelta)
@@ -1007,12 +1124,14 @@ class SupabaseRouteService {
     String originStopId,
     String destStopId,
   ) async {
-    debugPrint('[SupabaseRouteService] findTripPlan: "$originStopId" → "$destStopId"');
+    debugPrint(
+      '[SupabaseRouteService] findTripPlan: "$originStopId" → "$destStopId"',
+    );
 
-    final response = await _client.rpc('find_trip_plan', params: {
-      'origin_stop_id': originStopId,
-      'dest_stop_id':   destStopId,
-    });
+    final response = await _client.rpc(
+      'find_trip_plan',
+      params: {'origin_stop_id': originStopId, 'dest_stop_id': destStopId},
+    );
 
     if (response == null) {
       debugPrint('[SupabaseRouteService] RPC returned null — no route found');
@@ -1026,7 +1145,7 @@ class SupabaseRouteService {
 
     if (type == 'direct') {
       final leg = await _buildLeg(
-        tripId:      data['leg1_trip_id'].toString(),
+        tripId: data['leg1_trip_id'].toString(),
         boardStopId: originStopId,
         alightStopId: destStopId,
       );
@@ -1040,12 +1159,12 @@ class SupabaseRouteService {
       debugPrint('[SupabaseRouteService] Transfer via stop: $transferStopId');
 
       final leg1 = await _buildLeg(
-        tripId:      data['leg1_trip_id'].toString(),
+        tripId: data['leg1_trip_id'].toString(),
         boardStopId: originStopId,
         alightStopId: transferStopId,
       );
       final leg2 = await _buildLeg(
-        tripId:      data['leg2_trip_id'].toString(),
+        tripId: data['leg2_trip_id'].toString(),
         boardStopId: transferStopId,
         alightStopId: destStopId,
       );
@@ -1064,12 +1183,13 @@ class SupabaseRouteService {
     required String boardStopId,
     required String alightStopId,
   }) async {
-    final tripRow = await _client
-      .schema('gtfs')
-        .from('trips')
-        .select('trip_id, route_id, shape_id')
-        .eq('trip_id', tripId)
-        .maybeSingle();
+    final tripRow =
+        await _client
+            .schema('gtfs')
+            .from('trips')
+            .select('trip_id, route_id, shape_id')
+            .eq('trip_id', tripId)
+            .maybeSingle();
 
     if (tripRow == null) return null;
 
@@ -1077,43 +1197,48 @@ class SupabaseRouteService {
     final shapeId = tripRow['shape_id']?.toString();
 
     final stopRows = await _client
-      .schema('gtfs')
+        .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .inFilter('stop_id', [boardStopId, alightStopId]);
 
-    final routeRow = await _client
-      .schema('gtfs')
-        .from('routes')
-        .select('route_id, route_short_name, route_long_name, route_color, route_type')
-        .eq('route_id', routeId)
-        .maybeSingle();
+    final routeRow =
+        await _client
+            .schema('gtfs')
+            .from('routes')
+            .select(
+              'route_id, route_short_name, route_long_name, route_color, route_type',
+            )
+            .eq('route_id', routeId)
+            .maybeSingle();
 
     Map<String, dynamic>? boardStop, alightStop;
     for (final s in stopRows) {
-      if (s['stop_id'].toString() == boardStopId)  boardStop  = Map.from(s);
+      if (s['stop_id'].toString() == boardStopId) boardStop = Map.from(s);
       if (s['stop_id'].toString() == alightStopId) alightStop = Map.from(s);
     }
 
     if (boardStop == null || alightStop == null) {
-      debugPrint('[SupabaseRouteService] Could not find stop coords for leg $tripId');
+      debugPrint(
+        '[SupabaseRouteService] Could not find stop coords for leg $tripId',
+      );
       return null;
     }
 
     return TransitLeg(
-      tripId:         tripId,
-      routeId:        routeId,
-      shapeId:        shapeId,
+      tripId: tripId,
+      routeId: routeId,
+      shapeId: shapeId,
       routeShortName: routeRow?['route_short_name'] as String?,
-      routeLongName:  routeRow?['route_long_name']  as String?,
-      routeColor:     routeRow?['route_color']       as String?,
-      routeType:      _parseRouteType(routeRow?['route_type']),
-      boardStopId:    boardStopId,
-      alightStopId:   alightStopId,
-      boardStopName:  boardStop['stop_name']  as String? ?? 'Stop',
+      routeLongName: routeRow?['route_long_name'] as String?,
+      routeColor: routeRow?['route_color'] as String?,
+      routeType: _parseRouteType(routeRow?['route_type']),
+      boardStopId: boardStopId,
+      alightStopId: alightStopId,
+      boardStopName: boardStop['stop_name'] as String? ?? 'Stop',
       alightStopName: alightStop['stop_name'] as String? ?? 'Stop',
-      boardLat:  (boardStop['stop_lat']  as num).toDouble(),
-      boardLon:  (boardStop['stop_lon']  as num).toDouble(),
+      boardLat: (boardStop['stop_lat'] as num).toDouble(),
+      boardLon: (boardStop['stop_lon'] as num).toDouble(),
       alightLat: (alightStop['stop_lat'] as num).toDouble(),
       alightLon: (alightStop['stop_lon'] as num).toDouble(),
     );
@@ -1122,25 +1247,28 @@ class SupabaseRouteService {
   // ── Get shape polyline for a trip ─────────────────────────────────────────
   static Future<List<LatLng>> getShapePolyline(String shapeId) async {
     final points = await _client
-      .schema('gtfs')
+        .schema('gtfs')
         .from('shapes')
         .select('shape_pt_lat, shape_pt_lon, shape_pt_sequence')
         .eq('shape_id', shapeId)
         .order('shape_pt_sequence');
 
     return points
-        .map((p) => LatLng(
-              (p['shape_pt_lat'] as num).toDouble(),
-              (p['shape_pt_lon'] as num).toDouble(),
-            ))
+        .map(
+          (p) => LatLng(
+            (p['shape_pt_lat'] as num).toDouble(),
+            (p['shape_pt_lon'] as num).toDouble(),
+          ),
+        )
         .toList();
   }
 
   // ── Get all stops along a trip ────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getStopsForTrip(
-      String tripId) async {
+    String tripId,
+  ) async {
     final stopTimes = await _client
-      .schema('gtfs')
+        .schema('gtfs')
         .from('stop_times')
         .select('stop_id, stop_sequence, arrival_time, departure_time')
         .eq('trip_id', tripId)
@@ -1149,7 +1277,7 @@ class SupabaseRouteService {
     final stopIds = stopTimes.map((s) => s['stop_id'].toString()).toList();
 
     final stops = await _client
-      .schema('gtfs')
+        .schema('gtfs')
         .from('stops')
         .select('stop_id, stop_name, stop_lat, stop_lon')
         .inFilter('stop_id', stopIds);
@@ -1161,20 +1289,23 @@ class SupabaseRouteService {
       return {
         ...st,
         'stop_name': stop['stop_name'],
-        'stop_lat':  stop['stop_lat'],
-        'stop_lon':  stop['stop_lon'],
+        'stop_lat': stop['stop_lat'],
+        'stop_lon': stop['stop_lon'],
       };
     }).toList();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   static double _haversineKm(LatLng a, LatLng b) {
-    const r    = 6371.0;
-    final dLat = _rad(b.latitude  - a.latitude);
+    const r = 6371.0;
+    final dLat = _rad(b.latitude - a.latitude);
     final dLng = _rad(b.longitude - a.longitude);
-    final x    = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_rad(a.latitude)) * math.cos(_rad(b.latitude)) *
-            math.sin(dLng / 2) * math.sin(dLng / 2);
+    final x =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(a.latitude)) *
+            math.cos(_rad(b.latitude)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(x), math.sqrt(1 - x));
   }
 

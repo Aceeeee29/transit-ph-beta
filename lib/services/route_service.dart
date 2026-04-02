@@ -88,6 +88,86 @@ class RouteService {
     }
   }
 
+  static Future<void> _incrementApprovedContributionStats(
+    String contributorUid,
+  ) async {
+    final uid = contributorUid.trim();
+    if (uid.isEmpty) return;
+
+    final userRef = _firestore.collection('users').doc(uid);
+    await userRef.set({
+      'routesContributed': FieldValue.increment(1),
+      'contributionCount': FieldValue.increment(1),
+    }, SetOptions(merge: true));
+
+    final userSnap = await userRef.get();
+    if (!userSnap.exists) return;
+
+    final data = userSnap.data() ?? const <String, dynamic>{};
+    final routesContributed =
+        (data['routesContributed'] as num?)?.toInt() ??
+        (data['contributionCount'] as num?)?.toInt() ??
+        0;
+    final unlockedAchievements = List<String>.from(
+      data['achievements'] ?? const <String>[],
+    );
+    final unlockedBadges = List<String>.from(data['badges'] ?? const <String>[]);
+
+    final pioneerUnlocked = routesContributed >= 10;
+    final heroUnlocked = routesContributed >= 50;
+    final contributorBadgeUnlocked = routesContributed >= 10;
+
+    final newlyUnlockedAchievements = <String>[];
+    final newlyUnlockedBadges = <String>[];
+
+    if (pioneerUnlocked && !unlockedAchievements.contains('route_pioneer')) {
+      newlyUnlockedAchievements.add('route_pioneer');
+    }
+    if (heroUnlocked && !unlockedAchievements.contains('community_hero')) {
+      newlyUnlockedAchievements.add('community_hero');
+    }
+    if (contributorBadgeUnlocked && !unlockedBadges.contains('contributor')) {
+      newlyUnlockedBadges.add('contributor');
+    }
+
+    await userRef.collection('achievements').doc('route_pioneer').set({
+      'id': 'route_pioneer',
+      'progress': routesContributed,
+      'isUnlocked': pioneerUnlocked,
+      if (newlyUnlockedAchievements.contains('route_pioneer'))
+        'unlockedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await userRef.collection('achievements').doc('community_hero').set({
+      'id': 'community_hero',
+      'progress': routesContributed,
+      'isUnlocked': heroUnlocked,
+      if (newlyUnlockedAchievements.contains('community_hero'))
+        'unlockedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await userRef.collection('badges').doc('contributor').set({
+      'id': 'contributor',
+      'isUnlocked': contributorBadgeUnlocked,
+      if (newlyUnlockedBadges.contains('contributor'))
+        'earnedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    final userUpdates = <String, dynamic>{};
+    if (newlyUnlockedAchievements.isNotEmpty) {
+      userUpdates['achievements'] = FieldValue.arrayUnion(
+        newlyUnlockedAchievements,
+      );
+    }
+    if (newlyUnlockedBadges.isNotEmpty) {
+      userUpdates['badges'] = FieldValue.arrayUnion(newlyUnlockedBadges);
+    }
+
+    if (userUpdates.isNotEmpty) {
+      await userRef.set(userUpdates, SetOptions(merge: true));
+    }
+  }
+
   static Future<void> _markStaleRoutesForReviewIfNeeded({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   }) async {
@@ -298,11 +378,15 @@ class RouteService {
     try {
       String? contributorId;
       String routeTitle = 'your submitted route';
+      bool wasAlreadyApproved = false;
 
       final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
       if (routeSnapshot.exists) {
         final routeData = routeSnapshot.data();
         contributorId = (routeData?['contributorId'] as String?)?.trim();
+        final currentStatus = (routeData?['approvalStatus'] as String?)?.trim();
+        wasAlreadyApproved =
+            currentStatus == route_model.RouteApprovalStatus.approved.name;
         final start = routeData?['startLocation'] as String?;
         final end = routeData?['endLocation'] as String?;
         if (start != null && end != null) {
@@ -325,6 +409,16 @@ class RouteService {
 
       final recipientId = await _resolveNotificationRecipientId(contributorId);
       if (recipientId != null && recipientId.isNotEmpty) {
+        if (!wasAlreadyApproved) {
+          try {
+            await _incrementApprovedContributionStats(recipientId);
+          } catch (e) {
+            print(
+              'Error updating approved contribution stats for $recipientId: $e',
+            );
+          }
+        }
+
         try {
           await NotificationsService.addNotification(
             NotificationModel(

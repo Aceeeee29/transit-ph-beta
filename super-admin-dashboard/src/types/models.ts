@@ -30,10 +30,19 @@ export interface RouteItem {
   contributorName?: string
   contributorEmail?: string
   createdAt?: Timestamp
+  updatedAt?: Timestamp
   status: RouteStatus
   views: number
   upvotes: number
   downvotes: number
+  feedbackSummary?: {
+    fareAccurateYes?: number
+    fareAccurateNo?: number
+    scheduleAccurateYes?: number
+    scheduleAccurateNo?: number
+    stillOperatingYes?: number
+    stillOperatingNo?: number
+  }
   steps?: string[]
   transportModes?: string[]
   etaMinutes?: number

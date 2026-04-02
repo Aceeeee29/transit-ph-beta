@@ -1,6 +1,26 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum UserRole { user, moderator }
+enum UserRole { user, moderator, admin }
+
+UserRole _parseUserRole(dynamic rawRole) {
+  final normalized = (rawRole as String? ?? 'user')
+      .trim()
+      .toLowerCase()
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_');
+
+  switch (normalized) {
+    case 'moderator':
+      return UserRole.moderator;
+    case 'admin':
+    case 'superadmin':
+    case 'super_admin':
+      return UserRole.admin;
+    case 'user':
+    default:
+      return UserRole.user;
+  }
+}
 
 class User {
   String? uid;
@@ -105,10 +125,7 @@ class User {
               : json['createdAt'] is String
               ? DateTime.parse(json['createdAt'])
               : null,
-      role: UserRole.values.firstWhere(
-        (e) => e.name == json['role'],
-        orElse: () => UserRole.user,
-      ),
+      role: _parseUserRole(json['role']),
       isBanned: json['isBanned'] ?? false,
       followedRouteIds: List<String>.from(json['followedRouteIds'] ?? []),
       hasSeenTutorial: json['hasSeenTutorial'] ?? false,

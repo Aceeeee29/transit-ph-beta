@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
-import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
@@ -754,18 +753,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
           SnackBar(content: Text('Failed to submit route: $e')),
         );
         return;
-      }
-
-      if (widget.routeToEdit == null) {
-        final user = await GamificationService.loadUser();
-        final unlockedItems =
-            await GamificationService.incrementRoutesContributed(user);
-        if (unlockedItems.isNotEmpty && mounted) {
-          setState(() {
-            _pendingNotifications = unlockedItems;
-            _showNotificationOverlay = true;
-          });
-        }
       }
 
       if (!mounted) return;

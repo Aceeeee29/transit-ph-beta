@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/notifications_service.dart';
+import '../services/route_service.dart';
 
 class ModerationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -189,50 +190,7 @@ class ModerationService {
 
   static Future<void> approveRoute(String routeId) async {
     try {
-      String? contributorId;
-      String routeTitle = 'your submitted route';
-
-      final routeSnapshot =
-          await _firestore.collection('routes').doc(routeId).get();
-      if (routeSnapshot.exists) {
-        final routeData = routeSnapshot.data();
-        contributorId = (routeData?['contributorId'] as String?)?.trim();
-        final start = routeData?['startLocation'] as String?;
-        final end = routeData?['endLocation'] as String?;
-        if (start != null && end != null) {
-          routeTitle = '$start to $end';
-        }
-      }
-
-      await _firestore.collection('routes').doc(routeId).update({
-        'approvalStatus': route_model.RouteApprovalStatus.approved.name,
-        'staleNeedsReview': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      await _writeRouteAuditLog(
-        routeId: routeId,
-        action: 'moderator_approved',
-      );
-
-      final recipientId = await _resolveNotificationRecipientId(contributorId);
-      if (recipientId != null && recipientId.isNotEmpty) {
-        // Notification delivery should not block route approval completion.
-        try {
-          await NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: recipientId,
-              type: 'route_approved',
-              timestamp: DateTime.now(),
-              message:
-                  'Your submitted route ($routeTitle) was approved and is now live.',
-            ),
-          );
-        } catch (e) {
-          print('Error creating approval notification for route $routeId: $e');
-        }
-      }
+      await RouteService.approveRoute(routeId);
 
       // Remove from local pending list immediately
       pendingRoutesNotifier.value = pendingRoutesNotifier.value

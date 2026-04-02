@@ -8,6 +8,80 @@ import type { RouteItem } from '@/types/models'
 
 const PAGE_SIZE = 12
 
+type RouteTrustScore = {
+  total: number
+  label: 'High trust' | 'Moderate trust' | 'Needs verification'
+  isCritical: boolean
+}
+
+function computeRouteTrust(route: RouteItem): RouteTrustScore {
+  const approvalPoints = route.status === 'approved' ? 50 : route.status === 'pending' ? 20 : 0
+
+  const summary = route.feedbackSummary
+  const fareYes = summary?.fareAccurateYes ?? 0
+  const fareNo = summary?.fareAccurateNo ?? 0
+  const scheduleYes = summary?.scheduleAccurateYes ?? 0
+  const scheduleNo = summary?.scheduleAccurateNo ?? 0
+  const operatingYes = summary?.stillOperatingYes ?? 0
+  const operatingNo = summary?.stillOperatingNo ?? 0
+
+  const signedRatioPoints = (yes: number, no: number, maxPoints: number) => {
+    const total = yes + no
+    if (total <= 0) return 0
+    const signedRatio = (yes - no) / total
+    return Math.max(-maxPoints, Math.min(maxPoints, Math.round(signedRatio * maxPoints)))
+  }
+
+  const confirmationPoints =
+    signedRatioPoints(fareYes, fareNo, 12) +
+    signedRatioPoints(scheduleYes, scheduleNo, 12) +
+    signedRatioPoints(operatingYes, operatingNo, 11)
+
+  const refTime = route.updatedAt ?? route.createdAt
+  let freshnessPoints = 0
+  if (refTime) {
+    const ageDays = Math.max(0, Math.floor((Date.now() - refTime.toMillis()) / 86400000))
+    if (ageDays <= 7) freshnessPoints = 15
+    else if (ageDays <= 30) freshnessPoints = 10
+    else if (ageDays <= 90) freshnessPoints = 5
+  }
+
+  const total = Math.max(0, Math.min(100, approvalPoints + confirmationPoints + freshnessPoints))
+  const label = total >= 85 ? 'High trust' : total >= 65 ? 'Moderate trust' : 'Needs verification'
+
+  return { total, label, isCritical: total < 30 }
+}
+
+function TrustBadge({ route }: { route: RouteItem }) {
+  const trust = computeRouteTrust(route)
+  const tone =
+    trust.total >= 85
+      ? { color: 'var(--success)' }
+      : trust.total >= 65
+        ? { color: 'var(--accent)' }
+        : { color: 'var(--warning)' }
+
+  return (
+    <span
+      title={`Trust ${trust.total}/100 (${trust.label})`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: trust.isCritical ? '4px 8px' : '4px 10px',
+        borderRadius: 999,
+        fontSize: '0.74rem',
+        fontWeight: 700,
+        color: trust.isCritical ? 'var(--danger)' : tone.color,
+        background: 'transparent',
+        border: 'none',
+      }}
+    >
+      {trust.total}
+    </span>
+  )
+}
+
 function StatusBadge({ status }: { status?: string }) {
   if (status === 'approved') return <span className="badge badge-approved"><span className="badge-dot" />Approved</span>
   if (status === 'rejected') return <span className="badge badge-rejected"><span className="badge-dot" />Rejected</span>
@@ -52,6 +126,17 @@ export function RoutesPage() {
   }
 
   const allChecked = paginated.length > 0 && paginated.every((r) => selectedIds.includes(r.id))
+  const selectedRoutes = useMemo(
+    () => list.filter((r) => selectedIds.includes(r.id)),
+    [list, selectedIds],
+  )
+  const hasApprovedInSelection = selectedRoutes.some((r) => r.status === 'approved')
+  const disableBulkActions = !selectedIds.length || hasApprovedInSelection
+
+  const guardedBulkUpdate = (status: 'approved' | 'rejected') => {
+    if (disableBulkActions) return
+    return bulkUpdate(status)
+  }
 
   return (
     <div style={{ display: 'grid', gap: 20 }} className="stagger">
@@ -90,10 +175,10 @@ export function RoutesPage() {
           </select>
         </div>
         <div className="toolbar-actions">
-          <button className="btn btn-sm btn-success" disabled={!selectedIds.length} onClick={() => bulkUpdate('approved')}>
+          <button className="btn btn-sm btn-success" disabled={disableBulkActions} onClick={() => guardedBulkUpdate('approved')}>
             <CheckCircle size={13} /> Bulk Approve ({selectedIds.length})
           </button>
-          <button className="btn btn-sm btn-danger" disabled={!selectedIds.length} onClick={() => bulkUpdate('rejected')}>
+          <button className="btn btn-sm btn-danger" disabled={disableBulkActions} onClick={() => guardedBulkUpdate('rejected')}>
             <XCircle size={13} /> Bulk Reject
           </button>
         </div>
@@ -102,10 +187,10 @@ export function RoutesPage() {
       {isLoading ? (
         <div className="table-wrap">
           <table>
-            <thead><tr><th /><th>Start</th><th>End</th><th>Contributor</th><th>Date</th><th>Status</th><th>Views</th><th>Votes</th><th>Actions</th></tr></thead>
+            <thead><tr><th /><th>Start</th><th>End</th><th>Contributor</th><th>Date</th><th>Status</th><th>Views</th><th>Votes</th><th>Trust</th><th>Actions</th></tr></thead>
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>{Array.from({ length: 9 }).map((_, j) => <td key={j}><div className="skeleton" /></td>)}</tr>
+                <tr key={i}>{Array.from({ length: 10 }).map((_, j) => <td key={j}><div className="skeleton" /></td>)}</tr>
               ))}
             </tbody>
           </table>
@@ -141,6 +226,7 @@ export function RoutesPage() {
                 <th>Status</th>
                 <th>Views</th>
                 <th>Votes</th>
+                <th>Trust</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -180,6 +266,9 @@ export function RoutesPage() {
                         <ThumbsDown size={11} />{r.downvotes ?? 0}
                       </span>
                     </div>
+                  </td>
+                  <td>
+                    <TrustBadge route={r} />
                   </td>
                   <td>
                     <div className="action-group">
@@ -233,6 +322,7 @@ export function RoutesPage() {
                 <StatusBadge status={preview.status} />
               </div>
               {[
+                ['Trust', `${computeRouteTrust(preview).total}/100 (${computeRouteTrust(preview).label})`],
                 ['Steps', (preview.steps ?? []).join(' -> ') || 'No step data'],
                 ['Transport Modes', (preview.transportModes ?? []).join(', ') || 'N/A'],
                 ['ETA', `${preview.etaMinutes ?? 'N/A'} mins`],

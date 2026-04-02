@@ -83,9 +83,15 @@ class AuthGate extends StatelessWidget {
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
                 final data = userSnapshot.data!.data() ?? <String, dynamic>{};
-                final role = data['role'] as String?;
-                final isAdmin =
-                    role == 'moderator' || role == 'admin';
+                final role = ((data['role'] as String?) ?? '')
+                  .trim()
+                  .toLowerCase()
+                  .replaceAll('-', '_')
+                  .replaceAll(' ', '_');
+                final isAdmin = role == 'moderator' ||
+                  role == 'admin' ||
+                  role == 'superadmin' ||
+                  role == 'super_admin';
                 final isBanned = (data['isBanned'] as bool? ?? false) ||
                     (data['status'] as String? ?? '') == 'banned';
                 final hasSeenTutorial =
@@ -140,9 +146,15 @@ class AuthGate extends StatelessWidget {
                         retrySnapshot.data!.exists) {
                       final data = retrySnapshot.data!.data()
                           as Map<String, dynamic>;
-                      final role = data['role'] as String?;
-                      final isAdmin =
-                          role == 'moderator' || role == 'admin';
+                        final role = ((data['role'] as String?) ?? '')
+                          .trim()
+                          .toLowerCase()
+                          .replaceAll('-', '_')
+                          .replaceAll(' ', '_');
+                        final isAdmin = role == 'moderator' ||
+                          role == 'admin' ||
+                          role == 'superadmin' ||
+                          role == 'super_admin';
                       final isBanned = (data['isBanned'] as bool? ?? false) ||
                         (data['status'] as String? ?? '') == 'banned';
                       final hasSeenTutorial =

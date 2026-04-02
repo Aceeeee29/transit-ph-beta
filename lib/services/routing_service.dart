@@ -26,12 +26,12 @@ class RoutingException implements Exception {
 ///
 /// OSRM public API is used for road snapping only (free, no key required).
 class RoutingService {
-  static const _minWalkSegmentKm           = 0.08;
-  static const _walkSpeedKmh               = 5.0;
-  static const _stopSearchRadiusKm         = 0.5;
+  static const _minWalkSegmentKm = 0.08;
+  static const _walkSpeedKmh = 5.0;
+  static const _stopSearchRadiusKm = 0.5;
   static const _stopSearchRadiusExpandedKm = 1.5;
-  static const _candidateStopsLimit        = 4;
-  static const _allowFerrySuggestions      = false;
+  static const _candidateStopsLimit = 4;
+  static const _allowFerrySuggestions = false;
 
   // OSRM public demo server — free, no API key needed
   static const _osrmBase = 'https://router.project-osrm.org/route/v1';
@@ -47,10 +47,13 @@ class RoutingService {
     required LatLng destination,
     String mode = 'Jeepney',
   }) async {
-    const cacheProfile = 'supabase-gtfs-v8';
+    const cacheProfile = 'supabase-gtfs-v9';
 
     final cached = await RouteCacheRepository.get(
-      originName, destinationName, mode, cacheProfile,
+      originName,
+      destinationName,
+      mode,
+      cacheProfile,
     );
     if (cached != null) {
       debugPrint('[RoutingService] Cache hit');
@@ -58,13 +61,18 @@ class RoutingService {
     }
 
     final result = await _getGtfsRoute(
-      origin:        origin,
-      destination:   destination,
+      origin: origin,
+      destination: destination,
       preferredMode: mode,
     );
 
     RouteCacheRepository.put(
-        originName, destinationName, mode, cacheProfile, result);
+      originName,
+      destinationName,
+      mode,
+      cacheProfile,
+      result,
+    );
     return result;
   }
 
@@ -94,7 +102,8 @@ class RoutingService {
       ]).timeout(const Duration(seconds: 8));
     } on TimeoutException {
       throw const RoutingException(
-          'Stop lookup timed out. Check your internet connection.');
+        'Stop lookup timed out. Check your internet connection.',
+      );
     }
 
     if (candidates[0].isEmpty || candidates[1].isEmpty) {
@@ -103,21 +112,22 @@ class RoutingService {
           candidates[0].isNotEmpty
               ? Future.value(candidates[0])
               : SupabaseRouteService.findNearestStops(
-                  origin,
-                  radiusKm: _stopSearchRadiusExpandedKm,
-                  limit: _candidateStopsLimit,
-                ),
+                origin,
+                radiusKm: _stopSearchRadiusExpandedKm,
+                limit: _candidateStopsLimit,
+              ),
           candidates[1].isNotEmpty
               ? Future.value(candidates[1])
               : SupabaseRouteService.findNearestStops(
-                  destination,
-                  radiusKm: _stopSearchRadiusExpandedKm,
-                  limit: _candidateStopsLimit,
-                ),
+                destination,
+                radiusKm: _stopSearchRadiusExpandedKm,
+                limit: _candidateStopsLimit,
+              ),
         ]).timeout(const Duration(seconds: 8));
       } on TimeoutException {
         throw const RoutingException(
-            'Stop lookup timed out. Check your internet connection.');
+          'Stop lookup timed out. Check your internet connection.',
+        );
       }
     }
 
@@ -163,8 +173,9 @@ class RoutingService {
 
         if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
           try {
-            final pts = await SupabaseRouteService.getShapePolyline(leg.shapeId!)
-                .timeout(const Duration(seconds: 8));
+            final pts = await SupabaseRouteService.getShapePolyline(
+              leg.shapeId!,
+            ).timeout(const Duration(seconds: 8));
             if (pts.length >= 2) {
               return _clipShapeToStops(pts, board, alight);
             }
@@ -186,6 +197,19 @@ class RoutingService {
     );
   }
 
+  static Future<OrsRouteResult> buildWalkFallbackRoute({
+    required LatLng origin,
+    required LatLng destination,
+    String note = 'Showing walking fallback route for route variety.',
+  }) {
+    return _buildFallbackRoute(
+      origin: origin,
+      destination: destination,
+      preferredMode: 'Walk',
+      note: note,
+    );
+  }
+
   /// Lightweight road-snap between two points for map drawing in the
   /// Contribute screen.
   ///
@@ -198,19 +222,19 @@ class RoutingService {
     String mode = 'Jeepney',
   }) async {
     final profile = _osrmProfileForMode(mode);
-    final pts     = await _osrmSnap(origin, destination, profile);
+    final pts = await _osrmSnap(origin, destination, profile);
     if (pts == null || pts.length < 2) return null;
 
     final distKm = _polylineDistanceKm(pts);
-    final distM  = distKm * 1000;
-    final durS   = (distKm / _speedForMode(mode)) * 3600;
+    final distM = distKm * 1000;
+    final durS = (distKm / _speedForMode(mode)) * 3600;
 
     return OrsRouteResult(
-      distanceMeters:  distM,
+      distanceMeters: distM,
       durationSeconds: durS,
-      polyline:        pts,
-      steps:           [],
-      bbox:            [],
+      polyline: pts,
+      steps: [],
+      bbox: [],
     );
   }
 
@@ -249,7 +273,8 @@ class RoutingService {
       ]).timeout(const Duration(seconds: 8));
     } on TimeoutException {
       throw const RoutingException(
-          'Stop lookup timed out. Check your internet connection.');
+        'Stop lookup timed out. Check your internet connection.',
+      );
     }
 
     // Expand radius if either side has no nearby candidates
@@ -259,52 +284,59 @@ class RoutingService {
           candidates[0].isNotEmpty
               ? Future.value(candidates[0])
               : SupabaseRouteService.findNearestStops(
-                  origin,
-                  radiusKm: _stopSearchRadiusExpandedKm,
-                  limit: _candidateStopsLimit,
-                ),
+                origin,
+                radiusKm: _stopSearchRadiusExpandedKm,
+                limit: _candidateStopsLimit,
+              ),
           candidates[1].isNotEmpty
               ? Future.value(candidates[1])
               : SupabaseRouteService.findNearestStops(
-                  destination,
-                  radiusKm: _stopSearchRadiusExpandedKm,
-                  limit: _candidateStopsLimit,
-                ),
+                destination,
+                radiusKm: _stopSearchRadiusExpandedKm,
+                limit: _candidateStopsLimit,
+              ),
         ]).timeout(const Duration(seconds: 8));
       } on TimeoutException {
         throw const RoutingException(
-            'Stop lookup timed out. Check your internet connection.');
+          'Stop lookup timed out. Check your internet connection.',
+        );
       }
     }
 
     final originCandidates = candidates[0];
     final destCandidates = candidates[1];
-    final originStopData = originCandidates.isNotEmpty ? originCandidates.first : null;
-    final destStopData = destCandidates.isNotEmpty ? destCandidates.first : null;
+    final originStopData =
+        originCandidates.isNotEmpty ? originCandidates.first : null;
+    final destStopData =
+        destCandidates.isNotEmpty ? destCandidates.first : null;
 
     // ── Fallback A: no stops at all — walk-only route ─────────────────────────
     if (originStopData == null || destStopData == null) {
       debugPrint('[RoutingService] No stops found — using walk fallback');
       return _buildFallbackRoute(
-        origin:        origin,
-        destination:   destination,
+        origin: origin,
+        destination: destination,
         preferredMode: 'Walk',
-        note:          'No transit stops found nearby. Showing estimated walking route.',
+        note: 'No transit stops found nearby. Showing estimated walking route.',
       );
     }
 
     final nearestOriginStopId = originStopData['stop_id'].toString();
     final nearestDestStopId = destStopData['stop_id'].toString();
 
-    debugPrint('[RoutingService] Origin nearest: ${originStopData['stop_name']} ($nearestOriginStopId)');
-    debugPrint('[RoutingService] Dest nearest:   ${destStopData['stop_name']} ($nearestDestStopId)');
+    debugPrint(
+      '[RoutingService] Origin nearest: ${originStopData['stop_name']} ($nearestOriginStopId)',
+    );
+    debugPrint(
+      '[RoutingService] Dest nearest:   ${destStopData['stop_name']} ($nearestDestStopId)',
+    );
 
     if (nearestOriginStopId == nearestDestStopId) {
       return _buildFallbackRoute(
-        origin:        origin,
-        destination:   destination,
+        origin: origin,
+        destination: destination,
         preferredMode: 'Walk',
-        note:          'Origin and destination are very close. Showing walking route.',
+        note: 'Origin and destination are very close. Showing walking route.',
       );
     }
 
@@ -328,7 +360,9 @@ class RoutingService {
         selectedOriginStop = dijkstraResult.selectedOriginStop;
         selectedDestStop = dijkstraResult.selectedDestStop;
         bestScore = dijkstraResult.totalCostSeconds / 3600.0;
-        debugPrint('[RoutingService] Dijkstra plan selected (${plan.legs.length} leg(s))');
+        debugPrint(
+          '[RoutingService] Dijkstra plan selected (${plan.legs.length} leg(s))',
+        );
       } else {
         for (final originStop in originCandidates) {
           for (final destStop in destCandidates) {
@@ -336,9 +370,10 @@ class RoutingService {
             final destStopId = destStop['stop_id'].toString();
             if (originStopId == destStopId) continue;
 
-            final candidatePlan = await SupabaseRouteService
-                .findTripPlan(originStopId, destStopId)
-                .timeout(const Duration(seconds: 15));
+            final candidatePlan = await SupabaseRouteService.findTripPlan(
+              originStopId,
+              destStopId,
+            ).timeout(const Duration(seconds: 15));
 
             if (candidatePlan == null) continue;
             if (!_allowFerrySuggestions && _planHasFerry(candidatePlan)) {
@@ -370,7 +405,8 @@ class RoutingService {
       }
     } on TimeoutException {
       throw const RoutingException(
-          'Route lookup timed out. Check your internet connection.');
+        'Route lookup timed out. Check your internet connection.',
+      );
     } catch (e) {
       debugPrint('[RoutingService] Trip plan error: $e');
     }
@@ -379,36 +415,41 @@ class RoutingService {
     if (plan == null) {
       debugPrint('[RoutingService] No GTFS connection — using direct fallback');
       return _buildFallbackRoute(
-        origin:        origin,
-        destination:   destination,
+        origin: origin,
+        destination: destination,
         preferredMode: preferredMode,
-        originStop:    LatLng(
+        originStop: LatLng(
           (originStopData['stop_lat'] as num).toDouble(),
           (originStopData['stop_lon'] as num).toDouble(),
         ),
         originStopName: originStopData['stop_name'] as String? ?? 'Stop',
-        destStop:       LatLng(
+        destStop: LatLng(
           (destStopData['stop_lat'] as num).toDouble(),
           (destStopData['stop_lon'] as num).toDouble(),
         ),
-        destStopName:   destStopData['stop_name'] as String? ?? 'Stop',
-        note:           'No connected transit route found in current data. '
-                        'Showing estimated direct route.',
+        destStopName: destStopData['stop_name'] as String? ?? 'Stop',
+        note:
+            'No connected transit route found in current data. '
+            'Showing estimated direct route.',
       );
     }
 
     final chosenOriginStop = selectedOriginStop ?? originStopData;
     final chosenDestStop = selectedDestStop ?? destStopData;
 
-    debugPrint('[RoutingService] Selected origin stop: ${chosenOriginStop['stop_name']} (${chosenOriginStop['stop_id']})');
-    debugPrint('[RoutingService] Selected dest stop:   ${chosenDestStop['stop_name']} (${chosenDestStop['stop_id']})');
+    debugPrint(
+      '[RoutingService] Selected origin stop: ${chosenOriginStop['stop_name']} (${chosenOriginStop['stop_id']})',
+    );
+    debugPrint(
+      '[RoutingService] Selected dest stop:   ${chosenDestStop['stop_name']} (${chosenDestStop['stop_id']})',
+    );
 
     debugPrint('[RoutingService] Plan: ${plan.legs.length} leg(s)');
 
     // ── Step 3: Road-snap each leg via OSRM ──────────────────────────────────
     final shapePolylines = await Future.wait(
       plan.legs.map((leg) async {
-        final board  = LatLng(leg.boardLat,  leg.boardLon);
+        final board = LatLng(leg.boardLat, leg.boardLon);
         final alight = LatLng(leg.alightLat, leg.alightLon);
         final osrmMode = _osrmProfileForMode(
           _inferModeFromRoute(
@@ -426,9 +467,9 @@ class RoutingService {
         // Fall back to GTFS shape clipped to stops
         if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
           try {
-            final pts = await SupabaseRouteService
-                .getShapePolyline(leg.shapeId!)
-                .timeout(const Duration(seconds: 8));
+            final pts = await SupabaseRouteService.getShapePolyline(
+              leg.shapeId!,
+            ).timeout(const Duration(seconds: 8));
             if (pts.length >= 2) {
               return _clipShapeToStops(pts, board, alight);
             }
@@ -441,11 +482,11 @@ class RoutingService {
     );
 
     return await _buildResult(
-      origin:         origin,
-      destination:    destination,
-      legs:           plan.legs,
+      origin: origin,
+      destination: destination,
+      legs: plan.legs,
       shapePolylines: shapePolylines,
-      preferredMode:  preferredMode,
+      preferredMode: preferredMode,
       selectedOriginStop: chosenOriginStop,
       selectedDestStop: chosenDestStop,
     );
@@ -464,7 +505,7 @@ class RoutingService {
     required String note,
   }) async {
     final combinedPolyline = <LatLng>[];
-    final steps            = <OrsStep>[];
+    final steps = <OrsStep>[];
 
     final bool hasStops = originStop != null && destStop != null;
 
@@ -472,20 +513,22 @@ class RoutingService {
     if (hasStops) {
       final walkInKm = _haversineKm(origin, originStop);
       if (walkInKm > _minWalkSegmentKm) {
-        final walkPts = await _osrmSnap(origin, originStop, 'foot') ??
-            [origin, originStop];
+        final walkPts =
+            await _osrmSnap(origin, originStop, 'foot') ?? [origin, originStop];
         final walkDistM = _polylineDistanceKm(walkPts) * 1000;
-        final startIdx  = combinedPolyline.length;
+        final startIdx = combinedPolyline.length;
         combinedPolyline.addAll(walkPts);
-        steps.add(OrsStep(
-          instruction:     'Walk to ${originStopName ?? 'nearest stop'}',
-          distanceMeters:  walkDistM,
-          durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
-          suggestedMode:   'Walk',
-          estimatedFare:   0.0,
-          wayPointStart:   startIdx,
-          wayPointEnd:     combinedPolyline.length - 1,
-        ));
+        steps.add(
+          OrsStep(
+            instruction: 'Walk to ${originStopName ?? 'nearest stop'}',
+            distanceMeters: walkDistM,
+            durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
+            suggestedMode: 'Walk',
+            estimatedFare: 0.0,
+            wayPointStart: startIdx,
+            wayPointEnd: combinedPolyline.length - 1,
+          ),
+        );
       } else {
         combinedPolyline.add(originStop);
       }
@@ -494,92 +537,102 @@ class RoutingService {
     }
 
     // ── Main estimated ride / walk ────────────────────────────────────────────
-    final ridePtA   = hasStops ? originStop : origin;
-    final ridePtB   = hasStops ? destStop   : destination;
-    final rideMode = preferredMode == 'Walk'
-      ? 'Walk'
-      : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
-    final osrmProf  = _osrmProfileForMode(rideMode);
+    final ridePtA = hasStops ? originStop : origin;
+    final ridePtB = hasStops ? destStop : destination;
+    final rideMode =
+        preferredMode == 'Walk'
+            ? 'Walk'
+            : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
+    final osrmProf = _osrmProfileForMode(rideMode);
 
-    final ridePts   = await _osrmSnap(ridePtA, ridePtB, osrmProf) ??
-        [ridePtA, ridePtB];
+    final ridePts =
+        await _osrmSnap(ridePtA, ridePtB, osrmProf) ?? [ridePtA, ridePtB];
 
     final rideDistM = _polylineDistanceKm(ridePts) * 1000;
     final rideSpeed = _speedForMode(rideMode);
-    final rideDurS  = (rideDistM / 1000 / rideSpeed) * 3600;
-    final rideFare  = PhFareCalculator.compute(rideMode, rideDistM);
+    final rideDurS = (rideDistM / 1000 / rideSpeed) * 3600;
+    final rideFare = PhFareCalculator.compute(rideMode, rideDistM);
 
-    final rideStartIdx = combinedPolyline.isEmpty
-        ? 0
-        : combinedPolyline.length - 1;
+    final rideStartIdx =
+        combinedPolyline.isEmpty ? 0 : combinedPolyline.length - 1;
 
-    final rideToAdd = combinedPolyline.isNotEmpty &&
-            ridePts.isNotEmpty &&
-            _haversineKm(combinedPolyline.last, ridePts.first) < 0.001
-        ? ridePts.skip(1).toList()
-        : ridePts;
+    final rideToAdd =
+        combinedPolyline.isNotEmpty &&
+                ridePts.isNotEmpty &&
+                _haversineKm(combinedPolyline.last, ridePts.first) < 0.001
+            ? ridePts.skip(1).toList()
+            : ridePts;
     combinedPolyline.addAll(rideToAdd);
 
-    final rideLabel = hasStops
-        ? '[Estimated] $rideMode from ${originStopName ?? 'start'} to ${destStopName ?? 'destination'}'
-        : '[Estimated] $rideMode to destination';
+    final rideLabel =
+        hasStops
+            ? '[Estimated] $rideMode from ${originStopName ?? 'start'} to ${destStopName ?? 'destination'}'
+            : '[Estimated] $rideMode to destination';
 
-    steps.add(OrsStep(
-      instruction:     rideLabel,
-      distanceMeters:  rideDistM,
-      durationSeconds: rideDurS,
-      suggestedMode:   rideMode,
-      estimatedFare:   rideFare,
-      wayPointStart:   rideStartIdx,
-      wayPointEnd:     combinedPolyline.length - 1,
-    ));
+    steps.add(
+      OrsStep(
+        instruction: rideLabel,
+        distanceMeters: rideDistM,
+        durationSeconds: rideDurS,
+        suggestedMode: rideMode,
+        estimatedFare: rideFare,
+        wayPointStart: rideStartIdx,
+        wayPointEnd: combinedPolyline.length - 1,
+      ),
+    );
 
     // ── Walk-out (dest stop → destination) ────────────────────────────────────
     if (hasStops) {
       final walkOutKm = _haversineKm(destStop, destination);
       if (walkOutKm > _minWalkSegmentKm) {
-        final walkPts = await _osrmSnap(destStop, destination, 'foot') ??
+        final walkPts =
+            await _osrmSnap(destStop, destination, 'foot') ??
             [destStop, destination];
-        final walkDistM  = _polylineDistanceKm(walkPts) * 1000;
-        final startIdx   = combinedPolyline.length - 1;
-        final toAdd = _haversineKm(combinedPolyline.last, walkPts.first) < 0.001
-            ? walkPts.skip(1).toList()
-            : walkPts;
+        final walkDistM = _polylineDistanceKm(walkPts) * 1000;
+        final startIdx = combinedPolyline.length - 1;
+        final toAdd =
+            _haversineKm(combinedPolyline.last, walkPts.first) < 0.001
+                ? walkPts.skip(1).toList()
+                : walkPts;
         combinedPolyline.addAll(toAdd);
-        steps.add(OrsStep(
-          instruction:     'Walk from ${destStopName ?? 'stop'} to destination',
-          distanceMeters:  walkDistM,
-          durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
-          suggestedMode:   'Walk',
-          estimatedFare:   0.0,
-          wayPointStart:   startIdx,
-          wayPointEnd:     combinedPolyline.length - 1,
-        ));
+        steps.add(
+          OrsStep(
+            instruction: 'Walk from ${destStopName ?? 'stop'} to destination',
+            distanceMeters: walkDistM,
+            durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
+            suggestedMode: 'Walk',
+            estimatedFare: 0.0,
+            wayPointStart: startIdx,
+            wayPointEnd: combinedPolyline.length - 1,
+          ),
+        );
       }
     }
 
     // ── Totals + BBox ─────────────────────────────────────────────────────────
     final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
-    final totalDurS  = steps.fold(0.0, (s, e) => s + e.durationSeconds);
+    final totalDurS = steps.fold(0.0, (s, e) => s + e.durationSeconds);
 
     List<double> bbox = [];
     if (combinedPolyline.isNotEmpty) {
       final lats = combinedPolyline.map((p) => p.latitude);
       final lngs = combinedPolyline.map((p) => p.longitude);
       bbox = [
-        lngs.reduce(math.min), lats.reduce(math.min),
-        lngs.reduce(math.max), lats.reduce(math.max),
+        lngs.reduce(math.min),
+        lats.reduce(math.min),
+        lngs.reduce(math.max),
+        lats.reduce(math.max),
       ];
     }
 
     debugPrint('[RoutingService] Fallback route built — $note');
 
     return OrsRouteResult(
-      distanceMeters:  totalDistM,
+      distanceMeters: totalDistM,
       durationSeconds: totalDurS,
-      polyline:        combinedPolyline,
-      steps:           steps,
-      bbox:            bbox,
+      polyline: combinedPolyline,
+      steps: steps,
+      bbox: bbox,
     );
   }
 
@@ -594,29 +647,30 @@ class RoutingService {
       final coords =
           '${from.longitude},${from.latitude};${to.longitude},${to.latitude}';
       final uri = Uri.parse(
-          '$_osrmBase/$profile/$coords?overview=full&geometries=geojson');
+        '$_osrmBase/$profile/$coords?overview=full&geometries=geojson',
+      );
 
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 8));
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
 
       if (response.statusCode != 200) return null;
 
-      final data  = jsonDecode(response.body) as Map<String, dynamic>;
-      final code  = data['code'] as String?;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final code = data['code'] as String?;
       if (code != 'Ok') return null;
 
       final routes = data['routes'] as List?;
       if (routes == null || routes.isEmpty) return null;
 
-      final geometry    = routes[0]['geometry'] as Map<String, dynamic>;
+      final geometry = routes[0]['geometry'] as Map<String, dynamic>;
       final coordinates = geometry['coordinates'] as List;
 
-      final points = coordinates
-          .map((c) => LatLng(
-                (c[1] as num).toDouble(),
-                (c[0] as num).toDouble(),
-              ))
-          .toList();
+      final points =
+          coordinates
+              .map(
+                (c) =>
+                    LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+              )
+              .toList();
 
       // OSRM can occasionally produce pathological small-area loops near
       // roundabouts/interchanges. If detected, skip snap so callers can
@@ -671,10 +725,14 @@ class RoutingService {
 
   static String _osrmProfileForMode(String mode) {
     switch (mode) {
-      case 'Walk':    return 'foot';
-      case 'Train':   return 'driving';
-      case 'Ferry':   return 'driving';
-      default:        return 'driving'; // Jeepney, Bus, FX/Van, Tricycle
+      case 'Walk':
+        return 'foot';
+      case 'Train':
+        return 'driving';
+      case 'Ferry':
+        return 'driving';
+      default:
+        return 'driving'; // Jeepney, Bus, FX/Van, Tricycle
     }
   }
 
@@ -690,37 +748,40 @@ class RoutingService {
     required Map<String, dynamic> selectedDestStop,
   }) async {
     final combinedPolyline = <LatLng>[];
-    final steps            = <OrsStep>[];
-    final firstLeg         = legs.first;
-    final lastLeg          = legs.last;
+    final steps = <OrsStep>[];
+    final firstLeg = legs.first;
+    final lastLeg = legs.last;
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
     final boardFirst = LatLng(
       (selectedOriginStop['stop_lat'] as num).toDouble(),
       (selectedOriginStop['stop_lon'] as num).toDouble(),
     );
-    final walkInKm   = _haversineKm(origin, boardFirst);
+    final walkInKm = _haversineKm(origin, boardFirst);
     if (walkInKm > _minWalkSegmentKm) {
-      final walkInPts = await _osrmSnap(origin, boardFirst, 'foot') ??
-          [origin, boardFirst];
+      final walkInPts =
+          await _osrmSnap(origin, boardFirst, 'foot') ?? [origin, boardFirst];
       final walkInDistM = _polylineDistanceKm(walkInPts) * 1000;
       combinedPolyline.addAll(walkInPts);
-      steps.add(OrsStep(
-        instruction:     'Walk to ${selectedOriginStop['stop_name'] ?? firstLeg.boardStopName}',
-        distanceMeters:  walkInDistM,
-        durationSeconds: (walkInDistM / 1000 / _walkSpeedKmh) * 3600,
-        suggestedMode:   'Walk',
-        estimatedFare:   0.0,
-        wayPointStart:   0,
-        wayPointEnd:     combinedPolyline.length - 1,
-      ));
+      steps.add(
+        OrsStep(
+          instruction:
+              'Walk to ${selectedOriginStop['stop_name'] ?? firstLeg.boardStopName}',
+          distanceMeters: walkInDistM,
+          durationSeconds: (walkInDistM / 1000 / _walkSpeedKmh) * 3600,
+          suggestedMode: 'Walk',
+          estimatedFare: 0.0,
+          wayPointStart: 0,
+          wayPointEnd: combinedPolyline.length - 1,
+        ),
+      );
     } else {
       combinedPolyline.add(origin);
     }
 
     // ── Vehicle legs ──────────────────────────────────────────────────────────
     for (int i = 0; i < legs.length; i++) {
-      final leg      = legs[i];
+      final leg = legs[i];
       final polyline = shapePolylines[i];
       final mode = _inferModeFromRoute(
         routeType: leg.routeType,
@@ -731,69 +792,81 @@ class RoutingService {
 
       final vehicleStartIdx = combinedPolyline.length - 1;
 
-      final toAdd = combinedPolyline.isNotEmpty &&
-              polyline.isNotEmpty &&
-              _haversineKm(combinedPolyline.last, polyline.first) < 0.001
-          ? polyline.skip(1).toList()
-          : polyline;
+      final toAdd =
+          combinedPolyline.isNotEmpty &&
+                  polyline.isNotEmpty &&
+                  _haversineKm(combinedPolyline.last, polyline.first) < 0.001
+              ? polyline.skip(1).toList()
+              : polyline;
       combinedPolyline.addAll(toAdd);
 
       final vehicleEndIdx = combinedPolyline.length - 1;
-      final distKm        = _polylineDistanceKm(polyline);
-      final distM         = distKm * 1000;
-      final routeLabel    = _routeLabelForLeg(leg);
+      final distKm = _polylineDistanceKm(polyline);
+      final distM = distKm * 1000;
+      final routeLabel = _routeLabelForLeg(leg);
 
-      steps.add(OrsStep(
-        instruction:     routeLabel != null
-            ? 'Ride $mode ($routeLabel) from ${leg.boardStopName} to ${leg.alightStopName}'
-            : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}',
-        distanceMeters:  distM,
-        durationSeconds: (distKm / _speedForMode(mode)) * 3600,
-        suggestedMode:   mode,
-        estimatedFare:   PhFareCalculator.compute(mode, distM),
-        wayPointStart:   vehicleStartIdx,
-        wayPointEnd:     vehicleEndIdx,
-      ));
+      steps.add(
+        OrsStep(
+          instruction:
+              routeLabel != null
+                  ? 'Ride $mode ($routeLabel) from ${leg.boardStopName} to ${leg.alightStopName}'
+                  : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}',
+          distanceMeters: distM,
+          durationSeconds: (distKm / _speedForMode(mode)) * 3600,
+          suggestedMode: mode,
+          estimatedFare: PhFareCalculator.compute(mode, distM),
+          wayPointStart: vehicleStartIdx,
+          wayPointEnd: vehicleEndIdx,
+        ),
+      );
 
       // ── Transfer walk ──────────────────────────────────────────────────────
       if (i < legs.length - 1) {
-        final nextLeg    = legs[i + 1];
-        final alightPt   = LatLng(leg.alightLat,   leg.alightLon);
-        final boardPt    = LatLng(nextLeg.boardLat, nextLeg.boardLon);
+        final nextLeg = legs[i + 1];
+        final alightPt = LatLng(leg.alightLat, leg.alightLon);
+        final boardPt = LatLng(nextLeg.boardLat, nextLeg.boardLon);
         final transferKm = _haversineKm(alightPt, boardPt);
         final transferRouteLabel = _routeLabelForLeg(nextLeg) ?? 'next line';
 
         if (transferKm > _minWalkSegmentKm) {
-          final transferPts = await _osrmSnap(alightPt, boardPt, 'foot') ??
-              [alightPt, boardPt];
+          final transferPts =
+              await _osrmSnap(alightPt, boardPt, 'foot') ?? [alightPt, boardPt];
           final transferDistM = _polylineDistanceKm(transferPts) * 1000;
           final tStart = combinedPolyline.length - 1;
-          final transferToAdd = combinedPolyline.isNotEmpty &&
-                  transferPts.isNotEmpty &&
-                  _haversineKm(combinedPolyline.last, transferPts.first) < 0.001
-              ? transferPts.skip(1).toList()
-              : transferPts;
+          final transferToAdd =
+              combinedPolyline.isNotEmpty &&
+                      transferPts.isNotEmpty &&
+                      _haversineKm(combinedPolyline.last, transferPts.first) <
+                          0.001
+                  ? transferPts.skip(1).toList()
+                  : transferPts;
           combinedPolyline.addAll(transferToAdd);
-          steps.add(OrsStep(
-            instruction:     'Transfer: walk from ${leg.alightStopName} to ${nextLeg.boardStopName}, then board $transferRouteLabel',
-            distanceMeters:  transferDistM,
-            durationSeconds: (transferDistM / 1000 / _walkSpeedKmh) * 3600,
-            suggestedMode:   'Walk',
-            estimatedFare:   0.0,
-            wayPointStart:   tStart,
-            wayPointEnd:     combinedPolyline.length - 1,
-          ));
+          steps.add(
+            OrsStep(
+              instruction:
+                  'Transfer: walk from ${leg.alightStopName} to ${nextLeg.boardStopName}, then board $transferRouteLabel',
+              distanceMeters: transferDistM,
+              durationSeconds: (transferDistM / 1000 / _walkSpeedKmh) * 3600,
+              suggestedMode: 'Walk',
+              estimatedFare: 0.0,
+              wayPointStart: tStart,
+              wayPointEnd: combinedPolyline.length - 1,
+            ),
+          );
         } else {
           final tIdx = combinedPolyline.length - 1;
-          steps.add(OrsStep(
-            instruction:     'Transfer at ${leg.alightStopName}: board $transferRouteLabel',
-            distanceMeters:  0.0,
-            durationSeconds: 45.0,
-            suggestedMode:   'Walk',
-            estimatedFare:   0.0,
-            wayPointStart:   tIdx,
-            wayPointEnd:     tIdx,
-          ));
+          steps.add(
+            OrsStep(
+              instruction:
+                  'Transfer at ${leg.alightStopName}: board $transferRouteLabel',
+              distanceMeters: 0.0,
+              durationSeconds: 45.0,
+              suggestedMode: 'Walk',
+              estimatedFare: 0.0,
+              wayPointStart: tIdx,
+              wayPointEnd: tIdx,
+            ),
+          );
         }
       }
     }
@@ -803,51 +876,59 @@ class RoutingService {
       (selectedDestStop['stop_lat'] as num).toDouble(),
       (selectedDestStop['stop_lon'] as num).toDouble(),
     );
-    final walkOutKm  = _haversineKm(alightLast, destination);
+    final walkOutKm = _haversineKm(alightLast, destination);
     if (walkOutKm > _minWalkSegmentKm) {
-      final walkOutPts = await _osrmSnap(alightLast, destination, 'foot') ??
+      final walkOutPts =
+          await _osrmSnap(alightLast, destination, 'foot') ??
           [alightLast, destination];
       final walkOutDistM = _polylineDistanceKm(walkOutPts) * 1000;
       final startIdx = combinedPolyline.length - 1;
-      final walkOutToAdd = combinedPolyline.isNotEmpty &&
-              walkOutPts.isNotEmpty &&
-              _haversineKm(combinedPolyline.last, walkOutPts.first) < 0.001
-          ? walkOutPts.skip(1).toList()
-          : walkOutPts;
+      final walkOutToAdd =
+          combinedPolyline.isNotEmpty &&
+                  walkOutPts.isNotEmpty &&
+                  _haversineKm(combinedPolyline.last, walkOutPts.first) < 0.001
+              ? walkOutPts.skip(1).toList()
+              : walkOutPts;
       combinedPolyline.addAll(walkOutToAdd);
-      steps.add(OrsStep(
-        instruction:     'Walk from ${selectedDestStop['stop_name'] ?? lastLeg.alightStopName} to destination',
-        distanceMeters:  walkOutDistM,
-        durationSeconds: (walkOutDistM / 1000 / _walkSpeedKmh) * 3600,
-        suggestedMode:   'Walk',
-        estimatedFare:   0.0,
-        wayPointStart:   startIdx,
-        wayPointEnd:     combinedPolyline.length - 1,
-      ));
+      steps.add(
+        OrsStep(
+          instruction:
+              'Walk from ${selectedDestStop['stop_name'] ?? lastLeg.alightStopName} to destination',
+          distanceMeters: walkOutDistM,
+          durationSeconds: (walkOutDistM / 1000 / _walkSpeedKmh) * 3600,
+          suggestedMode: 'Walk',
+          estimatedFare: 0.0,
+          wayPointStart: startIdx,
+          wayPointEnd: combinedPolyline.length - 1,
+        ),
+      );
     }
 
     // ── Totals + BBox ─────────────────────────────────────────────────────────
     final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
-    final transfers  = steps.where((s) => s.suggestedMode != 'Walk').length;
-    final totalDurS  = steps.fold(0.0, (s, e) => s + e.durationSeconds)
-        + (transfers > 0 ? transfers * 120.0 : 0.0);
+    final transfers = steps.where((s) => s.suggestedMode != 'Walk').length;
+    final totalDurS =
+        steps.fold(0.0, (s, e) => s + e.durationSeconds) +
+        (transfers > 0 ? transfers * 120.0 : 0.0);
 
     List<double> bbox = [];
     if (combinedPolyline.isNotEmpty) {
       final lats = combinedPolyline.map((p) => p.latitude);
       final lngs = combinedPolyline.map((p) => p.longitude);
       bbox = [
-        lngs.reduce(math.min), lats.reduce(math.min),
-        lngs.reduce(math.max), lats.reduce(math.max),
+        lngs.reduce(math.min),
+        lats.reduce(math.min),
+        lngs.reduce(math.max),
+        lats.reduce(math.max),
       ];
     }
 
     return OrsRouteResult(
-      distanceMeters:  totalDistM,
+      distanceMeters: totalDistM,
       durationSeconds: totalDurS,
-      polyline:        combinedPolyline,
-      steps:           steps,
-      bbox:            bbox,
+      polyline: combinedPolyline,
+      steps: steps,
+      bbox: bbox,
     );
   }
 
@@ -862,7 +943,9 @@ class RoutingService {
     // GTFS route_type is authoritative for rail/ferry and usually bus-like modes.
     if (_isTrainRouteType(routeType)) return 'Train';
     if (routeType == 4) {
-      return _allowFerrySuggestions ? 'Ferry' : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
+      return _allowFerrySuggestions
+          ? 'Ferry'
+          : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
 
     final joinedName =
@@ -884,7 +967,9 @@ class RoutingService {
       return 'Tricycle';
     }
     if (joinedName.contains('ferry') || joinedName.contains('pier')) {
-      return _allowFerrySuggestions ? 'Ferry' : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
+      return _allowFerrySuggestions
+          ? 'Ferry'
+          : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
     if (joinedName.contains('mrt') ||
         joinedName.contains('lrt') ||
@@ -934,7 +1019,10 @@ class RoutingService {
   }
 
   static List<LatLng> _clipShapeToStops(
-      List<LatLng> shape, LatLng boardStop, LatLng alightStop) {
+    List<LatLng> shape,
+    LatLng boardStop,
+    LatLng alightStop,
+  ) {
     if (shape.length < 2) return shape;
     int bIdx = _closestIdx(shape, boardStop);
     int aIdx = _closestIdx(shape, alightStop);
@@ -947,10 +1035,14 @@ class RoutingService {
   }
 
   static int _closestIdx(List<LatLng> polyline, LatLng target) {
-    int best = 0; double bestDist = double.infinity;
+    int best = 0;
+    double bestDist = double.infinity;
     for (int i = 0; i < polyline.length; i++) {
       final d = _haversineKm(polyline[i], target);
-      if (d < bestDist) { bestDist = d; best = i; }
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
     }
     return best;
   }
@@ -965,24 +1057,35 @@ class RoutingService {
 
   static double _speedForMode(String mode) {
     switch (mode) {
-      case 'Walk':     return 5.0;
-      case 'Jeepney':  return 20.0;
-      case 'Bus':      return 25.0;
-      case 'Train':    return 40.0;
-      case 'Tricycle': return 15.0;
-      case 'FX/Van':   return 30.0;
-      case 'Ferry':    return 20.0;
-      default:         return 20.0;
+      case 'Walk':
+        return 5.0;
+      case 'Jeepney':
+        return 20.0;
+      case 'Bus':
+        return 25.0;
+      case 'Train':
+        return 40.0;
+      case 'Tricycle':
+        return 15.0;
+      case 'FX/Van':
+        return 30.0;
+      case 'Ferry':
+        return 20.0;
+      default:
+        return 20.0;
     }
   }
 
   static double _haversineKm(LatLng a, LatLng b) {
-    const r    = 6371.0;
-    final dLat = _rad(b.latitude  - a.latitude);
+    const r = 6371.0;
+    final dLat = _rad(b.latitude - a.latitude);
     final dLng = _rad(b.longitude - a.longitude);
-    final x    = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_rad(a.latitude)) * math.cos(_rad(b.latitude)) *
-            math.sin(dLng / 2) * math.sin(dLng / 2);
+    final x =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(a.latitude)) *
+            math.cos(_rad(b.latitude)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(x), math.sqrt(1 - x));
   }
 

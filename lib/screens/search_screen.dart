@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
-import '../repositories/route_cache_repository.dart';
 import '../services/search_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
@@ -14,6 +13,7 @@ import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
 import '../widgets/notification_overlay.dart';
+import '../widgets/search/route_generation_notice_dialog.dart';
 import '../widgets/search/search_help_sheet.dart';
 import '../widgets/search/search_route_card.dart';
 import 'route_map_screen.dart';
@@ -55,28 +55,30 @@ class _SearchScreenState extends State<SearchScreen> {
   };
 
   // ─── Color tokens ─────────────────────────────────────────────────────────
-  static const _bg           = Color(0xFFF4F8FF);
-  static const _surface      = Color(0xFFFFFFFF);
-  static const _surfaceAlt   = Color(0xFFEAF2FF);
-  static const _accent       = Color(0xFF2E7CF6);
-  static const _accentSoft   = Color(0x1A2E7CF6);
-  static const _textPrimary  = Color(0xFF0F1D35);
+  static const _bg = Color(0xFFF4F8FF);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static const _accent = Color(0xFF2E7CF6);
+  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
-  static const _border       = Color(0xFFD4E4F7);
+  static const _border = Color(0xFFD4E4F7);
 
   // ─── Route state ──────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
-  bool _isLoadingOrs      = false;
-  bool _orsError          = false;
+  bool _isLoadingOrs = false;
+  bool _orsError = false;
   String _orsErrorMessage = '';
-  String _lastOrsQuery    = '';
+  String _lastOrsQuery = '';
   List<DijkstraRouteAlternative> _routeAlternatives = [];
+  Map<int, OrsRouteResult> _fallbackAlternativeRoutes = <int, OrsRouteResult>{};
+  Map<int, String> _alternativeLabels = <int, String>{};
   int _selectedAlternativeIndex = 0;
   LatLng? _lastOriginForAlternatives;
   LatLng? _lastDestinationForAlternatives;
 
   // ─── Origin state ─────────────────────────────────────────────────────────
-  bool _useCurrentLocation  = true;
+  bool _useCurrentLocation = true;
   bool _isDetectingLocation = false;
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -119,18 +121,21 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<LatLng?> _geocodePhilippines(String query) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q':               query,
-        'format':          'json',
-        'limit':           '5',
-        'countrycodes':    'ph',
-        'viewbox':         '116.0,4.5,127.0,21.5',
-        'bounded':         '0',
+        'q': query,
+        'format': 'json',
+        'limit': '5',
+        'countrycodes': 'ph',
+        'viewbox': '116.0,4.5,127.0,21.5',
+        'bounded': '0',
         'accept-language': 'en',
       });
 
-      final response = await http.get(uri, headers: {
-        'User-Agent': 'TransitPH/1.0 (transit-routing-app)',
-      }).timeout(const Duration(seconds: 8));
+      final response = await http
+          .get(
+            uri,
+            headers: {'User-Agent': 'TransitPH/1.0 (transit-routing-app)'},
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final results = jsonDecode(response.body) as List;
@@ -157,11 +162,18 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
-        final phLocations = locations.where((l) =>
-          l.latitude  >= 4.5  && l.latitude  <= 21.5 &&
-          l.longitude >= 116.0 && l.longitude <= 127.0,
-        ).toList();
-        final loc = phLocations.isNotEmpty ? phLocations.first : locations.first;
+        final phLocations =
+            locations
+                .where(
+                  (l) =>
+                      l.latitude >= 4.5 &&
+                      l.latitude <= 21.5 &&
+                      l.longitude >= 116.0 &&
+                      l.longitude <= 127.0,
+                )
+                .toList();
+        final loc =
+            phLocations.isNotEmpty ? phLocations.first : locations.first;
         return LatLng(loc.latitude, loc.longitude);
       }
     } catch (e) {
@@ -176,15 +188,15 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onSearch(String query) {
     if (query.trim().isEmpty) {
       setState(() {
-        _isSearching    = false;
+        _isSearching = false;
         _filteredRoutes = [];
-        _suggestions    = [];
-        _showOmnibox    = false;
+        _suggestions = [];
+        _showOmnibox = false;
       });
       return;
     }
 
-    final searchTerm     = query.trim().toLowerCase();
+    final searchTerm = query.trim().toLowerCase();
     final newSuggestions = <String>[];
 
     for (final s in _recentSearches) {
@@ -205,7 +217,9 @@ class _SearchScreenState extends State<SearchScreen> {
     for (final route in _routes) {
       if (route.shortDescription.toLowerCase().contains(searchTerm)) {
         final suggestion = '${route.startLocation} to ${route.endLocation}';
-        if (!newSuggestions.contains(suggestion)) newSuggestions.add(suggestion);
+        if (!newSuggestions.contains(suggestion)) {
+          newSuggestions.add(suggestion);
+        }
       }
       for (final tag in route.audienceTags) {
         if (_otherSuggestionTags.contains(tag) &&
@@ -217,27 +231,38 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     setState(() {
-      _isSearching    = true;
-      _suggestions    = newSuggestions.take(5).toList();
-      _showOmnibox    = _suggestions.isNotEmpty;
+      _isSearching = true;
+      _suggestions = newSuggestions.take(5).toList();
+      _showOmnibox = _suggestions.isNotEmpty;
       // Only show approved routes in search results
-      _filteredRoutes = _routes.where((r) {
-        return r.isApproved &&
-            (r.endLocation.trim().toLowerCase().contains(searchTerm) ||
-             r.startLocation.trim().toLowerCase().contains(searchTerm) ||
-             r.shortDescription.trim().toLowerCase().contains(searchTerm) ||
-             r.audienceTags.any((t) => t.toLowerCase().contains(searchTerm)));
-      }).toList()
-        ..sort((a, b) {
-          final scoreB = _communityReliabilityScore(b) + _suggestionTagScore(b);
-          final scoreA = _communityReliabilityScore(a) + _suggestionTagScore(a);
-          return scoreB.compareTo(scoreA);
-        });
+      _filteredRoutes =
+          _routes.where((r) {
+              return r.isApproved &&
+                  (r.endLocation.trim().toLowerCase().contains(searchTerm) ||
+                      r.startLocation.trim().toLowerCase().contains(
+                        searchTerm,
+                      ) ||
+                      r.shortDescription.trim().toLowerCase().contains(
+                        searchTerm,
+                      ) ||
+                      r.audienceTags.any(
+                        (t) => t.toLowerCase().contains(searchTerm),
+                      ));
+            }).toList()
+            ..sort((a, b) {
+              final scoreB =
+                  _communityReliabilityScore(b) + _suggestionTagScore(b);
+              final scoreA =
+                  _communityReliabilityScore(a) + _suggestionTagScore(a);
+              return scoreB.compareTo(scoreA);
+            });
       if (query.trim() != _lastOrsQuery) {
-        _orsResult       = null;
-        _orsError        = false;
+        _orsResult = null;
+        _orsError = false;
         _orsErrorMessage = '';
         _routeAlternatives = [];
+        _fallbackAlternativeRoutes = <int, OrsRouteResult>{};
+        _alternativeLabels = <int, String>{};
         _selectedAlternativeIndex = 0;
         _lastOriginForAlternatives = null;
         _lastDestinationForAlternatives = null;
@@ -263,11 +288,13 @@ class _SearchScreenState extends State<SearchScreen> {
     if (query.trim().isNotEmpty) {
       await SearchService.addRecentSearch(query.trim());
       await _loadRecentSearches();
-      final user          = await GamificationService.loadUser();
-      final unlockedItems = await GamificationService.incrementRoutesSearched(user);
+      final user = await GamificationService.loadUser();
+      final unlockedItems = await GamificationService.incrementRoutesSearched(
+        user,
+      );
       if (unlockedItems.isNotEmpty) {
         setState(() {
-          _pendingNotifications    = unlockedItems;
+          _pendingNotifications = unlockedItems;
           _showNotificationOverlay = true;
         });
       }
@@ -299,24 +326,10 @@ class _SearchScreenState extends State<SearchScreen> {
     await _loadRecentSearches();
   }
 
-  Future<void> _onClearRouteCache() async {
-    try {
-      final deleted = await RouteCacheRepository.clearAll();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Route cache cleared ($deleted entries).')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to clear route cache.')),
-      );
-    }
-  }
-
   void _onRouteTap(route_model.Route route) {
-    Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)));
   }
 
   List<route_model.Route> get _topSearches {
@@ -332,22 +345,31 @@ class _SearchScreenState extends State<SearchScreen> {
 
   int _suggestionTagScore(route_model.Route route) {
     if (route.audienceTags.isEmpty) return 0;
-    final matches = route.audienceTags.where((t) => _otherSuggestionTags.contains(t)).length;
+    final matches =
+        route.audienceTags
+            .where((t) => _otherSuggestionTags.contains(t))
+            .length;
     return matches * 10;
   }
 
   int _communityReliabilityScore(route_model.Route route) {
     final engagement = route.views + route.upvotes - route.downvotes;
-    final hasRouteSchedule = (route.schedule?.trim().isNotEmpty ?? false) ? 25 : 0;
+    final hasRouteSchedule =
+        (route.schedule?.trim().isNotEmpty ?? false) ? 25 : 0;
 
     final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
     final hasAnyTransportStep = transportSteps.isNotEmpty;
 
-    final scheduleComplete = hasAnyTransportStep &&
-        transportSteps.every((s) => s.is24_7 ||
-            ((s.startTime?.trim().isNotEmpty ?? false) &&
-                (s.endTime?.trim().isNotEmpty ?? false)));
-    final fareComplete = hasAnyTransportStep &&
+    final scheduleComplete =
+        hasAnyTransportStep &&
+        transportSteps.every(
+          (s) =>
+              s.is24_7 ||
+              ((s.startTime?.trim().isNotEmpty ?? false) &&
+                  (s.endTime?.trim().isNotEmpty ?? false)),
+        );
+    final fareComplete =
+        hasAnyTransportStep &&
         transportSteps.every((s) => s.actualFare != null && s.actualFare! >= 0);
 
     return engagement +
@@ -371,31 +393,37 @@ class _SearchScreenState extends State<SearchScreen> {
     final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
     if (transportSteps.isEmpty) return 0;
 
-    final totalDistanceKm = route.distanceMeters != null && route.distanceMeters! > 0
-        ? route.distanceMeters! / 1000
-        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final totalDistanceKm =
+        route.distanceMeters != null && route.distanceMeters! > 0
+            ? route.distanceMeters! / 1000
+            : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
     final perStepDistance = totalDistanceKm / transportSteps.length;
 
     var total = 0.0;
     for (final step in transportSteps) {
-      total += step.actualFare ??
+      total +=
+          step.actualFare ??
           RouteMetricsService.calculateFareForMode(step.mode, perStepDistance);
     }
     return total;
   }
 
   int _routeEstimatedMinutes(route_model.Route route) {
-    final parsedEta = int.tryParse((route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    final parsedEta = int.tryParse(
+      (route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''),
+    );
     if (parsedEta != null && parsedEta > 0) return parsedEta;
 
-    final distanceKm = route.distanceMeters != null && route.distanceMeters! > 0
-        ? route.distanceMeters! / 1000
-        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final distanceKm =
+        route.distanceMeters != null && route.distanceMeters! > 0
+            ? route.distanceMeters! / 1000
+            : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
 
     final hasTrain = route.steps.any((s) => s.mode == 'Train');
     final speed = hasTrain ? 28.0 : 20.0;
     final minutes = ((distanceKm / speed) * 60).ceil();
-    final transferPenalty = (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
+    final transferPenalty =
+        (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
     return (minutes + transferPenalty).clamp(8, 180);
   }
 
@@ -407,30 +435,76 @@ class _SearchScreenState extends State<SearchScreen> {
     sorted.sort((a, b) {
       switch (mode) {
         case ContributedRouteSortMode.budget:
-          final fareCmp = _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
+          final fareCmp = _routeEstimatedFare(
+            a,
+          ).compareTo(_routeEstimatedFare(b));
           if (fareCmp != 0) return fareCmp;
           return _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
         case ContributedRouteSortMode.fastest:
-          final timeCmp = _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
+          final timeCmp = _routeEstimatedMinutes(
+            a,
+          ).compareTo(_routeEstimatedMinutes(b));
           if (timeCmp != 0) return timeCmp;
           return _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
         case ContributedRouteSortMode.balanced:
-          final aScore = _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
-          final bScore = _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
+          final aScore =
+              _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
+          final bScore =
+              _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
           final cmp = aScore.compareTo(bScore);
           if (cmp != 0) return cmp;
-          return _communityReliabilityScore(b).compareTo(_communityReliabilityScore(a));
+          return _communityReliabilityScore(
+            b,
+          ).compareTo(_communityReliabilityScore(a));
       }
     });
     return sorted;
   }
 
+  String _alternativeTripIdSignature(DijkstraRouteAlternative alt) {
+    return alt.result.plan.legs.map((leg) => leg.tripId).join('>');
+  }
+
+  String _alternativeRouteSignature(DijkstraRouteAlternative alt) {
+    return alt.result.plan.legs
+        .map((leg) => '${leg.routeId}:${leg.tripId}:${leg.boardStopId}:${leg.alightStopId}')
+        .join('>');
+  }
+
+  bool _alternativeHasTrain(DijkstraRouteAlternative alt) {
+    for (final leg in alt.result.plan.legs) {
+      final routeType = leg.routeType;
+      final isTrainType =
+          routeType == 0 ||
+          routeType == 1 ||
+          routeType == 2 ||
+          routeType == 12 ||
+          ((routeType ?? -1) >= 100 && (routeType ?? -1) <= 117) ||
+          ((routeType ?? -1) >= 400 && (routeType ?? -1) <= 405) ||
+          ((routeType ?? -1) >= 900 && (routeType ?? -1) <= 906);
+      if (isTrainType) return true;
+
+      final name = '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
+      if (name.contains('mrt') ||
+          name.contains('lrt') ||
+          name.contains('pnr') ||
+          name.contains('rail') ||
+          name.contains('train')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   List<route_model.Route> _topThreeModePicks(List<route_model.Route> routes) {
     if (routes.isEmpty) return const <route_model.Route>[];
 
-    final budgetTop = _sortContributedRoutes(routes, ContributedRouteSortMode.budget).first;
-    final fastestTop = _sortContributedRoutes(routes, ContributedRouteSortMode.fastest).first;
-    final balancedTop = _sortContributedRoutes(routes, ContributedRouteSortMode.balanced).first;
+    final budgetTop =
+        _sortContributedRoutes(routes, ContributedRouteSortMode.budget).first;
+    final fastestTop =
+        _sortContributedRoutes(routes, ContributedRouteSortMode.fastest).first;
+    final balancedTop =
+        _sortContributedRoutes(routes, ContributedRouteSortMode.balanced).first;
 
     final picks = <route_model.Route>[];
     final seen = <String>{};
@@ -439,7 +513,10 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     if (picks.length < 3) {
-      final byBalanced = _sortContributedRoutes(routes, ContributedRouteSortMode.balanced);
+      final byBalanced = _sortContributedRoutes(
+        routes,
+        ContributedRouteSortMode.balanced,
+      );
       for (final r in byBalanced) {
         if (seen.add(r.id)) picks.add(r);
         if (picks.length == 3) break;
@@ -456,11 +533,11 @@ class _SearchScreenState extends State<SearchScreen> {
     if (query.isEmpty) return;
 
     setState(() {
-      _isLoadingOrs    = true;
-      _orsError        = false;
+      _isLoadingOrs = true;
+      _orsError = false;
       _orsErrorMessage = '';
-      _orsResult       = null;
-      _lastOrsQuery    = query;
+      _orsResult = null;
+      _lastOrsQuery = query;
     });
 
     try {
@@ -471,22 +548,26 @@ class _SearchScreenState extends State<SearchScreen> {
         final position = await LocationService.getCurrentPosition();
         if (position == null) {
           setState(() {
-            _isLoadingOrs    = false;
-            _orsError        = true;
-            _orsErrorMessage = 'Could not get your current location. Check location permissions.';
+            _isLoadingOrs = false;
+            _orsError = true;
+            _orsErrorMessage =
+                'Could not get your current location. Check location permissions.';
           });
           return;
         }
-        origin     = LatLng(position.latitude, position.longitude);
-        originName = await LocationService.getAddressFromCoordinates(
-          position.latitude, position.longitude,
-        ) ?? 'Current Location';
+        origin = LatLng(position.latitude, position.longitude);
+        originName =
+            await LocationService.getAddressFromCoordinates(
+              position.latitude,
+              position.longitude,
+            ) ??
+            'Current Location';
       } else {
         final originText = _originController.text.trim();
         if (originText.isEmpty) {
           setState(() {
-            _isLoadingOrs    = false;
-            _orsError        = true;
+            _isLoadingOrs = false;
+            _orsError = true;
             _orsErrorMessage = 'Please enter a starting point.';
           });
           return;
@@ -494,74 +575,175 @@ class _SearchScreenState extends State<SearchScreen> {
         final originLatLng = await _geocodePhilippines(originText);
         if (originLatLng == null) {
           setState(() {
-            _isLoadingOrs    = false;
-            _orsError        = true;
-            _orsErrorMessage = 'Could not find "$originText". Try a more specific address.';
+            _isLoadingOrs = false;
+            _orsError = true;
+            _orsErrorMessage =
+                'Could not find "$originText". Try a more specific address.';
           });
           return;
         }
-        origin     = originLatLng;
+        origin = originLatLng;
         originName = originText;
       }
 
       final destLatLng = await _geocodePhilippines(query);
       if (destLatLng == null) {
         setState(() {
-          _isLoadingOrs    = false;
-          _orsError        = true;
-          _orsErrorMessage = 'Could not find "$query". Try a more specific name.';
+          _isLoadingOrs = false;
+          _orsError = true;
+          _orsErrorMessage =
+              'Could not find "$query". Try a more specific name.';
         });
         return;
       }
 
       List<DijkstraRouteAlternative> alternatives = [];
+      var fallbackAlternatives = <int, OrsRouteResult>{};
+      var labelsByIndex = <int, String>{};
       try {
-        alternatives = await RoutingService.getRouteAlternatives(
-          origin: origin,
-          destination: destLatLng,
-          optimization: 'balanced',
-          maxAlternatives: 3,
-        );
+        final pools = await Future.wait([
+          RoutingService.getRouteAlternatives(
+            origin: origin,
+            destination: destLatLng,
+            optimization: 'balanced',
+            maxAlternatives: 8,
+          ),
+          RoutingService.getRouteAlternatives(
+            origin: origin,
+            destination: destLatLng,
+            optimization: 'fastest',
+            maxAlternatives: 8,
+          ),
+          RoutingService.getRouteAlternatives(
+            origin: origin,
+            destination: destLatLng,
+            optimization: 'budget',
+            maxAlternatives: 8,
+          ),
+        ]);
+
+        final merged = <DijkstraRouteAlternative>[];
+        final mergedSeen = <String>{};
+        for (final pool in pools) {
+          for (final alt in pool) {
+            final sig = _alternativeRouteSignature(alt);
+            if (!mergedSeen.add(sig)) continue;
+            merged.add(alt);
+          }
+        }
+
+        final selected = <DijkstraRouteAlternative>[];
+        final selectedSeen = <String>{};
+
+        DijkstraRouteAlternative? pickFrom(
+          List<DijkstraRouteAlternative> pool,
+        ) {
+          for (final alt in pool) {
+            final sig = _alternativeRouteSignature(alt);
+            if (selectedSeen.contains(sig)) continue;
+            return alt;
+          }
+          for (final alt in merged) {
+            final sig = _alternativeRouteSignature(alt);
+            if (selectedSeen.contains(sig)) continue;
+            return alt;
+          }
+          return null;
+        }
+
+        void addLabeled(String label, DijkstraRouteAlternative? alt) {
+          if (alt == null) return;
+          final sig = _alternativeRouteSignature(alt);
+          if (!selectedSeen.add(sig)) return;
+          selected.add(alt);
+          labelsByIndex[selected.length - 1] = label;
+        }
+
+        final balancedPick = pickFrom(pools[0]);
+        addLabeled('Balanced', balancedPick);
+
+        final byTime = List<DijkstraRouteAlternative>.from(merged)
+          ..sort((a, b) => a.estimatedTimeMinutes.compareTo(b.estimatedTimeMinutes));
+        addLabeled('Fastest', pickFrom(byTime));
+
+        final byFare = List<DijkstraRouteAlternative>.from(merged)
+          ..sort((a, b) => a.estimatedFarePhp.compareTo(b.estimatedFarePhp));
+        addLabeled('Budget', pickFrom(byFare));
+
+        final hasTrainAlready = selected.any(_alternativeHasTrain);
+        if (!hasTrainAlready) {
+          final trainPick = pickFrom(
+            merged.where(_alternativeHasTrain).toList(),
+          );
+          addLabeled('Train', trainPick);
+        }
+
+        alternatives = selected;
+
+        final tripIdSignatures = <String>{};
+        for (var i = 0; i < alternatives.length; i++) {
+          final signature = _alternativeTripIdSignature(alternatives[i]);
+          if (signature.isEmpty || tripIdSignatures.add(signature)) continue;
+
+          fallbackAlternatives[i] = await RoutingService.buildWalkFallbackRoute(
+            origin: origin,
+            destination: destLatLng,
+            note: 'Showing walking fallback route for visual variety.',
+          );
+        }
       } catch (e) {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
 
-      final result = alternatives.isNotEmpty
-          ? await RoutingService.buildRouteFromDijkstraAlternative(
-              origin: origin,
-              destination: destLatLng,
-              alternative: alternatives.first.result,
-              preferredMode: 'Auto',
-            )
-          : await RoutingService.getRoute(
-              originName: originName,
-              origin: origin,
-              destinationName: query,
-              destination: destLatLng,
-              mode: 'Auto',
-            );
+      final result =
+          fallbackAlternatives[0] ??
+          (alternatives.isNotEmpty
+              ? await RoutingService.buildRouteFromDijkstraAlternative(
+                origin: origin,
+                destination: destLatLng,
+                alternative: alternatives.first.result,
+                preferredMode: 'Auto',
+              )
+              : await RoutingService.getRoute(
+                originName: originName,
+                origin: origin,
+                destinationName: query,
+                destination: destLatLng,
+                mode: 'Auto',
+              ));
 
       setState(() {
         _isLoadingOrs = false;
-        _orsResult    = result;
+        _orsResult = result;
         _routeAlternatives = alternatives;
+        _fallbackAlternativeRoutes = fallbackAlternatives;
+        _alternativeLabels = labelsByIndex;
         _selectedAlternativeIndex = 0;
         _lastOriginForAlternatives = origin;
         _lastDestinationForAlternatives = destLatLng;
       });
     } on RoutingException catch (e) {
       setState(() {
-        _isLoadingOrs    = false;
-        _orsError        = true;
+        _isLoadingOrs = false;
+        _orsError = true;
         _orsErrorMessage = e.message;
       });
     } catch (e) {
       setState(() {
-        _isLoadingOrs    = false;
-        _orsError        = true;
+        _isLoadingOrs = false;
+        _orsError = true;
         _orsErrorMessage = 'Unexpected error: $e';
       });
     }
+  }
+
+  Future<void> _onGenerateRoutePressed() async {
+    if (_isLoadingOrs) return;
+
+    final proceed = await RouteGenerationNoticeDialog.shouldProceed(context);
+    if (!mounted || !proceed) return;
+
+    await _fetchOrsRoute();
   }
 
   Future<void> _selectAlternative(int index) async {
@@ -569,6 +751,15 @@ class _SearchScreenState extends State<SearchScreen> {
     if (index < 0 || index >= _routeAlternatives.length) return;
     if (_lastOriginForAlternatives == null ||
         _lastDestinationForAlternatives == null) {
+      return;
+    }
+
+    final fallbackRoute = _fallbackAlternativeRoutes[index];
+    if (fallbackRoute != null) {
+      setState(() {
+        _orsResult = fallbackRoute;
+        _selectedAlternativeIndex = index;
+      });
       return;
     }
 
@@ -606,14 +797,19 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isDetectingLocation = true);
     final position = await LocationService.getCurrentPosition();
     if (position != null) {
-      final address = await LocationService.getAddressFromCoordinates(
-        position.latitude, position.longitude,
-      ) ?? 'Current Location';
+      final address =
+          await LocationService.getAddressFromCoordinates(
+            position.latitude,
+            position.longitude,
+          ) ??
+          'Current Location';
       _originController.text = address;
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not detect location. Check permissions.')),
+          const SnackBar(
+            content: Text('Could not detect location. Check permissions.'),
+          ),
         );
       }
     }
@@ -633,7 +829,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   String _totalFareRange() {
     if (_orsResult == null) return '₱0';
-    final total = _orsResult!.steps.fold(0.0, (sum, s) => sum + s.estimatedFare);
+    final total = _orsResult!.steps.fold(
+      0.0,
+      (sum, s) => sum + s.estimatedFare,
+    );
     if (total == 0) return 'Free';
     return '₱${(total * 0.9).round()}–${(total * 1.15).round()}';
   }
@@ -651,11 +850,14 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: color,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -664,7 +866,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _stepModeIcon(String mode) {
     final color = _stepModeColor(mode);
     return Container(
-      width: 26, height: 26,
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
@@ -676,27 +879,43 @@ class _SearchScreenState extends State<SearchScreen> {
 
   IconData _stepModeIconData(String mode) {
     switch (mode) {
-      case 'Walk':     return Icons.directions_walk;
-      case 'Jeepney':  return Icons.directions_bus;
-      case 'Bus':      return Icons.directions_bus_filled;
-      case 'Train':    return Icons.train;
-      case 'Tricycle': return Icons.two_wheeler;
-      case 'FX/Van':   return Icons.airport_shuttle;
-      case 'Ferry':    return Icons.directions_boat;
-      default:         return Icons.directions_bus;
+      case 'Walk':
+        return Icons.directions_walk;
+      case 'Jeepney':
+        return Icons.directions_bus;
+      case 'Bus':
+        return Icons.directions_bus_filled;
+      case 'Train':
+        return Icons.train;
+      case 'Tricycle':
+        return Icons.two_wheeler;
+      case 'FX/Van':
+        return Icons.airport_shuttle;
+      case 'Ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_bus;
     }
   }
 
   Color _stepModeColor(String mode) {
     switch (mode) {
-      case 'Walk':     return Colors.green.shade600;
-      case 'Jeepney':  return Colors.blue.shade600;
-      case 'Bus':      return Colors.red.shade600;
-      case 'Train':    return Colors.purple.shade600;
-      case 'Tricycle': return Colors.orange.shade600;
-      case 'FX/Van':   return Colors.amber.shade700;
-      case 'Ferry':    return Colors.lightBlue.shade600;
-      default:         return Colors.blue.shade600;
+      case 'Walk':
+        return Colors.green.shade600;
+      case 'Jeepney':
+        return Colors.blue.shade600;
+      case 'Bus':
+        return Colors.red.shade600;
+      case 'Train':
+        return Colors.purple.shade600;
+      case 'Tricycle':
+        return Colors.orange.shade600;
+      case 'FX/Van':
+        return Colors.amber.shade700;
+      case 'Ferry':
+        return Colors.lightBlue.shade600;
+      default:
+        return Colors.blue.shade600;
     }
   }
 
@@ -732,9 +951,10 @@ class _SearchScreenState extends State<SearchScreen> {
                     }
                   },
                   color: _accent,
-                  child: _isSearching
-                      ? _buildSearchResults()
-                      : _buildSearchSuggestions(),
+                  child:
+                      _isSearching
+                          ? _buildSearchResults()
+                          : _buildSearchSuggestions(),
                 ),
               ),
             ],
@@ -765,28 +985,37 @@ class _SearchScreenState extends State<SearchScreen> {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: _border),
           ),
-          child: const Icon(Icons.arrow_back_ios_new,
-              size: 15, color: _textSecondary),
+          child: const Icon(
+            Icons.arrow_back_ios_new,
+            size: 15,
+            color: _textSecondary,
+          ),
         ),
       ),
       title: Row(
         children: [
           Container(
-            width: 30, height: 30,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
-                color: _accentSoft,
-                borderRadius: BorderRadius.circular(9)),
-            child:
-                const Icon(Icons.manage_search_rounded, color: _accent, size: 16),
+              color: _accentSoft,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(
+              Icons.manage_search_rounded,
+              color: _accent,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 10),
           const Text(
             'Search Routes',
             style: TextStyle(
-                color: _textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3),
+              color: _textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
           ),
         ],
       ),
@@ -802,8 +1031,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(color: _border),
               ),
-              child: const Icon(Icons.help_outline_rounded,
-                  size: 17, color: _textSecondary),
+              child: const Icon(
+                Icons.help_outline_rounded,
+                size: 17,
+                color: _textSecondary,
+              ),
             ),
           ),
         ),
@@ -834,33 +1066,42 @@ class _SearchScreenState extends State<SearchScreen> {
               style: const TextStyle(color: _textPrimary, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search destinations...',
-                hintStyle:
-                    const TextStyle(color: _textSecondary, fontSize: 14),
-                prefixIcon: const Icon(Icons.search_rounded,
-                    color: _accent, size: 20),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? GestureDetector(
-                        onTap: () {
-                          _searchController.clear();
-                          _onSearch('');
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
+                hintStyle: const TextStyle(color: _textSecondary, fontSize: 14),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: _accent,
+                  size: 20,
+                ),
+                suffixIcon:
+                    _searchController.text.isNotEmpty
+                        ? GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            _onSearch('');
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
                               color: _border,
-                              borderRadius: BorderRadius.circular(6)),
-                          child: const Icon(Icons.close,
-                              size: 14, color: _textSecondary),
-                        ),
-                      )
-                    : null,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        )
+                        : null,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
-                    vertical: 14, horizontal: 4),
+                  vertical: 14,
+                  horizontal: 4,
+                ),
               ),
-              onChanged:   _onSearch,
+              onChanged: _onSearch,
               onSubmitted: _onSearchSubmitted,
-              onTap:       _onSearchFocus,
+              onTap: _onSearchFocus,
             ),
           ),
           if (_showOmnibox && _suggestions.isNotEmpty) _buildOmnibox(),
@@ -878,9 +1119,10 @@ class _SearchScreenState extends State<SearchScreen> {
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-              color: _accent.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 6))
+            color: _accent.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: ListView.separated(
@@ -890,44 +1132,45 @@ class _SearchScreenState extends State<SearchScreen> {
         separatorBuilder: (_, index) => Divider(color: _border, height: 1),
         itemBuilder: (context, index) {
           final suggestion = _suggestions[index];
-          final isRecent   = _recentSearches.contains(suggestion);
+          final isRecent = _recentSearches.contains(suggestion);
           return InkWell(
             onTap: () => _onSuggestionTap(suggestion),
             borderRadius: BorderRadius.vertical(
-              top:    index == 0 ? const Radius.circular(14) : Radius.zero,
-              bottom: index == _suggestions.length - 1
-                  ? const Radius.circular(14)
-                  : Radius.zero,
+              top: index == 0 ? const Radius.circular(14) : Radius.zero,
+              bottom:
+                  index == _suggestions.length - 1
+                      ? const Radius.circular(14)
+                      : Radius.zero,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               child: Row(
                 children: [
                   Container(
-                    width: 28, height: 28,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
                       color: isRecent ? _surfaceAlt : _accentSoft,
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Icon(
-                      isRecent
-                          ? Icons.history_rounded
-                          : Icons.search_rounded,
+                      isRecent ? Icons.history_rounded : Icons.search_rounded,
                       size: 14,
                       color: isRecent ? _textSecondary : _accent,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(suggestion,
-                        style: const TextStyle(
-                            color: _textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500)),
+                    child: Text(
+                      suggestion,
+                      style: const TextStyle(
+                        color: _textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                  const Icon(Icons.north_west,
-                      size: 13, color: _textSecondary),
+                  const Icon(Icons.north_west, size: 13, color: _textSecondary),
                 ],
               ),
             ),
@@ -941,8 +1184,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSearchResults() {
     if (_filteredRoutes.isNotEmpty) {
-      final sortedRoutes =
-          _sortContributedRoutes(_filteredRoutes, _contributedSortMode);
+      final sortedRoutes = _sortContributedRoutes(
+        _filteredRoutes,
+        _contributedSortMode,
+      );
       final topPicks = _topThreeModePicks(_filteredRoutes);
 
       return ListView(
@@ -993,23 +1238,26 @@ class _SearchScreenState extends State<SearchScreen> {
         _sortFilterChip(
           label: 'Balanced',
           active: _contributedSortMode == ContributedRouteSortMode.balanced,
-          onTap: () => setState(
-            () => _contributedSortMode = ContributedRouteSortMode.balanced,
-          ),
+          onTap:
+              () => setState(
+                () => _contributedSortMode = ContributedRouteSortMode.balanced,
+              ),
         ),
         _sortFilterChip(
           label: 'Budget',
           active: _contributedSortMode == ContributedRouteSortMode.budget,
-          onTap: () => setState(
-            () => _contributedSortMode = ContributedRouteSortMode.budget,
-          ),
+          onTap:
+              () => setState(
+                () => _contributedSortMode = ContributedRouteSortMode.budget,
+              ),
         ),
         _sortFilterChip(
           label: 'Fastest',
           active: _contributedSortMode == ContributedRouteSortMode.fastest,
-          onTap: () => setState(
-            () => _contributedSortMode = ContributedRouteSortMode.fastest,
-          ),
+          onTap:
+              () => setState(
+                () => _contributedSortMode = ContributedRouteSortMode.fastest,
+              ),
         ),
       ],
     );
@@ -1078,7 +1326,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 onTap: () => _onRouteTap(route),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.grey.shade300),
@@ -1090,12 +1341,18 @@ class _SearchScreenState extends State<SearchScreen> {
                         '${route.startLocation} to ${route.endLocation}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         'PHP ${_routeEstimatedFare(route).toStringAsFixed(0)} • ${_routeEstimatedMinutes(route)} min',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                     ],
                   ),
@@ -1114,8 +1371,7 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Container(
           width: double.infinity,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.blue.shade50,
             border: Border.all(color: Colors.blue.shade300),
@@ -1124,16 +1380,14 @@ class _SearchScreenState extends State<SearchScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.info_outline,
-                  color: Colors.blue.shade700, size: 20),
+              Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Fallback auto-generated route from transit stop data. '
                   'Use community-verified routes first whenever available. '
                   'Distances and fares here are estimates.',
-                  style: TextStyle(
-                      fontSize: 13, color: Colors.blue.shade800),
+                  style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
                 ),
               ),
             ],
@@ -1157,81 +1411,101 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.route,
-                        color: Colors.blue.shade700, size: 20),
+                    Icon(Icons.route, color: Colors.blue.shade700, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _searchController.text.trim(),
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 8, runSpacing: 6,
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    _infoChip(Icons.straighten,
-                        _orsResult!.distanceLabel, Colors.green),
-                    _infoChip(Icons.timer_outlined,
-                        _orsResult!.durationLabel, Colors.orange),
-                    _infoChip(Icons.payments_outlined,
-                        _totalFareRange(), Colors.green.shade700),
+                    _infoChip(
+                      Icons.straighten,
+                      _orsResult!.distanceLabel,
+                      Colors.green,
+                    ),
+                    _infoChip(
+                      Icons.timer_outlined,
+                      _orsResult!.durationLabel,
+                      Colors.orange,
+                    ),
+                    _infoChip(
+                      Icons.payments_outlined,
+                      _totalFareRange(),
+                      Colors.green.shade700,
+                    ),
                   ],
                 ),
                 if (_orsResult!.steps.isNotEmpty) ...[
                   const Divider(height: 24),
-                  const Text('Route steps',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text(
+                    'Route steps',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
-                  ..._orsResult!.steps.take(6).map((step) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _stepModeIcon(step.suggestedMode),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _stepModeColor(
-                                          step.suggestedMode),
-                                      borderRadius:
-                                          BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      step.suggestedMode,
-                                      style: const TextStyle(
+                  ..._orsResult!.steps
+                      .take(6)
+                      .map(
+                        (step) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _stepModeIcon(step.suggestedMode),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _stepModeColor(
+                                          step.suggestedMode,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        step.suggestedMode,
+                                        style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 10,
-                                          fontWeight: FontWeight.bold),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(step.instruction,
-                                      style: const TextStyle(
-                                          fontSize: 13)),
-                                ],
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      step.instruction,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      )),
+                      ),
                   if (_orsResult!.steps.length > 6)
                     Text(
                       '+ ${_orsResult!.steps.length - 6} more steps',
                       style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade500),
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
                     ),
                 ],
               ],
@@ -1239,46 +1513,33 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Route cached locally — next search is instant.',
-          style:
-              TextStyle(fontSize: 12, color: Colors.grey.shade500),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _onClearRouteCache,
-            icon: const Icon(Icons.delete_sweep_outlined, size: 16),
-            label: const Text('Clear route cache'),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.blue.shade700,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ),
+
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => OrsRouteMapScreen(
-                  result: _orsResult!,
-                  destinationName: _searchController.text.trim(),
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (_) => OrsRouteMapScreen(
+                        result: _orsResult!,
+                        destinationName: _searchController.text.trim(),
+                      ),
                 ),
-              ));
+              );
             },
             icon: const Icon(Icons.map, color: Colors.white),
-            label: const Text('View on Map',
-                style: TextStyle(color: Colors.white, fontSize: 15)),
+            label: const Text(
+              'View on Map',
+              style: TextStyle(color: Colors.white, fontSize: 15),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ),
@@ -1287,22 +1548,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildAlternativesPanel() {
-    int budgetIdx = 0;
-    int fastestIdx = 0;
-    int balancedIdx = 0;
-
-    for (var i = 1; i < _routeAlternatives.length; i++) {
-      if (_routeAlternatives[i].estimatedFarePhp < _routeAlternatives[budgetIdx].estimatedFarePhp) {
-        budgetIdx = i;
-      }
-      if (_routeAlternatives[i].estimatedTimeMinutes < _routeAlternatives[fastestIdx].estimatedTimeMinutes) {
-        fastestIdx = i;
-      }
-      if (_routeAlternatives[i].balancedScore < _routeAlternatives[balancedIdx].balancedScore) {
-        balancedIdx = i;
-      }
-    }
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1324,7 +1569,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Generated via repeated Dijkstra with edge penalties (k-shortest approximation).',
+            'Best picks for Balanced, Fastest, and Budget from GTFS alternatives.',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 10),
@@ -1332,11 +1577,27 @@ class _SearchScreenState extends State<SearchScreen> {
             final index = entry.key;
             final alt = entry.value;
             final selected = index == _selectedAlternativeIndex;
+            final fallbackRoute = _fallbackAlternativeRoutes[index];
+            final displayFare =
+                fallbackRoute == null
+                    ? alt.estimatedFarePhp
+                    : fallbackRoute.steps.fold<double>(
+                      0.0,
+                      (sum, s) => sum + s.estimatedFare,
+                    );
+            final displayTimeMinutes =
+                fallbackRoute == null
+                    ? alt.estimatedTimeMinutes
+                    : fallbackRoute.durationSeconds / 60.0;
 
             final tags = <String>[];
-            if (index == budgetIdx) tags.add('Budget');
-            if (index == fastestIdx) tags.add('Fastest');
-            if (index == balancedIdx) tags.add('Balanced');
+            final optionLabel = _alternativeLabels[index];
+            if (optionLabel != null && optionLabel.isNotEmpty) {
+              tags.add(optionLabel);
+            }
+            if (fallbackRoute != null) {
+              tags.add('Walk Fallback');
+            }
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1344,12 +1605,18 @@ class _SearchScreenState extends State<SearchScreen> {
                 onTap: () => _selectAlternative(index),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: selected ? Colors.blue.shade50 : Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: selected ? Colors.blue.shade400 : Colors.grey.shade300,
+                      color:
+                          selected
+                              ? Colors.blue.shade400
+                              : Colors.grey.shade300,
                     ),
                   ),
                   child: Row(
@@ -1360,12 +1627,18 @@ class _SearchScreenState extends State<SearchScreen> {
                           children: [
                             Text(
                               'Option ${index + 1}',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Fare: PHP ${alt.estimatedFarePhp.toStringAsFixed(0)} • Time: ${alt.estimatedTimeMinutes.toStringAsFixed(0)} min',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              'Fare: PHP ${displayFare.toStringAsFixed(0)} • Time: ${displayTimeMinutes.toStringAsFixed(0)} min',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
                             if (tags.isNotEmpty) ...[
                               const SizedBox(height: 4),
@@ -1382,7 +1655,11 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                       ),
                       if (selected)
-                        Icon(Icons.check_circle, color: Colors.blue.shade700, size: 18),
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.blue.shade700,
+                          size: 18,
+                        ),
                     ],
                   ),
                 ),
@@ -1399,20 +1676,26 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         const SizedBox(height: 32),
         Container(
-          width: 72, height: 72,
+          width: 72,
+          height: 72,
           decoration: BoxDecoration(
-              color: _surfaceAlt,
-              borderRadius: BorderRadius.circular(20)),
-          child: const Icon(Icons.search_off_rounded,
-              size: 36, color: _textSecondary),
+            color: _surfaceAlt,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(
+            Icons.search_off_rounded,
+            size: 36,
+            color: _textSecondary,
+          ),
         ),
         const SizedBox(height: 16),
         const Text(
           'No community routes found',
           style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: _textPrimary),
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: _textPrimary,
+          ),
         ),
         const SizedBox(height: 6),
         const Text(
@@ -1437,24 +1720,25 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Text(
                 _orsErrorMessage,
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(color: Colors.red.shade700, fontSize: 13),
+                style: TextStyle(color: Colors.red.shade700, fontSize: 13),
               ),
             ),
           ),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: _isLoadingOrs ? null : _fetchOrsRoute,
-            icon:
-                const Icon(Icons.map_outlined, color: Colors.white),
-            label: const Text('Generate Route',
-                style: TextStyle(color: Colors.white, fontSize: 15)),
+            onPressed: _isLoadingOrs ? null : _onGenerateRoutePressed,
+            icon: const Icon(Icons.map_outlined, color: Colors.white),
+            label: const Text(
+              'Generate Route',
+              style: TextStyle(color: Colors.white, fontSize: 15),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ),
@@ -1476,10 +1760,11 @@ class _SearchScreenState extends State<SearchScreen> {
           Text(
             'Starting point',
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.blue.shade700,
-                letterSpacing: 0.4),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue.shade700,
+              letterSpacing: 0.4,
+            ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -1488,26 +1773,27 @@ class _SearchScreenState extends State<SearchScreen> {
                 label: 'My location',
                 icon: Icons.my_location,
                 active: _useCurrentLocation,
-                onTap: () => setState(() {
-                  _useCurrentLocation = true;
-                  _originController.clear();
-                }),
+                onTap:
+                    () => setState(() {
+                      _useCurrentLocation = true;
+                      _originController.clear();
+                    }),
               ),
               const SizedBox(width: 8),
               _originToggleBtn(
                 label: 'Enter address',
                 icon: Icons.edit_location_alt_outlined,
                 active: !_useCurrentLocation,
-                onTap: () =>
-                    setState(() => _useCurrentLocation = false),
+                onTap: () => setState(() => _useCurrentLocation = false),
               ),
             ],
           ),
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 220),
-            crossFadeState: _useCurrentLocation
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
+            crossFadeState:
+                _useCurrentLocation
+                    ? CrossFadeState.showFirst
+                    : CrossFadeState.showSecond,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -1517,28 +1803,29 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: TextField(
                       controller: _originController,
                       decoration: InputDecoration(
-                        hintText:
-                            'e.g. Quezon City Hall, EDSA Cubao...',
+                        hintText: 'e.g. Quezon City Hall, EDSA Cubao...',
                         hintStyle: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade400),
+                          fontSize: 13,
+                          color: Colors.grey.shade400,
+                        ),
                         prefixIcon: Icon(
-                            Icons.location_on_outlined,
-                            color: Colors.blue.shade600,
-                            size: 20),
+                          Icons.location_on_outlined,
+                          color: Colors.blue.shade600,
+                          size: 20,
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                              color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                              color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                       ),
                       textInputAction: TextInputAction.done,
@@ -1546,18 +1833,19 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                   const SizedBox(width: 8),
                   IconButton.filled(
-                    onPressed: _isDetectingLocation
-                        ? null
-                        : _detectAndFillOrigin,
-                    icon: _isDetectingLocation
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
+                    onPressed:
+                        _isDetectingLocation ? null : _detectAndFillOrigin,
+                    icon:
+                        _isDetectingLocation
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white),
-                          )
-                        : const Icon(Icons.my_location, size: 18),
+                                color: Colors.white,
+                              ),
+                            )
+                            : const Icon(Icons.my_location, size: 18),
                     tooltip: 'Use GPS location',
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.blue.shade600,
@@ -1584,33 +1872,29 @@ class _SearchScreenState extends State<SearchScreen> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: active ? Colors.blue.shade700 : Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active
-                ? Colors.blue.shade700
-                : Colors.grey.shade300,
+            color: active ? Colors.blue.shade700 : Colors.grey.shade300,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 15,
-                color: active
-                    ? Colors.white
-                    : Colors.grey.shade600),
+            Icon(
+              icon,
+              size: 15,
+              color: active ? Colors.white : Colors.grey.shade600,
+            ),
             const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color:
-                    active ? Colors.white : Colors.grey.shade600,
+                color: active ? Colors.white : Colors.grey.shade600,
               ),
             ),
           ],
@@ -1645,67 +1929,88 @@ class _SearchScreenState extends State<SearchScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('RECENT SEARCHES',
-                style: TextStyle(
-                    color: _textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2)),
+            const Text(
+              'RECENT SEARCHES',
+              style: TextStyle(
+                color: _textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
+            ),
             GestureDetector(
               onTap: _onClearRecentSearches,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 5),
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: _surfaceAlt,
                   borderRadius: BorderRadius.circular(7),
                   border: Border.all(color: _border),
                 ),
-                child: const Text('Clear All',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: _textSecondary,
-                        fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Clear All',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         Wrap(
-          spacing: 8, runSpacing: 8,
-          children: _recentSearches.map((search) {
-            return GestureDetector(
-              onTap: () => _onRecentSearchTap(search),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: _border),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.history_rounded,
-                        size: 13, color: _textSecondary),
-                    const SizedBox(width: 6),
-                    Text(search,
-                        style: const TextStyle(
+          spacing: 8,
+          runSpacing: 8,
+          children:
+              _recentSearches.map((search) {
+                return GestureDetector(
+                  onTap: () => _onRecentSearchTap(search),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.history_rounded,
+                          size: 13,
+                          color: _textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          search,
+                          style: const TextStyle(
                             fontSize: 12,
                             color: _textPrimary,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _onRemoveRecentSearch(search),
-                      child: const Icon(Icons.close,
-                          size: 12, color: _textSecondary),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _onRemoveRecentSearch(search),
+                          child: const Icon(
+                            Icons.close,
+                            size: 12,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
+                  ),
+                );
+              }).toList(),
         ),
       ],
     );
@@ -1715,15 +2020,20 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('TOP SEARCHES',
-            style: TextStyle(
-                color: _textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2)),
+        const Text(
+          'TOP SEARCHES',
+          style: TextStyle(
+            color: _textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
         const SizedBox(height: 4),
-        const Text('Popular routes based on community activity',
-            style: TextStyle(fontSize: 13, color: _textSecondary)),
+        const Text(
+          'Popular routes based on community activity',
+          style: TextStyle(fontSize: 13, color: _textSecondary),
+        ),
         const SizedBox(height: 16),
         ..._topSearches.map((route) => _routeCardWithBadge(route)),
       ],

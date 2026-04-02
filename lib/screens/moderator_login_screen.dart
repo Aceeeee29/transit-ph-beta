@@ -61,9 +61,18 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
         return;
       }
 
-      final role = userDoc.data()?['role'] as String?;
+        final role = ((userDoc.data()?['role'] as String?) ?? '')
+          .trim()
+          .toLowerCase()
+          .replaceAll('-', '_')
+          .replaceAll(' ', '_');
 
-      if (role != 'moderator' && role != 'admin') {
+        final isPrivilegedRole = role == 'moderator' ||
+          role == 'admin' ||
+          role == 'superadmin' ||
+          role == 'super_admin';
+
+        if (!isPrivilegedRole) {
         // Not a moderator — sign them out immediately
         await FirebaseAuth.instance.signOut();
         setState(() =>

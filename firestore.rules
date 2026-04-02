@@ -250,5 +250,15 @@ service cloud.firestore {
       allow read: if configId == 'update_checker' || isAuth();
       allow create, update, delete: if isSuperAdmin();
     }
+
+    // ── ROUTE CACHE (per-user) ──────────────────────────────────────────────
+    match /route_cache/{cacheId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
   }
 }
