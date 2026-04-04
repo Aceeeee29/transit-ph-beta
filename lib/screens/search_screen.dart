@@ -230,6 +230,8 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
 
+    newSuggestions.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
     setState(() {
       _isSearching = true;
       _suggestions = newSuggestions.take(5).toList();

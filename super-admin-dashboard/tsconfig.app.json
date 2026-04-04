@@ -17,7 +17,6 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["react", "react-dom", "vite/client"],
     "typeRoots": ["./node_modules/@types"],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }

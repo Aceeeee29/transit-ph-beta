@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/route.dart' as route_model;
+import '../../services/route_service.dart';
+import '../../services/route_trust_service.dart';
 
 /// A route card used in the search screen results and suggestions.
 class SearchRouteCard extends StatelessWidget {
@@ -115,6 +117,8 @@ class SearchRouteCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
+              _buildRouteIntegrityChip(),
+              const SizedBox(height: 8),
               Text(
                 route.shortDescription,
                 style: const TextStyle(
@@ -202,6 +206,65 @@ class SearchRouteCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRouteIntegrityChip() {
+    return StreamBuilder<Map<String, int>>(
+      stream: RouteService.watchRouteFeedbackSummary(route.id),
+      builder: (context, snapshot) {
+        final summary = snapshot.data ?? const {
+          'fareAccurateYes': 0,
+          'fareAccurateNo': 0,
+          'scheduleAccurateYes': 0,
+          'scheduleAccurateNo': 0,
+          'stillOperatingYes': 0,
+          'stillOperatingNo': 0,
+        };
+
+        final trust = RouteTrustService.computeConfidence(
+          route: route,
+          feedbackSummary: summary,
+        );
+        final trustLabel = RouteTrustService.confidenceLabel(trust.total);
+
+        final trustColor = trust.total >= 85
+            ? const Color(0xFF2D9F63)
+            : trust.total >= 65
+                ? _accent
+                : const Color(0xFFB8732F);
+
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: trustColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: trustColor.withOpacity(0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.verified_user_outlined,
+                  size: 13,
+                  color: trustColor,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'Route integrity ${trust.total}/100 - $trustLabel',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: trustColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -1447,6 +1447,20 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }();
 
     final scheduleText = _routeScheduleText();
+    final trustScore = _trustScore;
+    final trustLabel = trustScore != null
+      ? RouteTrustService.confidenceLabel(trustScore.total)
+      : 'Loading';
+    final trustColor = trustScore == null
+      ? _textSecondary
+      : trustScore.total >= 85
+        ? _green
+        : trustScore.total >= 65
+          ? _accent
+          : const Color(0xFFE89A3C);
+    final trustValue = trustScore != null
+      ? '${trustScore.total}/100'
+      : '--';
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -1485,6 +1499,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               value: scheduleText,
             ),
           ],
+          const SizedBox(width: 10),
+          _metricCard(
+            icon: Icons.verified_user_outlined,
+            iconColor: trustColor,
+            label: 'Integrity ($trustLabel)',
+            value: trustValue,
+          ),
         ],
       ),
     );

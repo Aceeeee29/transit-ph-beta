@@ -9,6 +9,8 @@ import '../services/weather_service.dart';
 import '../services/location_service.dart';
 import '../services/recommendation_service.dart';
 import '../services/route_metrics_service.dart';
+import '../services/route_service.dart';
+import '../services/route_trust_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
 
@@ -611,6 +613,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 8),
+              _routeIntegrityChip(route),
+              const SizedBox(height: 8),
               Text(
                 route.shortDescription,
                 style: const TextStyle(
@@ -787,6 +791,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 6),
+            _routeIntegrityChip(route),
+            const SizedBox(height: 6),
             Text(
               route.shortDescription,
               style: const TextStyle(
@@ -928,6 +934,60 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return const Icon(Icons.directions_walk, color: Colors.green, size: 20);
     }
+  }
+
+  Widget _routeIntegrityChip(route_model.Route route) {
+    return StreamBuilder<Map<String, int>>(
+      stream: RouteService.watchRouteFeedbackSummary(route.id),
+      builder: (context, snapshot) {
+        final summary = snapshot.data ?? const {
+          'fareAccurateYes': 0,
+          'fareAccurateNo': 0,
+          'scheduleAccurateYes': 0,
+          'scheduleAccurateNo': 0,
+          'stillOperatingYes': 0,
+          'stillOperatingNo': 0,
+        };
+
+        final trust = RouteTrustService.computeConfidence(
+          route: route,
+          feedbackSummary: summary,
+        );
+        final trustLabel = RouteTrustService.confidenceLabel(trust.total);
+        final trustColor = trust.total >= 85
+            ? const Color(0xFF2D9F63)
+            : trust.total >= 65
+                ? _accent
+                : const Color(0xFFB8732F);
+
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: trustColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: trustColor.withOpacity(0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.verified_user_outlined, size: 13, color: trustColor),
+                const SizedBox(width: 5),
+                Text(
+                  'Integrity ${trust.total}/100 - $trustLabel',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: trustColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _sortChip({
