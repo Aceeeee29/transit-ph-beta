@@ -16,13 +16,21 @@ import '../services/schedule_window_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
+import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 
 class RouteMapScreen extends StatefulWidget {
   final route_model.Route route;
+  final bool enableRouteIntegrity;
+  final bool showDownloadButton;
 
-  const RouteMapScreen({super.key, required this.route});
+  const RouteMapScreen({
+    super.key,
+    required this.route,
+    this.enableRouteIntegrity = true,
+    this.showDownloadButton = true,
+  });
 
   @override
   State<RouteMapScreen> createState() => _RouteMapScreenState();
@@ -62,6 +70,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _scheduleAccurate = true;
   bool _stillOperating = true;
   bool _isExitPromptOpen = false;
+  bool _isRouteDownloaded = false;
+  bool _isDownloadingRoute = false;
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -94,7 +104,42 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _loadEngagementState();
     _generatePathPoints();
     _loadScheduleWindowSnapshot();
-    _loadRouteTrustState();
+    if (widget.enableRouteIntegrity) {
+      _loadRouteTrustState();
+    }
+    _loadDownloadedState();
+  }
+
+  Future<void> _loadDownloadedState() async {
+    final isDownloaded = await OfflineRouteRepository.isRouteDownloaded(
+      widget.route.id,
+    );
+    if (!mounted) return;
+    setState(() => _isRouteDownloaded = isDownloaded);
+  }
+
+  Future<void> _downloadRouteForOffline() async {
+    if (!widget.showDownloadButton) return;
+    if (_isDownloadingRoute || _isRouteDownloaded) return;
+
+    setState(() => _isDownloadingRoute = true);
+    try {
+      await OfflineRouteRepository.saveRoute(widget.route);
+      if (!mounted) return;
+      setState(() => _isRouteDownloaded = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Route downloaded for offline mode.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloadingRoute = false);
+      }
+    }
   }
 
   Future<void> _loadScheduleWindowSnapshot() async {
@@ -400,6 +445,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   Future<bool> _handleBackPressed() async {
+    if (!widget.enableRouteIntegrity) {
+      return true;
+    }
+
     if (await _isTrustPromptSkippedToday()) {
       return true;
     }
@@ -1086,6 +1135,40 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         ],
       ),
       actions: [
+        if (widget.showDownloadButton)
+          GestureDetector(
+            onTap: (_isDownloadingRoute || _isRouteDownloaded)
+                ? null
+                : _downloadRouteForOffline,
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _isRouteDownloaded
+                    ? _green.withValues(alpha: 0.12)
+                    : _accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _isRouteDownloaded
+                      ? _green.withValues(alpha: 0.35)
+                      : _accent.withValues(alpha: 0.3),
+                ),
+              ),
+              child: _isDownloadingRoute
+                  ? const Padding(
+                      padding: EdgeInsets.all(8.5),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _isRouteDownloaded
+                          ? Icons.download_done_rounded
+                          : Icons.download_rounded,
+                      color: _isRouteDownloaded ? _green : _accent,
+                      size: 18,
+                    ),
+            ),
+          ),
         _VoteButton(
           icon: Icons.arrow_upward_rounded,
           count: widget.route.upvotes,
@@ -1449,18 +1532,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final scheduleText = _routeScheduleText();
     final trustScore = _trustScore;
     final trustLabel = trustScore != null
-      ? RouteTrustService.confidenceLabel(trustScore.total)
-      : 'Loading';
+        ? RouteTrustService.confidenceLabel(trustScore.total)
+        : 'Loading';
     final trustColor = trustScore == null
-      ? _textSecondary
-      : trustScore.total >= 85
-        ? _green
-        : trustScore.total >= 65
-          ? _accent
-          : const Color(0xFFE89A3C);
-    final trustValue = trustScore != null
-      ? '${trustScore.total}/100'
-      : '--';
+        ? _textSecondary
+        : trustScore.total >= 85
+            ? _green
+            : trustScore.total >= 65
+                ? _accent
+                : const Color(0xFFE89A3C);
+    final trustValue = trustScore != null ? '${trustScore.total}/100' : '--';
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -1478,7 +1559,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               icon: Icons.access_time_rounded,
               iconColor: _accent,
               label: 'ETA',
-              value: '${widget.route.eta} min',
+              value: RouteMetricsService.formatEtaLabel(widget.route.eta),
             ),
           ],
           if (widget.route.price != null) ...[
@@ -1499,13 +1580,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               value: scheduleText,
             ),
           ],
-          const SizedBox(width: 10),
-          _metricCard(
-            icon: Icons.verified_user_outlined,
-            iconColor: trustColor,
-            label: 'Integrity ($trustLabel)',
-            value: trustValue,
-          ),
+          if (widget.enableRouteIntegrity) ...[
+            const SizedBox(width: 10),
+            _metricCard(
+              icon: Icons.verified_user_outlined,
+              iconColor: trustColor,
+              label: 'Integrity ($trustLabel)',
+              value: trustValue,
+            ),
+          ],
         ],
       ),
     );

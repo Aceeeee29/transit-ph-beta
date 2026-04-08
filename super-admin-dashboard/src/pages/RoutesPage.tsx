@@ -88,6 +88,29 @@ function StatusBadge({ status }: { status?: string }) {
   return <span className="badge badge-pending"><span className="badge-dot" />Pending</span>
 }
 
+function EditedBadge({ editCount }: { editCount?: number }) {
+  const count = editCount ?? 0
+  return (
+    <span
+      title={count > 0 ? `Edited ${count} time${count > 1 ? 's' : ''}` : 'Edited'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '3px 8px',
+        borderRadius: 999,
+        fontSize: '0.72rem',
+        fontWeight: 800,
+        color: 'var(--accent)',
+        background: 'var(--accent-soft)',
+        border: '1px solid rgba(46,124,246,0.35)',
+      }}
+    >
+      EDITED
+    </span>
+  )
+}
+
 export function RoutesPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -255,7 +278,12 @@ export function RoutesPage() {
                   <td style={{ fontSize: '0.81rem', color: 'var(--text-secondary)' }}>
                     {r.createdAt?.toDate().toLocaleDateString() ?? '-'}
                   </td>
-                  <td><StatusBadge status={r.status} /></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <StatusBadge status={r.status} />
+                      {r.status === 'pending' && r.isEdited ? <EditedBadge editCount={r.editCount} /> : null}
+                    </div>
+                  </td>
                   <td style={{ fontWeight: 600 }}>{r.views ?? 0}</td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -320,6 +348,7 @@ export function RoutesPage() {
                   <span style={{ fontWeight: 700 }}>{preview.endLocation}</span>
                 </div>
                 <StatusBadge status={preview.status} />
+                {preview.status === 'pending' && preview.isEdited ? <EditedBadge editCount={preview.editCount} /> : null}
               </div>
               {[
                 ['Trust', `${computeRouteTrust(preview).total}/100 (${computeRouteTrust(preview).label})`],

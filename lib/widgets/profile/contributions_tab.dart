@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../models/route.dart' as route_model;
 import '../../services/route_service.dart';
 import 'profile_colors.dart';
@@ -16,8 +17,10 @@ class ContributionsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid ?? userEmail;
+
     return FutureBuilder<List<route_model.Route>>(
-      future: RouteService.getRoutesByUser(userEmail),
+      future: RouteService.getRoutesByUser(uid, userEmail: userEmail),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

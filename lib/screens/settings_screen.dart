@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/feedback.dart' as feedback_model;
+import '../screens/legal_documents_screen.dart';
 import '../services/moderation_service.dart';
 import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
@@ -903,14 +904,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: 'Privacy Policy',
                   icon: Icons.lock_outline_rounded,
                   onTap: () {
-                    // TODO: Open Privacy Policy
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder:
+                            (_) => const LegalDocumentsScreen(
+                              type: LegalDocumentType.privacyPolicy,
+                            ),
+                      ),
+                    );
                   },
                 ),
                 _actionRow(
                   label: 'Terms of Service',
                   icon: Icons.description_outlined,
                   onTap: () {
-                    // TODO: Open Terms of Service
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder:
+                            (_) => const LegalDocumentsScreen(
+                              type: LegalDocumentType.termsAndConditions,
+                            ),
+                      ),
+                    );
                   },
                 ),
                 _actionRow(

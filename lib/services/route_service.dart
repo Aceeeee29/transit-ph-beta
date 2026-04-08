@@ -287,17 +287,45 @@ class RouteService {
   }
 
   /// Get all routes contributed by a specific user (all statuses — for profile)
-  static Future<List<route_model.Route>> getRoutesByUser(String userId) async {
+  /// Supports both UID and email-based contributor IDs for legacy compatibility.
+  static Future<List<route_model.Route>> getRoutesByUser(
+    String userId, {
+    String? userEmail,
+  }) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('routes')
-          .where('contributorId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
-          .get();
+      final normalizedId = userId.trim();
+      final normalizedEmail = userEmail?.trim();
 
-      return querySnapshot.docs
-          .map((doc) => route_model.Route.fromJson(doc.data()))
-          .toList();
+      final identifiers = <String>{};
+      if (normalizedId.isNotEmpty) identifiers.add(normalizedId);
+      if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
+        identifiers.add(normalizedEmail);
+      }
+
+      if (identifiers.isEmpty) return [];
+
+      final byRouteId = <String, route_model.Route>{};
+
+      for (final contributorIdentifier in identifiers) {
+        final querySnapshot = await _firestore
+            .collection('routes')
+            .where('contributorId', isEqualTo: contributorIdentifier)
+            .get();
+
+        for (final doc in querySnapshot.docs) {
+          final route = route_model.Route.fromJson(doc.data());
+          byRouteId[route.id] = route;
+        }
+      }
+
+      final routes = byRouteId.values.toList()
+        ..sort((a, b) {
+          final aTime = a.createdAt ?? DateTime(2000);
+          final bTime = b.createdAt ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
+
+      return routes;
     } catch (e) {
       print('Error fetching routes for user $userId: $e');
       return [];
@@ -352,7 +380,14 @@ class RouteService {
   static Future<void> updateRoute(route_model.Route route) async {
     try {
       final before = await _firestore.collection('routes').doc(route.id).get();
+      final beforeData = before.data() ?? const <String, dynamic>{};
       final data = route.toJson();
+
+      // Any user edit must be re-reviewed by moderators/super admins.
+      data['approvalStatus'] = route_model.RouteApprovalStatus.pending.name;
+      data['isEdited'] = true;
+      data['editedAt'] = FieldValue.serverTimestamp();
+      data['editCount'] = FieldValue.increment(1);
       data['updatedAt'] = FieldValue.serverTimestamp();
       await _firestore.collection('routes').doc(route.id).update(data);
       final actorId = await _currentActorIdOrSystem();
@@ -361,10 +396,12 @@ class RouteService {
         action: 'route_updated',
         actorId: actorId,
         meta: {
-          'beforeApprovalStatus': before.data()?['approvalStatus'],
+          'beforeApprovalStatus': beforeData['approvalStatus'],
           'afterApprovalStatus': data['approvalStatus'],
-          'changedPrice': before.data()?['price'] != data['price'],
-          'changedSchedule': before.data()?['schedule'] != data['schedule'],
+          'changedPrice': beforeData['price'] != data['price'],
+          'changedSchedule': beforeData['schedule'] != data['schedule'],
+          'markedAsEdited': true,
+          'nextEditCount': ((beforeData['editCount'] as num?)?.toInt() ?? 0) + 1,
         },
       );
     } catch (e) {
@@ -396,6 +433,7 @@ class RouteService {
 
       await _firestore.collection('routes').doc(routeId).update({
         'approvalStatus': route_model.RouteApprovalStatus.approved.name,
+        'isEdited': false,
         'staleNeedsReview': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });

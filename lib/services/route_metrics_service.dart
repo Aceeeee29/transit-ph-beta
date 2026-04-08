@@ -205,6 +205,25 @@ class RouteMetricsService {
     }
   }
 
+  /// Format ETA text and ensure units are included when possible.
+  static String formatEtaLabel(String? etaText, {String fallback = 'N/A'}) {
+    if (etaText == null) return fallback;
+
+    final raw = etaText.trim();
+    if (raw.isEmpty) return fallback;
+
+    final lower = raw.toLowerCase();
+    final alreadyHasUnits = RegExp(
+      r'\b(min|mins|minute|minutes|h|hr|hrs|hour|hours)\b',
+    ).hasMatch(lower);
+    if (alreadyHasUnits) return raw;
+
+    final minutes = int.tryParse(raw.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (minutes == null || minutes <= 0) return raw;
+
+    return formatEta(minutes);
+  }
+
   /// Calculate the fare estimate based on distance and mode
   static String calculateFareEstimate(
     List<LatLng> points,

@@ -3,6 +3,7 @@ import '../../models/route.dart' as route_model;
 import '../../screens/contribute_screen.dart';
 import '../../services/route_service.dart';
 import '../../services/route_metrics_service.dart';
+import '../../services/route_trust_service.dart';
 import 'profile_colors.dart';
 
 class RouteContributionCard extends StatelessWidget {
@@ -17,16 +18,9 @@ class RouteContributionCard extends StatelessWidget {
     required this.distanceUnit,
   });
 
-  double _calculateAverageRating() {
-    final total = route.upvotes + route.downvotes;
-    if (total == 0) return 0.0;
-    return (route.upvotes - route.downvotes) / (total + 1);
-  }
-
   @override
   Widget build(BuildContext context) {
     final distance = RouteMetricsService.calculateRouteDistance(route.pathPoints);
-    final avgRating = _calculateAverageRating();
     final distanceLabel = RouteMetricsService.formatDistanceForUnit(
       distance,
       distanceUnit: distanceUnit,
@@ -55,7 +49,7 @@ class RouteContributionCard extends StatelessWidget {
             const SizedBox(height: 14),
             Divider(color: ProfileColors.border, height: 1),
             const SizedBox(height: 12),
-            _MetricsGrid(route: route, avgRating: avgRating),
+            _MetricsGrid(route: route),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -66,7 +60,7 @@ class RouteContributionCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 _infoPill(
                   icon: Icons.schedule_outlined,
-                  label: route.eta ?? 'N/A',
+                  label: RouteMetricsService.formatEtaLabel(route.eta),
                 ),
               ],
             ),
@@ -208,9 +202,8 @@ class _CardHeader extends StatelessWidget {
 
 class _MetricsGrid extends StatelessWidget {
   final route_model.Route route;
-  final double avgRating;
 
-  const _MetricsGrid({required this.route, required this.avgRating});
+  const _MetricsGrid({required this.route});
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +218,7 @@ class _MetricsGrid extends StatelessWidget {
         children: [
           _metricCell('👥', '${route.views}', 'Views'),
           _vDivider(),
-          _metricCell('⭐', avgRating.toStringAsFixed(1), 'Rating'),
+          _integrityMetricCell(),
           _vDivider(),
           _metricCell('👍', '${route.upvotes}', 'Upvotes'),
           _vDivider(),
@@ -254,6 +247,49 @@ class _MetricsGrid extends StatelessWidget {
             style: const TextStyle(fontSize: 10, color: ProfileColors.textSecondary),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _integrityMetricCell() {
+    return Expanded(
+      child: StreamBuilder<Map<String, int>>(
+        stream: RouteService.watchRouteFeedbackSummary(route.id),
+        builder: (context, snapshot) {
+          final summary = snapshot.data ??
+              const {
+                'fareAccurateYes': 0,
+                'fareAccurateNo': 0,
+                'scheduleAccurateYes': 0,
+                'scheduleAccurateNo': 0,
+                'stillOperatingYes': 0,
+                'stillOperatingNo': 0,
+              };
+
+          final trust = RouteTrustService.computeConfidence(
+            route: route,
+            feedbackSummary: summary,
+          );
+
+          return Column(
+            children: [
+              const Text('🛡️', style: TextStyle(fontSize: 14)),
+              const SizedBox(height: 2),
+              Text(
+                '${trust.total}/100',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: ProfileColors.textPrimary,
+                ),
+              ),
+              const Text(
+                'Integrity',
+                style: TextStyle(fontSize: 10, color: ProfileColors.textSecondary),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

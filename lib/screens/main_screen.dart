@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'home_screen.dart';
 import 'contribute_screen.dart';
 import 'profile_screen.dart';
 import 'feed_screen.dart';
 import 'moderator_screen.dart';
+import 'offline_mode_prompt_screen.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
@@ -26,6 +30,8 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isLoading = false;
   bool _didCheckAnnouncements = false;
+  bool _isOfflinePromptVisible = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   List<Post> posts = [];
   List<route_model.Route> routes = [];
@@ -55,7 +61,49 @@ class _MainScreenState extends State<MainScreen> {
     ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
     _loadData();
+    _startConnectivityMonitoring();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAnnouncements());
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
+  bool _hasNetwork(List<ConnectivityResult> results) {
+    return results.any((result) => result != ConnectivityResult.none);
+  }
+
+  Future<void> _startConnectivityMonitoring() async {
+    final connectivity = Connectivity();
+
+    final initial = await connectivity.checkConnectivity();
+    if (mounted && !_hasNetwork(initial)) {
+      await _showOfflinePrompt();
+    }
+
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen((
+      results,
+    ) async {
+      if (!mounted) return;
+      if (!_hasNetwork(results)) {
+        await _showOfflinePrompt();
+      }
+    });
+  }
+
+  Future<void> _showOfflinePrompt() async {
+    if (!mounted || _isOfflinePromptVisible) return;
+
+    _isOfflinePromptVisible = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const OfflineModePromptScreen()),
+      );
+    } finally {
+      _isOfflinePromptVisible = false;
+    }
   }
 
   Future<void> _checkAnnouncements() async {

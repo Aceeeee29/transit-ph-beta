@@ -31,7 +31,10 @@ export interface RouteItem {
   contributorEmail?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
+  editedAt?: Timestamp
   status: RouteStatus
+  isEdited?: boolean
+  editCount?: number
   views: number
   upvotes: number
   downvotes: number

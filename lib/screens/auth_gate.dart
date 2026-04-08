@@ -5,9 +5,13 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 import 'email_verification_screen.dart';
 import 'onboarding_screen.dart';
+import 'legal_consent_screen.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
+
+  static const _privacyPolicyVersion = '2026-04-08';
+  static const _termsVersion = '2026-04-08';
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -48,6 +52,22 @@ class AuthGate extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static bool _hasAcceptedLatestLegalDocuments(Map<String, dynamic> data) {
+    final raw = data['legalAcceptance'];
+    if (raw is! Map) return false;
+    final legal = raw.cast<String, dynamic>();
+
+    final privacyAccepted = legal['privacyPolicyAccepted'] == true;
+    final termsAccepted = legal['termsAccepted'] == true;
+    final privacyVersion = legal['privacyPolicyVersion'] as String?;
+    final termsVersion = legal['termsVersion'] as String?;
+
+    return privacyAccepted &&
+        termsAccepted &&
+        privacyVersion == _privacyPolicyVersion &&
+        termsVersion == _termsVersion;
   }
 
   @override
@@ -96,9 +116,19 @@ class AuthGate extends StatelessWidget {
                     (data['status'] as String? ?? '') == 'banned';
                 final hasSeenTutorial =
                     data['hasSeenTutorial'] as bool? ?? false;
+                final hasAcceptedLegal =
+                  _hasAcceptedLatestLegalDocuments(data);
 
                 if (isBanned) {
                   return const _BannedAccountHandler();
+                }
+
+                if (!hasAcceptedLegal) {
+                  return LegalConsentScreen(
+                    user: user,
+                    privacyPolicyVersion: _privacyPolicyVersion,
+                    termsVersion: _termsVersion,
+                  );
                 }
 
                 // ── Moderators/admins skip email verification & onboarding ──
@@ -159,8 +189,18 @@ class AuthGate extends StatelessWidget {
                         (data['status'] as String? ?? '') == 'banned';
                       final hasSeenTutorial =
                           data['hasSeenTutorial'] as bool? ?? false;
+                      final hasAcceptedLegal =
+                          _hasAcceptedLatestLegalDocuments(data);
 
                       if (isBanned) return const _BannedAccountHandler();
+
+                      if (!hasAcceptedLegal) {
+                        return LegalConsentScreen(
+                          user: user,
+                          privacyPolicyVersion: _privacyPolicyVersion,
+                          termsVersion: _termsVersion,
+                        );
+                      }
 
                       // Moderators skip verification & onboarding on retry too
                       if (isAdmin) return MainScreen(isAdmin: true);

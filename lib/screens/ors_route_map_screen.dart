@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import '../models/ors_route_result.dart';
+import '../repositories/route_cache_repository.dart';
 import '../services/route_metrics_service.dart';
 
 /// Displays an ORS-generated route on an interactive map.
@@ -13,12 +14,16 @@ import '../services/route_metrics_service.dart';
 /// and a draggable bottom sheet with distance, duration, and turn-by-turn steps.
 class OrsRouteMapScreen extends StatefulWidget {
   final OrsRouteResult result;
+  final String originName;
   final String destinationName;
+  final bool showDownloadButton;
 
   const OrsRouteMapScreen({
     super.key,
     required this.result,
+    required this.originName,
     required this.destinationName,
+    this.showDownloadButton = true,
   });
 
   @override
@@ -36,11 +41,60 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   bool _isLocating = false;
   bool _isNavigationStarted = false;
   bool _isAutoFollowEnabled = false;
+  bool _isDownloaded = false;
+  bool _isDownloading = false;
+
+  static const _cacheMode = 'Auto';
+  static const _cacheProfile = 'supabase-gtfs-v9';
 
   @override
   void initState() {
     super.initState();
     _initLocation();
+    _loadDownloadState();
+  }
+
+  Future<void> _loadDownloadState() async {
+    final cached = await RouteCacheRepository.get(
+      widget.originName,
+      widget.destinationName,
+      _cacheMode,
+      _cacheProfile,
+    );
+    if (!mounted) return;
+    setState(() => _isDownloaded = cached != null);
+  }
+
+  Future<void> _downloadGeneratedRoute() async {
+    if (!widget.showDownloadButton) return;
+    if (_isDownloading || _isDownloaded) return;
+
+    setState(() => _isDownloading = true);
+    try {
+      await RouteCacheRepository.put(
+        widget.originName,
+        widget.destinationName,
+        _cacheMode,
+        _cacheProfile,
+        widget.result,
+      );
+      if (!mounted) return;
+      setState(() => _isDownloaded = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Generated route downloaded for offline mode.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to download route: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
   }
 
   Future<void> _initLocation() async {
@@ -355,6 +409,29 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
         actions: [
+          if (widget.showDownloadButton)
+            IconButton(
+              icon: _isDownloading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      _isDownloaded
+                          ? Icons.download_done_rounded
+                          : Icons.download_rounded,
+                    ),
+              tooltip: _isDownloaded
+                  ? 'Downloaded'
+                  : 'Download for offline',
+              onPressed: (_isDownloading || _isDownloaded)
+                  ? null
+                  : _downloadGeneratedRoute,
+            ),
           IconButton(
             icon: const Icon(Icons.fit_screen),
             tooltip: 'Fit route',

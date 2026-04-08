@@ -247,7 +247,10 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
     contributorEmail: data.contributorEmail ?? data.userEmail ?? data.email,
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
     updatedAt: normalizeTimestamp(data.updatedAt),
+    editedAt: normalizeTimestamp(data.editedAt),
     status: data.approvalStatus ?? data.status ?? 'pending',
+    isEdited: Boolean(data.isEdited ?? false),
+    editCount: Number(data.editCount ?? 0),
     views: data.views ?? 0,
     upvotes: data.upvotes ?? 0,
     downvotes: data.downvotes ?? 0,
@@ -456,7 +459,7 @@ export async function getRoutes(): Promise<RouteItem[]> {
 export async function updateRouteStatus(routeId: string, status: 'approved' | 'rejected', reviewerUid: string) {
   await updateDoc(doc(db, 'routes', routeId), {
     approvalStatus: status,
-    status,
+    ...(status === 'approved' ? { isEdited: false } : {}),
     reviewedBy: reviewerUid,
     reviewedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

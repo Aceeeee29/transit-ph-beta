@@ -52,7 +52,7 @@ class RoutePreview extends StatelessWidget {
 
     // Prefer ORS-derived ETA/fare stored on the route over recalculating
     final formattedEta = route.eta != null && route.eta!.isNotEmpty
-        ? RouteMetricsService.formatEta(int.tryParse(route.eta!) ?? 0)
+      ? RouteMetricsService.formatEtaLabel(route.eta)
         : RouteMetricsService.formatEta(RouteMetricsService.calculateEta(
             route.pathPoints,
             route.steps.map((s) => s.mode).toList(),

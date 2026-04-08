@@ -12,10 +12,12 @@ import '../services/location_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
+import '../repositories/route_cache_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/search/route_generation_notice_dialog.dart';
 import '../widgets/search/search_help_sheet.dart';
 import '../widgets/search/search_route_card.dart';
+import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
 import 'ors_route_map_screen.dart';
 
@@ -76,6 +78,8 @@ class _SearchScreenState extends State<SearchScreen> {
   int _selectedAlternativeIndex = 0;
   LatLng? _lastOriginForAlternatives;
   LatLng? _lastDestinationForAlternatives;
+  String? _lastGeneratedOriginName;
+  String? _lastGeneratedDestinationName;
 
   // ─── Origin state ─────────────────────────────────────────────────────────
   bool _useCurrentLocation = true;
@@ -723,6 +727,8 @@ class _SearchScreenState extends State<SearchScreen> {
         _selectedAlternativeIndex = 0;
         _lastOriginForAlternatives = origin;
         _lastDestinationForAlternatives = destLatLng;
+        _lastGeneratedOriginName = originName;
+        _lastGeneratedDestinationName = query;
       });
     } on RoutingException catch (e) {
       setState(() {
@@ -824,6 +830,12 @@ class _SearchScreenState extends State<SearchScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const SearchHelpSheet(),
+    );
+  }
+
+  void _openDownloadedRoutes() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
     );
   }
 
@@ -1022,6 +1034,25 @@ class _SearchScreenState extends State<SearchScreen> {
         ],
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: _openDownloadedRoutes,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _surfaceAlt,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: _border),
+              ),
+              child: const Icon(
+                Icons.download_for_offline_rounded,
+                size: 17,
+                color: _accent,
+              ),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: GestureDetector(
@@ -1526,7 +1557,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   builder:
                       (_) => OrsRouteMapScreen(
                         result: _orsResult!,
-                        destinationName: _searchController.text.trim(),
+                        originName:
+                            _lastGeneratedOriginName ??
+                            (_originController.text.trim().isEmpty
+                                ? 'Current Location'
+                                : _originController.text.trim()),
+                        destinationName:
+                            _lastGeneratedDestinationName ??
+                            _searchController.text.trim(),
                       ),
                 ),
               );

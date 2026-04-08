@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/route.dart' as route_model;
+import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
 import 'search_screen.dart';
 import '../services/gamification_service.dart';
@@ -87,6 +88,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Keep empty tags when user profile load fails.
     }
+  }
+
+  void _openDownloadedRoutes() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
+    );
   }
 
   @override
@@ -682,7 +689,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     _statItem(Icons.thumb_down_outlined, '${route.downvotes}', _danger),
                     if (route.eta != null) ...[
                       const SizedBox(width: 14),
-                      _statItem(Icons.schedule_outlined, route.eta!, _textSecondary),
+                      _statItem(
+                        Icons.schedule_outlined,
+                        RouteMetricsService.formatEtaLabel(route.eta),
+                        _textSecondary,
+                      ),
                     ],
                     if (route.price != null) ...[
                       const SizedBox(width: 14),
@@ -736,7 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 200,
+          height: 212,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: routes.length > 5 ? 5 : routes.length,
@@ -806,10 +817,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             if (route.audienceTags.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: route.audienceTags.take(3).map((tag) => _audienceTagChip(tag)).toList(),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: route.audienceTags
+                      .take(3)
+                      .map(
+                        (tag) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _audienceTagChip(tag),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
             ],
             const Spacer(),
@@ -1407,6 +1427,38 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: _openDownloadedRoutes,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: _accentSoft,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _accent.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.download_for_offline_rounded,
+                      size: 18,
+                      color: _accent,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Open Offline Routes',
+                      style: TextStyle(
+                        color: _accent,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1584,7 +1636,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 200,
+            height: 212,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _tagMatchedRoutes.length,

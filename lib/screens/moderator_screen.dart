@@ -619,6 +619,34 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                     ],
                   ),
                 ),
+                if (route.isEdited) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _accent.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _accent.withOpacity(0.35)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit_rounded, size: 12, color: _accent),
+                        SizedBox(width: 4),
+                        Text(
+                          'EDITED',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: _accent,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 if (route.createdAt != null)
                   Text(

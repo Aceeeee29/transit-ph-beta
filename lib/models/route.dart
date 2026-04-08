@@ -31,6 +31,9 @@ class Route {
   final DateTime? updatedAt;
 
   final RouteApprovalStatus approvalStatus;
+  final bool isEdited;
+  final DateTime? editedAt;
+  final int editCount;
 
   Route({
     required this.id,
@@ -59,6 +62,9 @@ class Route {
     this.createdAt,
     this.updatedAt,
     this.approvalStatus = RouteApprovalStatus.pending,
+    this.isEdited = false,
+    this.editedAt,
+    this.editCount = 0,
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
@@ -112,6 +118,9 @@ class Route {
       'upvotes': upvotes,
       'downvotes': downvotes,
       'approvalStatus': approvalStatus.name,
+      'isEdited': isEdited,
+      'editedAt': editedAt != null ? Timestamp.fromDate(editedAt!) : null,
+      'editCount': editCount,
     };
   }
 
@@ -201,6 +210,13 @@ class Route {
           ? (json['updatedAt'] as Timestamp).toDate()
           : null,
       approvalStatus: parsedStatus,
+      isEdited: json['isEdited'] as bool? ?? false,
+      editedAt: json['editedAt'] != null
+          ? (json['editedAt'] as Timestamp).toDate()
+          : null,
+      editCount: json['editCount'] is int
+          ? json['editCount']
+          : int.tryParse(json['editCount']?.toString() ?? '0') ?? 0,
     );
   }
 }
