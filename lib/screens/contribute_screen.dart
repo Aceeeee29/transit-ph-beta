@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
+import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';
+import '../services/contribute_route_edit_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/map_controls.dart';
 import '../widgets/route_preview.dart';
@@ -14,18 +17,23 @@ import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../services/location_service.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
+import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
 
 class ContributeScreen extends StatefulWidget {
   final Future<void> Function(route_model.Route) onRouteSubmitted;
   final route_model.Route? routeToEdit;
   final String? contributorId;
+  final String? quickRouteToken;
+  final VoidCallback? onQuickRouteTokenConsumed;
 
   const ContributeScreen({
     super.key,
     required this.onRouteSubmitted,
     this.routeToEdit,
     this.contributorId,
+    this.quickRouteToken,
+    this.onQuickRouteTokenConsumed,
   });
 
   @override
@@ -56,8 +64,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _showNotificationOverlay = false;
   bool _isFormExpanded = false;
   bool _snapToRoadEnabled = true;
+  bool _showEditHandles = false;
   bool _showTutorial = false;
   LatLng? _searchedLocation;
+  String? _activeQuickRouteToken;
 
   // ─── Color tokens 
   static const _bg = Color(0xFFF4F8FF);
@@ -184,8 +194,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void initState() {
     super.initState();
     _checkTutorialStatus();
-    _loadRouteToEdit();
+    if (widget.quickRouteToken != null && widget.quickRouteToken!.trim().isNotEmpty) {
+      _loadQuickRouteLink(widget.quickRouteToken!.trim());
+    } else {
+      _loadRouteToEdit();
+    }
   }
+
+  bool get _isQuickCreateMode => _activeQuickRouteToken != null;
 
   void _loadRouteToEdit() {
     if (widget.routeToEdit != null) {
@@ -201,6 +217,86 @@ class _ContributeScreenState extends State<ContributeScreen> {
         selectionMode = 'done';
       });
       _saveToHistory();
+    }
+  }
+
+  Future<void> _loadQuickRouteLink(String token) async {
+    final payload = await QuickRouteLinkService.getValidLink(token);
+    if (!mounted) return;
+
+    widget.onQuickRouteTokenConsumed?.call();
+
+    if (payload == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This quick route link is invalid or has expired.'),
+        ),
+      );
+      return;
+    }
+
+    final route = payload.draftRoute;
+    setState(() {
+      _activeQuickRouteToken = payload.token;
+      pathPoints = List<LatLng>.from(route.pathPoints);
+      steps = List<route_model.Step>.from(route.steps);
+      _selectedRouteTags = List<String>.from(route.audienceTags);
+      stepBoundaries = List<int>.from(route.stepBoundaries);
+      _startLocationController.text = route.startLocation;
+      _endLocationController.text = route.endLocation;
+      _shortDescriptionController.text = route.shortDescription;
+      selectionMode = 'done';
+    });
+    _saveToHistory();
+  }
+
+  Future<void> _createQuickLink() async {
+    if (pathPoints.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Need at least start and end points on map')),
+      );
+      return;
+    }
+
+    if (!_formKey.currentState!.validate() || !_validateStepReliability()) {
+      return;
+    }
+
+    final ownerId = FirebaseAuth.instance.currentUser?.uid;
+    if (ownerId == null || ownerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to create a quick link.')),
+      );
+      return;
+    }
+
+    try {
+      final draftRoute = _buildRoute(existingId: null);
+      final token = await QuickRouteLinkService.createLink(
+        draftRoute: draftRoute,
+        ownerId: ownerId,
+      );
+      final url = QuickRouteLinkService.buildShareUrl(token);
+      await Clipboard.setData(ClipboardData(text: url));
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _QuickLinkDialog(url: url),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Quick link copied: $url'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create quick link: $e')),
+      );
     }
   }
 
@@ -443,6 +539,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _pendingOrsDistM = null;
       _pendingOrsDurS = null;
       selectionMode = 'start';
+      _showEditHandles = false;
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
@@ -475,6 +572,30 @@ class _ContributeScreenState extends State<ContributeScreen> {
           enabled
               ? 'Snap to road enabled - routes will follow roads'
               : 'Snap to road disabled - routes will use straight lines',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _toggleEditHandles() {
+    if (selectionMode != 'done' || steps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Finish adding steps first to edit route handles.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _showEditHandles = !_showEditHandles);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _showEditHandles
+            ? 'Edit handles enabled. Drag markers to adjust route.'
+              : 'Edit handles disabled.',
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -598,6 +719,59 @@ class _ContributeScreenState extends State<ContributeScreen> {
       }
     }
     return result;
+  }
+
+  List<LatLng> get _editableWaypoints {
+    if (pathPoints.isEmpty || steps.isEmpty) return const [];
+
+    final waypoints = <LatLng>[pathPoints.first];
+    for (int i = 0; i < steps.length; i++) {
+      final boundaryIndex = i < stepBoundaries.length
+          ? stepBoundaries[i]
+          : pathPoints.length - 1;
+      final safeIndex = boundaryIndex < 0
+          ? 0
+          : (boundaryIndex >= pathPoints.length
+              ? pathPoints.length - 1
+              : boundaryIndex);
+      waypoints.add(pathPoints[safeIndex]);
+    }
+    return waypoints;
+  }
+
+  Future<void> _onWaypointDragEnd(int index, LatLng updatedPoint) async {
+    if (steps.isEmpty) return;
+
+    final waypoints = List<LatLng>.from(_editableWaypoints);
+    if (waypoints.length != steps.length + 1) {
+      return;
+    }
+    if (index < 0 || index >= waypoints.length) {
+      return;
+    }
+
+    waypoints[index] = updatedPoint;
+
+    final rebuilt = await ContributeRouteEditService.rebuildFromWaypoints(
+      steps: List<route_model.Step>.from(steps),
+      waypoints: waypoints,
+      snapToRoadEnabled: _snapToRoadEnabled,
+    );
+
+    if (!mounted || rebuilt.pathPoints.length < 2) return;
+
+    setState(() {
+      pathPoints = rebuilt.pathPoints;
+      stepBoundaries = rebuilt.stepBoundaries;
+
+      _stepOrsDistM
+        ..clear()
+        ..addAll(rebuilt.stepOrsDistM);
+      _stepOrsDurS
+        ..clear()
+        ..addAll(rebuilt.stepOrsDurS);
+    });
+    _saveToHistory();
   }
 
   route_model.Route _buildRoute({String? existingId}) {
@@ -730,7 +904,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Submit ──────────────────────────────────────────────────────────────────
 
-  void _submit() async {
+  void _submit({bool forceModeration = false}) async {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -746,7 +920,19 @@ class _ContributeScreenState extends State<ContributeScreen> {
       }
       final route = _buildRoute(existingId: widget.routeToEdit?.id);
       try {
-        await widget.onRouteSubmitted(route);
+        if (_isQuickCreateMode && !forceModeration) {
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId == null || userId.isEmpty) {
+            throw StateError('Please sign in to quick create a route.');
+          }
+          await QuickRouteLinkService.createQuickRouteFromLink(
+            token: _activeQuickRouteToken!,
+            route: route,
+            creatorId: userId,
+          );
+        } else {
+          await widget.onRouteSubmitted(route);
+        }
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -762,7 +948,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
         context: context,
         builder: (_) => widget.routeToEdit != null
             ? const _SubmitSuccessDialog(isEdit: true)
-            : const _SubmitSuccessDialog(isEdit: false),
+            : _SubmitSuccessDialog(
+                isEdit: false,
+                quickCreateMode: _isQuickCreateMode,
+              ),
       );
 
       if (widget.routeToEdit == null) {
@@ -771,6 +960,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
           steps = [];
           stepBoundaries = [];
           selectionMode = 'start';
+          _showEditHandles = false;
           _startLocationController.clear();
           _endLocationController.clear();
           _shortDescriptionController.clear();
@@ -778,6 +968,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
         });
       }
     }
+  }
+
+  void _submitForReviewInstead() {
+    _submit(forceModeration: true);
   }
 
   // ─── Preview route ───────────────────────────────────────────────────────────
@@ -882,6 +1076,31 @@ class _ContributeScreenState extends State<ContributeScreen> {
         ],
       ),
       actions: [
+        if (selectionMode == 'done' && steps.isNotEmpty)
+          GestureDetector(
+            onTap: _toggleEditHandles,
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _showEditHandles ? _accentSoft : _surfaceAlt,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _showEditHandles
+                      ? _accent.withOpacity(0.35)
+                      : _border,
+                ),
+              ),
+              child: Icon(
+                _showEditHandles
+                    ? Icons.edit_location_alt_rounded
+                    : Icons.edit_location_alt_outlined,
+                color: _showEditHandles ? _accent : _textSecondary,
+                size: 18,
+              ),
+            ),
+          ),
         GestureDetector(
           onTap: () => setState(() => _showTutorial = true),
           child: Container(
@@ -971,6 +1190,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
               ),
           ],
         ),
+        if (selectionMode == 'done' && steps.isNotEmpty && _showEditHandles)
+          DraggableStepMarkersLayer(
+            waypoints: _editableWaypoints,
+            onWaypointDragEnd: _onWaypointDragEnd,
+            accent: _accent,
+          ),
       ],
     );
   }
@@ -1274,9 +1499,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
             onRouteTagsChanged: (tags) {
               setState(() => _selectedRouteTags = tags);
             },
-            onSubmit: _submit,
+            onSubmit: () => _submit(),
+            onSubmitForReviewInstead:
+                _isQuickCreateMode ? _submitForReviewInstead : null,
+            onCreateQuickLink: _isQuickCreateMode ? null : _createQuickLink,
             onReset: _onReset,
             selectionMode: selectionMode,
+            quickCreateMode: _isQuickCreateMode,
           ),
         ),
       ),
@@ -1286,8 +1515,40 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
 // ─── Submit success dialog ────────────────────────────────────────────────────
 
+class _QuickLinkDialog extends StatelessWidget {
+  final String url;
+
+  const _QuickLinkDialog({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('24h Quick Link Created'),
+      content: SelectableText(
+        '$url\n\nThis link can be used for 24 hours only.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: url));
+            if (context.mounted) Navigator.of(context).pop();
+          },
+          child: const Text('Copy Again'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Submit success dialog ────────────────────────────────────────────────────
+
 class _SubmitSuccessDialog extends StatelessWidget {
   final bool isEdit;
+  final bool quickCreateMode;
 
   static const _bg = Color(0xFFF4F8FF);
   static const _accent = Color(0xFF2E7CF6);
@@ -1297,7 +1558,10 @@ class _SubmitSuccessDialog extends StatelessWidget {
   static const _warning = Color(0xFFFFB547);
   static const _green = Color(0xFF3EC97A);
 
-  const _SubmitSuccessDialog({required this.isEdit});
+  const _SubmitSuccessDialog({
+    required this.isEdit,
+    this.quickCreateMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1339,7 +1603,9 @@ class _SubmitSuccessDialog extends StatelessWidget {
               child: Icon(
                 isEdit
                     ? Icons.check_circle_outline_rounded
-                    : Icons.pending_actions_rounded,
+                    : (quickCreateMode
+                        ? Icons.bolt_rounded
+                        : Icons.pending_actions_rounded),
                 color: isEdit ? _green : _warning,
                 size: 34,
               ),
@@ -1348,7 +1614,9 @@ class _SubmitSuccessDialog extends StatelessWidget {
             const SizedBox(height: 16),
 
             Text(
-              isEdit ? 'Route Updated' : 'Pending Review',
+              isEdit
+                  ? 'Route Updated'
+                  : (quickCreateMode ? 'Quick Route Created' : 'Pending Review'),
               style: const TextStyle(
                 color: _textPrimary,
                 fontSize: 18,
@@ -1364,7 +1632,9 @@ class _SubmitSuccessDialog extends StatelessWidget {
               child: Text(
                 isEdit
                     ? 'Your route has been updated successfully.'
-                    : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.',
+                    : (quickCreateMode
+                        ? 'This temporary route is now available via quick link and expires automatically in 24 hours.'
+                        : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.'),
                 style: const TextStyle(
                   color: _textSecondary,
                   fontSize: 14,
@@ -1375,7 +1645,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
             ),
 
             // ── Pending status steps (only for new submissions) ─────────────
-            if (!isEdit) ...[
+            if (!isEdit && !quickCreateMode) ...[
               const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),

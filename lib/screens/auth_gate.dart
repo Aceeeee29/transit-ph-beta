@@ -8,7 +8,9 @@ import 'onboarding_screen.dart';
 import 'legal_consent_screen.dart';
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  final String? quickRouteToken;
+
+  const AuthGate({super.key, this.quickRouteToken});
 
   static const _privacyPolicyVersion = '2026-04-08';
   static const _termsVersion = '2026-04-08';
@@ -134,7 +136,7 @@ class AuthGate extends StatelessWidget {
                 // ── Moderators/admins skip email verification & onboarding ──
                 if (isAdmin) {
                   print('Moderator/admin detected — skipping verification and onboarding');
-                  return MainScreen(isAdmin: true);
+                  return MainScreen(isAdmin: true, quickRouteToken: quickRouteToken);
                 }
 
                 // ── Regular users: check email verification ─────────────────
@@ -152,7 +154,7 @@ class AuthGate extends StatelessWidget {
                   return OnboardingScreen(user: user);
                 }
 
-                return MainScreen(isAdmin: false);
+                return MainScreen(isAdmin: false, quickRouteToken: quickRouteToken);
 
               } else {
                 // Document may not exist yet — race between auth event and
@@ -203,10 +205,18 @@ class AuthGate extends StatelessWidget {
                       }
 
                       // Moderators skip verification & onboarding on retry too
-                      if (isAdmin) return MainScreen(isAdmin: true);
+                      if (isAdmin) {
+                        return MainScreen(
+                          isAdmin: true,
+                          quickRouteToken: quickRouteToken,
+                        );
+                      }
 
                       return hasSeenTutorial
-                          ? MainScreen(isAdmin: false)
+                          ? MainScreen(
+                              isAdmin: false,
+                              quickRouteToken: quickRouteToken,
+                            )
                           : OnboardingScreen(user: user);
                     }
 

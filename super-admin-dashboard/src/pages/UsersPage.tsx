@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteUser, getUsers, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ArrowUpDown, Search, Users } from 'lucide-react'
-import type { AppUser } from '@/types/models'
+import type { AppUser, UserRole } from '@/types/models'
 
 const PAGE_SIZE = 12
 
@@ -99,9 +99,10 @@ export function UsersPage() {
   const [banConfirmId, setBanConfirmId] = useState<string | null>(null)
   const [banTypedText, setBanTypedText] = useState('')
   const [mutationError, setMutationError] = useState<string | null>(null)
+  const roleOptions: UserRole[] = ['user', 'moderator']
 
   const list = useMemo(() => data
-    .filter((u) => u.role !== 'superadmin' && u.role !== 'moderator')
+    .filter((u) => u.role !== 'superadmin')
     .filter((u) => statusFilter === 'all' || u.status === statusFilter)
     .filter((u) => `${u.name ?? ''} ${u.email ?? ''}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
@@ -120,10 +121,10 @@ export function UsersPage() {
     const detail = err instanceof Error ? err.message : 'Unexpected error'
     return `${prefix}. ${detail}`
   }
-  const promote = useMutation({
-    mutationFn: (id: string) => updateUserRole(id, 'moderator'),
+  const updateRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: UserRole }) => updateUserRole(id, role),
     onSuccess: async () => { setMutationError(null); await invalidate() },
-    onError: (err) => setMutationError(toErrorText('Failed to promote user', err)),
+    onError: (err) => setMutationError(toErrorText('Failed to update user role', err)),
   })
   const ban = useMutation({
     mutationFn: (id: string) => setUserBanStatus(id, true),
@@ -241,7 +242,20 @@ export function UsersPage() {
                     <td style={{ fontWeight:600 }}>{u.routesContributed ?? 0}</td>
                     <td>
                       <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'nowrap' }}>
-                        <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
+                        <select
+                          value={(u.role === 'moderator' ? 'moderator' : 'user') as UserRole}
+                          onChange={(e) => {
+                            const nextRole = e.target.value as UserRole
+                            const currentRole = (u.role === 'moderator' ? 'moderator' : 'user') as UserRole
+                            if (nextRole !== currentRole) updateRole.mutate({ id: u.id, role: nextRole })
+                          }}
+                          disabled={updateRole.isPending}
+                          style={{ width:'auto', minWidth:112, fontSize:'0.76rem', padding:'5px 8px' }}
+                        >
+                          {roleOptions.map((role) => (
+                            <option key={role} value={role}>{role}</option>
+                          ))}
+                        </select>
                         {u.status === 'banned'
                           ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                           : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
@@ -271,7 +285,20 @@ export function UsersPage() {
                 <div style={{ color:'var(--text-secondary)', fontSize:'0.8rem' }}>{u.email}</div>
                 <div style={{ display:'flex', gap:6 }}><StatusBadge status={u.status} /></div>
                 <div style={{ display:'flex', gap:5 }}>
-                  <Btn sm variant="outline" onClick={() => promote.mutate(u.id)}>Promote</Btn>
+                  <select
+                    value={(u.role === 'moderator' ? 'moderator' : 'user') as UserRole}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as UserRole
+                      const currentRole = (u.role === 'moderator' ? 'moderator' : 'user') as UserRole
+                      if (nextRole !== currentRole) updateRole.mutate({ id: u.id, role: nextRole })
+                    }}
+                    disabled={updateRole.isPending}
+                    style={{ width:'auto', minWidth:110, fontSize:'0.76rem', padding:'5px 8px' }}
+                  >
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
                   {u.status === 'banned'
                     ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                     : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>

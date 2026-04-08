@@ -1,6 +1,7 @@
 ﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getModeratorStats, updateUserRole } from '@/lib/firestoreApi'
-import { Shield, UserMinus } from 'lucide-react'
+import { Shield } from 'lucide-react'
+import type { UserRole } from '@/types/models'
 
 const PALETTE = ['#2E7CF6', '#9B7FE8', '#3EC97A', '#E05C6A', '#FFB547']
 const avatarBg = (s?: string) => PALETTE[(s?.charCodeAt(0) ?? 0) % PALETTE.length]
@@ -45,9 +46,10 @@ function StatusBadge({ status }: { status?: string }) {
 export function ModeratorsPage() {
   const qc = useQueryClient()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['moderators'], queryFn: getModeratorStats })
+  const roleOptions: UserRole[] = ['user', 'moderator']
 
-  const demote = useMutation({
-    mutationFn: (id: string) => updateUserRole(id, 'user'),
+  const updateRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: UserRole }) => updateUserRole(id, role),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['moderators'] })
       await qc.invalidateQueries({ queryKey: ['users'] })
@@ -123,23 +125,27 @@ export function ModeratorsPage() {
                     </span>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => { if (confirm(`Remove moderator role from ${m.name}?`)) demote.mutate(m.id) }}
-                      style={{
-                        display:'inline-flex', alignItems:'center', gap:5,
-                        padding:'5px 12px', borderRadius:7,
-                        background:'rgba(224,92,106,0.10)', color:'#E05C6A',
-                        border:'1px solid rgba(224,92,106,0.25)',
-                        fontSize:'0.75rem', fontWeight:600, fontFamily:'Manrope, sans-serif',
-                        cursor:'pointer', whiteSpace:'nowrap', lineHeight:1,
-                        transition:'all 0.17s ease',
+                    <select
+                      value="moderator"
+                      onChange={(e) => {
+                        const nextRole = e.target.value as UserRole
+                        if (nextRole !== 'moderator') {
+                          if (confirm(`Change role for ${m.name} to ${nextRole}?`)) {
+                            updateRole.mutate({ id: m.id, role: nextRole })
+                          }
+                          e.currentTarget.value = 'moderator'
+                          return
+                        }
+
+                        updateRole.mutate({ id: m.id, role: nextRole })
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#E05C6A'; (e.currentTarget as HTMLButtonElement).style.color = '#fff' }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(224,92,106,0.10)'; (e.currentTarget as HTMLButtonElement).style.color = '#E05C6A' }}
+                      disabled={updateRole.isPending}
+                      style={{ width:'auto', minWidth:124, fontSize:'0.76rem', padding:'5px 8px' }}
                     >
-                      <UserMinus size={13} /> Remove
-                    </button>
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
                   </td>
                 </tr>
               ))}

@@ -195,6 +195,43 @@ service cloud.firestore {
       }
     }
 
+    // ── QUICK ROUTE LINKS (24h token-based access) ─────────────────────────
+    match /quick_route_links/{token} {
+      // Token docs are never listable; only direct token lookup is allowed.
+      allow list: if false;
+      allow get: if resource.data.expiresAt is timestamp &&
+        resource.data.expiresAt > request.time;
+
+      allow create: if isAuth() &&
+        request.resource.data.token == token &&
+        request.resource.data.isQuickRoute == true &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.draftRoute is map;
+
+      // Keep quick links immutable so TTL constraints cannot be extended.
+      allow update: if false;
+      allow delete: if isStaff() || (isAuth() && resource.data.ownerId == request.auth.uid);
+    }
+
+    // ── QUICK ROUTES (temporary, private-by-link) ─────────────────────────
+    match /quick_routes/{quickRouteId} {
+      allow list: if false;
+      allow get: if resource.data.expiresAt is timestamp &&
+        resource.data.expiresAt > request.time;
+
+      allow create: if isAuth() &&
+        request.resource.data.creatorId == request.auth.uid &&
+        request.resource.data.isQuickRoute == true &&
+        request.resource.data.sourceToken is string &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time;
+
+      allow update: if false;
+      allow delete: if isStaff();
+    }
+
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
     match /notifications/{notifId} {
       allow read, update, delete: if isAuth() &&

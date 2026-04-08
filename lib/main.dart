@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -41,16 +45,6 @@ ThemeData buildTheme() {
   );
 }
 
-/// App routes configuration.
-final Map<String, WidgetBuilder> appRoutes = {
-  '/': (context) => const AuthGate(),
-  '/main': (context) {
-    final args = ModalRoute.of(context)!.settings.arguments;
-    final isAdmin = args is bool ? args : false;
-    return MainScreen(isAdmin: isAdmin);
-  },
-};
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -83,11 +77,74 @@ class TransitPHApp extends StatefulWidget {
 
 class _TransitPHAppState extends State<TransitPHApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  AppLinks? _appLinks;
+  StreamSubscription<Uri>? _deepLinkSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initDeepLinks());
+  }
+
+  @override
+  void dispose() {
+    _deepLinkSub?.cancel();
+    super.dispose();
+  }
+
+  String? _extractQuickToken(Uri? uri) {
+    if (uri == null) return null;
+
+    final qpToken = uri.queryParameters['token']?.trim();
+    if (qpToken != null && qpToken.isNotEmpty) {
+      return qpToken;
+    }
+
+    if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'q') {
+      final token = uri.pathSegments[1].trim();
+      return token.isEmpty ? null : token;
+    }
+
+    if (uri.scheme == 'transitph') {
+      if (uri.host == 'quick' && uri.pathSegments.isNotEmpty) {
+        final token = uri.pathSegments.first.trim();
+        return token.isEmpty ? null : token;
+      }
+
+      if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'quick') {
+        final token = uri.pathSegments[1].trim();
+        return token.isEmpty ? null : token;
+      }
+    }
+    return null;
+  }
+
+  void _openQuickRouteToken(String token) {
+    _navigatorKey.currentState?.pushNamed('/q/$token');
+  }
+
+  Future<void> _initDeepLinks() async {
+    if (kIsWeb) {
+      return;
+    }
+
+    _appLinks ??= AppLinks();
+
+    try {
+      final initialUri = await _appLinks!.getInitialLink();
+      final token = _extractQuickToken(initialUri);
+      if (token != null) {
+        _openQuickRouteToken(token);
+      }
+    } catch (_) {}
+
+    _deepLinkSub = _appLinks!.uriLinkStream.listen((uri) {
+      final token = _extractQuickToken(uri);
+      if (token != null) {
+        _openQuickRouteToken(token);
+      }
+    });
   }
 
   Future<void> _checkForUpdates() async {
@@ -103,7 +160,46 @@ class _TransitPHAppState extends State<TransitPHApp> {
       title: 'TransitPH',
       theme: buildTheme(),
       initialRoute: '/',
-      routes: appRoutes,
+      onGenerateRoute: (settings) {
+        final name = settings.name ?? '/';
+
+        if (name == '/') {
+          final queryToken = Uri.base.queryParameters['quickRouteToken'];
+          return MaterialPageRoute(
+            builder: (_) => AuthGate(quickRouteToken: queryToken),
+          );
+        }
+
+        if (name == '/main') {
+          final args = settings.arguments;
+          bool isAdmin = false;
+          String? quickRouteToken;
+
+          if (args is bool) {
+            isAdmin = args;
+          } else if (args is Map<String, dynamic>) {
+            isAdmin = args['isAdmin'] as bool? ?? false;
+            quickRouteToken = args['quickRouteToken'] as String?;
+          }
+
+          return MaterialPageRoute(
+            builder: (_) => MainScreen(
+              isAdmin: isAdmin,
+              quickRouteToken: quickRouteToken,
+            ),
+          );
+        }
+
+        if (name.startsWith('/q/')) {
+          final uri = Uri.parse(name);
+          final token = uri.pathSegments.length >= 2 ? uri.pathSegments[1] : '';
+          return MaterialPageRoute(
+            builder: (_) => AuthGate(quickRouteToken: token),
+          );
+        }
+
+        return MaterialPageRoute(builder: (_) => const AuthGate());
+      },
     );
   }
 }

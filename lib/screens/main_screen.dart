@@ -20,7 +20,13 @@ import '../widgets/translate_chathead.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
-  const MainScreen({super.key, this.isAdmin = false});
+  final String? quickRouteToken;
+
+  const MainScreen({
+    super.key,
+    this.isAdmin = false,
+    this.quickRouteToken,
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -32,6 +38,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _didCheckAnnouncements = false;
   bool _isOfflinePromptVisible = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  String? _pendingQuickRouteToken;
 
   List<Post> posts = [];
   List<route_model.Route> routes = [];
@@ -58,6 +65,10 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _pendingQuickRouteToken = widget.quickRouteToken;
+    if (_pendingQuickRouteToken != null && _pendingQuickRouteToken!.isNotEmpty) {
+      _selectedIndex = 2;
+    }
     ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
     _loadData();
@@ -165,6 +176,11 @@ class _MainScreenState extends State<MainScreen> {
         onRouteSubmitted: (route) async {
           await RouteService.saveRoute(route);
           await _loadData();
+        },
+        quickRouteToken: _pendingQuickRouteToken,
+        onQuickRouteTokenConsumed: () {
+          if (!mounted || _pendingQuickRouteToken == null) return;
+          setState(() => _pendingQuickRouteToken = null);
         },
       ),
       const ProfileScreen(),

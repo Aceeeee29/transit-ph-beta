@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransitPH Quick Route</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      :root {
+        --bg: #f4f8ff;
+        --surface: #ffffff;
+        --accent: #2e7cf6;
+        --text: #0f1d35;
+        --muted: #6f84a2;
+        --border: #d4e4f7;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: radial-gradient(circle at top, #e8f1ff 0%, var(--bg) 55%);
+        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+        color: var(--text);
+      }
+      .page {
+        width: min(1080px, 96vw);
+        margin: 20px auto;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 14px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .token {
+        font-family: Consolas, monospace;
+        background: #eef4ff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        word-break: break-all;
+      }
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+      .panel {
+        background: #f8fbff;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .meta {
+        margin: 0;
+        font-size: 13px;
+      }
+      .list {
+        margin: 8px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+      .list li {
+        margin: 4px 0;
+      }
+      .map {
+        width: 100%;
+        height: 420px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+      }
+      .map-loading {
+        display: none;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .steps {
+        max-height: 420px;
+        overflow: auto;
+      }
+      .step-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #fff;
+        margin: 8px 0;
+      }
+      .step-title {
+        margin: 0;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .step-sub {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      a,
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .ghost {
+        background: #eff5ff;
+        color: var(--accent);
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .map {
+          height: 320px;
+        }
+        .steps {
+          max-height: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="card">
+        <h1>TransitPH Quick Route</h1>
+        <p>
+          Route preview is available on this page.
+        </p>
+        <p class="token" id="tokenLabel">Token: loading...</p>
+        <div class="panel" id="routeSummary" style="display: none">
+          <p class="meta" id="routeTitle"></p>
+          <p class="meta" id="routeDesc"></p>
+          <p class="meta" id="routeEta"></p>
+          <p class="meta" id="routeFare"></p>
+          <p class="meta" id="routeDistance"></p>
+          <p class="meta" id="routeSchedule"></p>
+          <p class="meta" id="routeTags"></p>
+          <p class="meta" id="routeExpiry"></p>
+        </div>
+        <div class="grid" id="routeGrid" style="display: none">
+          <div class="panel">
+            <div id="routeMap" class="map"></div>
+            <p id="mapLoading" class="map-loading">Loading map tiles...</p>
+          </div>
+          <div class="panel steps" id="stepsWrap"></div>
+        </div>
+        <div class="actions">
+          <a class="ghost" id="openWebBtn" href="/q/">Refresh Route View</a>
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script>
+      (function () {
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        const token = parts.length >= 2 && parts[0] === 'q' ? parts[1] : '';
+
+        const modeColors = {
+          Walk: '#2e7d32',
+          Jeepney: '#1565c0',
+          Bus: '#c62828',
+          Train: '#6a1b9a',
+          Tricycle: '#ef6c00',
+          'FX/Van': '#f9a825',
+          Ferry: '#29b6f6',
+        };
+
+        const tokenLabel = document.getElementById('tokenLabel');
+        const openWebBtn = document.getElementById('openWebBtn');
+        const routeSummary = document.getElementById('routeSummary');
+        const routeGrid = document.getElementById('routeGrid');
+        const routeTitle = document.getElementById('routeTitle');
+        const routeDesc = document.getElementById('routeDesc');
+        const routeEta = document.getElementById('routeEta');
+        const routeFare = document.getElementById('routeFare');
+        const routeDistance = document.getElementById('routeDistance');
+        const routeSchedule = document.getElementById('routeSchedule');
+        const routeTags = document.getElementById('routeTags');
+        const routeExpiry = document.getElementById('routeExpiry');
+        const stepsWrap = document.getElementById('stepsWrap');
+        const mapLoading = document.getElementById('mapLoading');
+
+        let map = null;
+        const lineLayers = [];
+        let startMarker = null;
+        let endMarker = null;
+        let activeTileLayer = null;
+        let tileErrorCount = 0;
+
+        const tileSources = [
+          {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            options: {
+              maxZoom: 19,
+              attribution: '&copy; OpenStreetMap contributors',
+            },
+          },
+          {
+            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            options: {
+              subdomains: 'abcd',
+              maxZoom: 20,
+              attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            },
+          },
+        ];
+        let tileSourceIndex = 0;
+
+        const phBounds = [
+          [4.5, 116.0],
+          [21.5, 127.0],
+        ];
+
+        const firebaseConfig = {
+          apiKey: 'AIzaSyDblTjuOfpPL3ReEm1z8ymaig3Pg7PnnXU',
+          authDomain: 'transitph-75da4.firebaseapp.com',
+          projectId: 'transitph-75da4',
+          storageBucket: 'transitph-75da4.firebasestorage.app',
+          messagingSenderId: '617760269760',
+          appId: '1:617760269760:web:a773cbd4580d0fb3101425',
+          measurementId: 'G-F3LWNTC73W',
+        };
+
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        tokenLabel.textContent = token ? `Token: ${token}` : 'Invalid quick link';
+
+        if (token) {
+          openWebBtn.href = `/q/${encodeURIComponent(token)}`;
+          loadRoute(token);
+        }
+
+        function toLatLng(point) {
+          if (!point) return null;
+          const lat = Number(point.lat);
+          const lng = Number(point.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return [lat, lng];
+        }
+
+        function attachTileLayer() {
+          if (!map) return;
+          if (activeTileLayer) {
+            map.removeLayer(activeTileLayer);
+            activeTileLayer = null;
+          }
+
+          const source = tileSources[tileSourceIndex];
+          activeTileLayer = L.tileLayer(source.url, {
+            ...source.options,
+            noWrap: true,
+            updateWhenIdle: true,
+            keepBuffer: 4,
+          });
+
+          tileErrorCount = 0;
+          if (mapLoading) mapLoading.style.display = 'block';
+
+          activeTileLayer.on('load', () => {
+            if (mapLoading) mapLoading.style.display = 'none';
+          });
+
+          activeTileLayer.on('tileerror', () => {
+            tileErrorCount += 1;
+            if (tileErrorCount >= 8 && tileSourceIndex < tileSources.length - 1) {
+              tileSourceIndex += 1;
+              attachTileLayer();
+            }
+          });
+
+          activeTileLayer.addTo(map);
+        }
+
+        function renderMap(pathPoints, steps, stepBoundaries) {
+          const coords = (Array.isArray(pathPoints) ? pathPoints : [])
+            .map(toLatLng)
+            .filter(Boolean);
+
+          if (!coords.length) return;
+
+          if (!map) {
+            map = L.map('routeMap', {
+              minZoom: 5,
+              maxZoom: 18,
+              maxBounds: phBounds,
+              maxBoundsViscosity: 1.0,
+              worldCopyJump: false,
+              preferCanvas: true,
+            });
+            map.setMaxBounds(phBounds);
+            attachTileLayer();
+          }
+
+          while (lineLayers.length) {
+            const layer = lineLayers.pop();
+            map.removeLayer(layer);
+          }
+          if (startMarker) map.removeLayer(startMarker);
+          if (endMarker) map.removeLayer(endMarker);
+
+          const boundaries = Array.isArray(stepBoundaries) ? stepBoundaries : [];
+          const routeSteps = Array.isArray(steps) ? steps : [];
+
+          if (routeSteps.length > 0) {
+            for (let i = 0; i < routeSteps.length; i += 1) {
+              const step = routeSteps[i] || {};
+              const color = modeColors[step.mode] || '#2e7cf6';
+              const startIdx = i === 0 ? 0 : Number(boundaries[i - 1] ?? 0);
+              const endIdx = i < boundaries.length
+                ? Number(boundaries[i])
+                : coords.length - 1;
+
+              if (!Number.isFinite(startIdx) || !Number.isFinite(endIdx) || endIdx <= startIdx) {
+                continue;
+              }
+
+              const segment = coords.slice(startIdx, endIdx + 1);
+              if (segment.length < 2) continue;
+
+              const shadow = L.polyline(segment, {
+                color: '#000000',
+                opacity: 0.5,
+                weight: 8,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }).addTo(map);
+              const colored = L.polyline(segment, {
+                color,
+                weight: 6,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }).addTo(map);
+
+              lineLayers.push(shadow, colored);
+            }
+          }
+
+          if (!lineLayers.length) {
+            const fallback = L.polyline(coords, { color: '#2e7cf6', weight: 6 }).addTo(map);
+            lineLayers.push(fallback);
+          }
+
+          startMarker = L.marker(coords[0]).addTo(map).bindPopup('Start');
+          endMarker = L.marker(coords[coords.length - 1]).addTo(map).bindPopup('End');
+
+          const bounds = L.featureGroup([...lineLayers, startMarker, endMarker]).getBounds();
+          map.fitBounds(bounds, { padding: [88, 88], maxZoom: 15 });
+          const z = map.getZoom();
+          if (Number.isFinite(z)) {
+            map.setZoom(Math.max(5, z - 1));
+          }
+
+          const mapCenter = map.getCenter();
+          const constrainedLat = Math.min(21.5, Math.max(4.5, mapCenter.lat));
+          const constrainedLng = Math.min(127.0, Math.max(116.0, mapCenter.lng));
+          if (constrainedLat !== mapCenter.lat || constrainedLng !== mapCenter.lng) {
+            map.panTo([constrainedLat, constrainedLng], { animate: false });
+          }
+        }
+
+        function renderSteps(steps) {
+          stepsWrap.innerHTML = '<h3 style="margin:0 0 8px;">Steps</h3>';
+          const list = Array.isArray(steps) ? steps : [];
+          if (!list.length) {
+            const empty = document.createElement('p');
+            empty.className = 'meta';
+            empty.textContent = 'No step details available.';
+            stepsWrap.appendChild(empty);
+            return;
+          }
+
+          list.forEach((step, index) => {
+            const box = document.createElement('div');
+            box.className = 'step-item';
+
+            const title = document.createElement('p');
+            title.className = 'step-title';
+            title.textContent = `${index + 1}. ${step.mode || 'Step'}`;
+
+            const sub = document.createElement('p');
+            sub.className = 'step-sub';
+            sub.textContent = step.instruction || 'No instruction available.';
+
+            const details = document.createElement('p');
+            details.className = 'step-sub';
+            details.textContent = `Details: ${step.details || 'N/A'}`;
+
+            const schedule = document.createElement('p');
+            schedule.className = 'step-sub';
+            if (step.is24_7 === true) {
+              schedule.textContent = 'Schedule: 24/7';
+            } else {
+              const st = (step.startTime || '').toString().trim();
+              const et = (step.endTime || '').toString().trim();
+              schedule.textContent = st && et
+                ? `Schedule: ${st} - ${et}`
+                : 'Schedule: N/A';
+            }
+
+            const fare = document.createElement('p');
+            fare.className = 'step-sub';
+            fare.textContent = step.actualFare != null
+              ? `Actual fare: PHP ${Number(step.actualFare).toFixed(0)}`
+              : 'Actual fare: N/A';
+
+            const alt = document.createElement('p');
+            alt.className = 'step-sub';
+            alt.textContent = step.alternateRouteSuggestion
+              ? `Alternative: ${step.alternateRouteSuggestion}`
+              : 'Alternative: N/A';
+
+            box.appendChild(title);
+            box.appendChild(sub);
+            box.appendChild(details);
+            box.appendChild(schedule);
+            box.appendChild(fare);
+            box.appendChild(alt);
+            stepsWrap.appendChild(box);
+          });
+        }
+
+        function formatEta(etaRaw) {
+          const raw = (etaRaw ?? '').toString().trim();
+          if (!raw) return 'N/A';
+
+          const mins = Number(raw);
+          if (!Number.isFinite(mins)) {
+            return raw;
+          }
+
+          if (mins < 60) {
+            return `${mins} min${mins === 1 ? '' : 's'}`;
+          }
+
+          const hours = Math.floor(mins / 60);
+          const rem = mins % 60;
+          if (rem === 0) {
+            return `${hours} hr${hours === 1 ? '' : 's'}`;
+          }
+          return `${hours} hr${hours === 1 ? '' : 's'} ${rem} min${rem === 1 ? '' : 's'}`;
+        }
+
+        async function loadRoute(currentToken) {
+          try {
+            const doc = await db.collection('quick_route_links').doc(currentToken).get();
+            if (!doc.exists) {
+              tokenLabel.textContent = 'Invalid or expired quick link.';
+              return;
+            }
+
+            const data = doc.data() || {};
+            const draft = data.draftRoute || {};
+            const start = draft.startLocation || 'Unknown start';
+            const end = draft.endLocation || 'Unknown end';
+            const desc = draft.shortDescription || 'No route description provided.';
+            const eta = formatEta(draft.eta);
+            const fare = draft.price || 'N/A';
+            const distance = draft.distance || 'N/A';
+            const scheduleValue = draft.schedule || 'N/A';
+            const tags = Array.isArray(draft.audienceTags) ? draft.audienceTags : [];
+            const steps = Array.isArray(draft.steps) ? draft.steps : [];
+            const stepBoundaries = Array.isArray(draft.stepBoundaries)
+              ? draft.stepBoundaries
+              : [];
+
+            let expiryText = 'Unknown';
+            const expiresAt = data.expiresAt;
+            if (expiresAt && typeof expiresAt.toDate === 'function') {
+              expiryText = expiresAt.toDate().toLocaleString();
+            }
+
+            routeTitle.textContent = `Route: ${start} to ${end}`;
+            routeDesc.textContent = `Description: ${desc}`;
+            routeEta.textContent = `ETA: ${eta}`;
+            routeFare.textContent = `Fare: ${fare}`;
+            routeDistance.textContent = `Distance: ${distance}`;
+            routeSchedule.textContent = `Route schedule: ${scheduleValue}`;
+            routeTags.textContent = `Audience tags: ${tags.length ? tags.join(', ') : 'None'}`;
+            routeExpiry.textContent = `Expires: ${expiryText}`;
+
+            renderMap(draft.pathPoints, steps, stepBoundaries);
+            renderSteps(steps);
+
+            routeSummary.style.display = 'block';
+            routeGrid.style.display = 'grid';
+          } catch (e) {
+            tokenLabel.textContent = 'Could not load route details.';
+          }
+        }
+
+        // Only open app when the user explicitly taps "Open in App".
+      })();
+    </script>
+  </body>
+</html>

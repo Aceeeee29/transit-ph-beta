@@ -9,8 +9,11 @@ class RouteFormStepper extends StatefulWidget {
   final List<String> otherTagOptions;
   final ValueChanged<List<String>> onRouteTagsChanged;
   final VoidCallback onSubmit;
+  final VoidCallback? onSubmitForReviewInstead;
+  final VoidCallback? onCreateQuickLink;
   final VoidCallback onReset;
   final String selectionMode;
+  final bool quickCreateMode;
 
   const RouteFormStepper({
     super.key,
@@ -22,8 +25,11 @@ class RouteFormStepper extends StatefulWidget {
     required this.otherTagOptions,
     required this.onRouteTagsChanged,
     required this.onSubmit,
+    this.onSubmitForReviewInstead,
+    this.onCreateQuickLink,
     required this.onReset,
     required this.selectionMode,
+    this.quickCreateMode = false,
   });
 
   @override
@@ -35,9 +41,12 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
 
   static const _accent = Color(0xFF2E7CF6);
   static const _accentSoft = Color(0x1A2E7CF6);
+  static const _surfaceAlt = Color(0xFFEAF2FF);
   static const _border = Color(0xFFD4E4F7);
   static const _warning = Color(0xFFFFB547);
   static const _danger = Color(0xFFE05C6A);
+  static const _textPrimary = Color(0xFF0F1D35);
+  static const _textSecondary = Color(0xFF7A92B2);
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +95,6 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               if (widget.selectionMode == 'done' && _activeStep == 2) ...[
                 const SizedBox(height: 12),
 
-                // Pending review info banner
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 10),
@@ -102,10 +110,12 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                       Icon(Icons.info_outline_rounded,
                           size: 15, color: _warning),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Your route will be reviewed by a moderator before it appears publicly.',
-                          style: TextStyle(
+                          widget.quickCreateMode
+                              ? 'This route is temporary and expires automatically after 24 hours.'
+                              : 'Your route will be reviewed by a moderator before it appears publicly.',
+                          style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF7A92B2),
                             height: 1.4,
@@ -118,9 +128,11 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
 
                 const SizedBox(height: 10),
 
-                // Submit for Review button
                 ElevatedButton.icon(
-                  onPressed: widget.onSubmit,
+                  onPressed: (widget.quickCreateMode &&
+                          widget.onSubmitForReviewInstead != null)
+                      ? widget.onSubmitForReviewInstead
+                      : widget.onSubmit,
                   icon: const Icon(Icons.pending_actions_rounded,
                       size: 18, color: Colors.white),
                   label: const Text(
@@ -141,6 +153,40 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                     elevation: 0,
                   ),
                 ),
+
+                if (widget.quickCreateMode && widget.onSubmitForReviewInstead != null) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: widget.onSubmit,
+                    icon: const Icon(Icons.bolt_rounded, size: 16),
+                    label: const Text('Use This Link: Quick Create (24h)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _accent,
+                      side: BorderSide(color: _accent.withOpacity(0.45)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+
+                if (!widget.quickCreateMode && widget.onCreateQuickLink != null) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: widget.onCreateQuickLink,
+                    icon: const Icon(Icons.link_rounded, size: 16),
+                    label: const Text('Generate 24h Quick Link'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _accent,
+                      side: BorderSide(color: _accent.withOpacity(0.45)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
@@ -164,19 +210,23 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
             children: [
               TextFormField(
                 controller: widget.startLocationController,
-                decoration: const InputDecoration(
-                  labelText:
-                      'Starting Location (tap map to select or type)',
-                  border: OutlineInputBorder(),
+                style: const TextStyle(
+                  color: _textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: _buildInputDecoration(
+                  label: 'Starting Location (tap map to select or type)',
                 ),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: widget.endLocationController,
-                decoration: const InputDecoration(
-                  labelText:
-                      'End Location (tap map to select or type)',
-                  border: OutlineInputBorder(),
+                style: const TextStyle(
+                  color: _textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: _buildInputDecoration(
+                  label: 'End Location (tap map to select or type)',
                 ),
               ),
             ],
@@ -295,9 +345,12 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
             children: [
               TextFormField(
                 controller: widget.shortDescriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Short Description',
-                  border: OutlineInputBorder(),
+                style: const TextStyle(
+                  color: _textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: _buildInputDecoration(
+                  label: 'Short Description',
                 ),
                 maxLines: 2,
               ),
@@ -314,5 +367,38 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     widget.endLocationController.clear();
     widget.shortDescriptionController.clear();
     widget.onRouteTagsChanged(const []);
+  }
+
+  InputDecoration _buildInputDecoration({required String label}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+        color: _textSecondary,
+        fontSize: 12,
+      ),
+      floatingLabelStyle: const TextStyle(
+        color: _accent,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      filled: true,
+      fillColor: _surfaceAlt,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _accent, width: 1.5),
+      ),
+    );
   }
 }

@@ -80,7 +80,7 @@ class LegalDocumentsScreen extends StatelessWidget {
         return _DocumentContent(
           title: 'Privacy Policy',
           summary:
-              'Last updated: April 8, 2026. This policy explains what TransitPH Beta collects, how data is used, and your choices in the app.',
+              'Last updated: April 8, 2026. This policy explains what TransitPH collects, how data is used, and your choices in the app.',
           sections: const [
             _DocumentSection(
               heading: '1. Information We Collect',
@@ -126,7 +126,7 @@ class LegalDocumentsScreen extends StatelessWidget {
             _DocumentSection(
               heading: '6. Children\'s Privacy',
               paragraphs: [
-                'TransitPH Beta is not intended for children under 13. If you believe a child provided personal data, contact support so we can investigate and remove it where appropriate.',
+                'TransitPH is not intended for children under 13. If you believe a child provided personal data, contact support so we can investigate and remove it where appropriate.',
               ],
             ),
             _DocumentSection(
@@ -141,12 +141,12 @@ class LegalDocumentsScreen extends StatelessWidget {
         return _DocumentContent(
           title: 'Terms and Conditions',
           summary:
-              'Last updated: April 8, 2026. These terms govern your use of TransitPH Beta, including routing and community features.',
+              'Last updated: April 8, 2026. These terms govern your use of TransitPH, including routing and community features.',
           sections: const [
             _DocumentSection(
               heading: '1. Acceptance of Terms',
               paragraphs: [
-                'By creating an account or using TransitPH Beta, you agree to these Terms and our Privacy Policy.',
+                'By creating an account or using TransitPH, you agree to these Terms and our Privacy Policy.',
                 'If you do not agree, do not use the app.',
               ],
             ),
@@ -168,7 +168,7 @@ class LegalDocumentsScreen extends StatelessWidget {
             _DocumentSection(
               heading: '4. Community Content and Moderation',
               paragraphs: [
-                'You retain rights in your submitted content, and you grant TransitPH Beta a license to host, display, and process that content to operate the service.',
+                'You retain rights in your submitted content, and you grant TransitPH a license to host, display, and process that content to operate the service.',
                 'We may review, restrict, or remove content and accounts that violate these Terms or community safety rules.',
               ],
             ),
@@ -189,8 +189,8 @@ class LegalDocumentsScreen extends StatelessWidget {
             _DocumentSection(
               heading: '7. Limitation of Liability',
               paragraphs: [
-                'To the fullest extent permitted by law, TransitPH Beta is provided "as is" without warranties of uninterrupted or error-free operation.',
-                'TransitPH Beta and its operators are not liable for indirect, incidental, special, consequential, or punitive damages arising from app use.',
+                'To the fullest extent permitted by law, TransitPH is provided "as is" without warranties of uninterrupted or error-free operation.',
+                'TransitPH and its operators are not liable for indirect, incidental, special, consequential, or punitive damages arising from app use.',
               ],
             ),
             _DocumentSection(
