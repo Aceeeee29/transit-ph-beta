@@ -1227,6 +1227,33 @@ class _SearchScreenState extends State<SearchScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
+          _buildGenerateRouteOptionCard(),
+          const SizedBox(height: 12),
+          if (_isLoadingOrs) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ] else if (_orsResult != null) ...[
+            _buildOrsResultCard(),
+            const SizedBox(height: 12),
+          ] else if (_orsError) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(
+                _orsErrorMessage,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+              ),
+            ),
+          ],
           _buildContributedFilterRow(),
           const SizedBox(height: 10),
           if (topPicks.isNotEmpty) ...[
@@ -1258,6 +1285,56 @@ class _SearchScreenState extends State<SearchScreen> {
           ] else ...[
             _buildOrsEmptyState(),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGenerateRouteOptionCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Community routes found',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue.shade900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Need another option? You can still generate a fallback route from transit stop data.',
+            style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+          ),
+          const SizedBox(height: 10),
+          _buildOriginSelector(),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isLoadingOrs ? null : _onGenerateRoutePressed,
+              icon: const Icon(Icons.map_outlined, color: Colors.white),
+              label: const Text(
+                'Generate Route Anyway',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade700,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

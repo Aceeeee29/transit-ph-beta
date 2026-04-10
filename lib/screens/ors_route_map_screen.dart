@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/offline_tile_service.dart';
 import '../services/route_metrics_service.dart';
 
 /// Displays an ORS-generated route on an interactive map.
@@ -43,6 +44,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   bool _isAutoFollowEnabled = false;
   bool _isDownloaded = false;
   bool _isDownloading = false;
+  String? _offlineTileTemplate;
 
   static const _cacheMode = 'Auto';
   static const _cacheProfile = 'supabase-gtfs-v9';
@@ -52,6 +54,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     super.initState();
     _initLocation();
     _loadDownloadState();
+    _loadOfflineTileTemplate();
+  }
+
+  Future<void> _loadOfflineTileTemplate() async {
+    final template = await OfflineTileService.getLocalTileTemplatePath();
+    if (!mounted) return;
+    setState(() => _offlineTileTemplate = template);
   }
 
   Future<void> _loadDownloadState() async {
@@ -78,6 +87,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         _cacheProfile,
         widget.result,
       );
+      await OfflineTileService.cacheRouteTiles(widget.result.polyline);
       if (!mounted) return;
       setState(() => _isDownloaded = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -466,6 +476,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.app.transitph_beta',
               ),
+              if (_offlineTileTemplate != null)
+                TileLayer(
+                  urlTemplate: _offlineTileTemplate!,
+                  tileProvider: FileTileProvider(),
+                ),
               PolylineLayer(polylines: _polylines),
               MarkerLayer(markers: _markers),
             ],

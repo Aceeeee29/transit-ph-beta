@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'downloaded_routes_screen.dart';
-
 class OfflineModePromptScreen extends StatelessWidget {
   const OfflineModePromptScreen({super.key});
+
+  static const continueOfflineResult = 'continue_offline';
 
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
@@ -113,11 +113,7 @@ class OfflineModePromptScreen extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const DownloadedRoutesScreen(),
-                          ),
-                        );
+                        Navigator.of(context).pop(continueOfflineResult);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accent,

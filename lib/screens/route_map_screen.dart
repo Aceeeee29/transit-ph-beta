@@ -16,6 +16,7 @@ import '../services/schedule_window_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
+import '../services/offline_tile_service.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_map/route_report_dialog.dart';
@@ -72,6 +73,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _isExitPromptOpen = false;
   bool _isRouteDownloaded = false;
   bool _isDownloadingRoute = false;
+  String? _offlineTileTemplate;
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
@@ -108,6 +110,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       _loadRouteTrustState();
     }
     _loadDownloadedState();
+    _loadOfflineTileTemplate();
+  }
+
+  Future<void> _loadOfflineTileTemplate() async {
+    final template = await OfflineTileService.getLocalTileTemplatePath();
+    if (!mounted) return;
+    setState(() => _offlineTileTemplate = template);
   }
 
   Future<void> _loadDownloadedState() async {
@@ -125,6 +134,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     setState(() => _isDownloadingRoute = true);
     try {
       await OfflineRouteRepository.saveRoute(widget.route);
+      await OfflineTileService.cacheRouteTiles(
+        _pointsForTileCaching(),
+      );
       if (!mounted) return;
       setState(() => _isRouteDownloaded = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -140,6 +152,18 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         setState(() => _isDownloadingRoute = false);
       }
     }
+  }
+
+  List<LatLng> _pointsForTileCaching() {
+    final points = <LatLng>[];
+    points.addAll(widget.route.pathPoints);
+    if (widget.route.startLat != null && widget.route.startLng != null) {
+      points.add(LatLng(widget.route.startLat!, widget.route.startLng!));
+    }
+    if (widget.route.endLat != null && widget.route.endLng != null) {
+      points.add(LatLng(widget.route.endLat!, widget.route.endLng!));
+    }
+    return points;
   }
 
   Future<void> _loadScheduleWindowSnapshot() async {
@@ -1234,6 +1258,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.example.app.transitph_beta',
             ),
+            if (_offlineTileTemplate != null)
+              TileLayer(
+                urlTemplate: _offlineTileTemplate!,
+                tileProvider: FileTileProvider(),
+              ),
             MarkerLayer(markers: markers),
             PolylineLayer(polylines: polylines),
           ],

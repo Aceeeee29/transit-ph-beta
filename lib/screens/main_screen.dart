@@ -9,6 +9,7 @@ import 'profile_screen.dart';
 import 'feed_screen.dart';
 import 'moderator_screen.dart';
 import 'offline_mode_prompt_screen.dart';
+import 'downloaded_routes_screen.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
@@ -37,6 +38,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _isLoading = false;
   bool _didCheckAnnouncements = false;
   bool _isOfflinePromptVisible = false;
+  bool _offlineModeAccepted = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _pendingQuickRouteToken;
 
@@ -98,7 +100,11 @@ class _MainScreenState extends State<MainScreen> {
       results,
     ) async {
       if (!mounted) return;
-      if (!_hasNetwork(results)) {
+      if (_hasNetwork(results)) {
+        _offlineModeAccepted = false;
+        return;
+      }
+      if (!_offlineModeAccepted) {
         await _showOfflinePrompt();
       }
     });
@@ -109,9 +115,16 @@ class _MainScreenState extends State<MainScreen> {
 
     _isOfflinePromptVisible = true;
     try {
-      await Navigator.of(context).push(
+      final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(builder: (_) => const OfflineModePromptScreen()),
       );
+      if (result == OfflineModePromptScreen.continueOfflineResult) {
+        _offlineModeAccepted = true;
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
+        );
+      }
     } finally {
       _isOfflinePromptVisible = false;
     }

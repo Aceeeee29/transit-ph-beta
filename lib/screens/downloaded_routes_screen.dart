@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/route.dart' as route_model;
 import '../repositories/offline_route_repository.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/offline_tile_service.dart';
 import 'ors_route_map_screen.dart';
 import 'route_map_screen.dart';
 
@@ -158,6 +159,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
     await Future.wait([
       OfflineRouteRepository.clearAllDownloadedRoutes(),
       RouteCacheRepository.clearAllLocalCache(),
+      OfflineTileService.clearAllTiles(),
     ]);
     if (!mounted) return;
     await _refresh();
