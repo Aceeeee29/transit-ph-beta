@@ -2,6 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum UserRole { user, moderator, admin }
 
+DateTime? _parseDateTime(dynamic rawValue) {
+  if (rawValue is Timestamp) return rawValue.toDate();
+  if (rawValue is String) {
+    try {
+      return DateTime.parse(rawValue);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
 UserRole _parseUserRole(dynamic rawRole) {
   final normalized = (rawRole as String? ?? 'user')
       .trim()
@@ -42,6 +54,7 @@ class User {
   DateTime? createdAt;
   UserRole role;
   bool isBanned;
+  DateTime? restrictedUntil;
   List<String> followedRouteIds;
   bool hasSeenTutorial;
   List<String> recentSearches;
@@ -66,10 +79,16 @@ class User {
     this.createdAt,
     this.role = UserRole.user,
     this.isBanned = false,
+    this.restrictedUntil,
     this.followedRouteIds = const [],
     this.hasSeenTutorial = false,
     this.recentSearches = const [],
   });
+
+  bool get hasActiveRestriction {
+    final until = restrictedUntil;
+    return until != null && until.isAfter(DateTime.now());
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -92,6 +111,7 @@ class User {
       'createdAt': createdAt?.toIso8601String(),
       'role': role.name,
       'isBanned': isBanned,
+      'restrictedUntil': restrictedUntil?.toIso8601String(),
       'followedRouteIds': followedRouteIds,
       'hasSeenTutorial': hasSeenTutorial,
       'recentSearches': recentSearches,
@@ -99,6 +119,7 @@ class User {
   }
 
   factory User.fromJson(Map<String, dynamic> json) {
+    final status = (json['status'] as String? ?? '').trim().toLowerCase();
     return User(
       uid: json['uid'],
       name: json['name'] ?? 'N/A',
@@ -115,18 +136,11 @@ class User {
       co2Saved: (json['co2Saved'] as num?)?.toDouble() ?? 0.0,
       mostActiveRegion: json['mostActiveRegion'],
       streakDays: json['streakDays'] ?? 0,
-      lastActiveDate:
-          json['lastActiveDate'] != null
-              ? DateTime.parse(json['lastActiveDate'])
-              : null,
-      createdAt:
-          json['createdAt'] is Timestamp
-              ? (json['createdAt'] as Timestamp).toDate()
-              : json['createdAt'] is String
-              ? DateTime.parse(json['createdAt'])
-              : null,
+      lastActiveDate: _parseDateTime(json['lastActiveDate']),
+      createdAt: _parseDateTime(json['createdAt']),
       role: _parseUserRole(json['role']),
-      isBanned: json['isBanned'] ?? false,
+      isBanned: (json['isBanned'] as bool? ?? false) || status == 'banned',
+      restrictedUntil: _parseDateTime(json['restrictedUntil']),
       followedRouteIds: List<String>.from(json['followedRouteIds'] ?? []),
       hasSeenTutorial: json['hasSeenTutorial'] ?? false,
       recentSearches: List<String>.from(json['recentSearches'] ?? []),

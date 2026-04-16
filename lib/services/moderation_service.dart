@@ -91,6 +91,7 @@ class ModerationService {
   static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
   static StreamSubscription<QuerySnapshot>? _routesSubscription;
   static bool _initialized = false;
+  static const int maxRestrictionDays = 7;
 
   /// Initialize all real-time listeners
   static void init() {
@@ -350,21 +351,36 @@ class ModerationService {
 
   // ── User moderation ────────────────────────────────────────────────────────
 
-  static Future<void> banUser(String uid) async {
+  static Future<void> restrictUser(
+    String uid, {
+    required int days,
+  }) async {
+    final sanitizedDays = days.clamp(1, maxRestrictionDays) as int;
+    final restrictedUntil = DateTime.now().toUtc().add(
+      Duration(days: sanitizedDays),
+    );
+
     try {
       await _firestore.collection('users').doc(uid).update({
-        'isBanned': true,
-        'status': 'banned',
+        'isBanned': false,
+        'status': 'restricted',
+        'restrictedAt': FieldValue.serverTimestamp(),
+        'restrictedUntil': Timestamp.fromDate(restrictedUntil),
       });
-      final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
-      user.isBanned = true;
-      print('Banned user $uid');
+      final index = usersNotifier.value.indexWhere((u) => u.uid == uid);
+      if (index != -1) {
+        final user = usersNotifier.value[index];
+        user.isBanned = false;
+        user.restrictedUntil = restrictedUntil.toLocal();
+        usersNotifier.value = List<User>.from(usersNotifier.value);
+      }
+      print('Restricted user $uid for $sanitizedDays days');
     } catch (e) {
-      print('Error banning user $uid: $e');
+      print('Error restricting user $uid: $e');
     }
   }
 
-  static Future<void> unbanUser(String uid) async {
+  static Future<void> liftUserRestriction(String uid) async {
     try {
       await _firestore
           .collection('users')
@@ -372,13 +388,29 @@ class ModerationService {
           .update({
         'isBanned': false,
         'status': 'active',
+        'restrictedAt': FieldValue.delete(),
+        'restrictedUntil': FieldValue.delete(),
       });
-      final user = usersNotifier.value.firstWhere((u) => u.uid == uid);
-      user.isBanned = false;
-      print('Unbanned user $uid');
+      final index = usersNotifier.value.indexWhere((u) => u.uid == uid);
+      if (index != -1) {
+        final user = usersNotifier.value[index];
+        user.isBanned = false;
+        user.restrictedUntil = null;
+        usersNotifier.value = List<User>.from(usersNotifier.value);
+      }
+      print('Lifted restriction for user $uid');
     } catch (e) {
-      print('Error unbanning user $uid: $e');
+      print('Error lifting restriction for user $uid: $e');
     }
+  }
+
+  // Backward-compatible wrappers for older call sites.
+  static Future<void> banUser(String uid) async {
+    await restrictUser(uid, days: maxRestrictionDays);
+  }
+
+  static Future<void> unbanUser(String uid) async {
+    await liftUserRestriction(uid);
   }
 
   // ── Feedback management ────────────────────────────────────────────────────

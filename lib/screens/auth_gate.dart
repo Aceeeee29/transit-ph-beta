@@ -23,6 +23,7 @@ class AuthGate extends StatelessWidget {
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
   static const _danger = Color(0xFFE05C6A);
+  static const _maxRestrictionDuration = Duration(days: 7);
 
   // ─── Shared loading scaffold ───────────────────────────────────────────────
   static Widget _loadingScaffold() {
@@ -72,6 +73,45 @@ class AuthGate extends StatelessWidget {
         termsVersion == _termsVersion;
   }
 
+  static DateTime? _parseFirestoreDate(dynamic rawValue) {
+    if (rawValue is Timestamp) return rawValue.toDate();
+    if (rawValue is String) {
+      try {
+        return DateTime.parse(rawValue);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  static DateTime? _restrictionEndsAt(Map<String, dynamic> data) {
+    final explicitUntil = _parseFirestoreDate(data['restrictedUntil']);
+    if (explicitUntil != null) return explicitUntil.toUtc();
+
+    final status =
+        ((data['status'] as String?) ?? '').trim().toLowerCase();
+    if (status != 'restricted') return null;
+
+    final restrictedAt = _parseFirestoreDate(data['restrictedAt']);
+    if (restrictedAt != null) {
+      return restrictedAt.toUtc().add(_maxRestrictionDuration);
+    }
+
+    return DateTime.now().toUtc().add(_maxRestrictionDuration);
+  }
+
+  static bool _isRestrictionActive(Map<String, dynamic> data) {
+    final restrictionEndsAt = _restrictionEndsAt(data);
+    if (restrictionEndsAt != null) {
+      return restrictionEndsAt.isAfter(DateTime.now().toUtc());
+    }
+
+    final status =
+        ((data['status'] as String?) ?? '').trim().toLowerCase();
+    return (data['isBanned'] as bool? ?? false) || status == 'banned';
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -85,7 +125,7 @@ class AuthGate extends StatelessWidget {
           final user = snapshot.data!;
           print('User signed in: ${user.uid}, email: ${user.email}, emailVerified: ${user.emailVerified}');
 
-          // ── Keep user role/ban state live so moderation applies immediately ─
+          // ── Keep user role/restriction state live so moderation applies immediately ─
           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -114,15 +154,17 @@ class AuthGate extends StatelessWidget {
                   role == 'admin' ||
                   role == 'superadmin' ||
                   role == 'super_admin';
-                final isBanned = (data['isBanned'] as bool? ?? false) ||
-                    (data['status'] as String? ?? '') == 'banned';
+                final restrictionEndsAt = _restrictionEndsAt(data);
+                final isRestricted = _isRestrictionActive(data);
                 final hasSeenTutorial =
                     data['hasSeenTutorial'] as bool? ?? false;
                 final hasAcceptedLegal =
                   _hasAcceptedLatestLegalDocuments(data);
 
-                if (isBanned) {
-                  return const _BannedAccountHandler();
+                if (isRestricted) {
+                  return _RestrictedAccountHandler(
+                    restrictedUntil: restrictionEndsAt,
+                  );
                 }
 
                 if (!hasAcceptedLegal) {
@@ -187,14 +229,18 @@ class AuthGate extends StatelessWidget {
                           role == 'admin' ||
                           role == 'superadmin' ||
                           role == 'super_admin';
-                      final isBanned = (data['isBanned'] as bool? ?? false) ||
-                        (data['status'] as String? ?? '') == 'banned';
+                      final restrictionEndsAt = _restrictionEndsAt(data);
+                      final isRestricted = _isRestrictionActive(data);
                       final hasSeenTutorial =
                           data['hasSeenTutorial'] as bool? ?? false;
                       final hasAcceptedLegal =
                           _hasAcceptedLatestLegalDocuments(data);
 
-                      if (isBanned) return const _BannedAccountHandler();
+                      if (isRestricted) {
+                        return _RestrictedAccountHandler(
+                          restrictedUntil: restrictionEndsAt,
+                        );
+                      }
 
                       if (!hasAcceptedLegal) {
                         return LegalConsentScreen(
@@ -239,15 +285,37 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-class _BannedAccountHandler extends StatefulWidget {
-  const _BannedAccountHandler();
+class _RestrictedAccountHandler extends StatefulWidget {
+  final DateTime? restrictedUntil;
+
+  const _RestrictedAccountHandler({this.restrictedUntil});
 
   @override
-  State<_BannedAccountHandler> createState() => _BannedAccountHandlerState();
+  State<_RestrictedAccountHandler> createState() =>
+      _RestrictedAccountHandlerState();
 }
 
-class _BannedAccountHandlerState extends State<_BannedAccountHandler> {
+class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
   bool _dialogShown = false;
+
+  String _formatRestrictionUntil(DateTime restrictedUntil) {
+    final local = restrictedUntil.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final year = local.year;
+    return '$month/$day/$year at $hour:$minute $period';
+  }
+
+  String _buildRestrictionMessage() {
+    final restrictedUntil = widget.restrictedUntil;
+    if (restrictedUntil == null) {
+      return 'Your TransitPH account is temporarily restricted. Please try again later or contact support if you think this was a mistake.';
+    }
+    return 'Your TransitPH account is temporarily restricted until ${_formatRestrictionUntil(restrictedUntil)}. Please try again after that time or contact support if this was a mistake.';
+  }
 
   @override
   void didChangeDependencies() {
@@ -298,7 +366,7 @@ class _BannedAccountHandlerState extends State<_BannedAccountHandler> {
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Text(
-                        'Account Banned',
+                        'Account Restricted',
                         style: TextStyle(
                           color: AuthGate._textPrimary,
                           fontWeight: FontWeight.w800,
@@ -310,8 +378,8 @@ class _BannedAccountHandlerState extends State<_BannedAccountHandler> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Your TransitPH account has been banned. Please contact support if you think this was a mistake.',
+                Text(
+                  _buildRestrictionMessage(),
                   style: TextStyle(
                     color: AuthGate._textSecondary,
                     fontSize: 14,

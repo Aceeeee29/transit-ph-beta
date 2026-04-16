@@ -196,11 +196,37 @@ function getFeedbackReason(data: DocumentData): string {
   return 'No reason provided'
 }
 
-function resolveUserStatus(data: DocumentData): AppUser['status'] {
-  if (data.isBanned || data.status === 'banned') return 'banned'
+const MAX_RESTRICTION_DAYS = 7
 
-  if (data.status === 'active' || data.status === 'offline') {
-    return data.status
+function getRestrictionUntil(data: DocumentData): Timestamp | undefined {
+  const direct = normalizeTimestamp(data.restrictedUntil)
+  if (direct) return direct
+
+  const status = String(data.status ?? '').trim().toLowerCase()
+  if (status !== 'restricted') return undefined
+
+  const restrictedAt = normalizeTimestamp(data.restrictedAt)
+  if (!restrictedAt) return undefined
+
+  return Timestamp.fromMillis(
+    restrictedAt.toMillis() + MAX_RESTRICTION_DAYS * 24 * 60 * 60 * 1000,
+  )
+}
+
+function resolveUserStatus(data: DocumentData): AppUser['status'] {
+  const status = String(data.status ?? '').trim().toLowerCase()
+  const restrictedUntil = getRestrictionUntil(data)
+
+  if (data.isBanned || status === 'banned') return 'banned'
+
+  if (status === 'restricted') {
+    if (!restrictedUntil || restrictedUntil.toMillis() > Date.now()) {
+      return 'restricted'
+    }
+  }
+
+  if (status === 'active' || status === 'offline') {
+    return status
   }
 
   const lastActive = normalizeTimestamp(
@@ -225,6 +251,7 @@ function mapUserDoc(d: QueryDocumentSnapshot<DocumentData>): AppUser {
     email: data.email ?? '',
     role: data.role ?? 'user',
     status: resolveUserStatus(data),
+    restrictedUntil: getRestrictionUntil(data),
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
     routesContributed: data.routesContributed ?? data.contributionCount ?? 0,
     badges: data.badges ?? [],
@@ -371,6 +398,7 @@ function buildDashboardStatsFromData(
     totalUsers: users.length,
     activeUsers: users.filter((u) => u.status === 'active').length,
     bannedUsers: users.filter((u) => u.status === 'banned').length,
+    restrictedUsers: users.filter((u) => u.status === 'restricted').length,
     routes: {
       approved: routes.filter((r) => r.status === 'approved').length,
       pending: routes.filter((r) => r.status === 'pending').length,
@@ -403,10 +431,37 @@ export async function updateUserRole(userId: string, role: UserRole) {
   await updateDoc(doc(db, 'users', userId), { role, updatedAt: serverTimestamp() })
 }
 
+export async function restrictUser(userId: string, days = MAX_RESTRICTION_DAYS) {
+  const boundedDays = Math.max(1, Math.min(MAX_RESTRICTION_DAYS, Math.floor(days)))
+  const restrictedUntil = Timestamp.fromDate(
+    new Date(Date.now() + boundedDays * 24 * 60 * 60 * 1000),
+  )
+
+  await updateDoc(doc(db, 'users', userId), {
+    isBanned: false,
+    status: 'restricted',
+    restrictedAt: serverTimestamp(),
+    restrictedUntil,
+    updatedAt: serverTimestamp(),
+  })
+}
+
 export async function setUserBanStatus(userId: string, isBanned: boolean) {
   await updateDoc(doc(db, 'users', userId), {
     isBanned,
     status: isBanned ? 'banned' : 'active',
+    restrictedAt: null,
+    restrictedUntil: null,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export async function liftUserRestriction(userId: string) {
+  await updateDoc(doc(db, 'users', userId), {
+    isBanned: false,
+    status: 'active',
+    restrictedAt: null,
+    restrictedUntil: null,
     updatedAt: serverTimestamp(),
   })
 }

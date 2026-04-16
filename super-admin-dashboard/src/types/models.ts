@@ -1,7 +1,7 @@
 ﻿import type { Timestamp } from 'firebase/firestore'
 
 export type UserRole = 'user' | 'moderator' | 'superadmin'
-export type UserStatus = 'active' | 'offline' | 'banned'
+export type UserStatus = 'active' | 'offline' | 'restricted' | 'banned'
 export type RouteStatus = 'pending' | 'approved' | 'rejected'
 export type PostStatus = 'pending' | 'approved' | 'flagged' | 'rejected'
 export type AnnouncementType = 'info' | 'warning' | 'critical'
@@ -13,6 +13,7 @@ export interface AppUser {
   email: string
   role: UserRole
   status: UserStatus
+  restrictedUntil?: Timestamp
   createdAt?: Timestamp
   routesContributed: number
   badges?: string[]
@@ -94,6 +95,7 @@ export interface DashboardStats {
   totalUsers: number
   activeUsers: number
   bannedUsers: number
+  restrictedUsers: number
   routes: { approved: number; pending: number; rejected: number }
   posts: { approved: number; pending: number; flagged: number }
   userGrowth: Array<{ label: string; count: number }>

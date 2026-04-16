@@ -40,7 +40,28 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isAuth();
       allow create: if isSelf(uid);
-      allow update: if isSelf(uid) || isSuperAdmin();
+      allow update: if isSelf(uid) || isSuperAdmin() || (
+        isModerator() &&
+        resource.data.get('role', 'user') == 'user' &&
+        request.resource.data.get('role', 'user') == resource.data.get('role', 'user') &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isBanned', 'status', 'restrictedAt', 'restrictedUntil']) &&
+        request.resource.data.get('isBanned', false) == false &&
+        (
+          (
+            request.resource.data.get('status', 'active') == 'active' &&
+            !request.resource.data.keys().hasAny(['restrictedAt']) &&
+            !request.resource.data.keys().hasAny(['restrictedUntil'])
+          ) ||
+          (
+            request.resource.data.get('status', 'active') == 'restricted' &&
+            request.resource.data.get('restrictedAt', null) is timestamp &&
+            request.resource.data.get('restrictedUntil', null) is timestamp &&
+            request.resource.data.get('restrictedUntil', null) > request.time &&
+            request.resource.data.get('restrictedUntil', null) <= request.time + duration.value(7, 'd')
+          )
+        )
+      );
       allow delete: if isSuperAdmin();
 
       match /achievements/{achievementId} {

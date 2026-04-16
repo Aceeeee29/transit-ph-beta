@@ -216,17 +216,27 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     setState(() {});
   }
 
-  Future<bool> _confirmBanUser(User user) async {
-    var typedBan = '';
+  String _buildRestrictionLabel(User user) {
+    if (!user.hasActiveRestriction) return 'Active';
+    final until = user.restrictedUntil;
+    if (until == null) return 'Restricted';
+    final remaining = until.difference(DateTime.now());
+    final daysLeft = (remaining.inHours / 24).ceil().clamp(1, 7);
+    return 'Restricted (${daysLeft}d left)';
+  }
 
-    final confirmed = await showDialog<bool>(
+  Future<int?> _confirmRestrictUser(User user) async {
+    var typedKeyword = '';
+    var selectedDays = ModerationService.maxRestrictionDays;
+
+    final selectedRestrictionDays = await showDialog<int>(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withOpacity(0.35),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final canBan = typedBan.trim() == 'BAN';
+            final canRestrict = typedKeyword.trim().toUpperCase() == 'RESTRICT';
 
             return Dialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -268,7 +278,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                           const SizedBox(width: 10),
                           const Expanded(
                             child: Text(
-                              'Confirm User Ban',
+                              'Confirm User Restriction',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -280,7 +290,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'You are about to ban ${user.name}. Type BAN to confirm this action.',
+                        'You are about to restrict ${user.name} for up to 7 days. Type RESTRICT to confirm this action.',
                         style: const TextStyle(
                           fontSize: 13,
                           color: _textSecondary,
@@ -294,9 +304,45 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: _border),
                         ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: selectedDays,
+                            isExpanded: true,
+                            dropdownColor: _surface,
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            items: List.generate(
+                              ModerationService.maxRestrictionDays,
+                              (index) => index + 1,
+                            ).map((days) {
+                              final label = days == 1 ? '1 day' : '$days days';
+                              return DropdownMenuItem<int>(
+                                value: days,
+                                child: Text(label),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              selectedDays = value;
+                              setDialogState(() {});
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _border),
+                        ),
                         child: TextField(
                           onChanged: (value) {
-                            typedBan = value;
+                            typedKeyword = value;
                             setDialogState(() {});
                           },
                           style: const TextStyle(
@@ -305,7 +351,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                             fontWeight: FontWeight.w600,
                           ),
                           decoration: const InputDecoration(
-                            hintText: 'Type BAN',
+                            hintText: 'Type RESTRICT',
                             hintStyle: TextStyle(
                               color: _textSecondary,
                               fontSize: 13,
@@ -346,17 +392,17 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                           const SizedBox(width: 8),
                           Expanded(
                             child: GestureDetector(
-                              onTap: canBan
-                                  ? () => Navigator.of(context).pop(true)
+                              onTap: canRestrict
+                                  ? () => Navigator.of(context).pop(selectedDays)
                                   : null,
                               child: Container(
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: canBan
+                                  color: canRestrict
                                       ? _danger
                                       : _danger.withOpacity(0.35),
                                   borderRadius: BorderRadius.circular(10),
-                                  boxShadow: canBan
+                                  boxShadow: canRestrict
                                       ? [
                                           BoxShadow(
                                             color: _danger.withOpacity(0.28),
@@ -368,7 +414,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                                 ),
                                 alignment: Alignment.center,
                                 child: const Text(
-                                  'Ban User',
+                                  'Restrict User',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -390,7 +436,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
       },
     );
 
-    return confirmed == true;
+    return selectedRestrictionDays;
   }
 
   Widget _refreshableEmptyState(Widget child) {
@@ -1585,11 +1631,11 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                     children: [
                       _metaChip(Icons.badge_outlined, user.role.name, _accent),
                       _metaChip(
-                        user.isBanned
+                        user.hasActiveRestriction
                             ? Icons.block_outlined
                             : Icons.verified_user_outlined,
-                        user.isBanned ? 'Banned' : 'Active',
-                        user.isBanned ? _danger : _success,
+                        _buildRestrictionLabel(user),
+                        user.hasActiveRestriction ? _danger : _success,
                       ),
                     ],
                   ),
@@ -1597,26 +1643,32 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   Row(
                     children: [
                       _actionButton(
-                        label: user.isBanned ? 'Unban' : 'Ban',
-                        color: user.isBanned ? _success : _danger,
-                        filled: user.isBanned,
+                        label: user.hasActiveRestriction
+                            ? 'Lift Restriction'
+                            : 'Restrict',
+                        color: user.hasActiveRestriction ? _success : _danger,
+                        filled: user.hasActiveRestriction,
                         onTap: () async {
                           if (user.uid == null) return;
                           if (user.role != UserRole.user) {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Moderator accounts cannot be banned.'),
+                                content: Text('Moderator accounts cannot be restricted.'),
                               ),
                             );
                             return;
                           }
-                          if (user.isBanned) {
-                            await ModerationService.unbanUser(user.uid!);
+                          if (user.hasActiveRestriction) {
+                            await ModerationService.liftUserRestriction(user.uid!);
                           } else {
-                            final confirmed = await _confirmBanUser(user);
-                            if (!confirmed) return;
-                            await ModerationService.banUser(user.uid!);
+                            final restrictionDays =
+                                await _confirmRestrictUser(user);
+                            if (restrictionDays == null) return;
+                            await ModerationService.restrictUser(
+                              user.uid!,
+                              days: restrictionDays,
+                            );
                           }
                           setState(() {});
                         },

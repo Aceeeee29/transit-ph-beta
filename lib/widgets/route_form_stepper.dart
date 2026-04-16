@@ -82,7 +82,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                     ),
                   if (_activeStep < 2) const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: _clearBasicInfo,
+                    onPressed: _clearCurrentStep,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _danger,
                       foregroundColor: Colors.white,
@@ -362,11 +362,19 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     );
   }
 
-  void _clearBasicInfo() {
-    widget.startLocationController.clear();
-    widget.endLocationController.clear();
-    widget.shortDescriptionController.clear();
-    widget.onRouteTagsChanged(const []);
+  void _clearCurrentStep() {
+    switch (_activeStep) {
+      case 0:
+        widget.startLocationController.clear();
+        widget.endLocationController.clear();
+        break;
+      case 1:
+        widget.onRouteTagsChanged(const []);
+        break;
+      case 2:
+        widget.shortDescriptionController.clear();
+        break;
+    }
   }
 
   InputDecoration _buildInputDecoration({required String label}) {

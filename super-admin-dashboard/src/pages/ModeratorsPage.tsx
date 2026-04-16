@@ -32,6 +32,8 @@ function Avatar({ name, email, size = 32 }: { name?: string; email?: string; siz
 function StatusBadge({ status }: { status?: string }) {
   const s: React.CSSProperties = status === 'banned'
     ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.22)' }
+    : status === 'restricted'
+      ? { background: 'rgba(255,181,71,0.16)', color: '#C17C00', border: '1px solid rgba(193,124,0,0.28)' }
     : status === 'offline'
       ? { background: 'rgba(122,146,178,0.12)', color: '#7A92B2', border: '1px solid rgba(122,146,178,0.22)' }
       : { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }

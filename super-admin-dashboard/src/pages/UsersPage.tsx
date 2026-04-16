@@ -1,6 +1,6 @@
 ﻿import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteUser, getUsers, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
+import { deleteUser, getUsers, liftUserRestriction, restrictUser, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ArrowUpDown, Search, Users } from 'lucide-react'
 import type { AppUser, UserRole } from '@/types/models'
@@ -75,6 +75,8 @@ function RoleBadge({ role }: { role?: string }) {
 function StatusBadge({ status }: { status?: string }) {
   const s: React.CSSProperties = status === 'banned'
     ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.22)' }
+    : status === 'restricted'
+      ? { background: 'rgba(255,181,71,0.16)', color: '#C17C00', border: '1px solid rgba(193,124,0,0.28)' }
     : status === 'offline'
       ? { background: 'rgba(122,146,178,0.12)', color: '#7A92B2', border: '1px solid rgba(122,146,178,0.22)' }
       : { background: 'rgba(62,201,122,0.12)', color: '#3EC97A', border: '1px solid rgba(62,201,122,0.22)' }
@@ -84,6 +86,18 @@ function StatusBadge({ status }: { status?: string }) {
       {status ?? 'active'}
     </span>
   )
+}
+
+function getRestrictionDaysLabel(user: AppUser) {
+  if (user.status === 'banned') return 'banned'
+  if (user.status !== 'restricted') return user.status ?? 'active'
+  if (!user.restrictedUntil) return 'restricted'
+
+  const remainingMs = user.restrictedUntil.toMillis() - Date.now()
+  if (remainingMs <= 0) return 'restricted'
+
+  const daysLeft = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
+  return `restricted (${daysLeft}d left)`
 }
 
 export function UsersPage() {
@@ -96,6 +110,9 @@ export function UsersPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null)
+  const [restrictConfirmId, setRestrictConfirmId] = useState<string | null>(null)
+  const [restrictTypedText, setRestrictTypedText] = useState('')
+  const [restrictDays, setRestrictDays] = useState(7)
   const [banConfirmId, setBanConfirmId] = useState<string | null>(null)
   const [banTypedText, setBanTypedText] = useState('')
   const [mutationError, setMutationError] = useState<string | null>(null)
@@ -125,6 +142,16 @@ export function UsersPage() {
     mutationFn: ({ id, role }: { id: string; role: UserRole }) => updateUserRole(id, role),
     onSuccess: async () => { setMutationError(null); await invalidate() },
     onError: (err) => setMutationError(toErrorText('Failed to update user role', err)),
+  })
+  const restrict = useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number }) => restrictUser(id, days),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to restrict user', err)),
+  })
+  const liftRestriction = useMutation({
+    mutationFn: (id: string) => liftUserRestriction(id),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to lift restriction', err)),
   })
   const ban = useMutation({
     mutationFn: (id: string) => setUserBanStatus(id, true),
@@ -179,6 +206,7 @@ export function UsersPage() {
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
           <option value="offline">Offline</option>
+          <option value="restricted">Restricted</option>
           <option value="banned">Banned</option>
         </select>
       </div>
@@ -237,7 +265,7 @@ export function UsersPage() {
                       </div>
                     </td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.email}</td>
-                    <td><StatusBadge status={u.status} /></td>
+                    <td><StatusBadge status={getRestrictionDaysLabel(u)} /></td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.createdAt?.toDate().toLocaleDateString() ?? '-'}</td>
                     <td style={{ fontWeight:600 }}>{u.routesContributed ?? 0}</td>
                     <td>
@@ -256,10 +284,17 @@ export function UsersPage() {
                             <option key={role} value={role}>{role}</option>
                           ))}
                         </select>
-                        {u.status === 'banned'
-                          ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
-                          : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
-                        }
+                        {u.status === 'banned' ? (
+                          <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
+                        ) : (
+                          <>
+                            {u.status === 'restricted'
+                              ? <Btn sm variant="success" onClick={() => liftRestriction.mutate(u.id)}>Lift Restriction</Btn>
+                              : <Btn sm variant="danger" onClick={() => setRestrictConfirmId(u.id)}>Restrict</Btn>
+                            }
+                            <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
+                          </>
+                        )}
                         <Btn sm variant="danger" onClick={() => { if (confirm('Delete account permanently?')) remove.mutate(u.id) }}>
                           Delete
                         </Btn>
@@ -283,7 +318,7 @@ export function UsersPage() {
                   </div>
                 </div>
                 <div style={{ color:'var(--text-secondary)', fontSize:'0.8rem' }}>{u.email}</div>
-                <div style={{ display:'flex', gap:6 }}><StatusBadge status={u.status} /></div>
+                <div style={{ display:'flex', gap:6 }}><StatusBadge status={getRestrictionDaysLabel(u)} /></div>
                 <div style={{ display:'flex', gap:5 }}>
                   <select
                     value={(u.role === 'moderator' ? 'moderator' : 'user') as UserRole}
@@ -299,10 +334,17 @@ export function UsersPage() {
                       <option key={role} value={role}>{role}</option>
                     ))}
                   </select>
-                  {u.status === 'banned'
-                    ? <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
-                    : <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
-                  }
+                  {u.status === 'banned' ? (
+                    <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
+                  ) : (
+                    <>
+                      {u.status === 'restricted'
+                        ? <Btn sm variant="success" onClick={() => liftRestriction.mutate(u.id)}>Lift Restriction</Btn>
+                        : <Btn sm variant="danger" onClick={() => setRestrictConfirmId(u.id)}>Restrict</Btn>
+                      }
+                      <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -350,13 +392,50 @@ export function UsersPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(restrictConfirmId)} onOpenChange={(open) => { if (!open) { setRestrictConfirmId(null); setRestrictTypedText(''); setRestrictDays(7) } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirm Restriction</DialogTitle></DialogHeader>
+          <p style={{ color:'var(--text-secondary)', fontSize:'0.85rem', marginBottom:12 }}>
+            Type <strong style={{ color:'#E05C6A' }}>RESTRICT</strong> to confirm a temporary restriction.
+          </p>
+          <label style={{ color:'var(--text-secondary)', fontSize:'0.78rem', marginBottom:6, display:'block' }}>Restriction length</label>
+          <select
+            value={restrictDays}
+            onChange={(e) => setRestrictDays(Number(e.target.value) || 7)}
+            style={{ width: '100%', marginBottom: 10 }}
+          >
+            {Array.from({ length: 7 }, (_, index) => index + 1).map((days) => (
+              <option key={days} value={days}>{days} {days === 1 ? 'day' : 'days'}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={restrictTypedText}
+            onChange={(e) => setRestrictTypedText(e.target.value)}
+            placeholder="Type RESTRICT to confirm"
+          />
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
+            <Btn variant="outline" onClick={() => { setRestrictConfirmId(null); setRestrictTypedText(''); setRestrictDays(7) }}>Cancel</Btn>
+            <Btn variant="danger" disabled={restrictTypedText !== 'RESTRICT'} onClick={() => {
+              if (restrictConfirmId) restrict.mutate({ id: restrictConfirmId, days: restrictDays })
+              setRestrictConfirmId(null); setRestrictTypedText(''); setRestrictDays(7)
+            }}>Restrict User</Btn>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(banConfirmId)} onOpenChange={(open) => { if (!open) { setBanConfirmId(null); setBanTypedText('') } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Confirm Ban</DialogTitle></DialogHeader>
           <p style={{ color:'var(--text-secondary)', fontSize:'0.85rem', marginBottom:12 }}>
-            Type <strong style={{ color:'#E05C6A' }}>BAN</strong> to confirm.
+            Type <strong style={{ color:'#E05C6A' }}>BAN</strong> to permanently ban this account.
           </p>
-          <input type="text" value={banTypedText} onChange={(e) => setBanTypedText(e.target.value)} placeholder="Type BAN to confirm" />
+          <input
+            type="text"
+            value={banTypedText}
+            onChange={(e) => setBanTypedText(e.target.value)}
+            placeholder="Type BAN to confirm"
+          />
           <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
             <Btn variant="outline" onClick={() => { setBanConfirmId(null); setBanTypedText('') }}>Cancel</Btn>
             <Btn variant="danger" disabled={banTypedText !== 'BAN'} onClick={() => {
