@@ -97,6 +97,42 @@ class GamificationService {
     await prefs.setString(_userKey, jsonEncode(user.toJson()));
   }
 
+  static ({List<Achievement> achievements, bool changed})
+  _normalizeAchievements(List<Achievement> achievements) {
+    bool changed = false;
+    final normalized =
+        achievements.map((achievement) {
+          final cappedProgress = _clampProgress(
+            achievement.progress,
+            achievement.maxProgress,
+          );
+          final shouldBeUnlocked =
+              achievement.isUnlocked || cappedProgress >= achievement.maxProgress;
+          final normalizedProgress =
+              shouldBeUnlocked ? achievement.maxProgress : cappedProgress;
+
+          final needsUpdate =
+              achievement.progress != normalizedProgress ||
+              achievement.isUnlocked != shouldBeUnlocked ||
+              (shouldBeUnlocked && achievement.unlockedAt == null);
+
+          if (!needsUpdate) {
+            return achievement;
+          }
+
+          changed = true;
+          return achievement.copyWith(
+            progress: normalizedProgress,
+            isUnlocked: shouldBeUnlocked,
+            unlockedAt: shouldBeUnlocked
+                ? (achievement.unlockedAt ?? Timestamp.now())
+                : achievement.unlockedAt,
+          );
+        }).toList();
+
+    return (achievements: normalized, changed: changed);
+  }
+
   static Future<List<Achievement>> loadAchievements() async {
     final uid = _getCurrentUserUid();
     if (uid != null) {
@@ -108,9 +144,14 @@ class GamificationService {
                 .collection('achievements')
                 .get();
         if (querySnapshot.docs.isNotEmpty) {
-          return querySnapshot.docs
+          final loaded = querySnapshot.docs
               .map((doc) => Achievement.fromJson(doc.data()))
               .toList();
+          final normalized = _normalizeAchievements(loaded);
+          if (normalized.changed) {
+            await saveAchievements(normalized.achievements);
+          }
+          return normalized.achievements;
         } else {
           // Seed predefined achievements
           final predefined = getPredefinedAchievements();
@@ -126,7 +167,15 @@ class GamificationService {
     final achievementsJson = prefs.getString(_achievementsKey);
     if (achievementsJson != null) {
       final List<dynamic> decoded = jsonDecode(achievementsJson);
-      return decoded.map((e) => Achievement.fromJson(e)).toList();
+      final loaded = decoded.map((e) => Achievement.fromJson(e)).toList();
+      final normalized = _normalizeAchievements(loaded);
+      if (normalized.changed) {
+        await prefs.setString(
+          _achievementsKey,
+          jsonEncode(normalized.achievements.map((a) => a.toJson()).toList()),
+        );
+      }
+      return normalized.achievements;
     }
     return getPredefinedAchievements();
   }
@@ -334,6 +383,12 @@ class GamificationService {
     }
   }
 
+  static int _clampProgress(int value, int maxProgress) {
+    if (value < 0) return 0;
+    if (value > maxProgress) return maxProgress;
+    return value;
+  }
+
   /// Update streak on app open
   static Future<void> updateStreakOnAppOpen() async {
     final uid = _getCurrentUserUid();
@@ -358,20 +413,32 @@ class GamificationService {
         (a) => a.id == 'daily_rider',
       );
       if (dailyRiderIndex != -1) {
-        achievements[dailyRiderIndex] = achievements[dailyRiderIndex].copyWith(
-          progress: user.streakDays,
-        );
+        final dailyRider = achievements[dailyRiderIndex];
+        final nextProgress =
+            dailyRider.isUnlocked
+                ? dailyRider.maxProgress
+                : _clampProgress(user.streakDays, dailyRider.maxProgress);
+
+        if (dailyRider.progress != nextProgress) {
+          achievements[dailyRiderIndex] = dailyRider.copyWith(
+            progress: nextProgress,
+          );
+        }
+
         // Check for unlock
-        if (!achievements[dailyRiderIndex].isUnlocked &&
-            achievements[dailyRiderIndex].progress >=
-                achievements[dailyRiderIndex].maxProgress) {
+        if (!dailyRider.isUnlocked && nextProgress >= dailyRider.maxProgress) {
           achievements[dailyRiderIndex] = achievements[dailyRiderIndex]
               .copyWith(isUnlocked: true, unlockedAt: Timestamp.now());
           if (!user.achievements.contains('daily_rider')) {
             user.achievements.add('daily_rider');
             await saveUser(user);
           }
+        } else if (dailyRider.isUnlocked &&
+            !user.achievements.contains('daily_rider')) {
+          user.achievements.add('daily_rider');
+          await saveUser(user);
         }
+
         await saveAchievements(achievements);
       }
     } catch (e) {
@@ -390,87 +457,120 @@ class GamificationService {
     List<String> unlockedItems = [];
     bool achievementsUpdated = false;
     bool badgesUpdated = false;
+    bool userUpdated = false;
+
+    void incrementAchievementProgress(String achievementId) {
+      final index = achievements.indexWhere((a) => a.id == achievementId);
+      if (index == -1) return;
+
+      final achievement = achievements[index];
+      final cappedCurrent = _clampProgress(
+        achievement.progress,
+        achievement.maxProgress,
+      );
+
+      if (achievement.isUnlocked) {
+        if (cappedCurrent != achievement.maxProgress) {
+          achievements[index] = achievement.copyWith(
+            progress: achievement.maxProgress,
+          );
+          achievementsUpdated = true;
+        }
+        return;
+      }
+
+      final nextProgress = _clampProgress(
+        cappedCurrent + 1,
+        achievement.maxProgress,
+      );
+      if (nextProgress != achievement.progress) {
+        achievements[index] = achievement.copyWith(progress: nextProgress);
+        achievementsUpdated = true;
+      }
+    }
+
+    void unlockBadgeIfQualified(
+      String badgeId,
+      bool shouldUnlock,
+      String badgeName,
+    ) {
+      final badgeIndex = badges.indexWhere((b) => b.id == badgeId);
+      if (badgeIndex == -1) return;
+
+      final badge = badges[badgeIndex];
+
+      if (badge.isUnlocked) {
+        if (!user.badges.contains(badgeId)) {
+          user.badges.add(badgeId);
+          userUpdated = true;
+        }
+        return;
+      }
+
+      if (!shouldUnlock) return;
+
+      badges[badgeIndex] = badge.copyWith(
+        isUnlocked: true,
+        earnedAt: Timestamp.now(),
+      );
+      if (!user.badges.contains(badgeId)) {
+        user.badges.add(badgeId);
+        userUpdated = true;
+      }
+      unlockedItems.add('Badge: $badgeName');
+      badgesUpdated = true;
+    }
 
     // Increment progress based on action
     if (action == 'searched') {
-      final rookieIndex = achievements.indexWhere(
-        (a) => a.id == 'rookie_commuter',
-      );
-      if (rookieIndex != -1) {
-        achievements[rookieIndex] = achievements[rookieIndex].copyWith(
-          progress: achievements[rookieIndex].progress + 1,
-        );
-        achievementsUpdated = true;
-      }
-      final masterIndex = achievements.indexWhere(
-        (a) => a.id == 'metro_master',
-      );
-      if (masterIndex != -1) {
-        achievements[masterIndex] = achievements[masterIndex].copyWith(
-          progress: achievements[masterIndex].progress + 1,
-        );
-        achievementsUpdated = true;
-      }
-
-      // Check Explorer Badge
-      final explorerBadge = badges.firstWhere((b) => b.id == 'explorer');
-      if (!explorerBadge.isUnlocked && user.routesSearched >= 50) {
-        badges[badges.indexOf(explorerBadge)] = explorerBadge.copyWith(
-          isUnlocked: true,
-          earnedAt: Timestamp.now(),
-        );
-        user.badges.add('explorer');
-        unlockedItems.add('Badge: Explorer');
-        badgesUpdated = true;
-      }
+      incrementAchievementProgress('rookie_commuter');
+      incrementAchievementProgress('metro_master');
+      unlockBadgeIfQualified('explorer', user.routesSearched >= 50, 'Explorer');
     } else if (action == 'contributed') {
-      final pioneerIndex = achievements.indexWhere(
-        (a) => a.id == 'route_pioneer',
+      incrementAchievementProgress('route_pioneer');
+      incrementAchievementProgress('community_hero');
+      unlockBadgeIfQualified(
+        'contributor',
+        user.routesContributed >= 10,
+        'Contributor',
       );
-      if (pioneerIndex != -1) {
-        achievements[pioneerIndex] = achievements[pioneerIndex].copyWith(
-          progress: achievements[pioneerIndex].progress + 1,
-        );
-        achievementsUpdated = true;
-      }
-      final heroIndex = achievements.indexWhere(
-        (a) => a.id == 'community_hero',
-      );
-      if (heroIndex != -1) {
-        achievements[heroIndex] = achievements[heroIndex].copyWith(
-          progress: achievements[heroIndex].progress + 1,
-        );
-        achievementsUpdated = true;
-      }
-
-      // Check Contributor Badge
-      final contributorBadge = badges.firstWhere((b) => b.id == 'contributor');
-      if (!contributorBadge.isUnlocked && user.routesContributed >= 10) {
-        badges[badges.indexOf(contributorBadge)] = contributorBadge.copyWith(
-          isUnlocked: true,
-          earnedAt: Timestamp.now(),
-        );
-        if (!user.badges.contains('contributor')) {
-          user.badges.add('contributor');
-        }
-        unlockedItems.add('Badge: Contributor');
-        badgesUpdated = true;
-      }
     }
 
     // Check for unlocks
     for (int i = 0; i < achievements.length; i++) {
       final achievement = achievements[i];
-      if (!achievement.isUnlocked &&
-          achievement.progress >= achievement.maxProgress) {
-        achievements[i] = achievement.copyWith(
+      if (achievement.isUnlocked) {
+        if (achievement.progress != achievement.maxProgress) {
+          achievements[i] = achievement.copyWith(progress: achievement.maxProgress);
+          achievementsUpdated = true;
+        }
+        if (!user.achievements.contains(achievement.id)) {
+          user.achievements.add(achievement.id);
+          userUpdated = true;
+        }
+        continue;
+      }
+
+      final cappedProgress = _clampProgress(
+        achievement.progress,
+        achievement.maxProgress,
+      );
+      if (cappedProgress != achievement.progress) {
+        achievements[i] = achievement.copyWith(progress: cappedProgress);
+        achievementsUpdated = true;
+      }
+
+      final currentAchievement = achievements[i];
+      if (currentAchievement.progress >= currentAchievement.maxProgress) {
+        achievements[i] = currentAchievement.copyWith(
           isUnlocked: true,
           unlockedAt: Timestamp.now(),
         );
-        if (!user.achievements.contains(achievement.id)) {
-          user.achievements.add(achievement.id);
+        if (!user.achievements.contains(currentAchievement.id)) {
+          user.achievements.add(currentAchievement.id);
+          userUpdated = true;
         }
-        unlockedItems.add('Achievement: ${achievement.name}');
+        unlockedItems.add('Achievement: ${currentAchievement.name}');
         achievementsUpdated = true;
       }
     }
@@ -481,7 +581,7 @@ class GamificationService {
     if (badgesUpdated) {
       await saveBadges(badges);
     }
-    if (achievementsUpdated || badgesUpdated) {
+    if (achievementsUpdated || badgesUpdated || userUpdated) {
       await saveUser(user);
     }
 
