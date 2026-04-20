@@ -7,6 +7,7 @@ import '../services/notifications_service.dart';
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const int _staleReviewDays = 45;
+  static const int _routeFeedbackCooldownDays = 30;
 
   static Future<String?> _resolveNotificationRecipientId(
     String? contributorId,
@@ -34,6 +35,29 @@ class RouteService {
       }
     } catch (e) {
       print('Error resolving contributor email to uid ($raw): $e');
+    }
+
+    return null;
+  }
+
+  static String? _extractContributorIdentifier(
+    Map<String, dynamic>? routeData,
+  ) {
+    if (routeData == null) return null;
+
+    final identifiers = [
+      routeData['contributorId'],
+      routeData['userId'],
+      routeData['contributorEmail'],
+      routeData['userEmail'],
+      routeData['email'],
+    ];
+
+    for (final candidate in identifiers) {
+      final normalized = (candidate as String?)?.trim();
+      if (normalized != null && normalized.isNotEmpty) {
+        return normalized;
+      }
     }
 
     return null;
@@ -420,7 +444,7 @@ class RouteService {
       final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
       if (routeSnapshot.exists) {
         final routeData = routeSnapshot.data();
-        contributorId = (routeData?['contributorId'] as String?)?.trim();
+        contributorId = _extractContributorIdentifier(routeData);
         final currentStatus = (routeData?['approvalStatus'] as String?)?.trim();
         wasAlreadyApproved =
             currentStatus == route_model.RouteApprovalStatus.approved.name;
@@ -488,7 +512,7 @@ class RouteService {
       final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
       if (routeSnapshot.exists) {
         final routeData = routeSnapshot.data();
-        contributorId = (routeData?['contributorId'] as String?)?.trim();
+        contributorId = _extractContributorIdentifier(routeData);
         final start = routeData?['startLocation'] as String?;
         final end = routeData?['endLocation'] as String?;
         if (start != null && end != null) {
@@ -764,6 +788,24 @@ class RouteService {
       if (!routeSnap.exists) throw StateError('route_not_found');
       final prevSnap = await transaction.get(feedbackRef);
 
+      if (prevSnap.exists) {
+        final prevData = prevSnap.data() ?? const <String, dynamic>{};
+        final lastFeedbackAt =
+            (prevData['updatedAt'] as Timestamp?) ??
+            (prevData['createdAt'] as Timestamp?);
+
+        if (lastFeedbackAt != null) {
+          final nextAllowedAt = lastFeedbackAt
+              .toDate()
+              .add(const Duration(days: _routeFeedbackCooldownDays));
+          if (DateTime.now().isBefore(nextAllowedAt)) {
+            throw StateError(
+              'feedback_cooldown:${nextAllowedAt.toUtc().toIso8601String()}',
+            );
+          }
+        }
+      }
+
       final updates = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
         'feedbackSummary.lastFeedbackAt': FieldValue.serverTimestamp(),
@@ -815,6 +857,28 @@ class RouteService {
       };
     } catch (e) {
       print('Error loading user route quality feedback for $routeId: $e');
+      return null;
+    }
+  }
+
+  static Future<DateTime?> getUserRouteFeedbackNextAllowedAt({
+    required String routeId,
+    required String userId,
+  }) async {
+    try {
+      final doc = await _routeFeedbackDoc(routeId, userId).get();
+      if (!doc.exists) return null;
+
+      final data = doc.data() ?? const <String, dynamic>{};
+      final lastFeedbackAt =
+          (data['updatedAt'] as Timestamp?) ?? (data['createdAt'] as Timestamp?);
+      if (lastFeedbackAt == null) return null;
+
+      return lastFeedbackAt
+          .toDate()
+          .add(const Duration(days: _routeFeedbackCooldownDays));
+    } catch (e) {
+      print('Error loading route feedback cooldown for $routeId: $e');
       return null;
     }
   }

@@ -6,11 +6,13 @@ class RouteHistoryState {
   final List<LatLng> pathPoints;
   final List<route_model.Step> steps;
   final List<int> stepBoundaries;
+  final String selectionMode;
 
   RouteHistoryState({
     required this.pathPoints,
     required this.steps,
     required this.stepBoundaries,
+    required this.selectionMode,
   });
 }
 
@@ -23,6 +25,7 @@ class RouteHistoryService {
     List<LatLng> pathPoints,
     List<route_model.Step> steps,
     List<int> stepBoundaries,
+    String selectionMode,
   ) {
     // If we're not at the end of the history, remove all states after the
     // current one
@@ -54,6 +57,7 @@ class RouteHistoryService {
         pathPoints: pathPointsCopy,
         steps: stepsCopy,
         stepBoundaries: stepBoundariesCopy,
+        selectionMode: selectionMode,
       ),
     );
 

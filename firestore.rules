@@ -196,8 +196,49 @@ service cloud.firestore {
       // Per-user trust feedback answers for route reliability.
       match /routeFeedback/{userId} {
         allow read: if isAuth() && isSelf(userId);
-        allow create: if isAuth() && isSelf(userId);
-        allow update: if isAuth() && isSelf(userId);
+        allow create: if isAuth() &&
+          isSelf(userId) &&
+          request.resource.data.keys().hasOnly([
+            'routeId',
+            'userId',
+            'fareAccurate',
+            'scheduleAccurate',
+            'stillOperating',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.routeId == routeId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.fareAccurate is bool &&
+          request.resource.data.scheduleAccurate is bool &&
+          request.resource.data.stillOperating is bool &&
+          request.resource.data.createdAt is timestamp &&
+          request.resource.data.updatedAt is timestamp;
+        allow update: if isAuth() &&
+          isSelf(userId) &&
+          request.resource.data.keys().hasOnly([
+            'routeId',
+            'userId',
+            'fareAccurate',
+            'scheduleAccurate',
+            'stillOperating',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.routeId == resource.data.routeId &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.fareAccurate is bool &&
+          request.resource.data.scheduleAccurate is bool &&
+          request.resource.data.stillOperating is bool &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.updatedAt is timestamp &&
+          (
+            (resource.data.updatedAt is timestamp &&
+              resource.data.updatedAt + duration.value(30, 'd') <= request.time) ||
+            (resource.data.createdAt is timestamp &&
+              resource.data.createdAt + duration.value(30, 'd') <= request.time)
+          );
         allow delete: if false;
       }
 

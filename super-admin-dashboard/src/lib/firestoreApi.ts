@@ -1,16 +1,20 @@
 ﻿import {
   Timestamp,
   addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   type QueryDocumentSnapshot,
@@ -299,6 +303,140 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
   }
 }
 
+function toNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function getRouteContributorIdentifier(data: DocumentData): string | null {
+  const identifiers = [
+    data.contributorId,
+    data.userId,
+    data.contributorEmail,
+    data.userEmail,
+    data.email,
+  ]
+
+  for (const candidate of identifiers) {
+    const normalized = toNonEmptyString(candidate)
+    if (normalized) return normalized
+  }
+
+  return null
+}
+
+async function resolveContributorUid(contributorIdentifier: string | null): Promise<string | null> {
+  if (!contributorIdentifier) return null
+  if (!contributorIdentifier.includes('@')) return contributorIdentifier
+
+  try {
+    const usersByEmail = await getDocs(
+      query(usersCol, where('email', '==', contributorIdentifier), limit(1)),
+    )
+    if (usersByEmail.empty) return null
+
+    const firstMatch = usersByEmail.docs[0]
+    return toNonEmptyString(firstMatch.data().uid) ?? firstMatch.id
+  } catch {
+    return null
+  }
+}
+
+async function incrementApprovedContributionStats(contributorUid: string) {
+  const uid = contributorUid.trim()
+  if (!uid) return
+
+  const userRef = doc(db, 'users', uid)
+  await setDoc(
+    userRef,
+    {
+      routesContributed: increment(1),
+      contributionCount: increment(1),
+    },
+    { merge: true },
+  )
+
+  const userSnap = await getDoc(userRef)
+  if (!userSnap.exists()) return
+
+  const data = userSnap.data() ?? {}
+  const routesContributed = Number(data.routesContributed ?? data.contributionCount ?? 0)
+  const unlockedAchievements = Array.isArray(data.achievements)
+    ? data.achievements.filter((value): value is string => typeof value === 'string')
+    : []
+  const unlockedBadges = Array.isArray(data.badges)
+    ? data.badges.filter((value): value is string => typeof value === 'string')
+    : []
+
+  const pioneerUnlocked = routesContributed >= 10
+  const heroUnlocked = routesContributed >= 50
+  const contributorBadgeUnlocked = routesContributed >= 10
+
+  const newlyUnlockedAchievements: string[] = []
+  const newlyUnlockedBadges: string[] = []
+
+  if (pioneerUnlocked && !unlockedAchievements.includes('route_pioneer')) {
+    newlyUnlockedAchievements.push('route_pioneer')
+  }
+  if (heroUnlocked && !unlockedAchievements.includes('community_hero')) {
+    newlyUnlockedAchievements.push('community_hero')
+  }
+  if (contributorBadgeUnlocked && !unlockedBadges.includes('contributor')) {
+    newlyUnlockedBadges.push('contributor')
+  }
+
+  await setDoc(
+    doc(db, 'users', uid, 'achievements', 'route_pioneer'),
+    {
+      id: 'route_pioneer',
+      progress: routesContributed,
+      isUnlocked: pioneerUnlocked,
+      ...(newlyUnlockedAchievements.includes('route_pioneer')
+        ? { unlockedAt: serverTimestamp() }
+        : {}),
+    },
+    { merge: true },
+  )
+
+  await setDoc(
+    doc(db, 'users', uid, 'achievements', 'community_hero'),
+    {
+      id: 'community_hero',
+      progress: routesContributed,
+      isUnlocked: heroUnlocked,
+      ...(newlyUnlockedAchievements.includes('community_hero')
+        ? { unlockedAt: serverTimestamp() }
+        : {}),
+    },
+    { merge: true },
+  )
+
+  await setDoc(
+    doc(db, 'users', uid, 'badges', 'contributor'),
+    {
+      id: 'contributor',
+      isUnlocked: contributorBadgeUnlocked,
+      ...(newlyUnlockedBadges.includes('contributor')
+        ? { earnedAt: serverTimestamp() }
+        : {}),
+    },
+    { merge: true },
+  )
+
+  const userUpdates: Record<string, unknown> = {}
+  if (newlyUnlockedAchievements.length > 0) {
+    userUpdates.achievements = arrayUnion(...newlyUnlockedAchievements)
+  }
+  if (newlyUnlockedBadges.length > 0) {
+    userUpdates.badges = arrayUnion(...newlyUnlockedBadges)
+  }
+
+  if (Object.keys(userUpdates).length > 0) {
+    await setDoc(userRef, userUpdates, { merge: true })
+  }
+}
+
 function mapPostDoc(d: QueryDocumentSnapshot<DocumentData>): PostItem {
   const data = d.data()
   const status = data.moderationStatus ?? 'pending'
@@ -512,13 +650,53 @@ export async function getRoutes(): Promise<RouteItem[]> {
 }
 
 export async function updateRouteStatus(routeId: string, status: 'approved' | 'rejected', reviewerUid: string) {
-  await updateDoc(doc(db, 'routes', routeId), {
-    approvalStatus: status,
-    ...(status === 'approved' ? { isEdited: false } : {}),
-    reviewedBy: reviewerUid,
-    reviewedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const routeRef = doc(db, 'routes', routeId)
+
+  if (status !== 'approved') {
+    await updateDoc(routeRef, {
+      approvalStatus: status,
+      reviewedBy: reviewerUid,
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return
+  }
+
+  const routeSnap = await getDoc(routeRef)
+  if (!routeSnap.exists()) {
+    throw new Error(`Route ${routeId} not found`)
+  }
+
+  const contributorIdentifier = getRouteContributorIdentifier(routeSnap.data())
+  const contributorUid = await resolveContributorUid(contributorIdentifier)
+
+  const shouldIncrementContribution = await runTransaction(db, async (transaction) => {
+    const latestRouteSnap = await transaction.get(routeRef)
+    if (!latestRouteSnap.exists()) {
+      throw new Error(`Route ${routeId} not found`)
+    }
+
+    const latestData = latestRouteSnap.data()
+    const currentStatus =
+      toNonEmptyString(latestData.approvalStatus) ??
+      toNonEmptyString(latestData.status) ??
+      'pending'
+    const wasAlreadyApproved = currentStatus === 'approved'
+
+    transaction.update(routeRef, {
+      approvalStatus: status,
+      isEdited: false,
+      reviewedBy: reviewerUid,
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    return !wasAlreadyApproved
   })
+
+  if (shouldIncrementContribution && contributorUid) {
+    await incrementApprovedContributionStats(contributorUid)
+  }
 }
 
 export async function deleteRoute(routeId: string) {

@@ -70,6 +70,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _fareAccurate = true;
   bool _scheduleAccurate = true;
   bool _stillOperating = true;
+  bool _hasSubmittedTrustFeedback = false;
+  DateTime? _trustFeedbackNextAllowedAt;
   bool _isExitPromptOpen = false;
   bool _isRouteDownloaded = false;
   bool _isDownloadingRoute = false;
@@ -212,17 +214,28 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     Map<String, bool>? mine;
+    DateTime? nextAllowedAt;
     if (uid != null && uid.trim().isNotEmpty) {
-      mine = await RouteService.getUserRouteQualityFeedback(
-        routeId: widget.route.id,
-        userId: uid,
-      );
+      final results = await Future.wait<dynamic>([
+        RouteService.getUserRouteQualityFeedback(
+          routeId: widget.route.id,
+          userId: uid,
+        ),
+        RouteService.getUserRouteFeedbackNextAllowedAt(
+          routeId: widget.route.id,
+          userId: uid,
+        ),
+      ]);
+      mine = results[0] as Map<String, bool>?;
+      nextAllowedAt = results[1] as DateTime?;
     }
 
     if (!mounted) return;
     setState(() {
       _feedbackSummary = summary;
       _trustScore = score;
+      _hasSubmittedTrustFeedback = mine != null;
+      _trustFeedbackNextAllowedAt = nextAllowedAt;
       if (mine != null) {
         _fareAccurate = mine['fareAccurate'] ?? _fareAccurate;
         _scheduleAccurate = mine['scheduleAccurate'] ?? _scheduleAccurate;
@@ -262,6 +275,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       );
       return true;
     } catch (e) {
+      if (e is StateError) {
+        final rawMessage = e.message?.toString() ?? '';
+        if (rawMessage.startsWith('feedback_cooldown:')) {
+          return true;
+        }
+      }
+
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not submit feedback: $e')),
@@ -394,7 +414,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Before leaving, help improve route reliability with quick trust feedback.',
+                      'Before leaving, help improve route reliability with quick trust feedback (once every 30 days).',
                       style: TextStyle(
                         fontSize: 11,
                         color: _textSecondary,
@@ -475,6 +495,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     if (await _isTrustPromptSkippedToday()) {
       return true;
+    }
+
+    if (_hasSubmittedTrustFeedback) {
+      final nextAllowedAt = _trustFeedbackNextAllowedAt;
+      if (nextAllowedAt == null || DateTime.now().isBefore(nextAllowedAt)) {
+        return true;
+      }
     }
 
     if (_isExitPromptOpen) return false;

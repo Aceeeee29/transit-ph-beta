@@ -57,6 +57,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   final List<double?> _stepOrsDurS = [];
   double? _pendingOrsDistM;
   double? _pendingOrsDurS;
+  int? _pendingStepStartIndex;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
   String? selectedRegion;
@@ -198,6 +199,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _loadQuickRouteLink(widget.quickRouteToken!.trim());
     } else {
       _loadRouteToEdit();
+      if (widget.routeToEdit == null) {
+        _saveToHistory();
+      }
     }
   }
 
@@ -347,6 +351,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         selectionMode = 'step';
         _showModeDialog();
       });
+      _saveToHistory();
       if (_startLocationController.text.isEmpty) {
         final name = await LocationService.getAddressFromCoordinates(
             point.latitude, point.longitude);
@@ -358,6 +363,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     } else if (selectionMode == 'step') {
       if (pathPoints.isNotEmpty) {
         final lastPoint = pathPoints.last;
+        _pendingStepStartIndex = pathPoints.length;
 
         if (_snapToRoadEnabled) {
           try {
@@ -465,20 +471,43 @@ class _ContributeScreenState extends State<ContributeScreen> {
         mode: currentMode,
         modeColors: modeColors,
         getModeIcon: _getModeIcon,
-        onCancel: () => pathPoints.removeLast(),
+        onCancel: _cancelPendingStep,
         onSaved: (step) {
           setState(() {
             steps.add(step);
             stepBoundaries.add(pathPoints.length - 1);
             _stepOrsDistM.add(_pendingOrsDistM);
             _stepOrsDurS.add(_pendingOrsDurS);
+            _pendingStepStartIndex = null;
             _pendingOrsDistM = null;
             _pendingOrsDurS = null;
           });
+          _saveToHistory();
           _showAddAnotherStepDialog();
         },
       ),
     );
+  }
+
+  void _cancelPendingStep() {
+    setState(() {
+      final rollbackIndex = _pendingStepStartIndex;
+      if (rollbackIndex != null &&
+          rollbackIndex >= 0 &&
+          rollbackIndex < pathPoints.length) {
+        pathPoints = pathPoints.sublist(0, rollbackIndex);
+      } else if (pathPoints.isNotEmpty) {
+        pathPoints.removeLast();
+      }
+      _pendingStepStartIndex = null;
+      _pendingOrsDistM = null;
+      _pendingOrsDurS = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || selectionMode != 'step') return;
+      _showModeDialog();
+    });
   }
 
   void _showAddAnotherStepDialog() {
@@ -488,6 +517,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
         stepCount: steps.length,
         onAddAnother: () => _showModeDialog(),
         onFinished: () async {
+          final shouldFinish = await _confirmFinishRoute();
+          if (!mounted || !shouldFinish) {
+            if (mounted && selectionMode == 'step') {
+              _showModeDialog();
+            }
+            return;
+          }
+
           setState(() => selectionMode = 'done');
           if (_endLocationController.text.isEmpty &&
               pathPoints.isNotEmpty) {
@@ -505,6 +542,30 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
+  Future<bool> _confirmFinishRoute() async {
+    final shouldFinish = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Finish route now?'),
+        content: const Text(
+          'You can still preview and submit after this. If you need to add more steps, tap Keep Adding.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep Adding'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Finish Route'),
+          ),
+        ],
+      ),
+    );
+
+    return shouldFinish ?? false;
+  }
+
   // ─── History controls ────────────────────────────────────────────────────────
 
   void _onUndo() {
@@ -514,6 +575,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
         pathPoints = prev.pathPoints;
         steps = prev.steps;
         stepBoundaries = prev.stepBoundaries;
+        selectionMode = prev.selectionMode;
+        if (selectionMode != 'done') {
+          _showEditHandles = false;
+        }
+        _syncStepMetricsWithSteps();
       });
     }
   }
@@ -525,8 +591,33 @@ class _ContributeScreenState extends State<ContributeScreen> {
         pathPoints = next.pathPoints;
         steps = next.steps;
         stepBoundaries = next.stepBoundaries;
+        selectionMode = next.selectionMode;
+        if (selectionMode != 'done') {
+          _showEditHandles = false;
+        }
+        _syncStepMetricsWithSteps();
       });
     }
+  }
+
+  void _syncStepMetricsWithSteps() {
+    if (_stepOrsDistM.length > steps.length) {
+      _stepOrsDistM.removeRange(steps.length, _stepOrsDistM.length);
+    }
+    if (_stepOrsDurS.length > steps.length) {
+      _stepOrsDurS.removeRange(steps.length, _stepOrsDurS.length);
+    }
+
+    while (_stepOrsDistM.length < steps.length) {
+      _stepOrsDistM.add(null);
+    }
+    while (_stepOrsDurS.length < steps.length) {
+      _stepOrsDurS.add(null);
+    }
+
+    _pendingStepStartIndex = null;
+    _pendingOrsDistM = null;
+    _pendingOrsDurS = null;
   }
 
   void _onReset() {
@@ -536,6 +627,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       stepBoundaries = [];
       _stepOrsDistM.clear();
       _stepOrsDurS.clear();
+      _pendingStepStartIndex = null;
       _pendingOrsDistM = null;
       _pendingOrsDurS = null;
       selectionMode = 'start';
@@ -554,6 +646,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       List<LatLng>.from(pathPoints),
       List<route_model.Step>.from(steps),
       List<int>.from(stepBoundaries),
+      selectionMode,
     );
   }
 
