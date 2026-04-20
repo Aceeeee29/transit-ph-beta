@@ -9,8 +9,7 @@ class TutorialService {
     try {
       final user = await GamificationService.loadUser();
       return user.hasSeenTutorial;
-    } catch (e) {
-      print('Error loading tutorial status: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -21,8 +20,7 @@ class TutorialService {
       final user = await GamificationService.loadUser();
       user.hasSeenTutorial = true;
       await GamificationService.saveUser(user);
-    } catch (e) {
-      print('Error saving tutorial status: $e');
+    } catch (_) {
     }
   }
 
@@ -32,8 +30,7 @@ class TutorialService {
       final user = await GamificationService.loadUser();
       user.hasSeenTutorial = false;
       await GamificationService.saveUser(user);
-    } catch (e) {
-      print('Error resetting tutorial status: $e');
+    } catch (_) {
     }
   }
 

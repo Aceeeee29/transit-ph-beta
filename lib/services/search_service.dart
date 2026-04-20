@@ -24,8 +24,7 @@ class SearchService {
 
       user.recentSearches = recentSearches;
       await GamificationService.saveUser(user);
-    } catch (e) {
-      print('Error saving recent search: $e');
+    } catch (_) {
     }
   }
 
@@ -34,8 +33,7 @@ class SearchService {
     try {
       final user = await GamificationService.loadUser();
       return List<String>.from(user.recentSearches);
-    } catch (e) {
-      print('Error loading recent searches: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -46,8 +44,7 @@ class SearchService {
       final user = await GamificationService.loadUser();
       user.recentSearches = [];
       await GamificationService.saveUser(user);
-    } catch (e) {
-      print('Error clearing recent searches: $e');
+    } catch (_) {
     }
   }
 
@@ -57,8 +54,7 @@ class SearchService {
       final user = await GamificationService.loadUser();
       user.recentSearches.remove(query);
       await GamificationService.saveUser(user);
-    } catch (e) {
-      print('Error removing recent search: $e');
+    } catch (_) {
     }
   }
 }

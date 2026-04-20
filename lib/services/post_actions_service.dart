@@ -28,8 +28,7 @@ class PostActionsService {
       await firestore.collection('feedbacks').doc(feedbackId).set(
         feedback.toJson(),
       );
-    } catch (e) {
-      print('Error reporting post: $e');
+    } catch (_) {
     }
   }
 

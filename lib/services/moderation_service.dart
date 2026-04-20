@@ -33,8 +33,7 @@ class ModerationService {
         'meta': meta ?? const <String, dynamic>{},
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error writing moderation audit log for route $routeId: $e');
+    } catch (_) {
     }
   }
 
@@ -70,8 +69,7 @@ class ModerationService {
         }
         return snap.docs.first.id;
       }
-    } catch (e) {
-      print('Error resolving contributor email to uid ($raw): $e');
+    } catch (_) {
     }
 
     return null;
@@ -164,7 +162,7 @@ class ModerationService {
         pendingRoutesNotifier.value = routes;
       },
       onError: (error) {
-        print('Error listening to pending routes: $error');
+        // Ignore listener errors; notifier will receive updates on next valid snapshot.
       },
     );
   }
@@ -197,9 +195,7 @@ class ModerationService {
       pendingRoutesNotifier.value = pendingRoutesNotifier.value
           .where((r) => r.id != routeId)
           .toList();
-      print('Approved route $routeId');
-    } catch (e) {
-      print('Error approving route $routeId: $e');
+    } catch (_) {
     }
   }
 
@@ -233,8 +229,7 @@ class ModerationService {
                   'Your submitted route ($routeTitle) was rejected by moderators.',
             ),
           );
-        } catch (e) {
-          print('Error creating rejection notification for route $routeId: $e');
+        } catch (_) {
         }
       }
 
@@ -249,9 +244,7 @@ class ModerationService {
       pendingRoutesNotifier.value = pendingRoutesNotifier.value
           .where((r) => r.id != routeId)
           .toList();
-      print('Rejected route $routeId (deleted)');
-    } catch (e) {
-      print('Error rejecting route $routeId: $e');
+    } catch (_) {
     }
   }
 
@@ -262,9 +255,7 @@ class ModerationService {
       await _firestore.collection('posts').doc(postId).update({
         'moderationStatus': ModerationStatus.approved.name,
       });
-      print('Approved post $postId');
-    } catch (e) {
-      print('Error approving post $postId: $e');
+    } catch (_) {
     }
   }
 
@@ -273,9 +264,7 @@ class ModerationService {
       await _firestore.collection('posts').doc(postId).update({
         'moderationStatus': ModerationStatus.rejected.name,
       });
-      print('Rejected post $postId');
-    } catch (e) {
-      print('Error rejecting post $postId: $e');
+    } catch (_) {
     }
   }
 
@@ -310,9 +299,7 @@ class ModerationService {
                   f.targetId == postId))
           .toList();
 
-      print('Dismissed reports for post $postId');
-    } catch (e) {
-      print('Error dismissing reported post $postId: $e');
+    } catch (_) {
     }
   }
 
@@ -343,9 +330,7 @@ class ModerationService {
                   f.targetId == postId))
           .toList();
 
-      print('Permanently removed post $postId');
-    } catch (e) {
-      print('Error permanently removing post $postId: $e');
+    } catch (_) {
     }
   }
 
@@ -374,9 +359,7 @@ class ModerationService {
         user.restrictedUntil = restrictedUntil.toLocal();
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-      print('Restricted user $uid for $sanitizedDays days');
-    } catch (e) {
-      print('Error restricting user $uid: $e');
+    } catch (_) {
     }
   }
 
@@ -398,9 +381,7 @@ class ModerationService {
         user.restrictedUntil = null;
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-      print('Lifted restriction for user $uid');
-    } catch (e) {
-      print('Error lifting restriction for user $uid: $e');
+    } catch (_) {
     }
   }
 
@@ -425,8 +406,7 @@ class ModerationService {
           .collection('feedbacks')
           .doc(feedback.id)
           .set(feedback.toJson());
-    } catch (e) {
-      print('Error adding feedback ${feedback.id}: $e');
+    } catch (_) {
     }
   }
 
@@ -436,8 +416,7 @@ class ModerationService {
           .collection('feedbacks')
           .doc(feedback.id)
           .set(feedback.toJson());
-    } catch (e) {
-      print('Error saving feedback ${feedback.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -458,9 +437,7 @@ class ModerationService {
         feedbacksNotifier.value = List.from(feedbacksNotifier.value)
           ..[index] = updatedFeedback;
       }
-      print('Updated feedback $feedbackId status to ${status.name}');
-    } catch (e) {
-      print('Error updating feedback $feedbackId status: $e');
+    } catch (_) {
     }
   }
 
@@ -469,9 +446,7 @@ class ModerationService {
       await _firestore.collection('feedbacks').doc(feedbackId).delete();
       feedbacksNotifier.value =
           feedbacksNotifier.value.where((f) => f.id != feedbackId).toList();
-      print('Deleted feedback $feedbackId');
-    } catch (e) {
-      print('Error deleting feedback $feedbackId: $e');
+    } catch (_) {
     }
   }
 

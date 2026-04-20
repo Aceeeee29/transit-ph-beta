@@ -47,7 +47,7 @@ class RoutingService {
     required LatLng destination,
     String mode = 'Jeepney',
   }) async {
-    const cacheProfile = 'supabase-gtfs-v9';
+    const cacheProfile = 'supabase-gtfs-v10';
 
     final cached = await RouteCacheRepository.get(
       originName,
@@ -156,34 +156,12 @@ class RoutingService {
     String preferredMode = 'Auto',
   }) async {
     final shapePolylines = await Future.wait(
-      alternative.plan.legs.map((leg) async {
-        final board = LatLng(leg.boardLat, leg.boardLon);
-        final alight = LatLng(leg.alightLat, leg.alightLon);
-        final osrmMode = _osrmProfileForMode(
-          _inferModeFromRoute(
-            routeType: leg.routeType,
-            routeShortName: leg.routeShortName,
-            routeLongName: leg.routeLongName,
-            preferredMode: preferredMode,
-          ),
-        );
-
-        final snapped = await _osrmSnap(board, alight, osrmMode);
-        if (snapped != null && snapped.length >= 2) return snapped;
-
-        if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
-          try {
-            final pts = await SupabaseRouteService.getShapePolyline(
-              leg.shapeId!,
-            ).timeout(const Duration(seconds: 8));
-            if (pts.length >= 2) {
-              return _clipShapeToStops(pts, board, alight);
-            }
-          } catch (_) {}
-        }
-
-        return [board, alight];
-      }),
+      alternative.plan.legs.map(
+        (leg) => _buildTransitLegPolyline(
+          leg: leg,
+          preferredMode: preferredMode,
+        ),
+      ),
     );
 
     return _buildResult(
@@ -448,37 +426,12 @@ class RoutingService {
 
     // ── Step 3: Road-snap each leg via OSRM ──────────────────────────────────
     final shapePolylines = await Future.wait(
-      plan.legs.map((leg) async {
-        final board = LatLng(leg.boardLat, leg.boardLon);
-        final alight = LatLng(leg.alightLat, leg.alightLon);
-        final osrmMode = _osrmProfileForMode(
-          _inferModeFromRoute(
-            routeType: leg.routeType,
-            routeShortName: leg.routeShortName,
-            routeLongName: leg.routeLongName,
-            preferredMode: preferredMode,
-          ),
-        );
-
-        // Try OSRM snap first
-        final snapped = await _osrmSnap(board, alight, osrmMode);
-        if (snapped != null && snapped.length >= 2) return snapped;
-
-        // Fall back to GTFS shape clipped to stops
-        if (leg.shapeId != null && leg.shapeId!.isNotEmpty) {
-          try {
-            final pts = await SupabaseRouteService.getShapePolyline(
-              leg.shapeId!,
-            ).timeout(const Duration(seconds: 8));
-            if (pts.length >= 2) {
-              return _clipShapeToStops(pts, board, alight);
-            }
-          } catch (_) {}
-        }
-
-        // Last resort: straight line
-        return [board, alight];
-      }),
+      plan.legs.map(
+        (leg) => _buildTransitLegPolyline(
+          leg: leg,
+          preferredMode: preferredMode,
+        ),
+      ),
     );
 
     return await _buildResult(
@@ -751,6 +704,18 @@ class RoutingService {
     final steps = <OrsStep>[];
     final firstLeg = legs.first;
     final lastLeg = legs.last;
+    final firstLegMode = _inferModeFromRoute(
+      routeType: firstLeg.routeType,
+      routeShortName: firstLeg.routeShortName,
+      routeLongName: firstLeg.routeLongName,
+      preferredMode: preferredMode,
+    );
+    final lastLegMode = _inferModeFromRoute(
+      routeType: lastLeg.routeType,
+      routeShortName: lastLeg.routeShortName,
+      routeLongName: lastLeg.routeLongName,
+      preferredMode: preferredMode,
+    );
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
     final boardFirst = LatLng(
@@ -759,8 +724,11 @@ class RoutingService {
     );
     final walkInKm = _haversineKm(origin, boardFirst);
     if (walkInKm > _minWalkSegmentKm) {
-      final walkInPts =
-          await _osrmSnap(origin, boardFirst, 'foot') ?? [origin, boardFirst];
+      final walkInPts = await _buildWalkConnectorPolyline(
+        origin,
+        boardFirst,
+        allowRoadSnap: !_isStationBasedLeg(firstLeg, firstLegMode),
+      );
       final walkInDistM = _polylineDistanceKm(walkInPts) * 1000;
       combinedPolyline.addAll(walkInPts);
       steps.add(
@@ -823,14 +791,25 @@ class RoutingService {
       // ── Transfer walk ──────────────────────────────────────────────────────
       if (i < legs.length - 1) {
         final nextLeg = legs[i + 1];
+        final nextMode = _inferModeFromRoute(
+          routeType: nextLeg.routeType,
+          routeShortName: nextLeg.routeShortName,
+          routeLongName: nextLeg.routeLongName,
+          preferredMode: preferredMode,
+        );
         final alightPt = LatLng(leg.alightLat, leg.alightLon);
         final boardPt = LatLng(nextLeg.boardLat, nextLeg.boardLon);
         final transferKm = _haversineKm(alightPt, boardPt);
         final transferRouteLabel = _routeLabelForLeg(nextLeg) ?? 'next line';
 
         if (transferKm > _minWalkSegmentKm) {
-          final transferPts =
-              await _osrmSnap(alightPt, boardPt, 'foot') ?? [alightPt, boardPt];
+          final transferPts = await _buildWalkConnectorPolyline(
+            alightPt,
+            boardPt,
+            allowRoadSnap:
+                !_isStationBasedLeg(leg, mode) &&
+                !_isStationBasedLeg(nextLeg, nextMode),
+          );
           final transferDistM = _polylineDistanceKm(transferPts) * 1000;
           final tStart = combinedPolyline.length - 1;
           final transferToAdd =
@@ -878,9 +857,11 @@ class RoutingService {
     );
     final walkOutKm = _haversineKm(alightLast, destination);
     if (walkOutKm > _minWalkSegmentKm) {
-      final walkOutPts =
-          await _osrmSnap(alightLast, destination, 'foot') ??
-          [alightLast, destination];
+      final walkOutPts = await _buildWalkConnectorPolyline(
+        alightLast,
+        destination,
+        allowRoadSnap: !_isStationBasedLeg(lastLeg, lastLegMode),
+      );
       final walkOutDistM = _polylineDistanceKm(walkOutPts) * 1000;
       final startIdx = combinedPolyline.length - 1;
       final walkOutToAdd =
@@ -1018,20 +999,112 @@ class RoutingService {
     return false;
   }
 
+  static Future<List<LatLng>> _buildTransitLegPolyline({
+    required TransitLeg leg,
+    required String preferredMode,
+  }) async {
+    final board = LatLng(leg.boardLat, leg.boardLon);
+    final alight = LatLng(leg.alightLat, leg.alightLon);
+    final mode = _inferModeFromRoute(
+      routeType: leg.routeType,
+      routeShortName: leg.routeShortName,
+      routeLongName: leg.routeLongName,
+      preferredMode: preferredMode,
+    );
+    List<LatLng>? shapePolyline;
+    var shapeAttempted = false;
+
+    Future<List<LatLng>?> tryLoadShape() async {
+      if (shapeAttempted) return shapePolyline;
+      shapeAttempted = true;
+
+      final shapeId = leg.shapeId;
+      if (shapeId == null || shapeId.isEmpty) return null;
+
+      try {
+        final pts = await SupabaseRouteService.getShapePolyline(
+          shapeId,
+        ).timeout(const Duration(seconds: 8));
+        if (pts.length >= 2) {
+          shapePolyline = _clipShapeToStops(pts, board, alight);
+        }
+      } catch (_) {}
+
+      return shapePolyline;
+    }
+
+    final shapeFirst = await tryLoadShape();
+    if (shapeFirst != null && shapeFirst.length >= 2) return shapeFirst;
+
+    final snapped = await _osrmSnap(board, alight, _osrmProfileForMode(mode));
+    if (snapped != null && snapped.length >= 2) {
+      final clipped = _clipShapeToStops(snapped, board, alight);
+      if (clipped.length >= 2) return clipped;
+    }
+
+    final shapeFallback = await tryLoadShape();
+    if (shapeFallback != null && shapeFallback.length >= 2) {
+      return shapeFallback;
+    }
+
+    return [board, alight];
+  }
+
+  static Future<List<LatLng>> _buildWalkConnectorPolyline(
+    LatLng from,
+    LatLng to, {
+    required bool allowRoadSnap,
+  }) async {
+    if (allowRoadSnap) {
+      final snapped = await _osrmSnap(from, to, 'foot');
+      if (snapped != null && snapped.length >= 2) {
+        return _clipShapeToStops(snapped, from, to);
+      }
+    }
+    return [from, to];
+  }
+
+  static bool _isStationBasedLeg(TransitLeg leg, String mode) {
+    if (mode == 'Train') return true;
+
+    final routeName =
+        '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
+
+    if (routeName.contains('edsa') && routeName.contains('carousel')) {
+      return true;
+    }
+    if (routeName.contains('carousel busway')) {
+      return true;
+    }
+
+    return false;
+  }
+
   static List<LatLng> _clipShapeToStops(
     List<LatLng> shape,
     LatLng boardStop,
     LatLng alightStop,
   ) {
-    if (shape.length < 2) return shape;
-    int bIdx = _closestIdx(shape, boardStop);
-    int aIdx = _closestIdx(shape, alightStop);
-    if (bIdx == aIdx) return shape;
-    if (bIdx > aIdx) {
-      final rev = shape.reversed.toList();
-      return rev.sublist(shape.length - 1 - bIdx, shape.length - 1 - aIdx + 1);
+    if (shape.length < 2) return [boardStop, alightStop];
+
+    final bIdx = _closestIdx(shape, boardStop);
+    final aIdx = _closestIdx(shape, alightStop);
+    if (bIdx == aIdx) {
+      return [boardStop, alightStop];
     }
-    return shape.sublist(bIdx, aIdx + 1);
+
+    final clipped =
+        bIdx < aIdx
+            ? shape.sublist(bIdx, aIdx + 1)
+            : shape.sublist(aIdx, bIdx + 1).reversed.toList();
+
+    if (clipped.length < 2) {
+      return [boardStop, alightStop];
+    }
+
+    clipped[0] = boardStop;
+    clipped[clipped.length - 1] = alightStop;
+    return clipped;
   }
 
   static int _closestIdx(List<LatLng> polyline, LatLng target) {

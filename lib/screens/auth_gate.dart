@@ -112,6 +112,66 @@ class AuthGate extends StatelessWidget {
     return (data['isBanned'] as bool? ?? false) || status == 'banned';
   }
 
+  static bool _isAdminRole(Map<String, dynamic> data) {
+    final role = ((data['role'] as String?) ?? '')
+        .trim()
+        .toLowerCase()
+        .replaceAll('-', '_')
+        .replaceAll(' ', '_');
+
+    return role == 'moderator' ||
+        role == 'admin' ||
+        role == 'superadmin' ||
+        role == 'super_admin';
+  }
+
+  static Widget _buildAuthedDestination({
+    required User user,
+    required Map<String, dynamic> data,
+    required String? quickRouteToken,
+    required bool enforceEmailVerification,
+  }) {
+    final isAdmin = _isAdminRole(data);
+    final restrictionEndsAt = _restrictionEndsAt(data);
+    final isRestricted = _isRestrictionActive(data);
+    final hasSeenTutorial = data['hasSeenTutorial'] as bool? ?? false;
+    final hasAcceptedLegal = _hasAcceptedLatestLegalDocuments(data);
+
+    if (isRestricted) {
+      return _RestrictedAccountHandler(
+        restrictedUntil: restrictionEndsAt,
+      );
+    }
+
+    if (!hasAcceptedLegal) {
+      return LegalConsentScreen(
+        user: user,
+        privacyPolicyVersion: _privacyPolicyVersion,
+        termsVersion: _termsVersion,
+      );
+    }
+
+    if (isAdmin) {
+      return MainScreen(isAdmin: true, quickRouteToken: quickRouteToken);
+    }
+
+    if (enforceEmailVerification) {
+      final isGoogleUser = user.providerData.any(
+        (provider) => provider.providerId == 'google.com',
+      );
+      if (!user.emailVerified && !isGoogleUser) {
+        return EmailVerificationScreen(user: user);
+      }
+    }
+
+    return hasSeenTutorial
+        ? MainScreen(
+            isAdmin: false,
+            quickRouteToken: quickRouteToken,
+          )
+        : OnboardingScreen(user: user);
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -123,7 +183,6 @@ class AuthGate extends StatelessWidget {
 
         if (snapshot.hasData) {
           final user = snapshot.data!;
-          print('User signed in: ${user.uid}, email: ${user.email}, emailVerified: ${user.emailVerified}');
 
           // ── Keep user role/restriction state live so moderation applies immediately ─
           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -138,71 +197,22 @@ class AuthGate extends StatelessWidget {
               }
 
               if (userSnapshot.hasError) {
-                print('Error fetching user document: ${userSnapshot.error}');
                 FirebaseAuth.instance.signOut();
                 return const LoginScreen();
               }
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
                 final data = userSnapshot.data!.data() ?? <String, dynamic>{};
-                final role = ((data['role'] as String?) ?? '')
-                  .trim()
-                  .toLowerCase()
-                  .replaceAll('-', '_')
-                  .replaceAll(' ', '_');
-                final isAdmin = role == 'moderator' ||
-                  role == 'admin' ||
-                  role == 'superadmin' ||
-                  role == 'super_admin';
-                final restrictionEndsAt = _restrictionEndsAt(data);
-                final isRestricted = _isRestrictionActive(data);
-                final hasSeenTutorial =
-                    data['hasSeenTutorial'] as bool? ?? false;
-                final hasAcceptedLegal =
-                  _hasAcceptedLatestLegalDocuments(data);
-
-                if (isRestricted) {
-                  return _RestrictedAccountHandler(
-                    restrictedUntil: restrictionEndsAt,
-                  );
-                }
-
-                if (!hasAcceptedLegal) {
-                  return LegalConsentScreen(
-                    user: user,
-                    privacyPolicyVersion: _privacyPolicyVersion,
-                    termsVersion: _termsVersion,
-                  );
-                }
-
-                // ── Moderators/admins skip email verification & onboarding ──
-                if (isAdmin) {
-                  print('Moderator/admin detected — skipping verification and onboarding');
-                  return MainScreen(isAdmin: true, quickRouteToken: quickRouteToken);
-                }
-
-                // ── Regular users: check email verification ─────────────────
-                final isGoogleUser = user.providerData
-                    .any((p) => p.providerId == 'google.com');
-                print('Is Google user: $isGoogleUser');
-
-                if (!user.emailVerified && !isGoogleUser) {
-                  print('Redirecting to email verification');
-                  return EmailVerificationScreen(user: user);
-                }
-
-                // ── Check onboarding ────────────────────────────────────────
-                if (!hasSeenTutorial) {
-                  return OnboardingScreen(user: user);
-                }
-
-                return MainScreen(isAdmin: false, quickRouteToken: quickRouteToken);
+                return _buildAuthedDestination(
+                  user: user,
+                  data: data,
+                  quickRouteToken: quickRouteToken,
+                  enforceEmailVerification: true,
+                );
 
               } else {
                 // Document may not exist yet — race between auth event and
                 // Firestore write completing. Wait 2 s then retry once.
-                print(
-                    'User document not found for UID: ${user.uid} — retrying...');
                 return FutureBuilder<DocumentSnapshot>(
                   future: Future.delayed(const Duration(seconds: 2)).then(
                     (_) => FirebaseFirestore.instance
@@ -220,55 +230,15 @@ class AuthGate extends StatelessWidget {
                         retrySnapshot.data!.exists) {
                       final data = retrySnapshot.data!.data()
                           as Map<String, dynamic>;
-                        final role = ((data['role'] as String?) ?? '')
-                          .trim()
-                          .toLowerCase()
-                          .replaceAll('-', '_')
-                          .replaceAll(' ', '_');
-                        final isAdmin = role == 'moderator' ||
-                          role == 'admin' ||
-                          role == 'superadmin' ||
-                          role == 'super_admin';
-                      final restrictionEndsAt = _restrictionEndsAt(data);
-                      final isRestricted = _isRestrictionActive(data);
-                      final hasSeenTutorial =
-                          data['hasSeenTutorial'] as bool? ?? false;
-                      final hasAcceptedLegal =
-                          _hasAcceptedLatestLegalDocuments(data);
-
-                      if (isRestricted) {
-                        return _RestrictedAccountHandler(
-                          restrictedUntil: restrictionEndsAt,
-                        );
-                      }
-
-                      if (!hasAcceptedLegal) {
-                        return LegalConsentScreen(
-                          user: user,
-                          privacyPolicyVersion: _privacyPolicyVersion,
-                          termsVersion: _termsVersion,
-                        );
-                      }
-
-                      // Moderators skip verification & onboarding on retry too
-                      if (isAdmin) {
-                        return MainScreen(
-                          isAdmin: true,
-                          quickRouteToken: quickRouteToken,
-                        );
-                      }
-
-                      return hasSeenTutorial
-                          ? MainScreen(
-                              isAdmin: false,
-                              quickRouteToken: quickRouteToken,
-                            )
-                          : OnboardingScreen(user: user);
+                      return _buildAuthedDestination(
+                        user: user,
+                        data: data,
+                        quickRouteToken: quickRouteToken,
+                        enforceEmailVerification: false,
+                      );
                     }
 
                     // Still no document after retry — sign out
-                    print(
-                        'User document still not found after retry — signing out');
                     FirebaseAuth.instance.signOut();
                     return const LoginScreen();
                   },

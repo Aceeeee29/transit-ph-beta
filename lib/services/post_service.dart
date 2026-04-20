@@ -20,8 +20,7 @@ class PostService {
           .where((post) =>
               post.expiresAt == null || post.expiresAt!.isAfter(now))
           .toList();
-    } catch (e) {
-      print('Error fetching posts: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -37,8 +36,7 @@ class PostService {
       return querySnapshot.docs
           .map((doc) => Post.fromJson(doc.data()))
           .toList();
-    } catch (e) {
-      print('Error fetching posts for user $userId: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -52,8 +50,7 @@ class PostService {
         return Post.fromJson(docSnapshot.data()!);
       }
       return null;
-    } catch (e) {
-      print('Error fetching post $postId: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -67,8 +64,7 @@ class PostService {
         DateTime.now().add(const Duration(days: 3)),
       );
       await _firestore.collection('posts').doc(post.id).set(data);
-    } catch (e) {
-      print('Error saving post ${post.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -78,8 +74,7 @@ class PostService {
     try {
       final data = post.toJson()..remove('timestamp'); // preserve server Timestamp
       await _firestore.collection('posts').doc(post.id).update(data);
-    } catch (e) {
-      print('Error updating post ${post.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -98,8 +93,7 @@ class PostService {
       }
       batch.delete(_firestore.collection('posts').doc(postId));
       await batch.commit();
-    } catch (e) {
-      print('Error deleting post $postId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -115,8 +109,7 @@ class PostService {
       for (final doc in expired.docs) {
         await deletePost(doc.id);
       }
-    } catch (e) {
-      print('Error cleaning up expired posts: $e');
+    } catch (_) {
     }
   }
 
@@ -192,8 +185,7 @@ class PostService {
         transaction.update(postRef, updates);
         return false;
       });
-    } catch (e) {
-      print('Error toggling vote on post $postId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -210,8 +202,7 @@ class PostService {
           .collection('comments')
           .doc(comment.id)
           .set(data);
-    } catch (e) {
-      print('Error adding comment ${comment.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -238,8 +229,7 @@ class PostService {
       } else {
         await commentsRef.doc(commentId).delete();
       }
-    } catch (e) {
-      print('Error deleting comment $commentId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -279,8 +269,7 @@ class PostService {
       }
 
       return topLevelComments.map((c) => commentMap[c.id] ?? c).toList();
-    } catch (e) {
-      print('Error fetching comments for post $postId: $e');
+    } catch (_) {
       return [];
     }
   }

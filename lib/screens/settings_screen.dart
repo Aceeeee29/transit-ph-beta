@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
+import '../repositories/route_cache_repository.dart';
 import '../services/moderation_service.dart';
 import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
+part 'settings_screen_sections.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userName;
@@ -27,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSubmittingFeedback = false;
   bool _isLoadingPreferences = true;
   bool _isSavingPreferences = false;
+  bool _isClearingRouteCache = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
@@ -42,208 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showEditProfileDialog() async {
-    final controller = TextEditingController(text: _displayName);
-
-    await showDialog<void>(
-      context: context,
-      builder:
-          (dialogContext) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _bg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withOpacity(0.08),
-                    blurRadius: 32,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                      border: Border(bottom: BorderSide(color: _border)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: _accentSoft,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: const Icon(
-                            Icons.edit_outlined,
-                            color: _accent,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Edit Profile Name',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _border),
-                      ),
-                      child: TextField(
-                        controller: controller,
-                        autofocus: true,
-                        textInputAction: TextInputAction.done,
-                        style: const TextStyle(
-                          color: _textPrimary,
-                          fontSize: 14,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          labelStyle: TextStyle(color: _textSecondary),
-                          prefixIcon: Icon(
-                            Icons.person_outline,
-                            color: _accent,
-                            size: 18,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            vertical: 13,
-                            horizontal: 4,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => Navigator.of(dialogContext).pop(),
-                            child: Container(
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: _surface,
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(color: _border),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: _textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: GestureDetector(
-                            onTap: () async {
-                              final updatedName = controller.text.trim();
-                              if (updatedName.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Name cannot be empty.'),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              try {
-                                final user = await GamificationService.loadUser();
-                                user.name = updatedName;
-                                await GamificationService.saveUser(user);
-
-                                final authUser =
-                                    firebase_auth.FirebaseAuth.instance.currentUser;
-                                if (authUser != null) {
-                                  await authUser.updateDisplayName(updatedName);
-                                }
-
-                                if (!mounted) return;
-                                setState(() {
-                                  _displayName = updatedName;
-                                });
-
-                                Navigator.of(dialogContext).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Profile updated successfully.'),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to update profile: $e'),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              height: 44,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                ),
-                                borderRadius: BorderRadius.circular(11),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _accent.withOpacity(0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              alignment: Alignment.center,
-                              child: const Text(
-                                'Save',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
+    await this._showEditProfileDialogSection();
   }
 
   Future<void> _loadPreferences() async {
@@ -302,6 +104,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       distanceUnit = value;
     });
     _savePreferences();
+  }
+
+  Future<void> _clearGeneratedRouteCache() async {
+    await this._clearGeneratedRouteCacheSection();
+  }
+
+  void _setRouteCacheClearing(bool value) {
+    setState(() {
+      _isClearingRouteCache = value;
+    });
+  }
+
+  void _setDisplayName(String value) {
+    setState(() {
+      _displayName = value;
+    });
   }
 
   // ─── Color tokens 
@@ -892,12 +710,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+            _section(
+              title: 'Storage',
+              icon: Icons.storage_rounded,
+              children: [
+                _actionRow(
+                  label:
+                      _isClearingRouteCache
+                          ? 'Clearing auto-generated route cache...'
+                          : 'Clear auto-generated route cache',
+                  icon: Icons.delete_sweep_outlined,
+                  onTap:
+                      _isClearingRouteCache ? () {} : _clearGeneratedRouteCache,
+                  isLast: true,
+                  color: const Color(0xFFD14343),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
             // ─── About 
             _section(
               title: 'About',
               icon: Icons.info_outline_rounded,
               children: [
-                _infoRow(label: 'Version', value: '0.1.16'),
+                _infoRow(label: 'Version', value: '0.1.17'),
                 _infoRow(label: 'Last Updated', value: 'April 2026'),
                 Divider(color: _border, height: 1),
                 _actionRow(

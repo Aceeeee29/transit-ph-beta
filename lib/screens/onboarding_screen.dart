@@ -127,8 +127,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'User';
       appUser.email = widget.user.email ?? '';
       await GamificationService.saveUser(appUser);
-    } catch (e) {
-      print('Error saving category: $e');
+    } catch (_) {
       // Continue anyway to proceed
     }
 

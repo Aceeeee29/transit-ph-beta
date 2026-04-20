@@ -57,8 +57,7 @@ class NotificationsService {
           .collection('notifications')
           .doc(notification.id)
           .set(data);
-    } catch (e) {
-      print('Error adding notification ${notification.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -77,8 +76,7 @@ class NotificationsService {
       return querySnapshot.docs
           .map((doc) => NotificationModel.fromJson(doc.data()))
           .toList();
-    } catch (e) {
-      print('Error fetching notifications for user $userId: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -89,8 +87,7 @@ class NotificationsService {
       await _firestore.collection('notifications').doc(notificationId).update({
         'isRead': true,
       });
-    } catch (e) {
-      print('Error marking notification $notificationId as read: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -105,8 +102,7 @@ class NotificationsService {
               .where('isRead', isEqualTo: false)
               .get();
       return querySnapshot.docs.length;
-    } catch (e) {
-      print('Error fetching unread count for user $userId: $e');
+    } catch (_) {
       return 0;
     }
   }
@@ -125,8 +121,7 @@ class NotificationsService {
   static Future<void> deleteNotification(String notificationId) async {
     try {
       await _firestore.collection('notifications').doc(notificationId).delete();
-    } catch (e) {
-      print('Error deleting notification $notificationId: $e');
+    } catch (_) {
       rethrow;
     }
   }

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/user_profile_bootstrap_service.dart';
+import '../widgets/auth/auth_text_field.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -50,40 +51,11 @@ class _LoginScreenState extends State<LoginScreen> {
           );
 
       try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
-        if (!userDoc.exists) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .set({
-                'uid': userCredential.user!.uid,
-                'name': userCredential.user!.displayName ?? 'Anonymous',
-                'email': userCredential.user!.email ?? '',
-                'photoUrl': userCredential.user!.photoURL,
-                'userCategory': null,
-                'userTags': [],
-                'role': 'user',
-                'isBanned': false,
-                'routesContributed': 0,
-                'routesSearched': 0,
-                'reportsSubmitted': 0,
-                'totalDistance': 0.0,
-                'co2Saved': 0.0,
-                'mostActiveRegion': null,
-                'streakDays': 0,
-                'lastActiveDate': null,
-                'createdAt': FieldValue.serverTimestamp(),
-                'badges': [],
-                'achievements': [],
-                'followedRouteIds': [],
-                'hasSeenTutorial': false,
-              });
-        }
-      } catch (firestoreError) {
-        print('Failed to create/check user document: $firestoreError');
+        await UserProfileBootstrapService.ensureUserProfileExists(
+          userCredential.user!,
+        );
+      } catch (_) {
+        // Allow login to continue; document bootstrap can be retried later.
       }
       // AuthGate handles navigation
     } on FirebaseAuthException catch (e) {
@@ -128,40 +100,11 @@ class _LoginScreenState extends State<LoginScreen> {
           await FirebaseAuth.instance.signInWithCredential(credential);
 
       try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
-        if (!userDoc.exists) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .set({
-                'uid': userCredential.user!.uid,
-                'name': userCredential.user!.displayName ?? 'Anonymous',
-                'email': userCredential.user!.email ?? '',
-                'photoUrl': userCredential.user!.photoURL,
-                'userCategory': null,
-                'userTags': [],
-                'role': 'user',
-                'isBanned': false,
-                'routesContributed': 0,
-                'routesSearched': 0,
-                'reportsSubmitted': 0,
-                'totalDistance': 0.0,
-                'co2Saved': 0.0,
-                'mostActiveRegion': null,
-                'streakDays': 0,
-                'lastActiveDate': null,
-                'createdAt': FieldValue.serverTimestamp(),
-                'badges': [],
-                'achievements': [],
-                'followedRouteIds': [],
-                'hasSeenTutorial': false,
-              });
-        }
-      } catch (firestoreError) {
-        print('Failed to create/check user document: $firestoreError');
+        await UserProfileBootstrapService.ensureUserProfileExists(
+          userCredential.user!,
+        );
+      } catch (_) {
+        // Allow login to continue; document bootstrap can be retried later.
       }
     } catch (e) {
       setState(() => _errorMessage = 'Failed to sign in with Google: ${e.toString()}');
@@ -190,56 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  // ─── Input field helper ────────────────────────────────────────────────────
-  Widget _inputField({
-    required String label,
-    required TextEditingController controller,
-    required String hint,
-    required IconData prefixIcon,
-    bool obscure = false,
-    Widget? suffix,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: _textPrimary,
-          ),
-        ),
-        const SizedBox(height: 7),
-        Container(
-          decoration: BoxDecoration(
-            color: _surfaceAlt,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _border),
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style: const TextStyle(color: _textPrimary, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(color: _textSecondary, fontSize: 14),
-              prefixIcon: Icon(prefixIcon, color: _accent, size: 18),
-              suffixIcon: suffix,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 14,
-                horizontal: 4,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -318,21 +211,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Email
-                      _inputField(
+                      AuthTextField(
                         label: 'Email',
                         controller: _emailController,
                         hint: 'you@example.com',
                         prefixIcon: Icons.email_outlined,
+                        accent: _accent,
+                        border: _border,
+                        surfaceAlt: _surfaceAlt,
+                        textPrimary: _textPrimary,
+                        textSecondary: _textSecondary,
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 14),
 
                       // Password
-                      _inputField(
+                      AuthTextField(
                         label: 'Password',
                         controller: _passwordController,
                         hint: 'Your password',
                         prefixIcon: Icons.lock_outline_rounded,
+                        accent: _accent,
+                        border: _border,
+                        surfaceAlt: _surfaceAlt,
+                        textPrimary: _textPrimary,
+                        textSecondary: _textSecondary,
                         obscure: !_isPasswordVisible,
                         suffix: GestureDetector(
                           onTap: () => setState(

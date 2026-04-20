@@ -50,8 +50,7 @@ class GamificationService {
 
           return newUser;
         }
-      } catch (e) {
-        print('Error loading user from Firestore: $e');
+      } catch (_) {
       }
     }
 
@@ -76,8 +75,7 @@ class GamificationService {
             .update(user.toJson());
 
         return;
-      } catch (e) {
-        print('Error saving user to Firestore: $e');
+      } catch (_) {
         // If update fails (document might not exist), try to set it
         try {
           await FirebaseFirestore.instance
@@ -86,8 +84,7 @@ class GamificationService {
               .set(user.toJson());
 
           return;
-        } catch (e2) {
-          print('Error creating user document in Firestore: $e2');
+        } catch (_) {
         }
       }
     }
@@ -158,8 +155,7 @@ class GamificationService {
           await saveAchievements(predefined);
           return predefined;
         }
-      } catch (e) {
-        print('Error loading achievements from Firestore: $e');
+      } catch (_) {
       }
     }
     // Fallback to SharedPreferences if not logged in or error
@@ -194,8 +190,7 @@ class GamificationService {
           batch.set(docRef, achievement.toJson());
         }
         await batch.commit();
-      } catch (e) {
-        print('Error saving achievements to Firestore: $e');
+      } catch (_) {
       }
     }
   }
@@ -215,8 +210,7 @@ class GamificationService {
               .map((doc) => Badge.fromJson(doc.data()))
               .toList();
         }
-      } catch (e) {
-        print('Error loading badges from Firestore: $e');
+      } catch (_) {
       }
     }
     // Fallback to SharedPreferences if not logged in or error
@@ -243,8 +237,7 @@ class GamificationService {
           batch.set(docRef, badge.toJson());
         }
         await batch.commit();
-      } catch (e) {
-        print('Error saving badges to Firestore: $e');
+      } catch (_) {
       }
     }
   }
@@ -323,8 +316,7 @@ class GamificationService {
       user.mostActiveRegion = mostActiveRegion;
 
       await saveUser(user);
-    } catch (e) {
-      print('Error recalculating user stats: $e');
+    } catch (_) {
     }
   }
 
@@ -441,8 +433,7 @@ class GamificationService {
 
         await saveAchievements(achievements);
       }
-    } catch (e) {
-      print('Error updating streak on app open: $e');
+    } catch (_) {
     }
   }
 

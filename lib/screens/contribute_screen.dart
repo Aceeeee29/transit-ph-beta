@@ -16,9 +16,33 @@ import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../services/location_service.dart';
+import 'contribute_location_search_screen.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
+part 'contribute_screen_dialogs.dart';
+part 'contribute_screen_edit_sections.dart';
+part 'contribute_screen_sections.dart';
+
+class _StepEditControls {
+  final List<List<LatLng>> stepControlPoints;
+  final List<LatLng> boundaryWaypoints;
+  final List<DraggableStepBodyHandle> bodyHandles;
+
+  const _StepEditControls({
+    required this.stepControlPoints,
+    required this.boundaryWaypoints,
+    required this.bodyHandles,
+  });
+
+  factory _StepEditControls.empty() {
+    return const _StepEditControls(
+      stepControlPoints: [],
+      boundaryWaypoints: [],
+      bodyHandles: [],
+    );
+  }
+}
 
 class ContributeScreen extends StatefulWidget {
   final Future<void> Function(route_model.Route) onRouteSubmitted;
@@ -68,6 +92,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _showEditHandles = false;
   bool _showTutorial = false;
   LatLng? _searchedLocation;
+  String _lastLocationSearchQuery = '';
   String? _activeQuickRouteToken;
 
   // ─── Color tokens 
@@ -447,6 +472,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return true;
   }
 
+  Future<void> _openLocationSearchScreen() async {
+    await this._openLocationSearchScreenSection();
+  }
+
   // ─── Dialog launchers ────────────────────────────────────────────────────────
 
   void _showModeDialog() {
@@ -637,6 +666,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _shortDescriptionController.clear();
       _selectedRouteTags = [];
       _searchedLocation = null;
+      _lastLocationSearchQuery = '';
     });
     _historyService.clear();
   }
@@ -814,253 +844,78 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return result;
   }
 
-  List<LatLng> get _editableWaypoints {
-    if (pathPoints.isEmpty || steps.isEmpty) return const [];
-
-    final waypoints = <LatLng>[pathPoints.first];
-    for (int i = 0; i < steps.length; i++) {
-      final boundaryIndex = i < stepBoundaries.length
-          ? stepBoundaries[i]
-          : pathPoints.length - 1;
-      final safeIndex = boundaryIndex < 0
-          ? 0
-          : (boundaryIndex >= pathPoints.length
-              ? pathPoints.length - 1
-              : boundaryIndex);
-      waypoints.add(pathPoints[safeIndex]);
-    }
-    return waypoints;
+  int _clampPathIndex(int index) {
+    return this._clampPathIndexSection(index);
   }
 
-  Future<void> _onWaypointDragEnd(int index, LatLng updatedPoint) async {
-    if (steps.isEmpty) return;
+  int _pickStepBodyHandleIndex(int startIdx, int endIdx) {
+    return this._pickStepBodyHandleIndexSection(startIdx, endIdx);
+  }
 
-    final waypoints = List<LatLng>.from(_editableWaypoints);
-    if (waypoints.length != steps.length + 1) {
-      return;
-    }
-    if (index < 0 || index >= waypoints.length) {
-      return;
-    }
+  _StepEditControls get _stepEditControls {
+    return this._stepEditControlsSection;
+  }
 
-    waypoints[index] = updatedPoint;
+  Future<void> _rebuildFromStepControls(
+    List<List<LatLng>> stepControlPoints,
+  ) async {
+    await this._rebuildFromStepControlsSection(stepControlPoints);
+  }
 
-    final rebuilt = await ContributeRouteEditService.rebuildFromWaypoints(
-      steps: List<route_model.Step>.from(steps),
-      waypoints: waypoints,
-      snapToRoadEnabled: _snapToRoadEnabled,
+  Future<void> _onBoundaryWaypointDragEnd(int index, LatLng updatedPoint) async {
+    await this._onBoundaryWaypointDragEndSection(index, updatedPoint);
+  }
+
+  Future<void> _onBodyHandleDragEnd(
+    int stepIndex,
+    int controlIndex,
+    LatLng updatedPoint,
+  ) async {
+    await this._onBodyHandleDragEndSection(
+      stepIndex,
+      controlIndex,
+      updatedPoint,
     );
-
-    if (!mounted || rebuilt.pathPoints.length < 2) return;
-
-    setState(() {
-      pathPoints = rebuilt.pathPoints;
-      stepBoundaries = rebuilt.stepBoundaries;
-
-      _stepOrsDistM
-        ..clear()
-        ..addAll(rebuilt.stepOrsDistM);
-      _stepOrsDurS
-        ..clear()
-        ..addAll(rebuilt.stepOrsDurS);
-    });
-    _saveToHistory();
   }
 
   route_model.Route _buildRoute({String? existingId}) {
-    double totalDurS = 0;
-    double totalDistKm = 0;
-    double totalFare = 0;
-    final Distance distCalc = const Distance();
-
-    for (int i = 0; i < steps.length; i++) {
-      final orsDistM =
-          i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
-      final orsDurS =
-          i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
-
-      if (orsDistM != null && orsDurS != null) {
-        totalDistKm += orsDistM / 1000;
-        totalDurS += orsDurS;
-        totalFare += steps[i].actualFare ??
-          RouteMetricsService.calculateFareForMode(
-            steps[i].mode, orsDistM / 1000);
-      } else {
-        final startIdx = (i == 0)
-            ? 0
-            : (i - 1 < stepBoundaries.length
-                ? stepBoundaries[i - 1]
-                : 0);
-        final endIdx = (i < stepBoundaries.length)
-            ? stepBoundaries[i]
-            : pathPoints.length - 1;
-        double segDistKm = 0;
-        for (int j = startIdx;
-            j < endIdx && j + 1 < pathPoints.length;
-            j++) {
-          segDistKm += distCalc.as(
-              LengthUnit.Kilometer, pathPoints[j], pathPoints[j + 1]);
-        }
-        totalDistKm += segDistKm;
-        final speedKmh = _speedForMode(steps[i].mode);
-        totalDurS += (segDistKm / speedKmh) * 3600;
-        totalFare += steps[i].actualFare ??
-          RouteMetricsService.calculateFareForMode(
-            steps[i].mode, segDistKm);
-      }
-    }
-    if (steps.length > 1) totalDurS += (steps.length - 1) * 120;
-
-    final distStr =
-        RouteMetricsService.formatDistance(totalDistKm);
-    final etaStr = (totalDurS / 60).ceil().toString();
-    final fareStr = 'PHP ${totalFare.round()}';
-    final schedule = _deriveRouteSchedule(steps);
-
-    final startLoc = _startLocationController.text.isEmpty
-        ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
-        : _startLocationController.text;
-    final endLoc = _endLocationController.text.isEmpty
-        ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
-        : _endLocationController.text;
-    final desc = _shortDescriptionController.text.isEmpty
-        ? 'Custom route with ${steps.length} steps'
-        : _shortDescriptionController.text;
-
-    return route_model.Route(
-      id: existingId ?? DateTime.now().toString(),
-      startLocation: startLoc,
-      endLocation: endLoc,
-      shortDescription: desc,
-      steps: steps,
-      startLat: pathPoints.first.latitude,
-      startLng: pathPoints.first.longitude,
-      endLat: pathPoints.last.latitude,
-      endLng: pathPoints.last.longitude,
-      pathPoints: pathPoints,
-      stepBoundaries: stepBoundaries,
-      eta: etaStr,
-      price: fareStr,
-      distance: distStr,
-      schedule: schedule,
-      audienceTags: _selectedRouteTags,
-      distanceMeters: totalDistKm > 0 ? totalDistKm * 1000 : null,
-      contributorId: widget.routeToEdit?.contributorId ??
-          widget.contributorId ??
-          FirebaseAuth.instance.currentUser?.uid,
-      // Always starts as pending — moderator must approve before it goes live
-      approvalStatus: route_model.RouteApprovalStatus.pending,
-    );
+    return this._buildRouteSection(existingId: existingId);
   }
 
   bool _validateStepReliability() {
-    for (int i = 0; i < steps.length; i++) {
-      final step = steps[i];
-      final stepNo = i + 1;
-      final isMotorized = step.mode != 'Walk';
+    return this._validateStepReliabilitySection();
+  }
 
-      if (step.instruction.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Step $stepNo is missing an instruction.')),
-        );
-        return false;
-      }
+  void _resetAfterSubmitSuccess() {
+    setState(() {
+      pathPoints = [];
+      steps = [];
+      stepBoundaries = [];
+      selectionMode = 'start';
+      _showEditHandles = false;
+      _startLocationController.clear();
+      _endLocationController.clear();
+      _shortDescriptionController.clear();
+      _selectedRouteTags = [];
+    });
+  }
 
-      if (!isMotorized) continue;
+  void _showTutorialOverlay() {
+    setState(() => _showTutorial = true);
+  }
 
-      if (step.details.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Step $stepNo needs details for ${step.mode}.')),
-        );
-        return false;
-      }
+  void _toggleFormExpanded() {
+    setState(() => _isFormExpanded = !_isFormExpanded);
+  }
 
-      final hasSchedule = step.is24_7 ||
-          ((step.startTime?.trim().isNotEmpty ?? false) &&
-              (step.endTime?.trim().isNotEmpty ?? false));
-      if (!hasSchedule) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Step $stepNo needs operating hours for ${step.mode}.')),
-        );
-        return false;
-      }
-
-      if (step.actualFare == null || step.actualFare! < 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Step $stepNo needs a valid actual fare for ${step.mode}.')),
-        );
-        return false;
-      }
-    }
-    return true;
+  void _setSelectedRouteTags(List<String> tags) {
+    setState(() => _selectedRouteTags = tags);
   }
 
   // ─── Submit ──────────────────────────────────────────────────────────────────
 
   void _submit({bool forceModeration = false}) async {
-    if (pathPoints.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('Need at least start and end points on map')),
-      );
-      return;
-    }
-
-    if (_formKey.currentState!.validate()) {
-      if (!_validateStepReliability()) {
-        return;
-      }
-      final route = _buildRoute(existingId: widget.routeToEdit?.id);
-      try {
-        if (_isQuickCreateMode && !forceModeration) {
-          final userId = FirebaseAuth.instance.currentUser?.uid;
-          if (userId == null || userId.isEmpty) {
-            throw StateError('Please sign in to quick create a route.');
-          }
-          await QuickRouteLinkService.createQuickRouteFromLink(
-            token: _activeQuickRouteToken!,
-            route: route,
-            creatorId: userId,
-          );
-        } else {
-          await widget.onRouteSubmitted(route);
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit route: $e')),
-        );
-        return;
-      }
-
-      if (!mounted) return;
-
-      // ── Show the correct dialog depending on new vs edit ──────────────────
-      await showDialog(
-        context: context,
-        builder: (_) => widget.routeToEdit != null
-            ? const _SubmitSuccessDialog(isEdit: true)
-            : _SubmitSuccessDialog(
-                isEdit: false,
-                quickCreateMode: _isQuickCreateMode,
-              ),
-      );
-
-      if (widget.routeToEdit == null) {
-        setState(() {
-          pathPoints = [];
-          steps = [];
-          stepBoundaries = [];
-          selectionMode = 'start';
-          _showEditHandles = false;
-          _startLocationController.clear();
-          _endLocationController.clear();
-          _shortDescriptionController.clear();
-          _selectedRouteTags = [];
-        });
-      }
-    }
+    await this._submitSection(forceModeration: forceModeration);
   }
 
   void _submitForReviewInstead() {
@@ -1070,32 +925,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Preview route ───────────────────────────────────────────────────────────
 
   void _onPreviewRoute() {
-    if (pathPoints.length < 2 || steps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Need at least start, end points and one step'),
-        ),
-      );
-      return;
-    }
-
-    final route = _buildRoute();
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoutePreview(
-          route: route,
-          onEdit: () {
-            Navigator.pop(context);
-          },
-          onSubmit: () {
-            Navigator.pop(context);
-            _submit();
-          },
-        ),
-      ),
-    );
+    this._onPreviewRouteSection();
   }
 
   // ─── Build ───────────────────────────────────────────────────────────────────
@@ -1136,719 +966,38 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: _surface,
-      foregroundColor: _textPrimary,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      title: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _accentSoft,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(Icons.add_road_rounded,
-                color: _accent, size: 16),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            widget.routeToEdit != null
-                ? 'Edit Route'
-                : 'Contribute a Route',
-            style: const TextStyle(
-              color: _textPrimary,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        if (selectionMode == 'done' && steps.isNotEmpty)
-          GestureDetector(
-            onTap: _toggleEditHandles,
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _showEditHandles ? _accentSoft : _surfaceAlt,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _showEditHandles
-                      ? _accent.withOpacity(0.35)
-                      : _border,
-                ),
-              ),
-              child: Icon(
-                _showEditHandles
-                    ? Icons.edit_location_alt_rounded
-                    : Icons.edit_location_alt_outlined,
-                color: _showEditHandles ? _accent : _textSecondary,
-                size: 18,
-              ),
-            ),
-          ),
-        GestureDetector(
-          onTap: () => setState(() => _showTutorial = true),
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: _surfaceAlt,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _border),
-            ),
-            child: const Icon(
-              Icons.help_outline_rounded,
-              color: _textSecondary,
-              size: 18,
-            ),
-          ),
-        ),
-        if (selectionMode == 'done')
-          GestureDetector(
-            onTap: _onPreviewRoute,
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _accentSoft,
-                borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: _accent.withOpacity(0.3)),
-              ),
-              child: const Icon(Icons.preview_rounded,
-                  color: _accent, size: 18),
-            ),
-          ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: _border),
-      ),
-    );
+    return this._buildAppBarSection();
   }
 
   Widget _buildMapLayer() {
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: const LatLng(12.8797, 121.7740),
-        initialZoom: 6.0,
-        minZoom: 5.0,
-        maxZoom: 18.0,
-        cameraConstraint: CameraConstraint.contain(
-          bounds: LatLngBounds(
-            const LatLng(4.5, 116.0),
-            const LatLng(21.5, 127.0),
-          ),
-        ),
-        onTap: _onMapTap,
-      ),
-      children: [
-        TileLayer(
-          urlTemplate:
-              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName:
-              'com.example.app.transitph_beta',
-        ),
-        PolylineLayer(polylines: polylines),
-        MarkerLayer(
-          markers: [
-            if (pathPoints.isNotEmpty)
-              Marker(
-                point: pathPoints.first,
-                child: const Icon(Icons.location_on,
-                    color: Colors.green, size: 40),
-              ),
-            if (pathPoints.length > 1)
-              Marker(
-                point: pathPoints.last,
-                child: const Icon(Icons.flag,
-                    color: Colors.red, size: 40),
-              ),
-            if (_searchedLocation != null)
-              Marker(
-                point: _searchedLocation!,
-                child: const Icon(Icons.my_location_rounded,
-                    color: _accent, size: 34),
-              ),
-          ],
-        ),
-        if (selectionMode == 'done' && steps.isNotEmpty && _showEditHandles)
-          DraggableStepMarkersLayer(
-            waypoints: _editableWaypoints,
-            onWaypointDragEnd: _onWaypointDragEnd,
-            accent: _accent,
-          ),
-      ],
-    );
+    return this._buildMapLayerSection();
   }
 
   Widget _buildMapControlsOverlay() {
-    double? totalOrsDistKm;
-    int? totalOrsDurMinutes;
-
-    if (_stepOrsDistM.isNotEmpty &&
-        _stepOrsDistM.every((d) => d != null)) {
-      totalOrsDistKm =
-          _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) /
-              1000;
-    }
-    if (_stepOrsDurS.isNotEmpty &&
-        _stepOrsDurS.every((d) => d != null)) {
-      double totalSeconds =
-          _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
-      if (steps.length > 1)
-        totalSeconds += ((steps.length - 1) * 120);
-      totalOrsDurMinutes = (totalSeconds / 60).ceil();
-    }
-
-    return Positioned(
-      top: 70,
-      left: 20,
-      child: MapControls(
-        historyService: _historyService,
-        pathPoints: pathPoints,
-        steps: steps,
-        stepBoundaries: stepBoundaries,
-        selectionMode: selectionMode,
-        currentMode: currentMode,
-        onUndo: _onUndo,
-        onRedo: _onRedo,
-        onReset: _onReset,
-        onPreview: _onPreviewRoute,
-        onSnapToRoadToggled: _onSnapToRoadToggled,
-        snapToRoadEnabled: _snapToRoadEnabled,
-        orsDistanceKm: totalOrsDistKm,
-        orsDurationMinutes: totalOrsDurMinutes,
-      ),
-    );
+    return this._buildMapControlsOverlaySection();
   }
 
   Widget _buildInstructionPill() {
-    String text;
-    switch (selectionMode) {
-      case 'start':
-        text = 'Tap on the map to select the starting point';
-        break;
-      case 'step':
-        text = 'Tap to select next point for $currentMode';
-        break;
-      default:
-        text = '';
-    }
-
-    return Positioned(
-      bottom: 50,
-      left: 16,
-      right: 16,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: _surface.withOpacity(0.96),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: _accent.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: const BoxDecoration(
-                  color: _accentSoft,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.touch_app_rounded,
-                  size: 13,
-                  color: _accent,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    color: _textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return this._buildInstructionPillSection();
   }
 
   Widget _buildRegionSelector() {
-    return Positioned(
-      top: 10,
-      right: 16,
-      child: Container(
-        width: 155,
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        decoration: BoxDecoration(
-          color: _surface.withOpacity(0.97),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: DropdownButtonFormField<String>(
-          initialValue: selectedRegion,
-          hint: const Text(
-            'Select Region',
-            style:
-                TextStyle(fontSize: 11, color: _textSecondary),
-          ),
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: _accent,
-            size: 18,
-          ),
-          dropdownColor: _surface,
-          style:
-              const TextStyle(color: _textPrimary, fontSize: 11),
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-            isDense: true,
-          ),
-          items: philippineRegions.keys.map((region) {
-            return DropdownMenuItem<String>(
-              value: region,
-              child: Text(
-                region,
-                style: const TextStyle(fontSize: 11),
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
-          onChanged: _onRegionChanged,
-        ),
-      ),
-    );
+    return this._buildRegionSelectorSection();
   }
 
   Widget _buildLocationSearchBar() {
-    return Positioned(
-      top: 10,
-      left: 16,
-      right: 180,
-      child: ContributeLocationSearchBar(
-        onSearch: _onLocationSearched,
-        surface: _surface,
-        border: _border,
-        accent: _accent,
-        textPrimary: _textPrimary,
-        textSecondary: _textSecondary,
-      ),
-    );
+    return this._buildLocationSearchBarSection();
   }
 
   Widget _buildFormDrawer(BuildContext context) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: _isFormExpanded
-            ? MediaQuery.of(context).size.height * 0.6
-            : 40,
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(20)),
-          border:
-              Border(top: BorderSide(color: _border, width: 1.5)),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20)),
-          child: Column(
-            children: [
-              _buildDrawerHandle(),
-              if (_isFormExpanded) _buildFormContent(),
-            ],
-          ),
-        ),
-      ),
-    );
+    return this._buildFormDrawerSection(context);
   }
 
   Widget _buildDrawerHandle() {
-    return InkWell(
-      onTap: () =>
-          setState(() => _isFormExpanded = !_isFormExpanded),
-      borderRadius:
-          const BorderRadius.vertical(top: Radius.circular(20)),
-      child: SizedBox(
-        height: 40,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: _border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              _isFormExpanded ? 'Hide Form' : 'Route Details',
-              style: const TextStyle(
-                color: _textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              _isFormExpanded
-                  ? Icons.keyboard_arrow_down_rounded
-                  : Icons.keyboard_arrow_up_rounded,
-              size: 18,
-              color: _accent,
-            ),
-            if (!_isFormExpanded && steps.isNotEmpty) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accentSoft,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                      color: _accent.withOpacity(0.2)),
-                ),
-                child: Text(
-                  '${steps.length} step${steps.length > 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    color: _accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+    return this._buildDrawerHandleSection();
   }
 
   Widget _buildFormContent() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 8),
-        child: Form(
-          key: _formKey,
-          child: RouteFormStepper(
-            startLocationController: _startLocationController,
-            endLocationController: _endLocationController,
-            shortDescriptionController: _shortDescriptionController,
-            selectedRouteTags: _selectedRouteTags,
-            userTagOptions: onboardingUserTags,
-            otherTagOptions: otherRouteTags,
-            onRouteTagsChanged: (tags) {
-              setState(() => _selectedRouteTags = tags);
-            },
-            onSubmit: () => _submit(),
-            onSubmitForReviewInstead:
-                _isQuickCreateMode ? _submitForReviewInstead : null,
-            onCreateQuickLink: _isQuickCreateMode ? null : _createQuickLink,
-            onReset: _onReset,
-            selectionMode: selectionMode,
-            quickCreateMode: _isQuickCreateMode,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Submit success dialog ────────────────────────────────────────────────────
-
-class _QuickLinkDialog extends StatelessWidget {
-  final String url;
-
-  const _QuickLinkDialog({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('24h Quick Link Created'),
-      content: SelectableText(
-        '$url\n\nThis link can be used for 24 hours only.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: url));
-            if (context.mounted) Navigator.of(context).pop();
-          },
-          child: const Text('Copy Again'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Submit success dialog ────────────────────────────────────────────────────
-
-class _SubmitSuccessDialog extends StatelessWidget {
-  final bool isEdit;
-  final bool quickCreateMode;
-
-  static const _bg = Color(0xFFF4F8FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
-  static const _warning = Color(0xFFFFB547);
-  static const _green = Color(0xFF3EC97A);
-
-  const _SubmitSuccessDialog({
-    required this.isEdit,
-    this.quickCreateMode = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: _bg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.08),
-              blurRadius: 32,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 28),
-
-            // ── Icon — green check for edit, warning clock for new ──────────
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: isEdit
-                    ? _green.withOpacity(0.12)
-                    : _warning.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: isEdit
-                      ? _green.withOpacity(0.3)
-                      : _warning.withOpacity(0.3),
-                ),
-              ),
-              child: Icon(
-                isEdit
-                    ? Icons.check_circle_outline_rounded
-                    : (quickCreateMode
-                        ? Icons.bolt_rounded
-                        : Icons.pending_actions_rounded),
-                color: isEdit ? _green : _warning,
-                size: 34,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            Text(
-              isEdit
-                  ? 'Route Updated'
-                  : (quickCreateMode ? 'Quick Route Created' : 'Pending Review'),
-              style: const TextStyle(
-                color: _textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.3,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                isEdit
-                    ? 'Your route has been updated successfully.'
-                    : (quickCreateMode
-                        ? 'This temporary route is now available via quick link and expires automatically in 24 hours.'
-                        : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.'),
-                style: const TextStyle(
-                  color: _textSecondary,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-
-            // ── Pending status steps (only for new submissions) ─────────────
-            if (!isEdit && !quickCreateMode) ...[
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _warning.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: _warning.withOpacity(0.2)),
-                  ),
-                  child: Column(
-                    children: [
-                      _step(
-                        icon: Icons.check_circle_rounded,
-                        color: _green,
-                        label: 'Route submitted',
-                        done: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _step(
-                        icon: Icons.shield_outlined,
-                        color: _warning,
-                        label: 'Awaiting moderator review',
-                        done: false,
-                      ),
-                      const SizedBox(height: 10),
-                      _step(
-                        icon: Icons.public_rounded,
-                        color: _textSecondary,
-                        label: 'Goes live after approval',
-                        done: false,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: double.infinity,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accent.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_rounded,
-                          color: Colors.white, size: 16),
-                      SizedBox(width: 8),
-                      Text(
-                        'Got it',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _step({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required bool done,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: done ? _textPrimary : _textSecondary,
-              fontWeight:
-                  done ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ),
-      ],
-    );
+    return this._buildFormContentSection();
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/user_profile_bootstrap_service.dart';
+import '../widgets/auth/auth_text_field.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -104,45 +105,17 @@ class _SignupScreenState extends State<SignupScreen> {
       // Send email verification
       try {
         await userCredential.user!.sendEmailVerification();
-        print('Verification email sent to ${userCredential.user!.email}');
-      } catch (verificationError) {
-        print('Failed to send verification email: $verificationError');
+      } catch (_) {
         // Continue anyway, as user can resend later
       }
 
       // Create user document in Firestore
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .set({
-              'uid': userCredential.user!.uid,
-              'name': userCredential.user!.displayName ?? 'Anonymous',
-              'email': _emailController.text.trim(),
-              'photoUrl': userCredential.user!.photoURL,
-              'userCategory': null,
-              'userTags': [],
-              'role': 'user',
-              'isBanned': false,
-              'routesContributed': 0,
-              'routesSearched': 0,
-              'reportsSubmitted': 0,
-              'totalDistance': 0.0,
-              'co2Saved': 0.0,
-              'mostActiveRegion': null,
-              'streakDays': 0,
-              'lastActiveDate': null,
-              'createdAt': FieldValue.serverTimestamp(),
-              'badges': [],
-              'achievements': [],
-              'followedRouteIds': [],
-              'hasSeenTutorial': false,
-            });
-        print(
-          'User document created successfully for UID: ${userCredential.user!.uid}',
+        await UserProfileBootstrapService.createUserProfile(
+          user: userCredential.user!,
+          email: _emailController.text.trim(),
         );
-      } catch (firestoreError) {
-        print('Failed to create user document: $firestoreError');
+      } catch (_) {
         // Delete the auth user if document creation fails
         await userCredential.user!.delete();
         throw Exception('Failed to create user profile');
@@ -152,13 +125,15 @@ class _SignupScreenState extends State<SignupScreen> {
       await FirebaseAuth.instance.signOut();
 
       // Navigate back to login
+      if (!mounted) return;
       Navigator.of(context).pop();
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = _getErrorMessage(e.code);
       });
     } catch (e) {
-      print('Signup error: $e');
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'An error occurred during signup. Please try again.';
       });
@@ -167,9 +142,11 @@ class _SignupScreenState extends State<SignupScreen> {
         await FirebaseAuth.instance.signOut();
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -192,57 +169,6 @@ class _SignupScreenState extends State<SignupScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  // ─── Input field helper ────────────────────────────────────────────────────
-  Widget _inputField({
-    required String label,
-    required TextEditingController controller,
-    required String hint,
-    required IconData prefixIcon,
-    bool obscure = false,
-    Widget? suffix,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: _textPrimary,
-          ),
-        ),
-        const SizedBox(height: 7),
-        Container(
-          decoration: BoxDecoration(
-            color: _surfaceAlt,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _border),
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style: const TextStyle(color: _textPrimary, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle:
-                  const TextStyle(color: _textSecondary, fontSize: 14),
-              prefixIcon: Icon(prefixIcon, color: _accent, size: 18),
-              suffixIcon: suffix,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 14,
-                horizontal: 4,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   // ─── Visibility toggle helper ──────────────────────────────────────────────
@@ -389,21 +315,31 @@ class _SignupScreenState extends State<SignupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Email
-                      _inputField(
+                      AuthTextField(
                         label: 'Email',
                         controller: _emailController,
                         hint: 'you@example.com',
                         prefixIcon: Icons.email_outlined,
+                        accent: _accent,
+                        border: _border,
+                        surfaceAlt: _surfaceAlt,
+                        textPrimary: _textPrimary,
+                        textSecondary: _textSecondary,
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 14),
 
                       // Password
-                      _inputField(
+                      AuthTextField(
                         label: 'Password',
                         controller: _passwordController,
                         hint: 'Create a strong password',
                         prefixIcon: Icons.lock_outline_rounded,
+                        accent: _accent,
+                        border: _border,
+                        surfaceAlt: _surfaceAlt,
+                        textPrimary: _textPrimary,
+                        textSecondary: _textSecondary,
                         obscure: !_isPasswordVisible,
                         suffix: _visibilityToggle(
                           visible: _isPasswordVisible,
@@ -414,11 +350,16 @@ class _SignupScreenState extends State<SignupScreen> {
                       const SizedBox(height: 14),
 
                       // Confirm password
-                      _inputField(
+                      AuthTextField(
                         label: 'Confirm Password',
                         controller: _confirmPasswordController,
                         hint: 'Re-enter your password',
                         prefixIcon: Icons.lock_outline_rounded,
+                        accent: _accent,
+                        border: _border,
+                        surfaceAlt: _surfaceAlt,
+                        textPrimary: _textPrimary,
+                        textSecondary: _textSecondary,
                         obscure: !_isConfirmPasswordVisible,
                         suffix: _visibilityToggle(
                           visible: _isConfirmPasswordVisible,

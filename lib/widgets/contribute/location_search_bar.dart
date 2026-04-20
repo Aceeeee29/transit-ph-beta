@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 class ContributeLocationSearchBar extends StatefulWidget {
   final Future<bool> Function(String query) onSearch;
+  final VoidCallback? onTapSearch;
+  final String? displayText;
   final Color surface;
   final Color border;
   final Color accent;
@@ -11,6 +13,8 @@ class ContributeLocationSearchBar extends StatefulWidget {
   const ContributeLocationSearchBar({
     super.key,
     required this.onSearch,
+    this.onTapSearch,
+    this.displayText,
     required this.surface,
     required this.border,
     required this.accent,
@@ -56,6 +60,63 @@ class _ContributeLocationSearchBarState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onTapSearch != null) {
+      final hasDisplayText =
+          widget.displayText != null && widget.displayText!.trim().isNotEmpty;
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTapSearch,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: widget.surface.withOpacity(0.97),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: widget.border),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.accent.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 10),
+                Icon(Icons.search_rounded, color: widget.accent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hasDisplayText
+                        ? widget.displayText!.trim()
+                        : 'Search location',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: hasDisplayText
+                          ? widget.textPrimary
+                          : widget.textSecondary,
+                      fontWeight:
+                          hasDisplayText ? FontWeight.w500 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.open_in_new_rounded,
+                  color: widget.textSecondary,
+                  size: 16,
+                ),
+                const SizedBox(width: 10),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       height: 44,
       decoration: BoxDecoration(

@@ -33,8 +33,7 @@ class RouteService {
         }
         return userByEmail.docs.first.id;
       }
-    } catch (e) {
-      print('Error resolving contributor email to uid ($raw): $e');
+    } catch (_) {
     }
 
     return null;
@@ -107,8 +106,7 @@ class RouteService {
         'meta': meta ?? const <String, dynamic>{},
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error writing route audit log for $routeId ($action): $e');
+    } catch (_) {
     }
   }
 
@@ -258,16 +256,14 @@ class RouteService {
 
       try {
         await _markStaleRoutesForReviewIfNeeded(docs: querySnapshot.docs);
-      } catch (e) {
-        print('Skipped stale-route auto-flagging due to permissions/runtime issue: $e');
+      } catch (_) {
       }
 
       return querySnapshot.docs
           .map((doc) => route_model.Route.fromJson(doc.data()))
           .where((r) => r.isApproved)
           .toList();
-    } catch (e) {
-      print('Error fetching approved routes: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -304,8 +300,7 @@ class RouteService {
         return bTime.compareTo(aTime);
       });
       return routes;
-    } catch (e) {
-      print('Error fetching pending routes: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -350,8 +345,7 @@ class RouteService {
         });
 
       return routes;
-    } catch (e) {
-      print('Error fetching routes for user $userId: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -365,8 +359,7 @@ class RouteService {
         return route_model.Route.fromJson(docSnapshot.data()!);
       }
       return null;
-    } catch (e) {
-      print('Error fetching route $routeId: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -393,9 +386,7 @@ class RouteService {
         action: 'route_created',
         actorId: actorId,
       );
-      print('Route ${route.id} saved with status: pending');
-    } catch (e) {
-      print('Error saving route ${route.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -428,8 +419,7 @@ class RouteService {
           'nextEditCount': ((beforeData['editCount'] as num?)?.toInt() ?? 0) + 1,
         },
       );
-    } catch (e) {
-      print('Error updating route ${route.id}: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -474,10 +464,7 @@ class RouteService {
         if (!wasAlreadyApproved) {
           try {
             await _incrementApprovedContributionStats(recipientId);
-          } catch (e) {
-            print(
-              'Error updating approved contribution stats for $recipientId: $e',
-            );
+          } catch (_) {
           }
         }
 
@@ -491,14 +478,11 @@ class RouteService {
               message: 'Your submitted route ($routeTitle) was approved and is now live.',
             ),
           );
-        } catch (e) {
-          print('Error creating approval notification for route $routeId: $e');
+        } catch (_) {
         }
       }
 
-      print('Route $routeId approved');
-    } catch (e) {
-      print('Error approving route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -545,14 +529,11 @@ class RouteService {
                   'Your submitted route ($routeTitle) was rejected by moderators.',
             ),
           );
-        } catch (e) {
-          print('Error creating rejection notification for route $routeId: $e');
+        } catch (_) {
         }
       }
 
-      print('Route $routeId rejected');
-    } catch (e) {
-      print('Error rejecting route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -561,8 +542,7 @@ class RouteService {
   static Future<void> deleteRoute(String routeId) async {
     try {
       await _firestore.collection('routes').doc(routeId).delete();
-    } catch (e) {
-      print('Error deleting route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -574,8 +554,7 @@ class RouteService {
         'views': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error incrementing view for route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -614,8 +593,7 @@ class RouteService {
       if (vote == 'up') return true;
       if (vote == 'down') return false;
       return null;
-    } catch (e) {
-      print('Error fetching vote for route $routeId, user $userId: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -671,8 +649,7 @@ class RouteService {
         'upvotes': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error incrementing upvote for route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -684,8 +661,7 @@ class RouteService {
         'downvotes': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error incrementing downvote for route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -704,8 +680,7 @@ class RouteService {
         ]),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print('Error adding report to route $routeId: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -726,8 +701,7 @@ class RouteService {
           .map((doc) => route_model.Route.fromJson(doc.data()))
           .where((r) => r.isApproved)
           .toList();
-    } catch (e) {
-      print('Error searching routes from $startLocation to $endLocation: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -745,8 +719,7 @@ class RouteService {
         'stillOperatingYes': (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
         'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
       };
-    } catch (e) {
-      print('Error loading route feedback summary for $routeId: $e');
+    } catch (_) {
       return {
         'fareAccurateYes': 0,
         'fareAccurateNo': 0,
@@ -855,8 +828,7 @@ class RouteService {
         'scheduleAccurate': (data['scheduleAccurate'] as bool?) ?? true,
         'stillOperating': (data['stillOperating'] as bool?) ?? true,
       };
-    } catch (e) {
-      print('Error loading user route quality feedback for $routeId: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -877,8 +849,7 @@ class RouteService {
       return lastFeedbackAt
           .toDate()
           .add(const Duration(days: _routeFeedbackCooldownDays));
-    } catch (e) {
-      print('Error loading route feedback cooldown for $routeId: $e');
+    } catch (_) {
       return null;
     }
   }
