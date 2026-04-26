@@ -735,7 +735,7 @@ extension _SearchScreenSections on _SearchScreenState {
         ),
         const SizedBox(height: 6),
         const Text(
-          'You can use fallback generated guidance from transit stop data.',
+          'You can use this as substitute but be aware that this might not be the best route / it is possibly outdated.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: _textSecondary),
         ),

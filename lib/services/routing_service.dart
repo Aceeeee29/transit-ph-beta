@@ -934,6 +934,7 @@ class RoutingService {
 
     // Explicit text signals for bus-like services.
     if (joinedName.contains('bus') ||
+    
         joinedName.contains('carousel') ||
         joinedName.contains('brt')) {
       return 'Bus';
@@ -1011,42 +1012,31 @@ class RoutingService {
       routeLongName: leg.routeLongName,
       preferredMode: preferredMode,
     );
-    List<LatLng>? shapePolyline;
-    var shapeAttempted = false;
-
-    Future<List<LatLng>?> tryLoadShape() async {
-      if (shapeAttempted) return shapePolyline;
-      shapeAttempted = true;
-
+    
+    // 1. If it's a train, rely exclusively on GTFS shape geometry (with clipping)
+    if (mode == 'Train') {
       final shapeId = leg.shapeId;
-      if (shapeId == null || shapeId.isEmpty) return null;
-
-      try {
-        final pts = await SupabaseRouteService.getShapePolyline(
-          shapeId,
-        ).timeout(const Duration(seconds: 8));
-        if (pts.length >= 2) {
-          shapePolyline = _clipShapeToStops(pts, board, alight);
-        }
-      } catch (_) {}
-
-      return shapePolyline;
+      if (shapeId != null && shapeId.isNotEmpty) {
+        try {
+          final pts = await SupabaseRouteService.getShapePolyline(shapeId)
+              .timeout(const Duration(seconds: 8));
+          if (pts.length >= 2) {
+            return _clipShapeToStops(pts, board, alight);
+          }
+        } catch (_) {}
+      }
+      return [board, alight]; // Train fallback
     }
 
-    final shapeFirst = await tryLoadShape();
-    if (shapeFirst != null && shapeFirst.length >= 2) return shapeFirst;
-
+    // 2. For Buses (including Carousel), Jeepneys, etc. use OSRM road snapping.
     final snapped = await _osrmSnap(board, alight, _osrmProfileForMode(mode));
     if (snapped != null && snapped.length >= 2) {
-      final clipped = _clipShapeToStops(snapped, board, alight);
-      if (clipped.length >= 2) return clipped;
+      // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry 
+      // and causes the straight-line bug.
+      return snapped; 
     }
 
-    final shapeFallback = await tryLoadShape();
-    if (shapeFallback != null && shapeFallback.length >= 2) {
-      return shapeFallback;
-    }
-
+    // Ultimate fallback
     return [board, alight];
   }
 
@@ -1065,17 +1055,9 @@ class RoutingService {
   }
 
   static bool _isStationBasedLeg(TransitLeg leg, String mode) {
+    // Only trains should use direct-line (non-snapped) station connectors.
+    // EDSA Carousel is a bus on a road network, so walk connectors to it SHOULD snap to roads.
     if (mode == 'Train') return true;
-
-    final routeName =
-        '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
-
-    if (routeName.contains('edsa') && routeName.contains('carousel')) {
-      return true;
-    }
-    if (routeName.contains('carousel busway')) {
-      return true;
-    }
 
     return false;
   }

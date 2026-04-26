@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../config.dart';
 import '../models/route.dart' as route_model;
 

@@ -100,7 +100,7 @@ class RouteGenerationNoticeDialog {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'This generated route may be inaccurate because dataset availability can be limited. It is currently limited to Jeep, Bus, Train, and Walk routes only.\n\nDo you want to continue?',
+                    'This generated route may be inaccurate because dataset availability can be limited and results might be outdated. It is currently limited to Jeep, Bus, Train, and Walk routes only.\n\nDo you want to continue?',
                     style: TextStyle(
                       color: _textSecondary,
                       fontSize: 13,

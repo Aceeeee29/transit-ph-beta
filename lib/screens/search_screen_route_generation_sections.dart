@@ -107,58 +107,95 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         final selected = <DijkstraRouteAlternative>[];
         final selectedSeen = <String>{};
 
-        DijkstraRouteAlternative? pickFrom(List<DijkstraRouteAlternative> pool) {
-          for (final alt in pool) {
-            final sig = _alternativeRouteSignature(alt);
-            if (selectedSeen.contains(sig)) continue;
-            return alt;
-          }
-          for (final alt in merged) {
-            final sig = _alternativeRouteSignature(alt);
-            if (selectedSeen.contains(sig)) continue;
-            return alt;
-          }
-          return null;
-        }
-
         void addLabeled(String label, DijkstraRouteAlternative? alt) {
           if (alt == null) return;
           final sig = _alternativeRouteSignature(alt);
-          if (!selectedSeen.add(sig)) return;
+
+          final existingIndex = selected.indexWhere(
+            (candidate) => _alternativeRouteSignature(candidate) == sig,
+          );
+          if (existingIndex >= 0) {
+            final existingLabel = labelsByIndex[existingIndex] ?? '';
+            if (existingLabel.isEmpty) {
+              labelsByIndex[existingIndex] = label;
+              return;
+            }
+
+            final parts =
+                existingLabel
+                    .split(' • ')
+                    .where((part) => part.trim().isNotEmpty)
+                    .toList();
+            if (!parts.contains(label)) {
+              parts.add(label);
+              labelsByIndex[existingIndex] = parts.join(' • ');
+            }
+            return;
+          }
+
+          selectedSeen.add(sig);
           selected.add(alt);
           labelsByIndex[selected.length - 1] = label;
         }
 
-        final balancedPick = pickFrom(pools[0]);
+        void addUnlabeledUnique(DijkstraRouteAlternative? alt) {
+          if (alt == null) return;
+          final sig = _alternativeRouteSignature(alt);
+          if (!selectedSeen.add(sig)) return;
+          selected.add(alt);
+        }
+
+        final balancedPick = pools[0].isEmpty ? null : pools[0].first;
         addLabeled('Balanced', balancedPick);
 
         final byTime = List<DijkstraRouteAlternative>.from(merged)
           ..sort((a, b) => a.estimatedTimeMinutes.compareTo(b.estimatedTimeMinutes));
-        addLabeled('Fastest', pickFrom(byTime));
+        addLabeled(
+          'Fastest',
+          byTime.isEmpty ? null : byTime.first,
+        );
 
         final byFare = List<DijkstraRouteAlternative>.from(merged)
           ..sort((a, b) => a.estimatedFarePhp.compareTo(b.estimatedFarePhp));
-        addLabeled('Budget', pickFrom(byFare));
+        addLabeled(
+          'Budget',
+          byFare.isEmpty ? null : byFare.first,
+        );
+
+        // Keep at least three visible options (when available) without
+        // distorting the core labels.
+        for (final alt in byTime) {
+          if (selected.length >= 3) break;
+          addUnlabeledUnique(alt);
+        }
+        for (final alt in byFare) {
+          if (selected.length >= 3) break;
+          addUnlabeledUnique(alt);
+        }
+        for (final alt in merged) {
+          if (selected.length >= 3) break;
+          addUnlabeledUnique(alt);
+        }
 
         final hasTrainAlready = selected.any(_alternativeHasTrain);
         if (!hasTrainAlready) {
-          final trainPick = pickFrom(merged.where(_alternativeHasTrain).toList());
+          final trainPick = _pickStrictAlternativeFromPool(
+            merged.where(_alternativeHasTrain).toList(),
+            selectedSeen,
+          );
           addLabeled('Train', trainPick);
         }
 
-        alternatives = selected;
-
-        final tripIdSignatures = <String>{};
-        for (var i = 0; i < alternatives.length; i++) {
-          final signature = _alternativeTripIdSignature(alternatives[i]);
-          if (signature.isEmpty || tripIdSignatures.add(signature)) continue;
-
-          fallbackAlternatives[i] = await RoutingService.buildWalkFallbackRoute(
-            origin: origin,
-            destination: destLatLng,
-            note: 'Showing walking fallback route for visual variety.',
+        final hasCarouselAlready = selected.any(_alternativeHasCarousel);
+        if (!hasCarouselAlready) {
+          final carouselPick = _pickStrictAlternativeFromPool(
+            merged.where(_alternativeHasCarousel).toList(),
+            selectedSeen,
           );
+          addLabeled('Carousel', carouselPick);
         }
+
+        alternatives = selected;
       } catch (e) {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
        }
@@ -178,6 +215,14 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
                 destination: destLatLng,
                 mode: 'Auto',
               ));
+
+      await RouteCacheRepository.put(
+        originName,
+        query,
+        'Auto',
+        'supabase-gtfs-v11',
+        result,
+      );
 
       setState(() {
         _isLoadingOrs = false;

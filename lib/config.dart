@@ -11,5 +11,5 @@ class Config {
       dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
   static String get quickRouteBaseUrl =>
-      dotenv.env['QUICK_ROUTE_BASE_URL'] ?? 'https://transitph-75da4.web.app';
+      dotenv.env['QUICK_ROUTE_BASE_URL'] ?? '';
 }

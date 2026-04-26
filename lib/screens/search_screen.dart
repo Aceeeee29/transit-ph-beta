@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
+import '../repositories/route_cache_repository.dart';
 import '../services/search_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
@@ -12,7 +13,7 @@ import '../services/location_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
-import '../repositories/route_cache_repository.dart';
+
 import '../widgets/notification_overlay.dart';
 import '../widgets/search/route_generation_notice_dialog.dart';
 import '../widgets/search/search_help_sheet.dart';
@@ -470,14 +471,37 @@ class _SearchScreenState extends State<SearchScreen> {
     return sorted;
   }
 
-  String _alternativeTripIdSignature(DijkstraRouteAlternative alt) {
-    return alt.result.plan.legs.map((leg) => leg.tripId).join('>');
-  }
-
   String _alternativeRouteSignature(DijkstraRouteAlternative alt) {
     return alt.result.plan.legs
         .map((leg) => '${leg.routeId}:${leg.tripId}:${leg.boardStopId}:${leg.alightStopId}')
         .join('>');
+  }
+
+  DijkstraRouteAlternative? _pickAlternativeFromPool(
+    List<DijkstraRouteAlternative> pool,
+    Set<String> selectedSignatures,
+    List<DijkstraRouteAlternative> merged,
+  ) {
+    for (final alt in pool) {
+      final sig = _alternativeRouteSignature(alt);
+      if (!selectedSignatures.contains(sig)) return alt;
+    }
+    for (final alt in merged) {
+      final sig = _alternativeRouteSignature(alt);
+      if (!selectedSignatures.contains(sig)) return alt;
+    }
+    return null;
+  }
+
+  DijkstraRouteAlternative? _pickStrictAlternativeFromPool(
+    List<DijkstraRouteAlternative> pool,
+    Set<String> selectedSignatures,
+  ) {
+    for (final alt in pool) {
+      final sig = _alternativeRouteSignature(alt);
+      if (!selectedSignatures.contains(sig)) return alt;
+    }
+    return null;
   }
 
   bool _alternativeHasTrain(DijkstraRouteAlternative alt) {
@@ -499,6 +523,20 @@ class _SearchScreenState extends State<SearchScreen> {
           name.contains('pnr') ||
           name.contains('rail') ||
           name.contains('train')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _alternativeHasCarousel(DijkstraRouteAlternative alt) {
+    for (final leg in alt.result.plan.legs) {
+      final name =
+          '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
+      if (name.contains('edsa') && name.contains('carousel')) {
+        return true;
+      }
+      if (name.contains('carousel busway')) {
         return true;
       }
     }
@@ -580,6 +618,18 @@ class _SearchScreenState extends State<SearchScreen> {
         alternative: _routeAlternatives[index].result,
         preferredMode: 'Auto',
       );
+
+      final originName = _lastGeneratedOriginName;
+      final destinationName = _lastGeneratedDestinationName;
+      if (originName != null && destinationName != null) {
+        await RouteCacheRepository.put(
+          originName,
+          destinationName,
+          'Auto',
+          'supabase-gtfs-v11',
+          next,
+        );
+      }
 
       if (!mounted) return;
       setState(() {
