@@ -430,6 +430,7 @@ class SupabaseRouteService {
             edge.isWalk
                 ? 'Walk'
                 : _inferRouteMode(
+                  routeId: edge.routeId,
                   routeType: edge.routeType,
                   routeShortName: edge.routeShortName,
                   routeLongName: edge.routeLongName,
@@ -524,6 +525,7 @@ class SupabaseRouteService {
       final route = routeId != null ? routeById[routeId] : null;
       final routeType = _parseRouteType(route?['route_type']);
       final inferredMode = _inferRouteMode(
+        routeId: routeId,
         routeType: routeType,
         routeShortName: route?['route_short_name'] as String?,
         routeLongName: route?['route_long_name'] as String?,
@@ -819,6 +821,7 @@ class SupabaseRouteService {
     var total = 0.0;
     for (final leg in result.plan.legs) {
       final mode = _inferRouteMode(
+        routeId: leg.routeId,
         routeType: leg.routeType,
         routeShortName: leg.routeShortName,
         routeLongName: leg.routeLongName,
@@ -1001,6 +1004,7 @@ class SupabaseRouteService {
   }
 
   static String _inferRouteMode({
+    required String? routeId,
     required int? routeType,
     required String? routeShortName,
     required String? routeLongName,
@@ -1008,9 +1012,26 @@ class SupabaseRouteService {
     if (_isTrainRouteType(routeType)) return 'Train';
     if (routeType == 4) return 'Ferry';
 
-    final name = '${routeShortName ?? ''} ${routeLongName ?? ''}'.toLowerCase();
-    if (name.contains('edsa') ||
-        name.contains('carousel') ||
+    if (isEdsaCarouselLeg(
+      routeId: routeId,
+      routeType: routeType,
+      routeShortName: routeShortName,
+      routeLongName: routeLongName,
+    )) {
+      return 'Bus';
+    }
+
+    final name =
+      '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
+        .toLowerCase();
+    if (_containsRouteCode(name, 'pub')) {
+      return 'Bus';
+    }
+    if (_containsRouteCode(name, 'puj')) {
+      return 'Jeepney';
+    }
+
+    if (name.contains('carousel') ||
         name.contains('bus') ||
         name.contains('brt')) {
       return 'Bus';
@@ -1031,6 +1052,72 @@ class SupabaseRouteService {
       return 'Tricycle';
     }
     return 'Jeepney';
+  }
+
+  static bool _containsRouteCode(String source, String code) {
+    if (source.isEmpty) return false;
+    final pattern = RegExp('(^|[^a-z0-9])$code(?=[0-9]|[^a-z0-9]|\$)');
+    return pattern.hasMatch(source);
+  }
+
+  static bool isEdsaCarouselLeg({
+    required String? routeId,
+    required int? routeType,
+    String? routeShortName,
+    String? routeLongName,
+    String? boardStopId,
+    String? alightStopId,
+  }) {
+    if (_isTrainRouteType(routeType)) return false;
+
+    final normalizedRouteId = _normalizeRouteToken(routeId);
+    final normalizedShort = _normalizeRouteToken(routeShortName);
+    final normalizedLong = _normalizeRouteToken(routeLongName);
+    final normalizedBoard = _normalizeRouteToken(boardStopId);
+    final normalizedAlight = _normalizeRouteToken(alightStopId);
+
+    if (normalizedRouteId == 'carousel_edsa' ||
+        normalizedRouteId == 'edsa_carousel' ||
+        normalizedRouteId == 'edsa_busway_carousel') {
+      return true;
+    }
+
+    if (normalizedRouteId.startsWith('carousel_') &&
+        normalizedRouteId.contains('edsa')) {
+      return true;
+    }
+
+    // Carousel stops in our GTFS consistently use CAR_* IDs.
+    if (routeType == 3 &&
+        (normalizedBoard.startsWith('car_') ||
+            normalizedAlight.startsWith('car_'))) {
+      return true;
+    }
+
+    final merged = '$normalizedRouteId $normalizedShort $normalizedLong';
+    final hasEdsa = _hasNormalizedToken(merged, 'edsa');
+    final hasCarousel = _hasNormalizedToken(merged, 'carousel');
+    final hasBusway =
+        _hasNormalizedToken(merged, 'busway') || _hasNormalizedToken(merged, 'brt');
+    return hasEdsa && (hasCarousel || hasBusway);
+  }
+
+  static bool _hasNormalizedToken(String source, String token) {
+    if (source.isEmpty) return false;
+    final tokens = source
+        .split(RegExp(r'[\s_]+'))
+        .where((t) => t.isNotEmpty)
+        .toSet();
+    return tokens.contains(token);
+  }
+
+  static String _normalizeRouteToken(String? value) {
+    if (value == null || value.isEmpty) return '';
+    final normalized = value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    return normalized.replaceAll(RegExp(r'^_|_$'), '');
   }
 
   static bool _isTrainRouteType(int? routeType) {

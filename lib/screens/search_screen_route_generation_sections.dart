@@ -220,7 +220,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         originName,
         query,
         'Auto',
-        'supabase-gtfs-v11',
+        RouteCacheRepository.generatedRouteProfile,
         result,
       );
 

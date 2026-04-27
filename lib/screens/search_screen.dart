@@ -168,7 +168,9 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     try {
-      final locations = await locationFromAddress(query);
+      final locations = await locationFromAddress(
+        query,
+      ).timeout(const Duration(seconds: 6));
       if (locations.isNotEmpty) {
         final phLocations =
             locations
@@ -531,12 +533,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
   bool _alternativeHasCarousel(DijkstraRouteAlternative alt) {
     for (final leg in alt.result.plan.legs) {
-      final name =
-          '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
-      if (name.contains('edsa') && name.contains('carousel')) {
-        return true;
-      }
-      if (name.contains('carousel busway')) {
+      if (SupabaseRouteService.isEdsaCarouselLeg(
+        routeId: leg.routeId,
+        routeType: leg.routeType,
+        routeShortName: leg.routeShortName,
+        routeLongName: leg.routeLongName,
+        boardStopId: leg.boardStopId,
+        alightStopId: leg.alightStopId,
+      )) {
         return true;
       }
     }
@@ -626,7 +630,7 @@ class _SearchScreenState extends State<SearchScreen> {
           originName,
           destinationName,
           'Auto',
-          'supabase-gtfs-v11',
+          RouteCacheRepository.generatedRouteProfile,
           next,
         );
       }

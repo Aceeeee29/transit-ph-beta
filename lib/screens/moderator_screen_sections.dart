@@ -656,7 +656,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         children: [
                           Expanded(
                             child: GestureDetector(
-                              onTap: () => Navigator.of(context).pop(false),
+                              onTap: () => Navigator.of(context).pop(),
                               child: Container(
                                 height: 40,
                                 decoration: BoxDecoration(

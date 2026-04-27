@@ -49,7 +49,10 @@ class LocationService {
     double longitude,
   ) async {
     try {
-      final placemarks = await placemarkFromCoordinates(latitude, longitude);
+      final placemarks = await placemarkFromCoordinates(
+        latitude,
+        longitude,
+      ).timeout(const Duration(seconds: 6));
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         // Build a readable address
@@ -96,7 +99,9 @@ class LocationService {
     }
 
     try {
-      final matches = await locationFromAddress(trimmed);
+      final matches = await locationFromAddress(
+        trimmed,
+      ).timeout(const Duration(seconds: 6));
       if (matches.isEmpty) {
         return null;
       }

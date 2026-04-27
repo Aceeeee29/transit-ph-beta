@@ -47,13 +47,11 @@ class RoutingService {
     required LatLng destination,
     String mode = 'Jeepney',
   }) async {
-    const cacheProfile = 'supabase-gtfs-v10';
-
     final cached = await RouteCacheRepository.get(
       originName,
       destinationName,
       mode,
-      cacheProfile,
+      RouteCacheRepository.generatedRouteProfile,
     );
     if (cached != null) {
       debugPrint('[RoutingService] Cache hit');
@@ -70,7 +68,7 @@ class RoutingService {
       originName,
       destinationName,
       mode,
-      cacheProfile,
+      RouteCacheRepository.generatedRouteProfile,
       result,
     );
     return result;
@@ -705,12 +703,14 @@ class RoutingService {
     final firstLeg = legs.first;
     final lastLeg = legs.last;
     final firstLegMode = _inferModeFromRoute(
+      routeId: firstLeg.routeId,
       routeType: firstLeg.routeType,
       routeShortName: firstLeg.routeShortName,
       routeLongName: firstLeg.routeLongName,
       preferredMode: preferredMode,
     );
     final lastLegMode = _inferModeFromRoute(
+      routeId: lastLeg.routeId,
       routeType: lastLeg.routeType,
       routeShortName: lastLeg.routeShortName,
       routeLongName: lastLeg.routeLongName,
@@ -752,6 +752,7 @@ class RoutingService {
       final leg = legs[i];
       final polyline = shapePolylines[i];
       final mode = _inferModeFromRoute(
+        routeId: leg.routeId,
         routeType: leg.routeType,
         routeShortName: leg.routeShortName,
         routeLongName: leg.routeLongName,
@@ -792,6 +793,7 @@ class RoutingService {
       if (i < legs.length - 1) {
         final nextLeg = legs[i + 1];
         final nextMode = _inferModeFromRoute(
+          routeId: nextLeg.routeId,
           routeType: nextLeg.routeType,
           routeShortName: nextLeg.routeShortName,
           routeLongName: nextLeg.routeLongName,
@@ -916,6 +918,7 @@ class RoutingService {
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   static String _inferModeFromRoute({
+    required String? routeId,
     required int? routeType,
     required String? routeShortName,
     required String? routeLongName,
@@ -929,12 +932,28 @@ class RoutingService {
           : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
 
+    if (SupabaseRouteService.isEdsaCarouselLeg(
+      routeId: routeId,
+      routeType: routeType,
+      routeShortName: routeShortName,
+      routeLongName: routeLongName,
+    )) {
+      return 'Bus';
+    }
+
     final joinedName =
-        '${routeShortName ?? ''} ${routeLongName ?? ''}'.toLowerCase();
+      '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
+        .toLowerCase();
+
+    if (_containsRouteCode(joinedName, 'pub')) {
+      return 'Bus';
+    }
+    if (_containsRouteCode(joinedName, 'puj')) {
+      return 'Jeepney';
+    }
 
     // Explicit text signals for bus-like services.
     if (joinedName.contains('bus') ||
-    
         joinedName.contains('carousel') ||
         joinedName.contains('brt')) {
       return 'Bus';
@@ -984,6 +1003,12 @@ class RoutingService {
     return 'Jeepney';
   }
 
+  static bool _containsRouteCode(String source, String code) {
+    if (source.isEmpty) return false;
+    final pattern = RegExp('(^|[^a-z0-9])$code(?=[0-9]|[^a-z0-9]|\$)');
+    return pattern.hasMatch(source);
+  }
+
   static bool _isTrainRouteType(int? routeType) {
     if (routeType == null) return false;
 
@@ -1007,6 +1032,7 @@ class RoutingService {
     final board = LatLng(leg.boardLat, leg.boardLon);
     final alight = LatLng(leg.alightLat, leg.alightLon);
     final mode = _inferModeFromRoute(
+      routeId: leg.routeId,
       routeType: leg.routeType,
       routeShortName: leg.routeShortName,
       routeLongName: leg.routeLongName,

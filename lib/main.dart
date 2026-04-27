@@ -57,7 +57,7 @@ void main() async {
     url: Config.supabaseUrl,
     anonKey: Config.supabaseAnonKey,
   );
-
+                                                                                                                                   
   // Initialize moderation service listeners
   ModerationService.init();
 

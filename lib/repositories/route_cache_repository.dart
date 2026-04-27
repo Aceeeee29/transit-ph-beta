@@ -12,6 +12,7 @@ class RouteCacheRepository {
   static const _dbName = 'transitph_offline.db';
   static const _dbVersion = 1;
   static const _table = 'route_cache';
+  static const generatedRouteProfile = 'supabase-gtfs-v12';
 
   static const _ttl = Duration(days: 3);
   static const _generatedRoutePrefix = 'generated_cache__';

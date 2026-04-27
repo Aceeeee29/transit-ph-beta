@@ -47,7 +47,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   String? _offlineTileTemplate;
 
   static const _cacheMode = 'Auto';
-  static const _cacheProfile = 'supabase-gtfs-v9';
 
   @override
   void initState() {
@@ -68,7 +67,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       widget.originName,
       widget.destinationName,
       _cacheMode,
-      _cacheProfile,
+      RouteCacheRepository.generatedRouteProfile,
     );
     if (!mounted) return;
     setState(() => _isDownloaded = cached != null);
@@ -84,7 +83,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         widget.originName,
         widget.destinationName,
         _cacheMode,
-        _cacheProfile,
+        RouteCacheRepository.generatedRouteProfile,
         widget.result,
       );
       await OfflineTileService.cacheRouteTiles(widget.result.polyline);

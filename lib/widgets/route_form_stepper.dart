@@ -253,7 +253,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: widget.userTagOptions.map((tag) {
+                children: widget.userTagOptions.map((tag) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
                   final isSelected = widget.selectedRouteTags.contains(tag);
                   return FilterChip(
                     label: Text(tag),
