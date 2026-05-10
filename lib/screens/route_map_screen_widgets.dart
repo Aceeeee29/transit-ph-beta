@@ -151,10 +151,10 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final stepSchedule = scheduleView?.displayText ?? _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
-    final estimatedFare = isTransport
-        ? RouteMetricsService.calculateFareForMode(step.mode, 1)
-        : 0.0;
-    final fareValue = step.actualFare ?? estimatedFare;
+    final estimatedFare = isTransport ? _estimateStepFare(idx, step) : 0.0;
+    final baseFareValue = step.actualFare ?? estimatedFare;
+    final fareValue = _applyFareDiscount(baseFareValue);
+    final fareProfileLabel = FareDiscountToggle.defaultLabel;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -306,8 +306,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                         border: Border.all(color: const Color(0xFFB9E4C6)),
                       ),
                       child: Text(
-                        'Fare: PHP ${fareValue.toStringAsFixed(0)} '
-                        '(${step.actualFare != null ? 'actual' : 'estimated'})',
+                        _isDiscountFareEnabled
+                            ? 'Fare ($fareProfileLabel): PHP ${fareValue.toStringAsFixed(0)} '
+                                '(${step.actualFare != null ? 'actual' : 'estimated'})'
+                            : 'Fare: PHP ${fareValue.toStringAsFixed(0)} '
+                                '(${step.actualFare != null ? 'actual' : 'estimated'})',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -695,6 +698,27 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         padding: const EdgeInsets.all(16),
         children: [
           _buildMetricsRow(),
+          if (_hasFareSteps) ...[
+            const SizedBox(height: 10),
+            FareDiscountToggle(
+              value: _isDiscountFareEnabled,
+              onChanged: _setDiscountEnabled,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              labelStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+              iconColor: _textSecondary,
+              iconSize: 16,
+              activeColor: _accent,
+            ),
+          ],
           if (_scheduleSnapshot != null) ...[
             const SizedBox(height: 10),
             _buildScheduleSummaryChip(),
@@ -779,6 +803,8 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             : const Color(0xFFE89A3C);
     final trustValue = trustScore != null ? '${trustScore.total}/100' : '--';
 
+    final fareLabel = _routeFareLabel();
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -798,13 +824,13 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               value: RouteMetricsService.formatEtaLabel(widget.route.eta),
             ),
           ],
-          if (widget.route.price != null) ...[
+          if (fareLabel != null) ...[
             const SizedBox(width: 10),
             _metricCard(
               icon: Icons.payments_outlined,
               iconColor: _green,
               label: 'Fare',
-              value: '${widget.route.price}',
+              value: fareLabel,
             ),
           ],
           if (scheduleText != null) ...[
@@ -964,4 +990,5 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       ),
     );
   }
+
 }

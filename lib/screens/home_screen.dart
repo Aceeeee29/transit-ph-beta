@@ -14,7 +14,7 @@ import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
-part 'home_screen_sections.dart';
+part 'home_screen_widgets.dart';
 
 enum RouteSortMode { community, budget, fastest, balanced }
 

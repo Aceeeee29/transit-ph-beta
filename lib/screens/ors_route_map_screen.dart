@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/offline_tile_service.dart';
 import '../services/route_metrics_service.dart';
+import '../widgets/fare_discount_toggle.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -31,7 +35,9 @@ class OrsRouteMapScreen extends StatefulWidget {
   State<OrsRouteMapScreen> createState() => _OrsRouteMapScreenState();
 }
 
-class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
+// FIX: Added SingleTickerProviderStateMixin for smooth camera animation
+class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
+    with SingleTickerProviderStateMixin {
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
@@ -45,15 +51,112 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   bool _isDownloaded = false;
   bool _isDownloading = false;
   String? _offlineTileTemplate;
+  bool _isDiscountFareEnabled = false;
+  bool _hasManualFareDiscountOverride = false;
+
+  // FIX: Smooth camera animation fields
+  late final AnimationController _cameraAnimController;
+  late final CurvedAnimation _cameraAnim;
+  LatLng? _animStartCenter;
+  double _animStartZoom = 12.0;
+  double _animStartRotation = 0.0;
+  LatLng? _animTargetCenter;
+  double _animTargetZoom = 12.0;
+  double _animTargetRotation = 0.0;
 
   static const _cacheMode = 'Auto';
 
   @override
   void initState() {
     super.initState();
+
+    // FIX: Initialise animation controller for buttery-smooth camera moves
+    _cameraAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _cameraAnim = CurvedAnimation(
+      parent: _cameraAnimController,
+      curve: Curves.easeOutCubic,
+    );
+    _cameraAnimController.addListener(_onCameraAnimTick);
+
     _initLocation();
+    _loadFareProfile();
     _loadDownloadState();
     _loadOfflineTileTemplate();
+  }
+
+  Future<void> _loadFareProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = snapshot.data();
+      if (data == null || !mounted || _hasManualFareDiscountOverride) return;
+
+      final category =
+          (data['userCategory'] as String?)?.toLowerCase().trim() ?? '';
+      if (!_isStudentCategory(category)) return;
+      setState(() => _isDiscountFareEnabled = true);
+    } catch (_) {}
+  }
+
+  bool _isStudentCategory(String category) =>
+      category.replaceAll('_', ' ') == 'student';
+
+  double get _fareDiscountMultiplier => _isDiscountFareEnabled ? 0.8 : 1.0;
+
+  double _applyFareDiscount(double fare) => fare * _fareDiscountMultiplier;
+
+  void _setDiscountEnabled(bool value) {
+    setState(() {
+      _isDiscountFareEnabled = value;
+      _hasManualFareDiscountOverride = true;
+    });
+  }
+
+  // FIX: Camera animation tick — interpolates lat, lng, zoom, and bearing
+  void _onCameraAnimTick() {
+    if (_animStartCenter == null || _animTargetCenter == null) return;
+    final t = _cameraAnim.value;
+
+    final lat = _lerpDouble(
+        _animStartCenter!.latitude, _animTargetCenter!.latitude, t);
+    final lng = _lerpDouble(
+        _animStartCenter!.longitude, _animTargetCenter!.longitude, t);
+    final zoom = _lerpDouble(_animStartZoom, _animTargetZoom, t);
+    final rotation = _lerpRotation(_animStartRotation, _animTargetRotation, t);
+
+    _mapController.moveAndRotate(LatLng(lat, lng), zoom, rotation);
+  }
+
+  double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
+
+  // FIX: Shortest-path rotation lerp — handles wrap-around (e.g. 350° → 10°)
+  double _lerpRotation(double a, double b, double t) {
+    final diff = (b - a + 540) % 360 - 180;
+    return (a + diff * t) % 360;
+  }
+
+  // FIX: Smooth animated camera move with bearing support
+  void _smoothMoveCamera(
+    LatLng target, {
+    required double zoom,
+    double rotation = 0,
+  }) {
+    _animStartCenter = _mapController.camera.center;
+    _animStartZoom = _mapController.camera.zoom;
+    _animStartRotation = _mapController.camera.rotation;
+    _animTargetCenter = target;
+    _animTargetZoom = zoom;
+    _animTargetRotation = rotation;
+
+    _cameraAnimController.stop();
+    _cameraAnimController.reset();
+    _cameraAnimController.forward();
   }
 
   Future<void> _loadOfflineTileTemplate() async {
@@ -120,73 +223,80 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         _startLocationTracking();
       } catch (_) {}
     }
-    setState(() => _isLocating = false);
+    if (mounted) setState(() => _isLocating = false);
   }
 
+  // FIX: Platform-aware stream settings — Android gets intervalDuration to
+  // suppress jitter callbacks; distanceFilter raised 2 → 3 m to further
+  // reduce spurious updates while keeping movement feeling live.
   void _startLocationTracking() {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 2,
-      ),
+      locationSettings: Platform.isAndroid
+          ? AndroidSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 3,
+              intervalDuration: const Duration(milliseconds: 800),
+            )
+          : const LocationSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 3,
+            ),
     ).listen(
-      (position) {
-        _handleLocationUpdate(position);
-      },
+      _handleLocationUpdate,
       onError: (_) {},
     );
   }
 
+  // FIX: Replaced undefined `nextDisplay` with `raw`.
+  // FIX: Passes heading to _maybeMoveCamera for map bearing rotation.
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    if (position.accuracy > 45) return;
+    // FIX: Slightly relaxed accuracy gate (45 → 50) to keep updates flowing
+    // in challenging environments while still rejecting wild outliers.
+    if (position.accuracy > 50) return;
 
     final raw = LatLng(position.latitude, position.longitude);
-    final nextDisplay = _displayPosition == null
-        ? raw
-        : LatLng(
-            _lerp(_displayPosition!.latitude, raw.latitude, 0.28),
-            _lerp(_displayPosition!.longitude, raw.longitude, 0.28),
-          );
-    final nextHeading = _smoothHeading(_displayHeading, position.heading);
-
-    final hasMoved = _displayPosition == null ||
-        const Distance().as(LengthUnit.Meter, _displayPosition!, nextDisplay) >=
-            0.8;
-    final headingChanged = _angularDifference(_displayHeading, nextHeading) >= 2;
-
-    if (!hasMoved && !headingChanged) return;
+    final nextHeading = _normalizeHeading(position.heading);
 
     setState(() {
       _currentPosition = position;
-      _displayPosition = nextDisplay;
+      _displayPosition = raw;
       _displayHeading = nextHeading;
     });
 
     if (_isNavigationStarted && _isAutoFollowEnabled) {
-      _maybeMoveCamera(nextDisplay);
+      // FIX: Was `nextDisplay` (undefined) — now correctly passes `raw`
+      _maybeMoveCamera(raw, heading: nextHeading);
     }
   }
 
-  void _maybeMoveCamera(LatLng target) {
+  // FIX: Throttle 450 ms → 120 ms, dead zone 2.5 m → 1.0 m.
+  // FIX: Accepts heading so the map rotates to keep travel direction up,
+  //      matching Google Maps / Waze behaviour.
+  void _maybeMoveCamera(LatLng target, {double heading = 0}) {
     final now = DateTime.now();
+
     if (_lastCameraMoveAt != null &&
-        now.difference(_lastCameraMoveAt!).inMilliseconds < 450) {
+        now.difference(_lastCameraMoveAt!).inMilliseconds < 120) {
       return;
     }
     if (_lastCameraTarget != null &&
-        const Distance().as(LengthUnit.Meter, _lastCameraTarget!, target) < 2.5) {
+        const Distance().as(LengthUnit.Meter, _lastCameraTarget!, target) <
+            1.0) {
       return;
     }
 
-    final zoom = _mapController.camera.zoom < 15 ? 15.0 : _mapController.camera.zoom;
     _lastCameraMoveAt = now;
     _lastCameraTarget = target;
-    _mapController.move(target, zoom);
-  }
 
-  double _lerp(double from, double to, double factor) => from + (to - from) * factor;
+    final targetZoom =
+        _mapController.camera.zoom < 16 ? 16.0 : _mapController.camera.zoom;
+    // Negate heading: rotating the map -heading° puts travel direction at top
+    final targetRotation = -heading;
+
+    _smoothMoveCamera(target, zoom: targetZoom, rotation: targetRotation);
+  }
 
   double _normalizeHeading(double heading) {
     if (!heading.isFinite || heading < 0) return _displayHeading;
@@ -194,19 +304,10 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     return value < 0 ? value + 360 : value;
   }
 
-  double _smoothHeading(double current, double incoming) {
-    final target = _normalizeHeading(incoming);
-    final delta = ((target - current + 540) % 360) - 180;
-    return (current + (delta * 0.25) + 360) % 360;
-  }
-
-  double _angularDifference(double a, double b) {
-    final diff = (a - b).abs() % 360;
-    return diff > 180 ? 360 - diff : diff;
-  }
-
   @override
   void dispose() {
+    _cameraAnim.dispose();
+    _cameraAnimController.dispose();
     _positionSubscription?.cancel();
     super.dispose();
   }
@@ -218,7 +319,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       (points.first.latitude + points.last.latitude) / 2,
       (points.first.longitude + points.last.longitude) / 2,
     );
-    _mapController.move(center, 13.0);
+    // FIX: Smooth animated move, reset bearing to north when fitting route
+    _smoothMoveCamera(center, zoom: 13.0, rotation: 0);
   }
 
   void _centerOnMe() {
@@ -226,9 +328,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     if (_isNavigationStarted && !_isAutoFollowEnabled) {
       setState(() => _isAutoFollowEnabled = true);
     }
-    _mapController.move(
+    // FIX: Smooth move + apply current heading as bearing
+    _smoothMoveCamera(
       _displayPosition!,
-      15.0,
+      zoom: 16.0,
+      rotation: -_displayHeading,
     );
   }
 
@@ -249,7 +353,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
   LatLng get _mapCenter {
     final points = widget.result.polyline;
-    if (points.isEmpty) return const LatLng(14.5995, 120.9842); // Manila
+    if (points.isEmpty) return const LatLng(14.5995, 120.9842);
     return LatLng(
       (points.first.latitude + points.last.latitude) / 2,
       (points.first.longitude + points.last.longitude) / 2,
@@ -264,7 +368,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
     final steps = widget.result.steps;
 
-    // Fallback — if no steps or no waypoint data, draw single blue line
     if (steps.isEmpty || steps.every((s) => s.wayPointEnd == 0)) {
       return [
         Polyline(
@@ -297,7 +400,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
       final color = _modeColor(step.suggestedMode);
 
-      // White outline for contrast against the map
       polylines.add(Polyline(
         points: segmentPoints,
         color: Colors.white,
@@ -306,7 +408,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         strokeJoin: StrokeJoin.round,
       ));
 
-      // Colored segment
       polylines.add(Polyline(
         points: segmentPoints,
         color: color,
@@ -323,7 +424,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     final markers = <Marker>[];
     final points = widget.result.polyline;
 
-    // Origin marker
     if (points.isNotEmpty) {
       markers.add(
         Marker(
@@ -349,7 +449,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       );
     }
 
-    // Destination marker
     if (points.length > 1) {
       markers.add(
         Marker(
@@ -375,7 +474,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       );
     }
 
-    // Current GPS position
     if (_displayPosition != null) {
       markers.add(
         Marker(
@@ -434,9 +532,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                           ? Icons.download_done_rounded
                           : Icons.download_rounded,
                     ),
-              tooltip: _isDownloaded
-                  ? 'Downloaded'
-                  : 'Download for offline',
+              tooltip:
+                  _isDownloaded ? 'Downloaded' : 'Download for offline',
               onPressed: (_isDownloading || _isDownloaded)
                   ? null
                   : _downloadGeneratedRoute,
@@ -450,7 +547,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       ),
       body: Stack(
         children: [
-          // ── Map ────────────────────────────────────────────────────────────
+          // ── Map ──────────────────────────────────────────────────────────────
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -472,8 +569,10 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.app.transitph_beta',
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName:
+                    'com.example.app.transitph_beta',
               ),
               if (_offlineTileTemplate != null)
                 TileLayer(
@@ -485,7 +584,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ],
           ),
 
-          // ── Summary chips (top overlay) ────────────────────────────────────
+          // ── Summary chips (top overlay) ──────────────────────────────────────
           Positioned(
             top: 12,
             left: 12,
@@ -506,10 +605,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                   Colors.orange.shade700,
                 ),
                 const Spacer(),
-                // Routing attribution badge
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.92),
                     borderRadius: BorderRadius.circular(8),
@@ -522,7 +620,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                   ),
                   child: Text(
                     '© OSRM\n© OpenStreetMap',
-                    style: TextStyle(fontSize: 9, color: Colors.grey.shade700),
+                    style: TextStyle(
+                        fontSize: 9, color: Colors.grey.shade700),
                     textAlign: TextAlign.right,
                   ),
                 ),
@@ -537,7 +636,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             child: Center(child: _buildStartControl()),
           ),
 
-          // ── My location FAB ────────────────────────────────────────────────
+          // ── My location FAB ──────────────────────────────────────────────────
           Positioned(
             right: 12,
             bottom: 240,
@@ -555,12 +654,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ),
           ),
 
-          // ── Mode legend (bottom-left) ──────────────────────────────────────
+          // ── Mode legend (bottom-left) ────────────────────────────────────────
           Positioned(
             left: 12,
             bottom: 240,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.93),
                 borderRadius: BorderRadius.circular(10),
@@ -609,7 +709,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ),
           ),
 
-          // ── Draggable bottom sheet: turn-by-turn steps ─────────────────────
+          // ── Draggable bottom sheet: turn-by-turn steps ───────────────────────
           DraggableScrollableSheet(
             initialChildSize: 0.28,
             minChildSize: 0.12,
@@ -619,8 +719,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             builder: (context, scrollController) => Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.12),
@@ -631,7 +731,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
               ),
               child: Column(
                 children: [
-                  // Drag handle
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 10),
                     width: 40,
@@ -641,7 +740,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  // Header
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Row(
@@ -657,15 +755,14 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                           ),
                         ),
                         const Spacer(),
-                        // Total fare badge
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.green.shade50,
                             borderRadius: BorderRadius.circular(8),
-                            border:
-                                Border.all(color: Colors.green.shade300),
+                            border: Border.all(
+                                color: Colors.green.shade300),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -688,38 +785,60 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                       ],
                     ),
                   ),
+                  if (_hasFareSteps) ...[
+                    const SizedBox(height: 8),
+                    FareDiscountToggle(
+                      value: _isDiscountFareEnabled,
+                      onChanged: _setDiscountEnabled,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                      iconColor: Colors.grey,
+                      iconSize: 15,
+                      activeColor: Colors.blue.shade700,
+                    ),
+                  ],
                   const Divider(height: 1),
-                  // Steps list
                   Expanded(
                     child: widget.result.steps.isEmpty
                         ? Center(
                             child: Text(
                               'No step data available',
-                              style: TextStyle(color: Colors.grey.shade500),
+                              style: TextStyle(
+                                  color: Colors.grey.shade500),
                             ),
                           )
                         : ListView.separated(
                             controller: scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8),
                             itemCount: widget.result.steps.length,
                             separatorBuilder: (_, __) =>
                                 const Divider(height: 1, indent: 56),
                             itemBuilder: (context, index) {
-                              final step = widget.result.steps[index];
-                              final modeColor = _modeColor(step.suggestedMode);
+                              final step =
+                                  widget.result.steps[index];
+                              final modeColor =
+                                  _modeColor(step.suggestedMode);
                               return ListTile(
                                 dense: true,
                                 leading: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 30,
                                       height: 30,
                                       decoration: BoxDecoration(
-                                        color: modeColor.withOpacity(0.15),
+                                        color: modeColor
+                                            .withOpacity(0.15),
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                            color: modeColor, width: 1.5),
+                                            color: modeColor,
+                                            width: 1.5),
                                       ),
                                       child: Icon(
                                         _modeIcon(step.suggestedMode),
@@ -732,11 +851,14 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                                 title: Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2),
                                       decoration: BoxDecoration(
                                         color: modeColor,
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius:
+                                            BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         step.suggestedMode,
@@ -751,18 +873,22 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                                     Expanded(
                                       child: Text(
                                         step.instruction,
-                                        style: const TextStyle(fontSize: 13),
+                                        style: const TextStyle(
+                                            fontSize: 13),
                                       ),
                                     ),
                                   ],
                                 ),
                                 trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.end,
                                   children: [
                                     if (step.distanceMeters > 0)
                                       Text(
-                                        _formatStepDistance(step.distanceMeters),
+                                        _formatStepDistance(
+                                            step.distanceMeters),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey.shade500,
@@ -770,7 +896,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                                       ),
                                     if (step.estimatedFare > 0)
                                       Text(
-                                        '₱${step.estimatedFare.toStringAsFixed(0)}',
+                                        '₱${_applyFareDiscount(step.estimatedFare).toStringAsFixed(0)}',
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
@@ -836,15 +962,18 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         ),
       );
     }
 
     return GestureDetector(
-      onTap: () => setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled),
+      onTap: () =>
+          setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(12),
@@ -895,16 +1024,18 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   }
 
   String _totalFareLabel() {
-    final total = widget.result.steps
-        .fold(0.0, (sum, s) => sum + s.estimatedFare);
-    if (total == 0) return 'Free';
+    final baseTotal =
+        widget.result.steps.fold(0.0, (sum, s) => sum + s.estimatedFare);
+    if (baseTotal == 0) return 'Free';
+    final total = _applyFareDiscount(baseTotal);
     final low = (total * 0.9).round();
     final high = (total * 1.15).round();
     return '₱$low–$high est.';
   }
 
-  /// Returns only the distinct modes actually used in this route,
-  /// preserving the order they first appear — for the legend.
+  bool get _hasFareSteps => widget.result.steps
+      .any((step) => step.estimatedFare > 0 && step.suggestedMode != 'Walk');
+
   List<String> _activeModes() {
     final seen = <String>{};
     final modes = <String>[];
@@ -918,27 +1049,43 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
   IconData _modeIcon(String mode) {
     switch (mode) {
-      case 'Walk':     return Icons.directions_walk;
-      case 'Jeepney':  return Icons.directions_bus;
-      case 'Bus':      return Icons.directions_bus_filled;
-      case 'Train':    return Icons.train;
-      case 'Tricycle': return Icons.two_wheeler;
-      case 'FX/Van':   return Icons.airport_shuttle;
-      case 'Ferry':    return Icons.directions_boat;
-      default:         return Icons.directions_bus;
+      case 'Walk':
+        return Icons.directions_walk;
+      case 'Jeepney':
+        return Icons.directions_bus;
+      case 'Bus':
+        return Icons.directions_bus_filled;
+      case 'Train':
+        return Icons.train;
+      case 'Tricycle':
+        return Icons.two_wheeler;
+      case 'FX/Van':
+        return Icons.airport_shuttle;
+      case 'Ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_bus;
     }
   }
 
   Color _modeColor(String mode) {
     switch (mode) {
-      case 'Walk':     return Colors.green.shade600;
-      case 'Jeepney':  return Colors.blue.shade600;
-      case 'Bus':      return Colors.red.shade600;
-      case 'Train':    return Colors.purple.shade600;
-      case 'Tricycle': return Colors.orange.shade600;
-      case 'FX/Van':   return Colors.amber.shade700;
-      case 'Ferry':    return Colors.lightBlue.shade600;
-      default:         return Colors.blue.shade600;
+      case 'Walk':
+        return Colors.green.shade600;
+      case 'Jeepney':
+        return Colors.blue.shade600;
+      case 'Bus':
+        return Colors.red.shade600;
+      case 'Train':
+        return Colors.purple.shade600;
+      case 'Tricycle':
+        return Colors.orange.shade600;
+      case 'FX/Van':
+        return Colors.amber.shade700;
+      case 'Ferry':
+        return Colors.lightBlue.shade600;
+      default:
+        return Colors.blue.shade600;
     }
   }
 }

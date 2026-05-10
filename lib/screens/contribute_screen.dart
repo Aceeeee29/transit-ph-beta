@@ -21,8 +21,8 @@ import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
 part 'contribute_screen_dialogs.dart';
-part 'contribute_screen_edit_sections.dart';
-part 'contribute_screen_sections.dart';
+part 'contribute_screen_map_editor.dart';
+part 'contribute_screen_route_builder.dart';
 
 class _StepEditControls {
   final List<List<LatLng>> stepControlPoints;

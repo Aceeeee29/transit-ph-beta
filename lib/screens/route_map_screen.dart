@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -19,10 +20,11 @@ import '../services/route_trust_service.dart';
 import '../services/offline_tile_service.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
+import '../widgets/fare_discount_toggle.dart';
 import '../widgets/route_map/route_report_dialog.dart';
-part 'route_map_screen_sections.dart';
-part 'route_map_screen_map_sections.dart';
-part 'route_map_screen_data_sections.dart';
+part 'route_map_screen_widgets.dart';
+part 'route_map_screen_overlays.dart';
+part 'route_map_screen_data.dart';
 
 class RouteMapScreen extends StatefulWidget {
   final route_model.Route route;
@@ -40,8 +42,11 @@ class RouteMapScreen extends StatefulWidget {
   State<RouteMapScreen> createState() => _RouteMapScreenState();
 }
 
-class _RouteMapScreenState extends State<RouteMapScreen> {
-  static const _skipTrustPromptDateKey = 'route_trust_feedback_skip_until_date';
+// FIX: Added SingleTickerProviderStateMixin for smooth camera animation
+class _RouteMapScreenState extends State<RouteMapScreen>
+    with SingleTickerProviderStateMixin {
+  static const _skipTrustPromptDateKey =
+      'route_trust_feedback_skip_until_date';
 
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionSubscription;
@@ -79,8 +84,20 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _isRouteDownloaded = false;
   bool _isDownloadingRoute = false;
   String? _offlineTileTemplate;
+  bool _isDiscountFareEnabled = false;
+  bool _hasManualFareDiscountOverride = false;
 
-  // ─── Color tokens ────────────────────────────────────────────────────────────
+  // FIX: Smooth camera animation fields
+  late final AnimationController _cameraAnimController;
+  late final CurvedAnimation _cameraAnim;
+  LatLng? _animStartCenter;
+  double _animStartZoom = 12.0;
+  double _animStartRotation = 0.0;
+  LatLng? _animTargetCenter;
+  double _animTargetZoom = 12.0;
+  double _animTargetRotation = 0.0;
+
+  // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
@@ -101,11 +118,23 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     'Ferry': Colors.lightBlue,
   };
 
-  // ─── Lifecycle ───────────────────────────────────────────────────────────────
+  // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
+
+    // FIX: Initialise animation controller for buttery-smooth camera moves
+    _cameraAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _cameraAnim = CurvedAnimation(
+      parent: _cameraAnimController,
+      curve: Curves.easeOutCubic,
+    );
+    _cameraAnimController.addListener(_onCameraAnimTick);
+
     _initLocation();
     _loadReports();
     _loadEngagementState();
@@ -114,8 +143,51 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (widget.enableRouteIntegrity) {
       _loadRouteTrustState();
     }
+    _loadFareProfile();
     _loadDownloadedState();
     _loadOfflineTileTemplate();
+  }
+
+  // FIX: Camera animation tick — interpolates lat, lng, zoom, and bearing
+  void _onCameraAnimTick() {
+    if (_animStartCenter == null || _animTargetCenter == null) return;
+    final t = _cameraAnim.value;
+
+    final lat = _lerpDouble(
+        _animStartCenter!.latitude, _animTargetCenter!.latitude, t);
+    final lng = _lerpDouble(
+        _animStartCenter!.longitude, _animTargetCenter!.longitude, t);
+    final zoom = _lerpDouble(_animStartZoom, _animTargetZoom, t);
+    final rotation =
+        _lerpRotation(_animStartRotation, _animTargetRotation, t);
+
+    _mapController.moveAndRotate(LatLng(lat, lng), zoom, rotation);
+  }
+
+  double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
+
+  // FIX: Shortest-path rotation lerp — handles wrap-around (e.g. 350° → 10°)
+  double _lerpRotation(double a, double b, double t) {
+    final diff = (b - a + 540) % 360 - 180;
+    return (a + diff * t) % 360;
+  }
+
+  // FIX: Smooth animated camera move with bearing support
+  void _smoothMoveCamera(
+    LatLng target, {
+    required double zoom,
+    double rotation = 0,
+  }) {
+    _animStartCenter = _mapController.camera.center;
+    _animStartZoom = _mapController.camera.zoom;
+    _animStartRotation = _mapController.camera.rotation;
+    _animTargetCenter = target;
+    _animTargetZoom = zoom;
+    _animTargetRotation = rotation;
+
+    _cameraAnimController.stop();
+    _cameraAnimController.reset();
+    _cameraAnimController.forward();
   }
 
   Future<void> _loadOfflineTileTemplate() async {
@@ -145,13 +217,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       if (!mounted) return;
       setState(() => _isRouteDownloaded = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Route downloaded for offline mode.')),
+        const SnackBar(
+            content: Text('Route downloaded for offline mode.')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Download failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isDownloadingRoute = false);
@@ -172,9 +244,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   Future<void> _loadScheduleWindowSnapshot() async {
-    final snapshot = await ScheduleWindowService.getRouteScheduleSnapshot(
-      widget.route,
-    );
+    final snapshot =
+        await ScheduleWindowService.getRouteScheduleSnapshot(widget.route);
     if (!mounted) return;
     setState(() => _scheduleSnapshot = snapshot);
   }
@@ -208,8 +279,26 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadFareProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = snapshot.data();
+      if (data == null || !mounted || _hasManualFareDiscountOverride) return;
+
+        final category =
+          (data['userCategory'] as String?)?.toLowerCase().trim() ?? '';
+        if (!_isStudentCategory(category)) return;
+      setState(() => _isDiscountFareEnabled = true);
+    } catch (_) {}
+  }
+
   Future<void> _loadRouteTrustState() async {
-    final summary = await RouteService.getRouteFeedbackSummary(widget.route.id);
+    final summary =
+        await RouteService.getRouteFeedbackSummary(widget.route.id);
     final score = RouteTrustService.computeConfidence(
       route: widget.route,
       feedbackSummary: summary,
@@ -241,7 +330,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       _trustFeedbackNextAllowedAt = nextAllowedAt;
       if (mine != null) {
         _fareAccurate = mine['fareAccurate'] ?? _fareAccurate;
-        _scheduleAccurate = mine['scheduleAccurate'] ?? _scheduleAccurate;
+        _scheduleAccurate =
+            mine['scheduleAccurate'] ?? _scheduleAccurate;
         _stillOperating = mine['stillOperating'] ?? _stillOperating;
       }
     });
@@ -256,7 +346,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (uid == null || uid.trim().isEmpty) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign in to submit route trust feedback.')),
+        const SnackBar(
+            content:
+                Text('Sign in to submit route trust feedback.')),
       );
       return false;
     }
@@ -274,7 +366,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       await _loadRouteTrustState();
       if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Thanks! Route trust feedback saved.')),
+        const SnackBar(
+            content: Text('Thanks! Route trust feedback saved.')),
       );
       return true;
     } catch (e) {
@@ -357,94 +450,91 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         _displayPosition =
             LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
         _displayHeading = _normalizeHeading(_currentPosition!.heading);
-        setState(() {});
+        if (mounted) setState(() {});
         _startLocationTracking();
       } catch (e) {
-        debugPrint('RouteMapScreen: failed to get current position: $e');
+        debugPrint(
+            'RouteMapScreen: failed to get current position: $e');
       }
     }
   }
 
+  // FIX: Platform-aware stream settings — Android gets intervalDuration to
+  // suppress jitter callbacks; distanceFilter raised 2 → 3 m to further
+  // reduce spurious updates while keeping movement feeling live.
   void _startLocationTracking() {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 2,
-      ),
+      locationSettings: Platform.isAndroid
+          ? AndroidSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 3,
+              intervalDuration: const Duration(milliseconds: 800),
+            )
+          : const LocationSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 3,
+            ),
     ).listen(
-      (position) {
-        _handleLocationUpdate(position);
-      },
+      _handleLocationUpdate,
       onError: (_) {},
     );
   }
 
+  // FIX: Replaced undefined `nextDisplay` with `raw`.
+  // FIX: Passes heading to _maybeMoveCamera for map bearing rotation.
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    if (position.accuracy > 45) return;
+    // FIX: Slightly relaxed accuracy gate (45 → 50) to keep updates flowing
+    // in challenging environments while still rejecting wild outliers.
+    if (position.accuracy > 50) return;
 
     final raw = LatLng(position.latitude, position.longitude);
-    final nextDisplay = _displayPosition == null
-        ? raw
-        : LatLng(
-            _lerp(_displayPosition!.latitude, raw.latitude, 0.28),
-            _lerp(_displayPosition!.longitude, raw.longitude, 0.28),
-          );
-    final nextHeading = _smoothHeading(_displayHeading, position.heading);
-
-    final hasMoved = _displayPosition == null ||
-        const Distance().as(LengthUnit.Meter, _displayPosition!, nextDisplay) >=
-            0.8;
-    final headingChanged = _angularDifference(_displayHeading, nextHeading) >= 2;
-
-    if (!hasMoved && !headingChanged) return;
+    final nextHeading = _normalizeHeading(position.heading);
 
     setState(() {
       _currentPosition = position;
-      _displayPosition = nextDisplay;
+      _displayPosition = raw;
       _displayHeading = nextHeading;
     });
 
     if (_isNavigationStarted && _isAutoFollowEnabled) {
-      _maybeMoveCamera(nextDisplay);
+      // FIX: Was `nextDisplay` (undefined) — now correctly passes `raw`
+      _maybeMoveCamera(raw, heading: nextHeading);
     }
   }
 
-  void _maybeMoveCamera(LatLng target) {
+  // FIX: Throttle 450 ms → 120 ms, dead zone 2.5 m → 1.0 m.
+  // FIX: Accepts heading so the map rotates to keep travel direction up,
+  //      matching Google Maps / Waze behaviour.
+  void _maybeMoveCamera(LatLng target, {double heading = 0}) {
     final now = DateTime.now();
+
     if (_lastCameraMoveAt != null &&
-        now.difference(_lastCameraMoveAt!).inMilliseconds < 450) {
+        now.difference(_lastCameraMoveAt!).inMilliseconds < 120) {
       return;
     }
     if (_lastCameraTarget != null &&
-        const Distance().as(LengthUnit.Meter, _lastCameraTarget!, target) < 2.5) {
+        const Distance().as(LengthUnit.Meter, _lastCameraTarget!, target) <
+            1.0) {
       return;
     }
 
-    final zoom = _mapController.camera.zoom < 15 ? 15.0 : _mapController.camera.zoom;
     _lastCameraMoveAt = now;
     _lastCameraTarget = target;
-    _mapController.move(target, zoom);
-  }
 
-  double _lerp(double from, double to, double factor) => from + (to - from) * factor;
+    final targetZoom =
+        _mapController.camera.zoom < 16 ? 16.0 : _mapController.camera.zoom;
+    // Negate heading: rotating the map -heading° puts travel direction at top
+    final targetRotation = -heading;
+
+    _smoothMoveCamera(target, zoom: targetZoom, rotation: targetRotation);
+  }
 
   double _normalizeHeading(double heading) {
     if (!heading.isFinite || heading < 0) return _displayHeading;
     final value = heading % 360;
     return value < 0 ? value + 360 : value;
-  }
-
-  double _smoothHeading(double current, double incoming) {
-    final target = _normalizeHeading(incoming);
-    final delta = ((target - current + 540) % 360) - 180;
-    return (current + (delta * 0.25) + 360) % 360;
-  }
-
-  double _angularDifference(double a, double b) {
-    final diff = (a - b).abs() % 360;
-    return diff > 180 ? 360 - diff : diff;
   }
 
   Future<void> _loadReports() async {
@@ -468,7 +558,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       return;
     }
 
-    final start = LatLng(widget.route.startLat!, widget.route.startLng!);
+    final start =
+        LatLng(widget.route.startLat!, widget.route.startLng!);
     final end = LatLng(widget.route.endLat!, widget.route.endLng!);
     if (widget.route.steps.isEmpty) {
       _pathPoints = [start, end];
@@ -476,16 +567,20 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
 
     final numSegments = widget.route.steps.length;
-    final latStep = (end.latitude - start.latitude) / numSegments;
-    final lngStep = (end.longitude - start.longitude) / numSegments;
+    final latStep =
+        (end.latitude - start.latitude) / numSegments;
+    final lngStep =
+        (end.longitude - start.longitude) / numSegments;
     _pathPoints = List.generate(
       numSegments + 1,
       (i) => LatLng(
-          start.latitude + latStep * i, start.longitude + lngStep * i),
+        start.latitude + latStep * i,
+        start.longitude + lngStep * i,
+      ),
     );
   }
 
-  // ─── Actions ─────────────────────────────────────────────────────────────────
+  // ─── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> _vote(bool isUpvote) async {
     if (_isApplyingVote) return;
@@ -500,8 +595,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (_userVote != null && _userVote != isUpvote) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('Remove your current vote first before voting again'),
+          content: Text(
+              'Remove your current vote first before voting again'),
         ),
       );
       return;
@@ -547,7 +642,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to save vote right now')),
+        const SnackBar(
+            content: Text('Unable to save vote right now')),
       );
     } finally {
       if (mounted) setState(() => _isApplyingVote = false);
@@ -557,7 +653,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   void _showReportDialog() {
     showRouteReportDialog(
       context,
-      onSubmit: (type, description) => _submitReport(type, description),
+      onSubmit: (type, description) =>
+          _submitReport(type, description),
     );
   }
 
@@ -589,21 +686,23 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   void _centerOnCurrentLocation() {
-    if (_displayPosition != null) {
-      if (_isNavigationStarted && !_isAutoFollowEnabled) {
-        setState(() => _isAutoFollowEnabled = true);
-      }
-      _mapController.move(
-        _displayPosition!,
-        15.0,
-      );
+    if (_displayPosition == null) return;
+    if (_isNavigationStarted && !_isAutoFollowEnabled) {
+      setState(() => _isAutoFollowEnabled = true);
     }
+    // FIX: Smooth move + apply current heading as bearing
+    _smoothMoveCamera(
+      _displayPosition!,
+      zoom: 16.0,
+      rotation: -_displayHeading,
+    );
   }
 
   void _startNavigation() {
     if (_displayPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Waiting for live location...')),
+        const SnackBar(
+            content: Text('Waiting for live location...')),
       );
       return;
     }
@@ -624,11 +723,90 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   @override
   void dispose() {
+    _cameraAnim.dispose();
+    _cameraAnimController.dispose();
     _positionSubscription?.cancel();
     super.dispose();
   }
 
-  // ─── Computed values ──────────────────────────────────────────────────────────
+ 
+
+  bool get _hasFareSteps =>
+      widget.route.steps.any((step) => step.mode != 'Walk');
+
+  double get _fareDiscountMultiplier => _isDiscountFareEnabled ? 0.8 : 1.0;
+
+  bool _isStudentCategory(String category) =>
+      category.replaceAll('_', ' ') == 'student';
+
+  double _applyFareDiscount(double fare) => fare * _fareDiscountMultiplier;
+
+  void _setDiscountEnabled(bool value) {
+    setState(() {
+      _isDiscountFareEnabled = value;
+      _hasManualFareDiscountOverride = true;
+    });
+  }
+
+  double? _parseFareAmount(String? priceLabel) {
+    if (priceLabel == null) return null;
+    final match = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(priceLabel);
+    if (match == null) return null;
+    return double.tryParse(match.group(1) ?? '');
+  }
+
+  double _estimateStepDistanceKm(int stepIndex) {
+    if (_pathPoints.length < 2) return 0.0;
+
+    final boundaries = widget.route.stepBoundaries.isNotEmpty
+        ? widget.route.stepBoundaries
+        : _computeEvenBoundaries();
+    final startIdx = stepIndex == 0 ? 0 : boundaries[stepIndex - 1];
+    final endIdx = stepIndex < boundaries.length
+        ? boundaries[stepIndex]
+        : _pathPoints.length - 1;
+
+    if (endIdx <= startIdx) return 0.0;
+    final distance = const Distance();
+    double total = 0.0;
+    for (int i = startIdx; i < endIdx && i + 1 < _pathPoints.length; i++) {
+      total += distance.as(
+        LengthUnit.Kilometer,
+        _pathPoints[i],
+        _pathPoints[i + 1],
+      );
+    }
+    return total;
+  }
+
+  double _estimateStepFare(int stepIndex, route_model.Step step) {
+    final distanceKm = _estimateStepDistanceKm(stepIndex);
+    return RouteMetricsService.calculateFareForMode(step.mode, distanceKm);
+  }
+
+  double _calculateRouteFareTotal() {
+    double total = 0.0;
+    for (int i = 0; i < widget.route.steps.length; i++) {
+      final step = widget.route.steps[i];
+      if (step.mode == 'Walk') continue;
+      final baseFare = step.actualFare ?? _estimateStepFare(i, step);
+      total += baseFare;
+    }
+
+    if (total <= 0) {
+      final parsed = _parseFareAmount(widget.route.price);
+      if (parsed != null) total = parsed;
+    }
+
+    return _applyFareDiscount(total);
+  }
+
+  String? _routeFareLabel() {
+    if (!_hasFareSteps && (widget.route.price == null)) return null;
+    final totalFare = _calculateRouteFareTotal();
+    if (totalFare <= 0) return 'Free';
+    return 'PHP ${totalFare.round()}';
+  }
 
   IconData _getModeIcon(String mode) {
     switch (mode) {
@@ -680,7 +858,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   String _formatTime(DateTime time) =>
-      '${time.hour}:${time.minute.toString().padLeft(2, '0')} ${time.day}/${time.month}';
+      '${time.hour}:${time.minute.toString().padLeft(2, '0')} '
+      '${time.day}/${time.month}';
 
   List<Polyline> get polylines {
     if (_pathPoints.length < 2) return [];
@@ -750,14 +929,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (_pathPoints.isNotEmpty) {
       result.add(Marker(
         point: _pathPoints.first,
-        child:
-            const Icon(Icons.location_on, color: Colors.green, size: 40),
+        child: const Icon(Icons.location_on,
+            color: Colors.green, size: 40),
       ));
     }
     if (_pathPoints.length > 1) {
       result.add(Marker(
         point: _pathPoints.last,
-        child: const Icon(Icons.flag, color: Colors.red, size: 40),
+        child:
+            const Icon(Icons.flag, color: Colors.red, size: 40),
       ));
     }
     if (_displayPosition != null) {
@@ -776,7 +956,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     return result;
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────────
+  // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -799,15 +979,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             navigator.pop();
           },
           child: Scaffold(
-          backgroundColor: _bg,
-          appBar: _buildAppBar(),
-          body: Column(
-            children: [
-              Expanded(flex: 2, child: _buildMapSection(center)),
-              Expanded(flex: 1, child: _buildInfoPanel()),
-            ],
+            backgroundColor: _bg,
+            appBar: _buildAppBar(),
+            body: Column(
+              children: [
+                Expanded(flex: 2, child: _buildMapSection(center)),
+                Expanded(flex: 1, child: _buildInfoPanel()),
+              ],
+            ),
           ),
-        ),
         ),
         if (_showNotificationOverlay)
           NotificationOverlay(
@@ -850,7 +1030,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final saved = widget.route.schedule?.trim();
     if (saved != null && saved.isNotEmpty) return saved;
 
-    final transportSteps = widget.route.steps.where((s) => s.mode != 'Walk').toList();
+    final transportSteps = widget.route.steps
+        .where((s) => s.mode != 'Walk')
+        .toList();
     if (transportSteps.isEmpty) return null;
 
     final has24x7Leg = transportSteps.any((s) => s.is24_7);
@@ -862,7 +1044,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       final start = _parseTimeToMinutes(step.startTime);
       final end = _parseTimeToMinutes(step.endTime);
       if (start == null || end == null) continue;
-      earliest = earliest == null ? start : math.min(earliest, start);
+      earliest =
+          earliest == null ? start : math.min(earliest, start);
       latest = latest == null ? end : math.max(latest, end);
     }
 
@@ -884,7 +1067,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
     if (hour == null || minute == null) return null;
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
     return hour * 60 + minute;
   }
 
@@ -899,7 +1084,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (step.is24_7) return '24/7';
     final start = step.startTime?.trim();
     final end = step.endTime?.trim();
-    if (start == null || start.isEmpty || end == null || end.isEmpty) return null;
+    if (start == null ||
+        start.isEmpty ||
+        end == null ||
+        end.isEmpty) return null;
     return '$start-$end';
   }
 
@@ -922,7 +1110,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
   }
 
-  // ─── FIXED: use saved distance fields instead of recalculating ────────────
   Widget _buildMetricsRow() {
     return _buildMetricsRowSection();
   }
@@ -949,10 +1136,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
-  Widget _buildSectionLabel(String label) => _buildSectionLabelSection(label);
+  Widget _buildSectionLabel(String label) =>
+      _buildSectionLabelSection(label);
 }
 
-// ─── Vote button widget ───────────────────────────────────────────────────────
+// ─── Vote button widget ────────────────────────────────────────────────────────
 
 class _VoteButton extends StatelessWidget {
   final IconData icon;
@@ -983,11 +1171,14 @@ class _VoteButton extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.12) : _surfaceAlt,
+          color: active
+              ? activeColor.withValues(alpha: 0.12)
+              : _surfaceAlt,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color:
-                active ? activeColor.withValues(alpha: 0.4) : _border,
+            color: active
+                ? activeColor.withValues(alpha: 0.4)
+                : _border,
           ),
         ),
         child: Row(

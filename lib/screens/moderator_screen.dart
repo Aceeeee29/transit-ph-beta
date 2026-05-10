@@ -7,8 +7,8 @@ import '../services/moderation_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/route_preview.dart';
-part 'moderator_screen_sections.dart';
-part 'moderator_screen_management_sections.dart';
+part 'moderator_screen_route_cards.dart';
+part 'moderator_screen_user_management.dart';
 
 class ModeratorScreen extends StatefulWidget {
   final Future<void> Function()? onRoutesModerated;

@@ -6,7 +6,7 @@ import '../repositories/route_cache_repository.dart';
 import '../services/moderation_service.dart';
 import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
-part 'settings_screen_sections.dart';
+part 'settings_screen_dialogs.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userName;
@@ -734,7 +734,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'About',
               icon: Icons.info_outline_rounded,
               children: [
-                _infoRow(label: 'Version', value: '0.1.18'),
+                _infoRow(label: 'Version', value: '0.1.20'),
                 _infoRow(label: 'Last Updated', value: 'April 2026'),
                 Divider(color: _border, height: 1),
                 _actionRow(

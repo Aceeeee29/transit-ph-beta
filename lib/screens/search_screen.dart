@@ -21,9 +21,9 @@ import '../widgets/search/search_route_card.dart';
 import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
 import 'ors_route_map_screen.dart';
-part 'search_screen_sections.dart';
-part 'search_screen_route_generation_sections.dart';
-part 'search_screen_discovery_sections.dart';
+part 'search_screen_widgets.dart';
+part 'search_screen_routing_logic.dart';
+part 'search_screen_suggestions.dart';
 
 enum ContributedRouteSortMode { balanced, budget, fastest }
 
