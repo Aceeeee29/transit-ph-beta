@@ -54,12 +54,14 @@ class DijkstraTripPlanResult {
   final Map<String, dynamic> selectedOriginStop;
   final Map<String, dynamic> selectedDestStop;
   final double totalCostSeconds;
+  final double totalWalkKm;
 
   const DijkstraTripPlanResult({
     required this.plan,
     required this.selectedOriginStop,
     required this.selectedDestStop,
     required this.totalCostSeconds,
+    required this.totalWalkKm,
   });
 }
 
@@ -69,6 +71,7 @@ class DijkstraRouteAlternative {
   final DijkstraTripPlanResult result;
   final double estimatedFarePhp;
   final double estimatedTimeMinutes;
+  final double totalWalkKm;
   final double budgetScore;
   final double fastestScore;
   final double balancedScore;
@@ -78,6 +81,7 @@ class DijkstraRouteAlternative {
     required this.result,
     required this.estimatedFarePhp,
     required this.estimatedTimeMinutes,
+    required this.totalWalkKm,
     required this.budgetScore,
     required this.fastestScore,
     required this.balancedScore,
@@ -129,6 +133,18 @@ class _DijkstraGraphContext {
   const _DijkstraGraphContext({
     required this.adjacency,
     required this.allStopsById,
+  });
+}
+
+class _DijkstraContextCacheEntry {
+  final String key;
+  final _DijkstraGraphContext context;
+  final DateTime cachedAt;
+
+  const _DijkstraContextCacheEntry({
+    required this.key,
+    required this.context,
+    required this.cachedAt,
   });
 }
 
@@ -221,6 +237,9 @@ class SupabaseRouteService {
 
   static const _fallbackTransitSpeedKmh = 20.0;
 
+  static const _dijkstraContextTtl = Duration(seconds: 45);
+  static _DijkstraContextCacheEntry? _dijkstraContextCache;
+
   static Future<DijkstraTripPlanResult?> findTripPlanDijkstra({
     required LatLng origin,
     required LatLng destination,
@@ -256,13 +275,25 @@ class SupabaseRouteService {
       return const <DijkstraRouteAlternative>[];
     }
 
-    final context = await _buildDijkstraGraphContext(
+    final contextKey = _buildDijkstraContextKey(
       origin: origin,
       destination: destination,
       originCandidates: originCandidates,
       destCandidates: destCandidates,
       allowFerry: allowFerry,
     );
+
+    var context = _getCachedDijkstraContext(contextKey);
+    context ??= await _buildDijkstraGraphContext(
+      origin: origin,
+      destination: destination,
+      originCandidates: originCandidates,
+      destCandidates: destCandidates,
+      allowFerry: allowFerry,
+    );
+    if (context != null) {
+      _cacheDijkstraContext(contextKey, context);
+    }
     if (context == null) return const <DijkstraRouteAlternative>[];
 
     final results = <DijkstraTripPlanResult>[];
@@ -609,7 +640,7 @@ class SupabaseRouteService {
               isWalk: false,
               tripId: tripId,
               routeId: routeId,
-              shapeId: trip['shape_id']?.toString(),
+              shapeId: _normalizeShapeId(trip['shape_id']),
               routeShortName: route?['route_short_name'] as String?,
               routeLongName: route?['route_long_name'] as String?,
               routeColor: route?['route_color'] as String?,
@@ -721,6 +752,10 @@ class SupabaseRouteService {
         pathEdges.where((e) => !e.isWalk && e.tripId != null).toList();
     if (transitEdges.isEmpty) return null;
 
+    final totalWalkMeters = pathEdges
+        .where((e) => e.isWalk)
+        .fold<double>(0.0, (sum, e) => sum + e.distanceMeters);
+
     final legs = <TransitLeg>[];
     var startEdge = transitEdges.first;
     var endEdge = transitEdges.first;
@@ -750,6 +785,7 @@ class SupabaseRouteService {
       selectedOriginStop: selectedOriginStop,
       selectedDestStop: selectedDestStop,
       totalCostSeconds: totalCostSeconds,
+      totalWalkKm: totalWalkMeters / 1000.0,
     );
   }
 
@@ -795,6 +831,7 @@ class SupabaseRouteService {
           result: results[i],
           estimatedFarePhp: fares[i],
           estimatedTimeMinutes: times[i],
+          totalWalkKm: results[i].totalWalkKm,
           budgetScore: budgetScore,
           fastestScore: fastestScore,
           balancedScore: balancedScore,
@@ -1022,8 +1059,8 @@ class SupabaseRouteService {
     }
 
     final name =
-      '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
-        .toLowerCase();
+        '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
+            .toLowerCase();
     if (_containsRouteCode(name, 'pub')) {
       return 'Bus';
     }
@@ -1098,16 +1135,15 @@ class SupabaseRouteService {
     final hasEdsa = _hasNormalizedToken(merged, 'edsa');
     final hasCarousel = _hasNormalizedToken(merged, 'carousel');
     final hasBusway =
-        _hasNormalizedToken(merged, 'busway') || _hasNormalizedToken(merged, 'brt');
+        _hasNormalizedToken(merged, 'busway') ||
+        _hasNormalizedToken(merged, 'brt');
     return hasEdsa && (hasCarousel || hasBusway);
   }
 
   static bool _hasNormalizedToken(String source, String token) {
     if (source.isEmpty) return false;
-    final tokens = source
-        .split(RegExp(r'[\s_]+'))
-        .where((t) => t.isNotEmpty)
-        .toSet();
+    final tokens =
+        source.split(RegExp(r'[\s_]+')).where((t) => t.isNotEmpty).toSet();
     return tokens.contains(token);
   }
 
@@ -1143,6 +1179,72 @@ class SupabaseRouteService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value.toString().trim());
+  }
+
+  static String? _normalizeShapeId(dynamic value) {
+    if (value == null) return null;
+    if (value is num) {
+      final rounded = value.roundToDouble();
+      if ((value - rounded).abs() < 0.000001) {
+        return value.round().toString();
+      }
+      return value.toString();
+    }
+
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+
+    final match = RegExp(r'^(\d+)\.0+$').firstMatch(raw);
+    if (match != null) return match.group(1);
+
+    return raw;
+  }
+
+  static String _buildDijkstraContextKey({
+    required LatLng origin,
+    required LatLng destination,
+    required List<Map<String, dynamic>> originCandidates,
+    required List<Map<String, dynamic>> destCandidates,
+    required bool allowFerry,
+  }) {
+    final originKey =
+        '${origin.latitude.toStringAsFixed(5)},${origin.longitude.toStringAsFixed(5)}';
+    final destKey =
+        '${destination.latitude.toStringAsFixed(5)},${destination.longitude.toStringAsFixed(5)}';
+
+    final originIds =
+        originCandidates
+            .map((s) => s['stop_id']?.toString())
+            .whereType<String>()
+            .toList()
+          ..sort();
+    final destIds =
+        destCandidates
+            .map((s) => s['stop_id']?.toString())
+            .whereType<String>()
+            .toList()
+          ..sort();
+
+    return '${allowFerry ? '1' : '0'}|$originKey|$destKey|o:${originIds.join(',')}|d:${destIds.join(',')}';
+  }
+
+  static _DijkstraGraphContext? _getCachedDijkstraContext(String key) {
+    final cached = _dijkstraContextCache;
+    if (cached == null) return null;
+    if (cached.key != key) return null;
+    if (DateTime.now().difference(cached.cachedAt) > _dijkstraContextTtl) {
+      _dijkstraContextCache = null;
+      return null;
+    }
+    return cached.context;
+  }
+
+  static void _cacheDijkstraContext(String key, _DijkstraGraphContext context) {
+    _dijkstraContextCache = _DijkstraContextCacheEntry(
+      key: key,
+      context: context,
+      cachedAt: DateTime.now(),
+    );
   }
 
   static double _fallbackSpeedForMode(String mode) {
@@ -1281,7 +1383,7 @@ class SupabaseRouteService {
     if (tripRow == null) return null;
 
     final routeId = tripRow['route_id'].toString();
-    final shapeId = tripRow['shape_id']?.toString();
+    final shapeId = _normalizeShapeId(tripRow['shape_id']);
 
     final stopRows = await _client
         .schema('gtfs')
@@ -1333,11 +1435,13 @@ class SupabaseRouteService {
 
   // ── Get shape polyline for a trip ─────────────────────────────────────────
   static Future<List<LatLng>> getShapePolyline(String shapeId) async {
+    final normalized = _normalizeShapeId(shapeId);
+    if (normalized == null || normalized.isEmpty) return [];
     final points = await _client
         .schema('gtfs')
         .from('shapes')
         .select('shape_pt_lat, shape_pt_lon, shape_pt_sequence')
-        .eq('shape_id', shapeId)
+        .eq('shape_id', normalized)
         .order('shape_pt_sequence');
 
     return points

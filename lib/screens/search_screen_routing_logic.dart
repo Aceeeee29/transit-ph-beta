@@ -19,6 +19,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
 
       if (_useCurrentLocation) {
         final position = await LocationService.getCurrentPosition();
+        if (!mounted) return;
         if (position == null) {
           setState(() {
             _isLoadingOrs = false;
@@ -29,12 +30,12 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           return;
         }
         origin = LatLng(position.latitude, position.longitude);
-        originName =
-            await LocationService.getAddressFromCoordinates(
-              position.latitude,
-              position.longitude,
-            ) ??
-            'Current Location';
+        final resolvedName = await LocationService.getAddressFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (!mounted) return;
+        originName = resolvedName ?? 'Current Location';
       } else {
         final originText = _originController.text.trim();
         if (originText.isEmpty) {
@@ -46,6 +47,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           return;
         }
         final originLatLng = await _geocodePhilippines(originText);
+        if (!mounted) return;
         if (originLatLng == null) {
           setState(() {
             _isLoadingOrs = false;
@@ -60,11 +62,13 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       }
 
       final destLatLng = await _geocodePhilippines(query);
+      if (!mounted) return;
       if (destLatLng == null) {
         setState(() {
           _isLoadingOrs = false;
           _orsError = true;
-          _orsErrorMessage = 'Could not find "$query". Try a more specific name.';
+          _orsErrorMessage =
+              'Could not find "$query". Try a more specific name.';
         });
         return;
       }
@@ -93,6 +97,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             maxAlternatives: 8,
           ),
         ]);
+        if (!mounted) return;
 
         final merged = <DijkstraRouteAlternative>[];
         final mergedSeen = <String>{};
@@ -148,19 +153,24 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         final balancedPick = pools[0].isEmpty ? null : pools[0].first;
         addLabeled('Balanced', balancedPick);
 
-        final byTime = List<DijkstraRouteAlternative>.from(merged)
-          ..sort((a, b) => a.estimatedTimeMinutes.compareTo(b.estimatedTimeMinutes));
-        addLabeled(
-          'Fastest',
-          byTime.isEmpty ? null : byTime.first,
+        final byTime = List<DijkstraRouteAlternative>.from(merged)..sort(
+          (a, b) => a.estimatedTimeMinutes.compareTo(b.estimatedTimeMinutes),
         );
+        addLabeled('Fastest', byTime.isEmpty ? null : byTime.first);
 
+        const budgetWalkCapKm = 1.5;
         final byFare = List<DijkstraRouteAlternative>.from(merged)
           ..sort((a, b) => a.estimatedFarePhp.compareTo(b.estimatedFarePhp));
-        addLabeled(
-          'Budget',
-          byFare.isEmpty ? null : byFare.first,
-        );
+
+        DijkstraRouteAlternative? budgetPick;
+        for (final alt in byFare) {
+          if (alt.totalWalkKm <= budgetWalkCapKm) {
+            budgetPick = alt;
+            break;
+          }
+        }
+        budgetPick ??= byFare.isEmpty ? null : byFare.first;
+        addLabeled('Budget', budgetPick);
 
         // Keep at least three visible options (when available) without
         // distorting the core labels.
@@ -198,7 +208,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         alternatives = selected;
       } catch (e) {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
-       }
+      }
       final result =
           fallbackAlternatives[0] ??
           (alternatives.isNotEmpty
@@ -224,6 +234,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         result,
       );
 
+      if (!mounted) return;
       setState(() {
         _isLoadingOrs = false;
         _orsResult = result;
@@ -237,12 +248,14 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         _lastGeneratedDestinationName = query;
       });
     } on RoutingException catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingOrs = false;
         _orsError = true;
         _orsErrorMessage = e.message;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingOrs = false;
         _orsError = true;
