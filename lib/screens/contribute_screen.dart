@@ -20,6 +20,7 @@ import 'contribute_location_search_screen.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
+import 'dart:async';
 part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_editor.dart';
 part 'contribute_screen_route_builder.dart';
@@ -95,6 +96,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String _lastLocationSearchQuery = '';
   String? _activeQuickRouteToken;
 
+  // ─── Zoom slider state ───────────────────────────────────────────────────────
+  double _currentZoom = 11.0;
+  bool _zoomControlsVisible = false; 
+  Timer? _zoomVisibilityTimer;  
+
+  
   // ─── Color tokens 
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
@@ -105,79 +112,39 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
 
-  // ─── Philippine regions 
+  // ─── CAMANAVA and Metro Manila boundaries ───────────────────────────────────
+  // NOTE: these are hand-tuned approximate rectangles, not survey-grade
+  // administrative boundaries. CAMANAVA's northern edge is intentionally
+  // tightened to exclude North Caloocan (a separate, non-contiguous part of
+  // Caloocan City). Because North Caloocan sits at similar latitudes to
+  // Valenzuela, this rectangle-based approach may clip a small sliver of
+  // Valenzuela's northernmost tip — a known tradeoff of using rectangles
+  // instead of true polygon boundaries.
   final Map<String, LatLngBounds> philippineRegions = {
-    'Philippines': LatLngBounds(
-      const LatLng(4.5, 116.0),
-      const LatLng(21.5, 127.0),
+    'Metro Manila': LatLngBounds(
+      const LatLng(14.38, 120.82),
+      const LatLng(14.95, 121.20),
     ),
-    'Region I – Ilocos Region': LatLngBounds(
-      const LatLng(15.5, 119.5),
-      const LatLng(18.5, 121.0),
+    'CAMANAVA': LatLngBounds(
+      const LatLng(14.60, 120.92), // tightened north edge — excludes North Caloocan
+      const LatLng(14.74, 121.03),
     ),
-    'Region II – Cagayan Valley': LatLngBounds(
-      const LatLng(16.0, 121.0),
-      const LatLng(19.0, 122.5),
+    'Caloocan': LatLngBounds(
+      // South Caloocan only — North Caloocan is a separate, non-contiguous area
+      const LatLng(14.62, 120.96),
+      const LatLng(14.68, 121.01),
     ),
-    'Region III – Central Luzon': LatLngBounds(
-      const LatLng(14.5, 120.0),
-      const LatLng(16.0, 121.5),
+    'Malabon': LatLngBounds(
+      const LatLng(14.63, 120.93),
+      const LatLng(14.70, 120.99),
     ),
-    'Region IV-A – CALABARZON': LatLngBounds(
-      const LatLng(13.5, 120.5),
-      const LatLng(15.0, 122.0),
+    'Navotas': LatLngBounds(
+      const LatLng(14.63, 120.92),
+      const LatLng(14.69, 120.97),
     ),
-    'MIMAROPA Region (Region IV-B)': LatLngBounds(
-      const LatLng(8.5, 117.0),
-      const LatLng(14.0, 122.0),
-    ),
-    'Region V – Bicol Region': LatLngBounds(
-      const LatLng(12.5, 122.5),
-      const LatLng(14.5, 124.5),
-    ),
-    'Region VI – Western Visayas': LatLngBounds(
-      const LatLng(9.5, 121.5),
-      const LatLng(12.0, 123.5),
-    ),
-    'Region VII – Central Visayas': LatLngBounds(
-      const LatLng(9.0, 123.0),
-      const LatLng(11.5, 124.5),
-    ),
-    'Region VIII – Eastern Visayas': LatLngBounds(
-      const LatLng(10.0, 124.0),
-      const LatLng(13.0, 126.0),
-    ),
-    'Region IX – Zamboanga Peninsula': LatLngBounds(
-      const LatLng(6.5, 121.5),
-      const LatLng(9.0, 123.5),
-    ),
-    'Region X – Northern Mindanao': LatLngBounds(
-      const LatLng(7.5, 123.5),
-      const LatLng(9.5, 126.0),
-    ),
-    'Region XI – Davao Region': LatLngBounds(
-      const LatLng(5.5, 125.0),
-      const LatLng(8.0, 127.0),
-    ),
-    'Region XII – SOCCSKSARGEN': LatLngBounds(
-      const LatLng(5.0, 124.0),
-      const LatLng(8.0, 125.5),
-    ),
-    'Region XIII – Caraga': LatLngBounds(
-      const LatLng(8.0, 125.5),
-      const LatLng(10.5, 127.0),
-    ),
-    'NCR – National Capital Region': LatLngBounds(
-      const LatLng(14.4, 120.9),
-      const LatLng(14.8, 121.2),
-    ),
-    'CAR – Cordillera Administrative Region': LatLngBounds(
-      const LatLng(16.0, 120.0),
-      const LatLng(18.5, 121.5),
-    ),
-    'BARMM – Bangsamoro Autonomous Region in Muslim Mindanao': LatLngBounds(
-      const LatLng(5.0, 119.0),
-      const LatLng(7.5, 122.0),
+    'Valenzuela': LatLngBounds(
+      const LatLng(14.655, 120.94),
+      const LatLng(14.755, 121.02),
     ),
   };
 
@@ -361,6 +328,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   @override
   void dispose() {
+    _zoomVisibilityTimer?.cancel();
     _startLocationController.dispose();
     _endLocationController.dispose();
     _shortDescriptionController.dispose();
@@ -427,21 +395,39 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void _onRegionChanged(String? region) {
     if (region != null && philippineRegions.containsKey(region)) {
       final bounds = philippineRegions[region]!;
-      if (region == 'Philippines') {
-        _mapController.move(const LatLng(12.8797, 121.7740), 6.0);
-      } else if (region == 'MIMAROPA Region (Region IV-B)') {
-        final center = LatLng(
-          (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
-          (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
-        );
-        _mapController.move(center, 7.0);
-      } else {
-        _mapController.fitCamera(
-          CameraFit.bounds(
-              bounds: bounds, padding: const EdgeInsets.all(20)),
-        );
-      }
-      setState(() => selectedRegion = region);
+      final center = LatLng(
+        (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
+        (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
+      );
+
+      double zoom;
+      switch (region) {
+        case 'Metro Manila':
+          zoom = 9.7;
+          break;
+        case 'CAMANAVA':
+          zoom = 13.0;
+          break;
+        case 'Malabon':
+        case 'Navotas':
+          zoom = 14.5; // small, compact cities need a tighter zoom to feel focused
+          break;
+        case 'Caloocan':
+          zoom = 14.0;
+          break;
+        case 'Valenzuela':
+          zoom = 13.5;
+          break;
+        default:
+          zoom = 13.0;
+          break;
+      } 
+
+      _mapController.move(center, zoom);
+      setState(() {
+        selectedRegion = region;
+        _currentZoom = zoom;
+      });
     }
   }
 
@@ -460,6 +446,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() {
       _searchedLocation = target;
       selectedRegion = null;
+      _currentZoom = 15.0;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -474,6 +461,30 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   Future<void> _openLocationSearchScreen() async {
     await this._openLocationSearchScreenSection();
+  }
+
+  // ─── Region border polygon (for the selected-region outline) ────────────────
+
+  List<Polygon> get _regionBoundaryPolygons {
+    if (selectedRegion == null) return [];
+    final bounds = philippineRegions[selectedRegion];
+    if (bounds == null) return [];
+
+    final corners = [
+      LatLng(bounds.northEast.latitude, bounds.southWest.longitude), // NW
+      LatLng(bounds.northEast.latitude, bounds.northEast.longitude), // NE
+      LatLng(bounds.southWest.latitude, bounds.northEast.longitude), // SE
+      LatLng(bounds.southWest.latitude, bounds.southWest.longitude), // SW
+    ];
+
+    return [
+      Polygon(
+        points: corners,
+        color: _accent.withOpacity(0.08),
+        borderColor: _accent,
+        borderStrokeWidth: 2.5,
+      ),
+    ];
   }
 
   // ─── Dialog launchers ────────────────────────────────────────────────────────
@@ -928,6 +939,86 @@ class _ContributeScreenState extends State<ContributeScreen> {
     this._onPreviewRouteSection();
   }
 
+
+  void _revealZoomControls() {          
+    setState(() => _zoomControlsVisible = true);
+    _zoomVisibilityTimer?.cancel();
+    _zoomVisibilityTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _zoomControlsVisible = false);
+    });
+  }
+
+  // ─── Vertical zoom slider ────────────────────────────────────────────────────
+
+  Widget _buildVerticalZoomSlider() {
+  return Positioned(
+    right: 12,
+    top: 140,
+    bottom: 160,
+    child: IgnorePointer(
+      ignoring: !_zoomControlsVisible,
+      child: AnimatedOpacity(
+        opacity: _zoomControlsVisible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: GestureDetector(
+          onTap: _revealZoomControls,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  _revealZoomControls();
+                  final z = (_currentZoom + 1).clamp(9.0, 18.0);
+                  setState(() => _currentZoom = z);
+                  _mapController.move(_mapController.camera.center, z);
+                },
+                child: const Icon(Icons.add_circle, size: 22, color: _accent),
+              ),
+              Expanded(
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      activeTrackColor: _accent,
+                      inactiveTrackColor: _border,
+                      thumbColor: _accent,
+                      overlayColor: _accent.withOpacity(0.15),
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      min: 9.0,
+                      max: 18.0,
+                      value: _currentZoom.clamp(9.0, 18.0),
+                      onChanged: (value) {
+                        _revealZoomControls();
+                        setState(() {
+                          _currentZoom = value;
+                          selectedRegion = null;
+                        });
+                        _mapController.move(_mapController.camera.center, value);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  _revealZoomControls();
+                  final z = (_currentZoom - 1).clamp(9.0, 18.0);
+                  setState(() => _currentZoom = z);
+                  _mapController.move(_mapController.camera.center, z);
+                },
+                child: const Icon(Icons.remove_circle, size: 22, color: _accent),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
   // ─── Build ───────────────────────────────────────────────────────────────────
 
   @override
@@ -945,6 +1036,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                 if (selectionMode != 'done') _buildInstructionPill(),
                 _buildLocationSearchBar(),
                 _buildRegionSelector(),
+                _buildVerticalZoomSlider(),
                 _buildFormDrawer(context),
               ],
             ),

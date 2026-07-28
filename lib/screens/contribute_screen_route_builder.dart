@@ -312,23 +312,30 @@ extension _ContributeScreenSections on _ContributeScreenState {
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: const LatLng(12.8797, 121.7740),
-        initialZoom: 6.0,
-        minZoom: 5.0,
+        initialCenter: const LatLng(14.716, 121.032),
+        initialZoom: 13.0,
+        minZoom: 9.0,
         maxZoom: 18.0,
         cameraConstraint: CameraConstraint.contain(
           bounds: LatLngBounds(
-            const LatLng(4.5, 116.0),
-            const LatLng(21.5, 127.0),
+            const LatLng(14.38, 120.82),
+            const LatLng(14.95, 121.20),
           ),
         ),
         onTap: _onMapTap,
+        onPositionChanged: (position, hasGesture) {
+          if (hasGesture) {
+            setState(() => _currentZoom = position.zoom);
+            _revealZoomControls();
+          }
+        },
       ),
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.example.app.transitph_beta',
         ),
+        // PolygonLayer(polygons: _regionBoundaryPolygons), // TODO: re-enable once real boundary data is added
         PolylineLayer(polylines: polylines),
         MarkerLayer(
           markers: [
@@ -480,7 +487,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
         child: DropdownButtonFormField<String>(
           initialValue: selectedRegion,
           hint: const Text(
-            'Select Region',
+            'Select Area',
             style: TextStyle(fontSize: 11, color: _textSecondary),
           ),
           isExpanded: true,
