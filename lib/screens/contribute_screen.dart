@@ -4,6 +4,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
+import '../models/place_model.dart';
+import '../services/places_service.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
@@ -101,6 +103,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _zoomControlsVisible = false; 
   Timer? _zoomVisibilityTimer;  
 
+  // ─── POI layer state ─────────────────────────────────────────────────────────
+  final Set<PlaceCategory> _visiblePoiCategories = {};
+  bool _poiFilterVisible = false;
+
   
   // ─── Color tokens 
   static const _bg = Color(0xFFF4F8FF);
@@ -111,6 +117,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
+
+  static const Map<PlaceCategory, IconData> _poiIcons = {
+    PlaceCategory.school: Icons.school,
+    PlaceCategory.hospital: Icons.local_hospital,
+    PlaceCategory.mall: Icons.shopping_bag,
+    PlaceCategory.publicPark: Icons.park,
+  };
+
+  static const Map<PlaceCategory, Color> _poiColors = {
+    PlaceCategory.school: Color(0xFF6A4CFF),
+    PlaceCategory.hospital: Color(0xFFE05C6A),
+    PlaceCategory.mall: Color(0xFFE89A3C),
+    PlaceCategory.publicPark: Color(0xFF3EC97A),
+  };
 
   // ─── CAMANAVA and Metro Manila boundaries ───────────────────────────────────
   // NOTE: these are hand-tuned approximate rectangles, not survey-grade
@@ -948,6 +968,151 @@ class _ContributeScreenState extends State<ContributeScreen> {
     });
   }
 
+  // ─── POI (nearby places) overlay layer ───────────────────────────────────────
+
+  List<Place> get _visiblePois {
+    if (_visiblePoiCategories.isEmpty) return const [];
+
+    LatLngBounds bounds;
+    try {
+      bounds = _mapController.camera.visibleBounds;
+    } catch (_) {
+      bounds = LatLngBounds(
+        const LatLng(14.38, 120.82),
+        const LatLng(14.95, 121.20),
+      );
+    }
+
+    return PlacesService.allPlaces.where((p) {
+      if (!_visiblePoiCategories.contains(p.category)) return false;
+      return bounds.contains(LatLng(p.latitude, p.longitude));
+    }).toList();
+  }
+
+  void _togglePoiCategory(PlaceCategory category) {
+    setState(() {
+      if (!_visiblePoiCategories.add(category)) {
+        _visiblePoiCategories.remove(category);
+      }
+    });
+  }
+
+  void _togglePoiFilterPanel() {
+    setState(() => _poiFilterVisible = !_poiFilterVisible);
+  }
+
+  Widget _buildPoiFilterControls() {
+    return Positioned(
+      right: 12,
+      top: 60,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          GestureDetector(
+            onTap: _togglePoiFilterPanel,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _poiFilterVisible ? _accent : _surface,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _poiFilterVisible ? _accent : _border,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _poiFilterVisible
+                    ? Icons.filter_alt
+                    : Icons.filter_alt_outlined,
+                size: 18,
+                color: _poiFilterVisible ? Colors.white : _accent,
+              ),
+            ),
+          ),
+          if (_poiFilterVisible) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: 172,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _surface.withValues(alpha: 0.98),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withValues(alpha: 0.12),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'POI Layers',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ...PlaceCategory.values.map((cat) {
+                    final isOn = _visiblePoiCategories.contains(cat);
+                    return GestureDetector(
+                      onTap: () => _togglePoiCategory(cat),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _poiIcons[cat],
+                              size: 15,
+                              color:
+                                  isOn ? _poiColors[cat] : _textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                cat.iconLabel,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      isOn ? _textPrimary : _textSecondary,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              isOn
+                                  ? Icons.check_box
+                                  : Icons.check_box_outline_blank,
+                              size: 16,
+                              color: isOn ? _accent : _border,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // ─── Vertical zoom slider ────────────────────────────────────────────────────
 
   Widget _buildVerticalZoomSlider() {
@@ -1036,6 +1201,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                 if (selectionMode != 'done') _buildInstructionPill(),
                 _buildLocationSearchBar(),
                 _buildRegionSelector(),
+                _buildPoiFilterControls(),
                 _buildVerticalZoomSlider(),
                 _buildFormDrawer(context),
               ],

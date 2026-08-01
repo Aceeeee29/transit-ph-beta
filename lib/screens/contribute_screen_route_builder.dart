@@ -337,6 +337,20 @@ extension _ContributeScreenSections on _ContributeScreenState {
         ),
         // PolygonLayer(polygons: _regionBoundaryPolygons), // TODO: re-enable once real boundary data is added
         PolylineLayer(polylines: polylines),
+        if (_visiblePois.isNotEmpty)
+          MarkerLayer(
+            markers: _visiblePois.map((p) {
+              return Marker(
+                point: LatLng(p.latitude, p.longitude),
+                child: Icon(
+                  _ContributeScreenState._poiIcons[p.category],
+                  color: _ContributeScreenState._poiColors[p.category],
+                  size: 24,
+                  shadows: const [Shadow(color: Colors.white, blurRadius: 3)],
+                ),
+              );
+            }).toList(),
+          ),
         MarkerLayer(
           markers: [
             if (pathPoints.isNotEmpty)

@@ -5,6 +5,7 @@ import '../models/route.dart' as route_model;
 import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
 import 'search_screen.dart';
+import 'explore_screen.dart';
 import '../services/gamification_service.dart';
 import '../services/weather_service.dart';
 import '../services/location_service.dart';
