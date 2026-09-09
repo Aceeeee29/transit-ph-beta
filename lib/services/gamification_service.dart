@@ -272,7 +272,10 @@ class GamificationService {
     if (uid == null) return;
 
     try {
-      final routes = await RouteService.getRoutesByUser(uid);
+      final routes = await RouteService.getRoutesByUser(
+        uid,
+        userEmail: user.email,
+      );
 
       double totalDistance = 0.0;
       double totalCo2Saved = 0.0;
@@ -311,6 +314,7 @@ class GamificationService {
       }
 
       // Update user stats (streak is handled separately on app open)
+      user.routesContributed = routes.length;
       user.totalDistance = totalDistance;
       user.co2Saved = totalCo2Saved;
       user.mostActiveRegion = mostActiveRegion;

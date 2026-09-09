@@ -2,20 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
+import '../models/place.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
+import '../services/gamification_service.dart';
 import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';
 import '../services/contribute_route_edit_service.dart';
+import '../data/camanava_places.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/map_controls.dart';
 import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../services/location_service.dart';
+import '../utils/map_distance.dart';
 import 'contribute_location_search_screen.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
@@ -24,6 +29,10 @@ import 'dart:async';
 part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_editor.dart';
 part 'contribute_screen_route_builder.dart';
+
+/// What the Map tab is currently showing. The map itself is shared — only the
+/// overlay UI and draw behaviour swap when the user toggles.
+enum MapTabMode { contribute, nearby }
 
 class _StepEditControls {
   final List<List<LatLng>> stepControlPoints;
@@ -51,6 +60,8 @@ class ContributeScreen extends StatefulWidget {
   final String? contributorId;
   final String? quickRouteToken;
   final VoidCallback? onQuickRouteTokenConsumed;
+  final MapTabMode mapMode;
+  final ValueChanged<MapTabMode>? onMapModeChanged;
 
   const ContributeScreen({
     super.key,
@@ -59,6 +70,8 @@ class ContributeScreen extends StatefulWidget {
     this.contributorId,
     this.quickRouteToken,
     this.onQuickRouteTokenConsumed,
+    this.mapMode = MapTabMode.contribute,
+    this.onMapModeChanged,
   });
 
   @override
@@ -78,23 +91,31 @@ class _ContributeScreenState extends State<ContributeScreen> {
   List<route_model.Step> steps = [];
   List<String> _selectedRouteTags = [];
   List<int> stepBoundaries = [];
-  final List<double?> _stepOrsDistM = [];
-  final List<double?> _stepOrsDurS = [];
+  List<double?> _stepOrsDistM = [];
+  List<double?> _stepOrsDurS = [];
   double? _pendingOrsDistM;
   double? _pendingOrsDurS;
   int? _pendingStepStartIndex;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
-  String? selectedRegion;
+  String? selectedRegion = 'CAMANAVA';
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool _isFormExpanded = false;
   bool _snapToRoadEnabled = true;
   bool _showEditHandles = false;
   bool _showTutorial = false;
+  late MapTabMode _mapMode;
   LatLng? _searchedLocation;
   String _lastLocationSearchQuery = '';
   String? _activeQuickRouteToken;
+
+  // ─── Nearby-places mode state ───────────────────────────────────────────────
+  Position? _nearbyPosition;
+  bool _nearbyIsLocating = false;
+  Place? _nearbySelectedPlace;
+  final Set<PlaceCategory> _nearbySelected = {PlaceCategory.tourist};
+  LatLng? _debugCoord;
 
   // ─── Zoom slider state ───────────────────────────────────────────────────────
   double _currentZoom = 11.0;
@@ -186,6 +207,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   @override
   void initState() {
     super.initState();
+    _mapMode = widget.mapMode;
     _checkTutorialStatus();
     if (widget.quickRouteToken != null && widget.quickRouteToken!.trim().isNotEmpty) {
       _loadQuickRouteLink(widget.quickRouteToken!.trim());
@@ -195,6 +217,34 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _saveToHistory();
       }
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant ContributeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.mapMode != _mapMode) {
+      _mapMode = widget.mapMode;
+      _onMapModeApplied(_mapMode);
+    }
+  }
+
+  /// Camera + housekeeping when the mode actually flips.
+  void _onMapModeApplied(MapTabMode mode) {
+    if (mode == MapTabMode.nearby) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _mapController.move(CamanavaBounds.center, CamanavaBounds.initialZoom);
+        }
+      });
+    }
+  }
+
+  /// Programmatic mode flip — used by the in-screen toggle.
+  void _switchMapMode(MapTabMode mode) {
+    if (_mapMode == mode) return;
+    setState(() => _mapMode = mode);
+    widget.onMapModeChanged?.call(mode);
+    _onMapModeApplied(mode);
   }
 
   bool get _isQuickCreateMode => _activeQuickRouteToken != null;
@@ -338,11 +388,15 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Map interaction ─────────────────────────────────────────────────────────
 
   void _onMapTap(TapPosition tapPosition, LatLng point) async {
+    if (_mapMode == MapTabMode.nearby) {
+      setState(() => _debugCoord = point);
+      return;
+    }
+
     if (selectionMode == 'start') {
       setState(() {
         pathPoints.add(point);
         selectionMode = 'step';
-        _showModeDialog();
       });
       _saveToHistory();
       if (_startLocationController.text.isEmpty) {
@@ -489,21 +543,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Dialog launchers ────────────────────────────────────────────────────────
 
-  void _showModeDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => ModeSelectionDialog(
-        currentMode: currentMode,
-        modes: modes,
-        modeColors: modeColors,
-        getModeIcon: _getModeIcon,
-        onModeSelected: (mode) {
-          setState(() => currentMode = mode);
-        },
-      ),
-    );
-  }
-
   void _showStepDialog() {
     showDialog(
       context: context,
@@ -523,7 +562,15 @@ class _ContributeScreenState extends State<ContributeScreen> {
             _pendingOrsDurS = null;
           });
           _saveToHistory();
-          _showAddAnotherStepDialog();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Step ${steps.length} saved. Tap the map for the next point, '
+                'pick a new mode, or tap Finish Route.',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
         },
       ),
     );
@@ -543,43 +590,139 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _pendingOrsDistM = null;
       _pendingOrsDurS = null;
     });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || selectionMode != 'step') return;
-      _showModeDialog();
-    });
   }
 
-  void _showAddAnotherStepDialog() {
+  Future<void> _onFinishRoutePressed() async {
+    final shouldFinish = await _confirmFinishRoute();
+    if (!mounted || !shouldFinish) return;
+
+    setState(() => selectionMode = 'done');
+    if (_endLocationController.text.isEmpty && pathPoints.isNotEmpty) {
+      final last = pathPoints.last;
+      final name = await LocationService.getAddressFromCoordinates(
+          last.latitude, last.longitude);
+      if (mounted && _endLocationController.text.isEmpty) {
+        setState(() {
+          _endLocationController.text = name ??
+              '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
+        });
+      }
+    }
+  }
+
+  void _showEditStepDialog(int index) {
+    if (index < 0 || index >= steps.length) return;
+    final step = steps[index];
     showDialog(
       context: context,
-      builder: (_) => AddStepDialog(
-        stepCount: steps.length,
-        onAddAnother: () => _showModeDialog(),
-        onFinished: () async {
-          final shouldFinish = await _confirmFinishRoute();
-          if (!mounted || !shouldFinish) {
-            if (mounted && selectionMode == 'step') {
-              _showModeDialog();
-            }
-            return;
-          }
-
-          setState(() => selectionMode = 'done');
-          if (_endLocationController.text.isEmpty &&
-              pathPoints.isNotEmpty) {
-            final last = pathPoints.last;
-            final name =
-                await LocationService.getAddressFromCoordinates(
-                    last.latitude, last.longitude);
-            if (mounted && _endLocationController.text.isEmpty) {
-              _endLocationController.text = name ??
-                  '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
-            }
-          }
+      builder: (_) => StepDialog(
+        mode: step.mode,
+        modeColors: modeColors,
+        getModeIcon: _getModeIcon,
+        initialStep: step,
+        onCancel: () {},
+        onSaved: (updated) {
+          setState(() => steps[index] = updated);
+          _saveToHistory();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Step updated.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
         },
       ),
     );
+  }
+
+  Future<void> _deleteStep(int index) async {
+    if (index < 0 || index >= steps.length) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove this step?'),
+        content: Text(
+            '${steps[index].instruction} will be removed and the remaining steps reconnected.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirm != true) return;
+
+    final remaining = List<route_model.Step>.from(steps)..removeAt(index);
+    if (remaining.isEmpty) {
+      _onReset();
+      return;
+    }
+
+    final controlPoints = _stepEditControls.stepControlPoints;
+    if (index >= controlPoints.length) return;
+    controlPoints.removeAt(index);
+
+    final rebuilt = await ContributeRouteEditService.rebuildFromStepControlPoints(
+      steps: remaining,
+      stepControlPoints: controlPoints,
+      snapToRoadEnabled: _snapToRoadEnabled,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      steps = remaining;
+      pathPoints = rebuilt.pathPoints;
+      stepBoundaries = rebuilt.stepBoundaries;
+      _stepOrsDistM = rebuilt.stepOrsDistM;
+      _stepOrsDurS = rebuilt.stepOrsDurS;
+    });
+    _saveToHistory();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Step removed.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _moveStep(int index, int delta) async {
+    final target = index + delta;
+    if (index < 0 ||
+        index >= steps.length ||
+        target < 0 ||
+        target >= steps.length) {
+      return;
+    }
+
+    final reordered = List<route_model.Step>.from(steps);
+    final moved = reordered.removeAt(index);
+    reordered.insert(target, moved);
+
+    final controlPoints = _stepEditControls.stepControlPoints;
+    if (index >= controlPoints.length) return;
+    final movedCp = controlPoints.removeAt(index);
+    controlPoints.insert(target, movedCp);
+
+    final rebuilt = await ContributeRouteEditService.rebuildFromStepControlPoints(
+      steps: reordered,
+      stepControlPoints: controlPoints,
+      snapToRoadEnabled: _snapToRoadEnabled,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      steps = reordered;
+      pathPoints = rebuilt.pathPoints;
+      stepBoundaries = rebuilt.stepBoundaries;
+      _stepOrsDistM = rebuilt.stepOrsDistM;
+      _stepOrsDurS = rebuilt.stepOrsDurS;
+    });
+    _saveToHistory();
   }
 
   Future<bool> _confirmFinishRoute() async {
@@ -737,6 +880,21 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   // ─── Route utilities ─────────────────────────────────────────────────────────
+
+  /// setState bridge for extension part files (e.g. contribute_screen_route_builder).
+  void _setUiState(VoidCallback fn) => setState(fn);
+
+  /// Called once per newly-submitted (non-edit) route so the Profile counters
+  /// (routes contributed + total distance ridden) stay in sync with Firestore.
+  Future<void> _bumpContributionStats() async {
+    try {
+      final user = await GamificationService.loadUser();
+      await GamificationService.incrementRoutesContributed(user);
+      await GamificationService.recalculateUserStats(user);
+    } catch (_) {
+      // Stats are best-effort; never block the submit flow on them.
+    }
+  }
 
   IconData _getModeIcon(String mode) {
     switch (mode) {
@@ -1023,22 +1181,36 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isNearby = _mapMode == MapTabMode.nearby;
     return Stack(
       children: [
         Scaffold(
           backgroundColor: _bg,
           appBar: _buildAppBar(),
           body: SafeArea(
-            child: Stack(
-              children: [
-                _buildMapLayer(),
-                _buildMapControlsOverlay(),
-                if (selectionMode != 'done') _buildInstructionPill(),
-                _buildLocationSearchBar(),
-                _buildRegionSelector(),
-                _buildVerticalZoomSlider(),
-                _buildFormDrawer(context),
-              ],
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                return Stack(
+                  children: [
+                    _buildMapLayer(),
+                    if (isNearby) ...[
+                      _buildNearbyFilterChips(),
+                      _buildNearbyDebugCoordChip(),
+                      if (_nearbySelectedPlace != null)
+                        _buildNearbyInfoCard(_nearbySelectedPlace!),
+                      _buildNearbyFabs(),
+                    ] else ...[
+                      _buildMapControlsOverlay(),
+                      if (selectionMode != 'done') _buildInstructionPill(),
+                      _buildStepChipsBar(),
+                      _buildLocationSearchBar(),
+                      _buildRegionSelector(),
+                      _buildVerticalZoomSlider(),
+                      _buildFormDrawer(context, constraints.maxHeight),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -1047,7 +1219,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
             notifications: _pendingNotifications,
             onAllDismissed: _onNotificationsDismissed,
           ),
-        if (_showTutorial)
+        if (_showTutorial && !isNearby)
           TutorialOverlay(
             steps: TutorialService.getContributeTutorialSteps(),
             onComplete: _onTutorialComplete,
@@ -1073,6 +1245,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return this._buildInstructionPillSection();
   }
 
+  Widget _buildStepChipsBar() {
+    return this._buildStepChipsBarSection();
+  }
+
   Widget _buildRegionSelector() {
     return this._buildRegionSelectorSection();
   }
@@ -1081,8 +1257,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return this._buildLocationSearchBarSection();
   }
 
-  Widget _buildFormDrawer(BuildContext context) {
-    return this._buildFormDrawerSection(context);
+  Widget _buildFormDrawer(BuildContext context, double availableHeight) {
+    return this._buildFormDrawerSection(context, availableHeight);
   }
 
   Widget _buildDrawerHandle() {

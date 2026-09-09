@@ -35,6 +35,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  MapTabMode _mapTabMode = MapTabMode.contribute;
   bool _isLoading = false;
   bool _didCheckAnnouncements = false;
   bool _isOfflinePromptVisible = false;
@@ -157,10 +158,21 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  void _openNearbyPlaces() {
+    setState(() {
+      _mapTabMode = MapTabMode.nearby;
+      _selectedIndex = 2;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
-      HomeScreen(routes: routes, onRefresh: _loadData),
+      HomeScreen(
+        routes: routes,
+        onRefresh: _loadData,
+        onOpenNearbyPlaces: _openNearbyPlaces,
+      ),
       FeedScreen(
         key: ValueKey(posts.length),
         posts: posts,
@@ -190,13 +202,18 @@ class _MainScreenState extends State<MainScreen> {
           await RouteService.saveRoute(route);
           await _loadData();
         },
+        mapMode: _mapTabMode,
+        onMapModeChanged: (mode) {
+          if (_mapTabMode == mode) return;
+          setState(() => _mapTabMode = mode);
+        },
         quickRouteToken: _pendingQuickRouteToken,
         onQuickRouteTokenConsumed: () {
           if (!mounted || _pendingQuickRouteToken == null) return;
           setState(() => _pendingQuickRouteToken = null);
         },
       ),
-      const ProfileScreen(),
+      ProfileScreen(key: ValueKey('profile_tab_${_selectedIndex == 3}')),
       if (widget.isAdmin) ModeratorScreen(onRoutesModerated: _loadData),
     ];
 
@@ -213,9 +230,9 @@ class _MainScreenState extends State<MainScreen> {
         label: 'Feed',
       ),
       const _NavItem(
-        icon: Icons.add_road_outlined,
-        activeIcon: Icons.add_road_rounded,
-        label: 'Contribute',
+        icon: Icons.map_outlined,
+        activeIcon: Icons.map_rounded,
+        label: 'Map',
         isAccent: true,
       ),
       const _NavItem(

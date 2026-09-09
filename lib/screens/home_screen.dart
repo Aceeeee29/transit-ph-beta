@@ -21,8 +21,14 @@ enum RouteSortMode { community, budget, fastest, balanced }
 class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
   final Future<void> Function()? onRefresh;
+  final VoidCallback onOpenNearbyPlaces;
 
-  const HomeScreen({super.key, required this.routes, this.onRefresh});
+  const HomeScreen({
+    super.key,
+    required this.routes,
+    this.onRefresh,
+    required this.onOpenNearbyPlaces,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();

@@ -86,27 +86,6 @@ Widget _iconBox({required Color color, required IconData icon}) {
   );
 }
 
-Widget _dialogContainer(Widget child) {
-  return Dialog(
-    backgroundColor: Colors.transparent,
-    child: Container(
-      decoration: BoxDecoration(
-        color: ContributeColors.bg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: ContributeColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: ContributeColors.accent.withOpacity(0.08),
-            blurRadius: 32,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: child,
-    ),
-  );
-}
-
 Widget _gradientButton({
   required String label,
   required IconData icon,
@@ -174,163 +153,6 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
   );
 }
 
-// ─── Mode Selection Dialog ────────────────────────────────────────────────────
-
-class ModeSelectionDialog extends StatefulWidget {
-  final String currentMode;
-  final List<String> modes;
-  final Map<String, Color> modeColors;
-  final IconData Function(String) getModeIcon;
-  final void Function(String mode) onModeSelected;
-
-  const ModeSelectionDialog({
-    super.key,
-    required this.currentMode,
-    required this.modes,
-    required this.modeColors,
-    required this.getModeIcon,
-    required this.onModeSelected,
-  });
-
-  @override
-  State<ModeSelectionDialog> createState() => _ModeSelectionDialogState();
-}
-
-class _ModeSelectionDialogState extends State<ModeSelectionDialog> {
-  bool _showAdvancedModes = false;
-
-  static const _advancedModes = {'Walk', 'Ferry'};
-
-  @override
-  Widget build(BuildContext context) {
-    final visibleModes = widget.modes.where((mode) {
-      if (_showAdvancedModes) return true;
-      return !_advancedModes.contains(mode);
-    }).toList();
-
-    return _dialogContainer(
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _DialogHeader(
-            icon: _iconBox(
-                color: ContributeColors.accent, icon: Icons.alt_route),
-            title: 'Select Transport Mode',
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: visibleModes
-                    .map(
-                      (mode) => _ModeTile(
-                        mode: mode,
-                        color: widget.modeColors[mode] ?? ContributeColors.accent,
-                        icon: widget.getModeIcon(mode),
-                        isSelected: mode == widget.currentMode,
-                        onTap: () {
-                          Navigator.pop(context);
-                          widget.onModeSelected(mode);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Tap on the map to select the next point for $mode',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: _ghostButton(
-              label: _showAdvancedModes
-                  ? 'Hide Advanced Modes (Walk / Ferry)'
-                  : 'Show Advanced Modes (Walk / Ferry)',
-              onTap: () {
-                setState(() => _showAdvancedModes = !_showAdvancedModes);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeTile extends StatelessWidget {
-  final String mode;
-  final Color color;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ModeTile({
-    required this.mode,
-    required this.color,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? color.withOpacity(0.08)
-              : ContributeColors.surface,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(
-            color: isSelected
-                ? color.withOpacity(0.4)
-                : ContributeColors.border,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(icon, color: color, size: 17),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              mode,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight:
-                    isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? ContributeColors.textPrimary
-                    : ContributeColors.textSecondary,
-              ),
-            ),
-            if (isSelected) ...[
-              const Spacer(),
-              Icon(Icons.check_circle_rounded, color: color, size: 16),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Step Dialog ──────────────────────────────────────────────────────────────
 
 class StepDialog extends StatefulWidget {
@@ -339,6 +161,7 @@ class StepDialog extends StatefulWidget {
   final IconData Function(String) getModeIcon;
   final VoidCallback onCancel;
   final void Function(route_model.Step step) onSaved;
+  final route_model.Step? initialStep;
 
   const StepDialog({
     super.key,
@@ -347,6 +170,7 @@ class StepDialog extends StatefulWidget {
     required this.getModeIcon,
     required this.onCancel,
     required this.onSaved,
+    this.initialStep,
   });
 
   @override
@@ -367,12 +191,27 @@ class _StepDialogState extends State<StepDialog> {
   static const _warnBorder = Color(0xFFFFD54F);
   static const _warnText = Color(0xFF7A5800);
 
+  bool get _isEditMode => widget.initialStep != null;
   bool get _isMotorizedMode => widget.mode != 'Walk';
 
   @override
   void initState() {
     super.initState();
-    _is24_7 = widget.mode == 'Walk';
+    final existing = widget.initialStep;
+    if (existing != null) {
+      _instructionController.text = existing.instruction;
+      _detailsController.text = existing.details;
+      _actualFareController.text =
+          existing.actualFare?.toStringAsFixed(0) ?? '';
+      _altRouteController.text = existing.alternateRouteSuggestion ?? '';
+      _is24_7 = existing.is24_7;
+      final start = _parseTimeOfDay(existing.startTime);
+      final end = _parseTimeOfDay(existing.endTime);
+      if (start != null) _startTime = start;
+      if (end != null) _endTime = end;
+    } else {
+      _is24_7 = widget.mode == 'Walk';
+    }
   }
 
   @override
@@ -387,6 +226,19 @@ class _StepDialogState extends State<StepDialog> {
   /// Converts [TimeOfDay] → "HH:mm" for storage.
   String _fmt24(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// Parses "HH:mm" back into a [TimeOfDay], or returns null when invalid.
+  TimeOfDay? _parseTimeOfDay(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour > 23 || minute > 59) {
+      return null;
+    }
+    return TimeOfDay(hour: hour, minute: minute);
+  }
 
   bool get _endBeforeStart =>
       (_endTime.hour * 60 + _endTime.minute) <=
@@ -503,8 +355,10 @@ class _StepDialogState extends State<StepDialog> {
                 color: modeColor,
                 icon: widget.getModeIcon(widget.mode),
               ),
-              title: '${widget.mode} Step',
-              subtitle: 'Add step details & schedule',
+              title: _isEditMode ? 'Edit ${widget.mode} Step' : '${widget.mode} Step',
+              subtitle: _isEditMode
+                  ? 'Update step details & schedule'
+                  : 'Add step details & schedule',
             ),
 
             // ── Scrollable body ───────────────────────────────────────────
@@ -789,7 +643,7 @@ class _StepDialogState extends State<StepDialog> {
                   Expanded(
                     flex: 2,
                     child: _gradientButton(
-                      label: 'Save Step',
+                      label: _isEditMode ? 'Update Step' : 'Save Step',
                       icon: Icons.check_rounded,
                       onTap: _save,
                     ),
@@ -799,104 +653,6 @@ class _StepDialogState extends State<StepDialog> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─── Add Another Step Dialog ──────────────────────────────────────────────────
-
-class AddStepDialog extends StatelessWidget {
-  final int stepCount;
-  final VoidCallback onAddAnother;
-  final VoidCallback onFinished;
-
-  const AddStepDialog({
-    super.key,
-    required this.stepCount,
-    required this.onAddAnother,
-    required this.onFinished,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _dialogContainer(
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _DialogHeader(
-            icon: _iconBox(
-              color: const Color(0xFF3EC97A),
-              icon: Icons.check_circle_outline,
-            ),
-            title: 'Step Added',
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: ContributeColors.surfaceAlt,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: ContributeColors.border),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: ContributeColors.accentSoft,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$stepCount',
-                        style: const TextStyle(
-                          color: ContributeColors.accent,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'step${stepCount > 1 ? 's' : ''} added to this route',
-                    style: const TextStyle(
-                      color: ContributeColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              children: [
-                _gradientButton(
-                  label: 'Add Another Step',
-                  icon: Icons.add_rounded,
-                  onTap: () {
-                    Navigator.pop(context);
-                    onAddAnother();
-                  },
-                ),
-                const SizedBox(height: 8),
-                _ghostButton(
-                  label: 'Finish Route',
-                  onTap: () {
-                    Navigator.pop(context);
-                    onFinished();
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

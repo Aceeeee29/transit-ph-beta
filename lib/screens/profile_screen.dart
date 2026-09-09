@@ -376,13 +376,6 @@ class _ProfileHeaderCard extends StatelessWidget {
             icon: Icons.straighten,
             color: _green,
           ),
-          Container(width: 1, height: 48, color: ProfileColors.border),
-          _statItem(
-            value: '${user.co2Saved.toStringAsFixed(1)} kg',
-            label: 'CO₂ Saved',
-            icon: Icons.eco_outlined,
-            color: const Color(0xFF3EC9D6),
-          ),
         ],
       ),
     );

@@ -57,6 +57,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   DateTime? _lastCameraMoveAt;
   bool _isNavigationStarted = false;
   bool _isAutoFollowEnabled = false;
+  int _traversedIndex = 0;
   List<route_model.Report> _routeReports = [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
@@ -710,6 +711,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     setState(() {
       _isNavigationStarted = true;
       _isAutoFollowEnabled = true;
+      _traversedIndex = 0;
     });
     _centerOnCurrentLocation();
   }
@@ -863,23 +865,34 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
   List<Polyline> get polylines {
     if (_pathPoints.length < 2) return [];
-    if (widget.route.steps.isEmpty) {
+
+    final trimStart = _trimStartIndex();
+
+    // One step-polyline, visibly trimmed so the travelled tail disappears.
+    List<Polyline> track(List<LatLng> pts, Color color, int fromIndex) {
+      final start = math.max(0, math.min(pts.length - 1, fromIndex));
+      final rest = pts.sublist(start);
+      if (rest.length < 2) return const [];
       return [
         Polyline(
-          points: _pathPoints,
+          points: rest,
           color: Colors.black,
           strokeWidth: 8.0,
           strokeCap: StrokeCap.round,
           strokeJoin: StrokeJoin.round,
         ),
         Polyline(
-          points: _pathPoints,
-          color: Colors.blue,
+          points: rest,
+          color: color,
           strokeWidth: 6.0,
           strokeCap: StrokeCap.round,
           strokeJoin: StrokeJoin.round,
         ),
       ];
+    }
+
+    if (widget.route.steps.isEmpty) {
+      return track(_pathPoints, Colors.blue, trimStart);
     }
 
     final boundaries = widget.route.stepBoundaries.isNotEmpty
@@ -896,23 +909,32 @@ class _RouteMapScreenState extends State<RouteMapScreen>
           : _pathPoints.length - 1;
       if (endIdx > startIdx) {
         final pts = _pathPoints.sublist(startIdx, endIdx + 1);
-        result.add(Polyline(
-          points: pts,
-          color: Colors.black,
-          strokeWidth: 8.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ));
-        result.add(Polyline(
-          points: pts,
-          color: color,
-          strokeWidth: 6.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ));
+        final relStart = trimStart - startIdx;
+        result.addAll(track(pts, color, relStart));
       }
     }
     return result;
+  }
+
+  /// Index of the path point nearest to the live position (monotonic), used to
+  /// drop the already-passed tail of the drawn route while navigating.
+  int _trimStartIndex() {
+    if (!_isNavigationStarted || _displayPosition == null) return 0;
+    final pos = _displayPosition!;
+    final distCalc = const Distance();
+    int best = 0;
+    double bestDist = double.infinity;
+    for (int i = 0; i < _pathPoints.length; i++) {
+      final d = distCalc.as(LengthUnit.Kilometer, pos, _pathPoints[i]);
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    if (best > _traversedIndex) {
+      _traversedIndex = best;
+    }
+    return _traversedIndex;
   }
 
   List<int> _computeEvenBoundaries() {
