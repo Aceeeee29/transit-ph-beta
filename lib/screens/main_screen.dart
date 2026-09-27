@@ -165,6 +165,13 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  void _openContributeRoute() {
+    setState(() {
+      _mapTabMode = MapTabMode.contribute;
+      _selectedIndex = 2;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
@@ -172,6 +179,7 @@ class _MainScreenState extends State<MainScreen> {
         routes: routes,
         onRefresh: _loadData,
         onOpenNearbyPlaces: _openNearbyPlaces,
+        onOpenContributeRoute: _openContributeRoute,
       ),
       FeedScreen(
         key: ValueKey(posts.length),

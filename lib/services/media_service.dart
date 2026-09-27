@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,10 +8,160 @@ import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 
+/// Thrown when a post media upload fails — carries a user-facing message
+/// plus the raw details for logs.
+class MediaUploadException implements Exception {
+  final String userMessage;
+  final String details;
+
+  const MediaUploadException(this.userMessage, [this.details = '']);
+
+  @override
+  String toString() => 'MediaUploadException: $userMessage $details';
+}
+
 class MediaService {
   static final ImagePicker _imagePicker = ImagePicker();
+  static FirebaseStorage get _storage => FirebaseStorage.instance;
   static bool _isRecording = false;
   static bool _isPlaying = false;
+
+  /// Max file size accepted by storage.rules (50MB).
+  static const int maxUploadBytes = 50 * 1024 * 1024;
+
+  /// Common preflight checks shared by image/video uploads.
+  /// Throws [MediaUploadException] with a specific message on failure.
+  static Future<void> _checkUploadable(File file, String kind) async {
+    if (!await file.exists()) {
+      throw MediaUploadException(
+        'Selected $kind is no longer available. Please re-select it.',
+        'file missing: ${file.path}',
+      );
+    }
+    final size = await file.length();
+    if (size <= 0) {
+      throw MediaUploadException(
+        'Selected $kind is empty. Please choose another file.',
+        'zero-byte file: ${file.path}',
+      );
+    }
+    if (size > maxUploadBytes) {
+      final mb = (size / (1024 * 1024)).toStringAsFixed(1);
+      throw MediaUploadException(
+        'This $kind is $mb MB — over the 50 MB limit. Pick a smaller file.',
+        'oversize file: $size bytes',
+      );
+    }
+  }
+
+  static Never _throwForFirebaseError(
+    Object e,
+    String kind,
+    String context,
+  ) {
+    debugPrint('[MediaService] $context failed: $e');
+    if (e is MediaUploadException) throw e;
+    if (e is TimeoutException) {
+      throw MediaUploadException(
+        'Upload timed out. Check your connection and try again.',
+        e.toString(),
+      );
+    }
+    if (e is FirebaseException) {
+      switch (e.code) {
+        case 'unauthenticated':
+          throw MediaUploadException(
+            'You must be signed in to attach $kind.',
+            e.toString(),
+          );
+        case 'unauthorized':
+        case 'permission-denied':
+        case 'denied':
+          throw MediaUploadException(
+            'Server rejected the upload (permission denied). Storage may not be enabled yet — try again later or contact support.',
+            e.toString(),
+          );
+        case 'quota-exceeded':
+          throw MediaUploadException(
+            'Server storage quota exceeded. Try again later.',
+            e.toString(),
+          );
+        case 'retry-limit-exceeded':
+        case 'unavailable':
+        case 'network-request-failed':
+        case 'unknown':
+          throw MediaUploadException(
+            'Upload failed — check your internet connection and try again. (If it keeps failing, Storage may not be enabled on the server.)',
+            e.toString(),
+          );
+        case 'object-not-found':
+          throw MediaUploadException(
+            'Upload failed unexpectedly. Please re-select the file.',
+            e.toString(),
+          );
+      }
+    }
+    throw MediaUploadException(
+      'Failed to upload $kind. Check your connection and try again.',
+      e.toString(),
+    );
+  }
+
+  /// Upload a post image to Firebase Storage and return its download URL.
+  /// Throws [MediaUploadException] with a specific message on failure.
+  static Future<String> uploadPostImage(File file, String postId) async {
+    const kind = 'photo';
+    try {
+      await _checkUploadable(file, kind);
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
+      final ref = _storage.ref().child('posts/$postId/images/$fileName');
+      final ext = path.extension(file.path).toLowerCase();
+      final contentType = ext == '.png'
+          ? 'image/png'
+          : ext == '.gif'
+              ? 'image/gif'
+              : ext == '.webp'
+                  ? 'image/webp'
+                  : 'image/jpeg';
+      await ref
+          .putFile(file, SettableMetadata(contentType: contentType))
+          .timeout(const Duration(minutes: 2));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      _throwForFirebaseError(e, kind, 'uploadPostImage');
+    }
+  }
+
+  /// Upload a post video to Firebase Storage and return its download URL.
+  /// Throws [MediaUploadException] with a specific message on failure.
+  static Future<String> uploadPostVideo(File file, String postId) async {
+    const kind = 'video';
+    try {
+      await _checkUploadable(file, kind);
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
+      final ref = _storage.ref().child('posts/$postId/videos/$fileName');
+      final ext = path.extension(file.path).toLowerCase();
+      final contentType = ext == '.mov'
+          ? 'video/quicktime'
+          : ext == '.webm'
+              ? 'video/webm'
+              : 'video/mp4';
+      await ref
+          .putFile(file, SettableMetadata(contentType: contentType))
+          .timeout(const Duration(minutes: 2));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      _throwForFirebaseError(e, kind, 'uploadPostVideo');
+    }
+  }
+
+  /// True when [url] looks like a remote (http/https) URL vs a local path.
+  static bool isRemoteUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
 
   /// Pick an image from the gallery
   static Future<File?> pickImageFromGallery() async {

@@ -2,7 +2,7 @@ part of 'contribute_screen.dart';
 
 extension _ContributeScreenEditSections on _ContributeScreenState {
   Future<void> _openLocationSearchScreenSection() async {
-    final query = await Navigator.of(context).push<String>(
+    final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ContributeLocationSearchScreen(
           initialQuery: _lastLocationSearchQuery,
@@ -10,11 +10,22 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
       ),
     );
 
-    if (!mounted || query == null) {
+    if (!mounted || result == null) {
       return;
     }
 
-    final normalizedQuery = query.trim();
+    // Tapped a live suggestion — coordinates included, no re-geocode needed.
+    if (result is LocationSearchResult) {
+      _onLocationPicked(
+        result.latitude,
+        result.longitude,
+        result.name,
+      );
+      return;
+    }
+
+    if (result is! String) return;
+    final normalizedQuery = result.trim();
     if (normalizedQuery.isEmpty) {
       return;
     }

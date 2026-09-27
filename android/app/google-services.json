@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "617760269760-epjf78pdjh4m3905u5g710c258v6d9tm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.transitph_beta",
+            "certificate_hash": "08cded14ebcdfbc778090c8511c16fb88c115d67"
+          }
+        },
+        {
           "client_id": "617760269760-ljgjd4ntekjvmf2lci3d63asd9ckgchu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

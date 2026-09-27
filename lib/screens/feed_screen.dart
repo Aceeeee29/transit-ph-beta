@@ -315,6 +315,7 @@ class _FeedScreenState extends State<FeedScreen> {
             MaterialPageRoute(
               builder: (_) => NotificationsScreen(
                 currentUserId: widget.currentUserId,
+                currentUserName: widget.currentUserName,
               ),
             ),
           ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:video_player/video_player.dart';
@@ -6,6 +8,11 @@ import '../../security/security_manager.dart';
 import 'feed_action_button.dart';
 import 'feed_colors.dart';
 import 'post_category_helpers.dart';
+
+bool _isRemoteMedia(String url) {
+  final lower = url.toLowerCase();
+  return lower.startsWith('http://') || lower.startsWith('https://');
+}
 
 /// Displays a single community post with its action bar, media, and comments.
 class FeedPostCard extends StatefulWidget {
@@ -44,16 +51,51 @@ class FeedPostCard extends StatefulWidget {
 
 class _FeedPostCardState extends State<FeedPostCard> {
   VideoPlayerController? _videoController;
+  String? _videoError;
 
   @override
   void initState() {
     super.initState();
-    if (widget.post.videoUrl != null) {
-      _videoController = VideoPlayerController.networkUrl(
-        Uri.parse(widget.post.videoUrl!),
-      )..initialize().then((_) {
-        if (mounted) setState(() {});
-      });
+    _initVideoController();
+  }
+
+  @override
+  void didUpdateWidget(FeedPostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.videoUrl != widget.post.videoUrl) {
+      _videoController?.dispose();
+      _videoController = null;
+      _videoError = null;
+      _initVideoController();
+    }
+  }
+
+  void _initVideoController() {
+    final videoUrl = widget.post.videoUrl?.trim();
+    if (videoUrl == null || videoUrl.isEmpty) return;
+    try {
+      if (_isRemoteMedia(videoUrl)) {
+        _videoController = VideoPlayerController.networkUrl(
+          Uri.parse(videoUrl),
+        );
+      } else if (!kIsWeb) {
+        // Legacy posts stored a local file path — still playable on-device.
+        _videoController = VideoPlayerController.file(File(videoUrl));
+      } else {
+        setState(() => _videoError = 'Unsupported video source.');
+        return;
+      }
+      _videoController!
+          .initialize()
+          .then((_) {
+            if (mounted) setState(() {});
+          })
+          .catchError((e) {
+            if (mounted) setState(() => _videoError = 'Video failed to load.');
+          });
+      _videoController!.setLooping(true);
+    } catch (_) {
+      _videoError = 'Video failed to load.';
     }
   }
 
@@ -109,7 +151,11 @@ class _FeedPostCardState extends State<FeedPostCard> {
               onDeleteTapped: widget.onDeleteTapped,
             ),
             const SizedBox(height: 12),
-            _PostContent(post: post, videoController: _videoController),
+            _PostContent(
+              post: post,
+              videoController: _videoController,
+              videoError: _videoError,
+            ),
             const SizedBox(height: 12),
             Divider(color: FeedColors.border, height: 1),
             const SizedBox(height: 8),
@@ -276,8 +322,13 @@ class _PostHeader extends StatelessWidget {
 class _PostContent extends StatelessWidget {
   final Post post;
   final VideoPlayerController? videoController;
+  final String? videoError;
 
-  const _PostContent({required this.post, required this.videoController});
+  const _PostContent({
+    required this.post,
+    required this.videoController,
+    this.videoError,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -301,9 +352,37 @@ class _PostContent extends StatelessWidget {
           const SizedBox(height: 12),
           _PostImageStrip(urls: post.imageUrls),
         ],
-        if (post.videoUrl != null && videoController != null) ...[
+        if (post.videoUrl != null) ...[
           const SizedBox(height: 12),
-          _VideoPlayer(controller: videoController!),
+          if (videoError != null)
+            Container(
+              height: 160,
+              decoration: BoxDecoration(
+                color: FeedColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.videocam_off_outlined,
+                      color: FeedColors.textSecondary,
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Video unavailable',
+                      style: TextStyle(
+                        color: FeedColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (videoController != null)
+            _VideoPlayer(controller: videoController!),
         ],
         if (post.taggedLocation != null) ...[
           const SizedBox(height: 10),
@@ -348,10 +427,102 @@ class _CategoryBadge extends StatelessWidget {
   }
 }
 
+Widget _mediaImage(String url) {
+  if (_isRemoteMedia(url)) {
+    return Image.network(
+      url,
+      width: 200,
+      height: 200,
+      fit: BoxFit.cover,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return Container(
+          width: 200,
+          height: 200,
+          color: FeedColors.surfaceAlt,
+          child: const Center(
+            child: CircularProgressIndicator(
+              color: FeedColors.accent,
+              strokeWidth: 2,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) => Container(
+        width: 200,
+        height: 200,
+        color: FeedColors.surfaceAlt,
+        child: const Icon(
+          Icons.broken_image_outlined,
+          color: FeedColors.textSecondary,
+        ),
+      ),
+    );
+  }
+  if (!kIsWeb) {
+    return Image.file(
+      File(url),
+      width: 200,
+      height: 200,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        width: 200,
+        height: 200,
+        color: FeedColors.surfaceAlt,
+        child: const Icon(
+          Icons.broken_image_outlined,
+          color: FeedColors.textSecondary,
+        ),
+      ),
+    );
+  }
+  return Container(
+    width: 200,
+    height: 200,
+    color: FeedColors.surfaceAlt,
+    child: const Icon(
+      Icons.broken_image_outlined,
+      color: FeedColors.textSecondary,
+    ),
+  );
+}
+
 class _PostImageStrip extends StatelessWidget {
   final List<String> urls;
 
   const _PostImageStrip({required this.urls});
+
+  void _openFullScreen(BuildContext context, int initialIndex) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            SizedBox(
+              height: 400,
+              child: PageView.builder(
+                itemCount: urls.length,
+                controller: PageController(initialPage: initialIndex),
+                itemBuilder: (_, i) => Center(
+                  child: _fullScreenImage(urls[i]),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -362,56 +533,87 @@ class _PostImageStrip extends StatelessWidget {
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           itemCount: urls.length,
-          itemBuilder:
-              (_, index) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    urls[index],
-                    width: 200,
-                    height: 200,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (_, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        width: 200,
-                        height: 200,
-                        color: FeedColors.surfaceAlt,
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            color: FeedColors.accent,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder:
-                        (_, __, ___) => Container(
-                          width: 200,
-                          height: 200,
-                          color: FeedColors.surfaceAlt,
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            color: FeedColors.textSecondary,
-                          ),
-                        ),
-                  ),
-                ),
+          itemBuilder: (_, index) => Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => _openFullScreen(context, index),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _mediaImage(urls[index]),
               ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _VideoPlayer extends StatelessWidget {
+Widget _fullScreenImage(String url) {
+  if (_isRemoteMedia(url)) {
+    return Image.network(
+      url,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => const Icon(
+        Icons.broken_image_outlined,
+        color: Colors.white70,
+        size: 48,
+      ),
+    );
+  }
+  if (!kIsWeb) {
+    return Image.file(
+      File(url),
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => const Icon(
+        Icons.broken_image_outlined,
+        color: Colors.white70,
+        size: 48,
+      ),
+    );
+  }
+  return const Icon(
+    Icons.broken_image_outlined,
+    color: Colors.white70,
+    size: 48,
+  );
+}
+
+class _VideoPlayer extends StatefulWidget {
   final VideoPlayerController controller;
 
   const _VideoPlayer({required this.controller});
 
   @override
+  State<_VideoPlayer> createState() => _VideoPlayerState();
+}
+
+class _VideoPlayerState extends State<_VideoPlayer> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTick);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTick);
+    super.dispose();
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     if (!controller.value.isInitialized) {
       return Container(
         height: 200,
@@ -427,11 +629,108 @@ class _VideoPlayer extends StatelessWidget {
         ),
       );
     }
+    final isPlaying = controller.value.isPlaying;
+    final position = controller.value.position;
+    final duration = controller.value.duration;
+    final progress = duration.inMilliseconds == 0
+        ? 0.0
+        : position.inMilliseconds / duration.inMilliseconds;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: AspectRatio(
-        aspectRatio: controller.value.aspectRatio,
-        child: VideoPlayer(controller),
+      child: Container(
+        color: Colors.black,
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (isPlaying) {
+                  controller.pause();
+                } else {
+                  controller.play();
+                }
+              },
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: controller.value.aspectRatio,
+                    child: VideoPlayer(controller),
+                  ),
+                  if (!isPlaying)
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              color: Colors.black.withOpacity(0.85),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (isPlaying) {
+                        controller.pause();
+                      } else {
+                        controller.play();
+                      }
+                    },
+                    child: Icon(
+                      isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 12,
+                        ),
+                      ),
+                      child: Slider(
+                        value: progress.clamp(0.0, 1.0),
+                        onChanged: (v) {
+                          final target = duration * v;
+                          controller.seekTo(target);
+                        },
+                        activeColor: FeedColors.accent,
+                        inactiveColor: Colors.white30,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

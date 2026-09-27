@@ -22,12 +22,14 @@ class HomeScreen extends StatefulWidget {
   final List<route_model.Route> routes;
   final Future<void> Function()? onRefresh;
   final VoidCallback onOpenNearbyPlaces;
+  final VoidCallback onOpenContributeRoute;
 
   const HomeScreen({
     super.key,
     required this.routes,
     this.onRefresh,
     required this.onOpenNearbyPlaces,
+    required this.onOpenContributeRoute,
   });
 
   @override

@@ -24,18 +24,26 @@ extension _ContributeScreenSections on _ContributeScreenState {
         totalDurS += orsDurS;
         totalFare +=
             steps[i].actualFare ??
-            RouteMetricsService.calculateFareForMode(steps[i].mode, orsDistM / 1000);
+            RouteMetricsService.calculateFareForMode(
+              steps[i].mode,
+              orsDistM / 1000,
+            );
       } else {
-        final startIdx = (i == 0)
-            ? 0
-            : (i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
-        final endIdx = (i < stepBoundaries.length)
-            ? stepBoundaries[i]
-            : pathPoints.length - 1;
+        final startIdx =
+            (i == 0)
+                ? 0
+                : (i - 1 < stepBoundaries.length ? stepBoundaries[i - 1] : 0);
+        final endIdx =
+            (i < stepBoundaries.length)
+                ? stepBoundaries[i]
+                : pathPoints.length - 1;
         double segDistKm = 0;
         for (int j = startIdx; j < endIdx && j + 1 < pathPoints.length; j++) {
-          segDistKm +=
-              distCalc.as(LengthUnit.Kilometer, pathPoints[j], pathPoints[j + 1]);
+          segDistKm += distCalc.as(
+            LengthUnit.Kilometer,
+            pathPoints[j],
+            pathPoints[j + 1],
+          );
         }
         totalDistKm += segDistKm;
         final speedKmh = _speedForMode(steps[i].mode);
@@ -52,15 +60,18 @@ extension _ContributeScreenSections on _ContributeScreenState {
     final fareStr = 'PHP ${totalFare.round()}';
     final schedule = _deriveRouteSchedule(steps);
 
-    final startLoc = _startLocationController.text.isEmpty
-        ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
-        : _startLocationController.text;
-    final endLoc = _endLocationController.text.isEmpty
-        ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
-        : _endLocationController.text;
-    final desc = _shortDescriptionController.text.isEmpty
-        ? 'Custom route with ${steps.length} steps'
-        : _shortDescriptionController.text;
+    final startLoc =
+        _startLocationController.text.isEmpty
+            ? 'Start Point (${pathPoints.first.latitude.toStringAsFixed(4)}, ${pathPoints.first.longitude.toStringAsFixed(4)})'
+            : _startLocationController.text;
+    final endLoc =
+        _endLocationController.text.isEmpty
+            ? 'End Point (${pathPoints.last.latitude.toStringAsFixed(4)}, ${pathPoints.last.longitude.toStringAsFixed(4)})'
+            : _endLocationController.text;
+    final desc =
+        _shortDescriptionController.text.isEmpty
+            ? 'Custom route with ${steps.length} steps'
+            : _shortDescriptionController.text;
 
     return route_model.Route(
       id: existingId ?? DateTime.now().toString(),
@@ -105,7 +116,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
       if (step.details.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Step $stepNo needs details for ${step.mode}.')),
+          SnackBar(
+            content: Text('Step $stepNo needs details for ${step.mode}.'),
+          ),
         );
         return false;
       }
@@ -117,7 +130,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
       if (!hasSchedule) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Step $stepNo needs operating hours for ${step.mode}.'),
+            content: Text(
+              'Step $stepNo needs operating hours for ${step.mode}.',
+            ),
           ),
         );
         return false;
@@ -126,7 +141,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
       if (step.actualFare == null || step.actualFare! < 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Step $stepNo needs a valid actual fare for ${step.mode}.'),
+            content: Text(
+              'Step $stepNo needs a valid actual fare for ${step.mode}.',
+            ),
           ),
         );
         return false;
@@ -138,7 +155,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
   Future<void> _submitSection({bool forceModeration = false}) async {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Need at least start and end points on map')),
+        const SnackBar(
+          content: Text('Need at least start and end points on map'),
+        ),
       );
       return;
     }
@@ -164,9 +183,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
         }
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit route: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to submit route: $e')));
         return;
       }
 
@@ -174,13 +193,14 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
       await showDialog(
         context: context,
-        builder: (_) =>
-            widget.routeToEdit != null
-                ? const _SubmitSuccessDialog(isEdit: true)
-                : _SubmitSuccessDialog(
-                  isEdit: false,
-                  quickCreateMode: _isQuickCreateMode,
-                ),
+        builder:
+            (_) =>
+                widget.routeToEdit != null
+                    ? const _SubmitSuccessDialog(isEdit: true)
+                    : _SubmitSuccessDialog(
+                      isEdit: false,
+                      quickCreateMode: _isQuickCreateMode,
+                    ),
       );
 
       if (widget.routeToEdit == null) {
@@ -194,7 +214,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
   void _onPreviewRouteSection() {
     if (pathPoints.length < 2 || steps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Need at least start, end points and one step')),
+        const SnackBar(
+          content: Text('Need at least start, end points and one step'),
+        ),
       );
       return;
     }
@@ -203,16 +225,17 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RoutePreview(
-          route: route,
-          onEdit: () {
-            Navigator.pop(context);
-          },
-          onSubmit: () {
-            Navigator.pop(context);
-            _submit();
-          },
-        ),
+        builder:
+            (_) => RoutePreview(
+              route: route,
+              onEdit: () {
+                Navigator.pop(context);
+              },
+              onSubmit: () {
+                Navigator.pop(context);
+                _submit();
+              },
+            ),
       ),
     );
   }
@@ -274,86 +297,185 @@ extension _ContributeScreenSections on _ContributeScreenState {
       ),
       actions: [
         GestureDetector(
-          onTap: () => _switchMapMode(
-            isNearby ? MapTabMode.contribute : MapTabMode.nearby,
-          ),
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: _accentSoft,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _accent.withOpacity(0.3)),
-            ),
-            child: Icon(
-              isNearby
-                  ? Icons.add_road_outlined
-                  : Icons.near_me_outlined,
-              color: _accent,
-              size: 18,
+          onTap:
+              () => _switchMapMode(
+                isNearby ? MapTabMode.contribute : MapTabMode.nearby,
+              ),
+          child: Tooltip(
+            message: isNearby
+                ? 'Back to route contribution'
+                : 'Show Nearby Places',
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: _accentSoft,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _accent.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isNearby
+                        ? Icons.add_road_outlined
+                        : Icons.near_me_outlined,
+                    color: _accent,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isNearby ? 'Contribute' : 'Show Nearby Places',
+                    style: const TextStyle(
+                      color: _accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        if (!isNearby) ...[
-          if (selectionMode == 'done' && steps.isNotEmpty)
-            GestureDetector(
-              onTap: _toggleEditHandles,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color:
-                      _showEditHandles ? _accentSoft : _surfaceAlt,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _showEditHandles
-                        ? _accent.withOpacity(0.35)
-                        : _border,
-                  ),
-                ),
-                child: Icon(
-                  _showEditHandles
-                      ? Icons.edit_location_alt_rounded
-                      : Icons.edit_location_alt_outlined,
-                  color: _showEditHandles ? _accent : _textSecondary,
-                  size: 18,
-                ),
-              ),
-            ),
-          GestureDetector(
-            onTap: _showTutorialOverlay,
+        GestureDetector(
+          onTap: _togglePins,
+          child: Tooltip(
+            message: _showPins ? 'Hide pins' : 'Show pins',
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: _surfaceAlt,
+                color: _showPins ? _accentSoft : _surfaceAlt,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _border),
+                border: Border.all(
+                  color: _showPins
+                      ? _accent.withOpacity(0.35)
+                      : _border,
+                ),
               ),
-              child: const Icon(Icons.help_outline_rounded,
-                  color: _textSecondary, size: 18),
+              child: Icon(
+                _showPins
+                    ? Icons.location_on_rounded
+                    : Icons.location_off_rounded,
+                color: _showPins ? _accent : _textSecondary,
+                size: 18,
+              ),
             ),
           ),
-          if (selectionMode == 'done')
-            GestureDetector(
-              onTap: _onPreviewRoute,
-              child: Container(
-                margin: const EdgeInsets.only(right: 16),
+        ),
+        // Secondary actions live in an overflow menu so the AppBar can
+        // never overflow, no matter how many become visible at once
+        // (e.g. after Load Example sets selectionMode to done with steps,
+        // which previously added edit-handles + preview buttons and broke
+        // the layout on narrow screens).
+        if (!isNearby)
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: PopupMenuButton<String>(
+              tooltip: 'More actions',
+              offset: const Offset(0, 44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              icon: Container(
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: _accentSoft,
+                  color: _surfaceAlt,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _accent.withOpacity(0.3)),
+                  border: Border.all(color: _border),
                 ),
-                child: const Icon(Icons.preview_rounded,
-                    color: _accent, size: 18),
+                child: const Icon(
+                  Icons.more_vert_rounded,
+                  color: _textSecondary,
+                  size: 18,
+                ),
               ),
+            onSelected: (value) {
+              switch (value) {
+                case 'handles':
+                  _toggleEditHandles();
+                case 'preview':
+                  _onPreviewRoute();
+                case 'tutorial':
+                  _showTutorialOverlay();
+              }
+            },
+            itemBuilder: (_) => [
+              if (selectionMode == 'done' && steps.isNotEmpty)
+                PopupMenuItem(
+                  value: 'handles',
+                  child: Row(
+                    children: [
+                      Icon(
+                        _showEditHandles
+                            ? Icons.edit_location_alt_rounded
+                            : Icons.edit_location_alt_outlined,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _showEditHandles
+                            ? 'Hide edit handles'
+                            : 'Show edit handles',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (selectionMode == 'done')
+                const PopupMenuItem(
+                  value: 'preview',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.preview_rounded,
+                        color: _accent,
+                        size: 18,
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Preview route',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: _textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const PopupMenuItem(
+                value: 'tutorial',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.help_outline_rounded,
+                      color: _textSecondary,
+                      size: 18,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Tutorial',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             ),
-        ],
+          ),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -397,20 +519,46 @@ extension _ContributeScreenSections on _ContributeScreenState {
           PolylineLayer(polylines: polylines),
           MarkerLayer(
             markers: [
-              if (pathPoints.isNotEmpty)
+              // POI reference pins (schools, attractions, parks, …) — shown
+              // in contribute mode too so users can draw routes relative to
+              // them. Deliberately non-interactive (IgnorePointer) so taps
+              // always fall through to route-point drawing; full details
+              // stay in Nearby Places mode. Hidden via the pins toggle.
+              if (_showPins)
+                for (final place in camanavaPlaces)
+                  Marker(
+                    point: LatLng(place.lat, place.lng),
+                    width: 34,
+                    height: 34,
+                    child: IgnorePointer(
+                      child: _NearbyPlacePin(
+                        place: place,
+                        selected: false,
+                      ),
+                    ),
+                  ),
+              if (_showPins && pathPoints.isNotEmpty)
                 Marker(
                   point: pathPoints.first,
-                  child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Colors.green,
+                    size: 40,
+                  ),
                 ),
-              if (pathPoints.length > 1)
+              if (_showPins && pathPoints.length > 1)
                 Marker(
                   point: pathPoints.last,
                   child: const Icon(Icons.flag, color: Colors.red, size: 40),
                 ),
-              if (_searchedLocation != null)
+              if (_showPins && _searchedLocation != null)
                 Marker(
                   point: _searchedLocation!,
-                  child: const Icon(Icons.my_location_rounded, color: _accent, size: 34),
+                  child: const Icon(
+                    Icons.my_location_rounded,
+                    color: _accent,
+                    size: 34,
+                  ),
                 ),
             ],
           ),
@@ -425,19 +573,26 @@ extension _ContributeScreenSections on _ContributeScreenState {
         ] else
           MarkerLayer(
             markers: [
-              for (final place in _visibleNearbyPlaces)
-                Marker(
-                  point: LatLng(place.lat, place.lng),
-                  width: _nearbySelectedPlace?.id == place.id ? 48 : 34,
-                  height: _nearbySelectedPlace?.id == place.id ? 48 : 34,
-                  child: GestureDetector(
-                    onTap: () => _onNearbyPlaceTapped(place),
-                    child: _NearbyPlacePin(place: place, selected: place.id == _nearbySelectedPlace?.id),
+              if (_showPins)
+                for (final place in _visibleNearbyPlaces)
+                  Marker(
+                    point: LatLng(place.lat, place.lng),
+                    width: _nearbySelectedPlace?.id == place.id ? 48 : 34,
+                    height: _nearbySelectedPlace?.id == place.id ? 48 : 34,
+                    child: GestureDetector(
+                      onTap: () => _onNearbyPlaceTapped(place),
+                      child: _NearbyPlacePin(
+                        place: place,
+                        selected: place.id == _nearbySelectedPlace?.id,
+                      ),
+                    ),
                   ),
-                ),
-              if (_nearbyPosition != null)
+              if (_showPins && _nearbyPosition != null)
                 Marker(
-                  point: LatLng(_nearbyPosition!.latitude, _nearbyPosition!.longitude),
+                  point: LatLng(
+                    _nearbyPosition!.latitude,
+                    _nearbyPosition!.longitude,
+                  ),
                   child: const _NearbyUserPin(),
                 ),
               if (_debugCoord != null)
@@ -456,7 +611,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
     int? totalOrsDurMinutes;
 
     if (_stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null)) {
-      totalOrsDistKm = _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000;
+      totalOrsDistKm =
+          _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000;
     }
     if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
       double totalSeconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
@@ -490,12 +646,15 @@ extension _ContributeScreenSections on _ContributeScreenState {
   Widget _buildInstructionPillSection() {
     if (selectionMode == 'done') return const SizedBox.shrink();
 
-    final String text = selectionMode == 'start'
-        ? 'Tap on the map to select the starting point'
-        : 'Tap to select next point for $currentMode';
+    final String text =
+        selectionMode == 'start'
+            ? 'Tap on the map to select the starting point'
+            : 'Tap to select next point for $currentMode';
 
+    // NOTE: sits above the bottom-left pins toggle (drawer 0-40,
+    // pins 46-80), so bottom is 88 to avoid overlap.
     return Positioned(
-      bottom: 50,
+      bottom: 88,
       left: 12,
       right: 12,
       child: Center(
@@ -526,8 +685,11 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       color: _accentSoft,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.touch_app_rounded,
-                        size: 13, color: _accent),
+                    child: const Icon(
+                      Icons.touch_app_rounded,
+                      size: 13,
+                      color: _accent,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -546,7 +708,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       onTap: _onFinishRoutePressed,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF3EC97A),
                           borderRadius: BorderRadius.circular(20),
@@ -554,8 +718,11 @@ extension _ContributeScreenSections on _ContributeScreenState {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.check_rounded,
-                                color: Colors.white, size: 14),
+                            const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Finish (${steps.length})',
@@ -585,12 +752,13 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       final selected = currentMode == mode;
                       final color = modeColors[mode] ?? _accent;
                       return GestureDetector(
-                        onTap: () =>
-                            _setUiState(() => currentMode = mode),
+                        onTap: () => _setUiState(() => currentMode = mode),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: selected ? color : _surfaceAlt,
                             borderRadius: BorderRadius.circular(16),
@@ -613,9 +781,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: selected
-                                      ? Colors.white
-                                      : _textPrimary,
+                                  color: selected ? Colors.white : _textPrimary,
                                 ),
                               ),
                             ],
@@ -636,8 +802,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
   Widget _buildStepChipsBarSection() {
     if (steps.isEmpty) return const SizedBox.shrink();
 
-    final bottom =
-        selectionMode == 'done' ? 84.0 : 148.0;
+    // Stacked above the pins toggle (46-80) and, when selecting points,
+    // above the instruction pill as well.
+    final bottom = selectionMode == 'done' ? 88.0 : 180.0;
 
     return Positioned(
       bottom: bottom,
@@ -653,7 +820,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 onLongPress: () => _deleteStep(i),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: _surface.withOpacity(0.96),
                     borderRadius: BorderRadius.circular(16),
@@ -740,16 +909,17 @@ extension _ContributeScreenSections on _ContributeScreenState {
             contentPadding: EdgeInsets.zero,
             isDense: true,
           ),
-          items: philippineRegions.keys.map((region) {
-            return DropdownMenuItem<String>(
-              value: region,
-              child: Text(
-                region,
-                style: const TextStyle(fontSize: 11),
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
+          items:
+              philippineRegions.keys.map((region) {
+                return DropdownMenuItem<String>(
+                  value: region,
+                  child: Text(
+                    region,
+                    style: const TextStyle(fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
           onChanged: _onRegionChanged,
         ),
       ),
@@ -774,13 +944,70 @@ extension _ContributeScreenSections on _ContributeScreenState {
     );
   }
 
+  Widget _buildPinsToggleSection() {
+    // Bottom-left, just above the route details drawer (contribute mode)
+    // or above the bottom nav (nearby mode). Kept clear of the MapControls
+    // box (top-left), the instruction pill, and the step chips — see the
+    // bottom offsets on those overlays.
+    final isNearby = _mapMode == MapTabMode.nearby;
+    return Positioned(
+      bottom: isNearby ? 16 : 46,
+      left: 12,
+      child: GestureDetector(
+        onTap: _togglePins,
+        child: Tooltip(
+          message: _showPins ? 'Hide pins' : 'Show pins',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: _showPins ? _accentSoft : _surface.withOpacity(0.97),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _showPins
+                    ? _accent.withOpacity(0.35)
+                    : _border,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _accent.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _showPins
+                      ? Icons.location_on_rounded
+                      : Icons.location_off_rounded,
+                  color: _showPins ? _accent : _textSecondary,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _showPins ? 'Hide Pins' : 'Show Pins',
+                  style: TextStyle(
+                    color: _showPins ? _accent : _textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFormDrawerSection(BuildContext context, double availableHeight) {
     // The drawer must always fit inside the body area (above the app bar,
     // bottom nav and keyboard) — otherwise its lower half sits off-screen and
     // scrolled content becomes unreachable.
-    final expandedHeight = (availableHeight * 0.6)
-        .clamp(200.0, availableHeight - 8.0)
-        .toDouble();
+    final expandedHeight =
+        (availableHeight * 0.6).clamp(200.0, availableHeight - 8.0).toDouble();
 
     return Positioned(
       bottom: 0,
@@ -923,21 +1150,25 @@ extension _ContributeScreenSections on _ContributeScreenState {
             const Text(
               'Route Steps',
               style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: _textPrimary),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: _textPrimary,
+              ),
             ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                  color: _accentSoft, borderRadius: BorderRadius.circular(8)),
+                color: _accentSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Text(
                 '${steps.length}',
                 style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: _accent),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: _accent,
+                ),
               ),
             ),
             const Spacer(),
@@ -946,9 +1177,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
               child: Text(
                 _showEditHandles ? 'Drag handles ON' : 'Drag handles',
                 style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: _accent),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _accent,
+                ),
               ),
             ),
           ],
@@ -980,12 +1212,16 @@ extension _ContributeScreenSections on _ContributeScreenState {
             height: 26,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8)),
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Text(
               '${index + 1}',
               style: TextStyle(
-                  color: color, fontSize: 12, fontWeight: FontWeight.w800),
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -1000,9 +1236,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _textPrimary),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
                 ),
                 Text(
                   _stepEditorSubtitle(step),
@@ -1024,9 +1261,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
             visualDensity: VisualDensity.compact,
             iconSize: 15,
             color: _textSecondary,
-            onPressed: index < steps.length - 1
-                ? () => _moveStep(index, 1)
-                : null,
+            onPressed:
+                index < steps.length - 1 ? () => _moveStep(index, 1) : null,
             icon: const Icon(Icons.arrow_downward),
           ),
           IconButton(
@@ -1084,7 +1320,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Location unavailable. Enable location to see distances from where you are.'),
+            'Location unavailable. Enable location to see distances from where you are.',
+          ),
           duration: Duration(seconds: 3),
         ),
       );
@@ -1120,7 +1357,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
       _nearbySelected.clear();
       _nearbySelected.addAll(place.categories);
     });
-    _mapController.move(LatLng(place.lat, place.lng), 14.5);
+    _mapController.move(
+      LatLng(place.lat, place.lng),
+      CamanavaBounds.initialZoom,
+    );
   }
 
   Future<void> _openNearbyListSheet() async {
@@ -1129,9 +1369,13 @@ extension _ContributeScreenSections on _ContributeScreenState {
     if (from != null) {
       sorted.sort((a, b) {
         final da = kmBetween(
-            LatLng(from.latitude, from.longitude), LatLng(a.lat, a.lng));
+          LatLng(from.latitude, from.longitude),
+          LatLng(a.lat, a.lng),
+        );
         final db = kmBetween(
-            LatLng(from.latitude, from.longitude), LatLng(b.lat, b.lng));
+          LatLng(from.latitude, from.longitude),
+          LatLng(b.lat, b.lng),
+        );
         return da.compareTo(db);
       });
     }
@@ -1139,11 +1383,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _NearbyPlacesListSheet(
-        places: sorted,
-        currentPosition: from,
-        onLocate: () => Navigator.pop(context),
-      ),
+      builder:
+          (_) => _NearbyPlacesListSheet(
+            places: sorted,
+            currentPosition: from,
+            onLocate: () => Navigator.pop(context),
+          ),
     );
     if (place != null && mounted) {
       _centerOnNearbyPlace(place);
@@ -1157,7 +1402,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     }
     _mapController.move(
       LatLng(_nearbyPosition!.latitude, _nearbyPosition!.longitude),
-      14.5,
+      CamanavaBounds.initialZoom,
     );
   }
 
@@ -1178,9 +1423,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
             color: selected ? color : _surface,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: selected ? color : _border, width: 1.2),
-            boxShadow: selected
-                ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8)]
-                : const [],
+            boxShadow:
+                selected
+                    ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8)]
+                    : const [],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1265,9 +1511,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
             const SizedBox(width: 6),
             GestureDetector(
               onTap: () async {
-                await Clipboard.setData(ClipboardData(
+                await Clipboard.setData(
+                  ClipboardData(
                     text:
-                        '${coord.latitude.toStringAsFixed(6)}, ${coord.longitude.toStringAsFixed(6)}'));
+                        '${coord.latitude.toStringAsFixed(6)}, ${coord.longitude.toStringAsFixed(6)}',
+                  ),
+                );
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -1276,12 +1525,20 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   ),
                 );
               },
-              child: const Icon(Icons.copy_rounded, color: _textSecondary, size: 14),
+              child: const Icon(
+                Icons.copy_rounded,
+                color: _textSecondary,
+                size: 14,
+              ),
             ),
             const SizedBox(width: 6),
             GestureDetector(
               onTap: () => _setUiState(() => _debugCoord = null),
-              child: const Icon(Icons.close_rounded, color: _textSecondary, size: 14),
+              child: const Icon(
+                Icons.close_rounded,
+                color: _textSecondary,
+                size: 14,
+              ),
             ),
           ],
         ),
@@ -1292,7 +1549,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
   Widget _buildNearbyInfoCard(Place place) {
     final distanceKm = _nearbyDistanceTo(place);
     final typeLabel = place.categories.map((c) => c.singularLabel).join(', ');
-    final locationParts = [place.city, if (place.address != null) place.address!];
+    final locationParts = [
+      place.city,
+      if (place.address != null) place.address!,
+    ];
     return Positioned(
       left: 12,
       right: 12,
@@ -1321,8 +1581,11 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 color: place.categories.first.color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(place.categories.first.icon,
-                  color: place.categories.first.color, size: 20),
+              child: Icon(
+                place.categories.first.icon,
+                color: place.categories.first.color,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1342,10 +1605,14 @@ extension _ContributeScreenSections on _ContributeScreenState {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () =>
-                            _setUiState(() => _nearbySelectedPlace = null),
-                        child: const Icon(Icons.close_rounded,
-                            color: _textSecondary, size: 18),
+                        onTap:
+                            () =>
+                                _setUiState(() => _nearbySelectedPlace = null),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: _textSecondary,
+                          size: 18,
+                        ),
                       ),
                     ],
                   ),
@@ -1353,16 +1620,20 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   Text(
                     typeLabel,
                     style: const TextStyle(
-                        color: _accent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600),
+                      color: _accent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (locationParts.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.place_outlined,
-                            color: _textSecondary, size: 13),
+                        const Icon(
+                          Icons.place_outlined,
+                          color: _textSecondary,
+                          size: 13,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -1370,7 +1641,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                color: _textSecondary, fontSize: 11),
+                              color: _textSecondary,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -1445,22 +1718,48 @@ extension _ContributeScreenSections on _ContributeScreenState {
       bottom: 14,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           GestureDetector(
             onTap: _openNearbyListSheet,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(color: _accent.withOpacity(0.12), blurRadius: 12),
-                ],
+            child: Tooltip(
+              message: 'Show Nearby Places list',
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withOpacity(0.12),
+                      blurRadius: 12,
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.format_list_bulleted_rounded,
+                      color: _accent,
+                      size: 20,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Show Nearby Places',
+                      style: TextStyle(
+                        color: _accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.format_list_bulleted_rounded,
-                  color: _accent, size: 22),
             ),
           ),
           const SizedBox(height: 12),
@@ -1476,13 +1775,20 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   BoxShadow(color: _accent.withOpacity(0.4), blurRadius: 14),
                 ],
               ),
-              child: _nearbyIsLocating
-                  ? const Padding(
-                      padding: EdgeInsets.all(13),
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.my_location, color: Colors.white, size: 22),
+              child:
+                  _nearbyIsLocating
+                      ? const Padding(
+                        padding: EdgeInsets.all(13),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Icon(
+                        Icons.my_location,
+                        color: Colors.white,
+                        size: 22,
+                      ),
             ),
           ),
         ],
@@ -1510,8 +1816,9 @@ class _NearbyPlacePin extends StatelessWidget {
         border: Border.all(color: Colors.white, width: selected ? 3 : 2),
         boxShadow: [
           BoxShadow(
-              color: color.withOpacity(selected ? 0.6 : 0.45),
-              blurRadius: selected ? 12 : 8),
+            color: color.withOpacity(selected ? 0.6 : 0.45),
+            blurRadius: selected ? 12 : 8,
+          ),
         ],
       ),
       child: Icon(
@@ -1542,8 +1849,7 @@ class _NearbyUserPin extends StatelessWidget {
           ),
         ],
       ),
-      child: const Icon(Icons.my_location,
-          color: Colors.white, size: 20),
+      child: const Icon(Icons.my_location, color: Colors.white, size: 20),
     );
   }
 }
@@ -1607,10 +1913,7 @@ class _NearbyPlacesListSheet extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
               child: Text(
                 'Sorted nearest to farthest from you',
-                style: TextStyle(
-                  color: Color(0xFF7A92B2),
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: Color(0xFF7A92B2), fontSize: 11),
               ),
             ),
           const Divider(height: 1, color: Color(0xFFD4E4F7)),
@@ -1621,13 +1924,16 @@ class _NearbyPlacesListSheet extends StatelessWidget {
               itemCount: places.length,
               itemBuilder: (context, index) {
                 final place = places[index];
-                final distanceKm = currentPosition == null
-                    ? null
-                    : kmBetween(
-                        LatLng(currentPosition!.latitude,
-                            currentPosition!.longitude),
-                        LatLng(place.lat, place.lng),
-                      );
+                final distanceKm =
+                    currentPosition == null
+                        ? null
+                        : kmBetween(
+                          LatLng(
+                            currentPosition!.latitude,
+                            currentPosition!.longitude,
+                          ),
+                          LatLng(place.lat, place.lng),
+                        );
                 return _NearbyPlaceListTile(
                   place: place,
                   distanceKm: distanceKm,
@@ -1669,8 +1975,7 @@ class _NearbyPlaceListTile extends StatelessWidget {
                 color: color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(place.categories.first.icon,
-                  color: color, size: 18),
+              child: Icon(place.categories.first.icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1690,15 +1995,16 @@ class _NearbyPlaceListTile extends StatelessWidget {
                   Text(
                     '${place.city} · ${place.categories.map((c) => c.label).join(', ')}',
                     style: const TextStyle(
-                        color: Color(0xFF7A92B2), fontSize: 11),
+                      color: Color(0xFF7A92B2),
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
             ),
             if (distanceKm != null)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEAF6FF),
                   borderRadius: BorderRadius.circular(8),
@@ -1713,8 +2019,11 @@ class _NearbyPlaceListTile extends StatelessWidget {
                 ),
               ),
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded,
-                color: Color(0xFF7A92B2), size: 18),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFF7A92B2),
+              size: 18,
+            ),
           ],
         ),
       ),

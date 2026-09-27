@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'settings_screen.dart';
 import '../services/gamification_service.dart';
 import '../services/settings_service.dart';
@@ -19,7 +18,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   gamification_user.User? user;
-  bool _isLoggingOut = false;
   bool _showEmailInProfile = false;
   String _distanceUnit = 'Miles';
 
@@ -52,22 +50,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _logout() async {
-    if (_isLoggingOut) return;
-    setState(() => _isLoggingOut = true);
-    try {
-      await firebase_auth.FirebaseAuth.instance.signOut();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoggingOut = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (user == null) {
@@ -87,43 +69,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: ProfileColors.bg,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          _ProfileHeaderCard(
-            user: user!,
-            initials: initials,
-            isLoggingOut: _isLoggingOut,
-            showEmailInProfile: _showEmailInProfile,
-            distanceDisplay: RouteMetricsService.formatDistanceForUnit(
-              user!.totalDistance,
-              distanceUnit: _distanceUnit,
-            ),
-            onLogout: _logout,
-          ),
-          Expanded(
-            child: DefaultTabController(
-              length: 3,
-              child: Column(
-                children: [
-                  _buildTabBar(),
-                  Container(height: 1, color: ProfileColors.border),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        AchievementsTab(userAchievements: user!.achievements),
-                        const BadgesTab(),
-                        ContributionsTab(
-                          userEmail: user!.email,
-                          distanceUnit: _distanceUnit,
-                        ),
-                      ],
-                    ),
+      body: DefaultTabController(
+        length: 3,
+        child: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) {
+            return [
+              SliverToBoxAdapter(
+                child: _ProfileHeaderCard(
+                  user: user!,
+                  initials: initials,
+                  showEmailInProfile: _showEmailInProfile,
+                  distanceDisplay: RouteMetricsService.formatDistanceForUnit(
+                    user!.totalDistance,
+                    distanceUnit: _distanceUnit,
                   ),
-                ],
+                ),
               ),
-            ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _ProfileTabBarDelegate(_buildTabBar()),
+              ),
+            ];
+          },
+          body: TabBarView(
+            children: [
+              AchievementsTab(userAchievements: user!.achievements),
+              const BadgesTab(),
+              ContributionsTab(
+                userEmail: user!.email,
+                distanceUnit: _distanceUnit,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -168,13 +146,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => SettingsScreen(
-                  userName: user!.name,
-                  userEmail: user!.email,
-                ),
+                builder:
+                    (_) => SettingsScreen(
+                      userName: user!.name,
+                      userEmail: user!.email,
+                    ),
               ),
             );
             if (!mounted) return;
+            await _loadUser();
             await _loadPreferences();
           },
           child: Container(
@@ -203,14 +183,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildTabBar() {
     return Container(
-      color: ProfileColors.surface,
+      decoration: const BoxDecoration(
+        color: ProfileColors.surface,
+        border: Border(bottom: BorderSide(color: ProfileColors.border)),
+      ),
       child: const TabBar(
         labelColor: ProfileColors.accent,
         unselectedLabelColor: ProfileColors.textSecondary,
         indicatorColor: ProfileColors.accent,
         indicatorWeight: 2.5,
         labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        unselectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
         tabs: [
           Tab(text: 'Achievements'),
           Tab(text: 'Badges'),
@@ -221,25 +207,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// ─── Pinned tab bar sliver delegate ──────────────────────────────────────────
+
+class _ProfileTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget tabBar;
+
+  _ProfileTabBarDelegate(this.tabBar);
+
+  @override
+  double get minExtent => kTextTabBarHeight + 1;
+
+  @override
+  double get maxExtent => kTextTabBarHeight + 1;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return tabBar;
+  }
+
+  @override
+  bool shouldRebuild(covariant _ProfileTabBarDelegate oldDelegate) {
+    return oldDelegate.tabBar != tabBar;
+  }
+}
+
 // ─── Profile header card ─────────────────────────────────────────────────────
 
 class _ProfileHeaderCard extends StatelessWidget {
   final gamification_user.User user;
   final String initials;
-  final bool isLoggingOut;
   final bool showEmailInProfile;
   final String distanceDisplay;
-  final VoidCallback onLogout;
 
   static const _green = Color(0xFF3EC97A);
 
   const _ProfileHeaderCard({
     required this.user,
     required this.initials,
-    required this.isLoggingOut,
     required this.showEmailInProfile,
     required this.distanceDisplay,
-    required this.onLogout,
   });
 
   @override
@@ -264,17 +274,15 @@ class _ProfileHeaderCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             showEmailInProfile ? user.email : 'Email hidden',
-            style: const TextStyle(fontSize: 13, color: ProfileColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 13,
+              color: ProfileColors.textSecondary,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
-          if (_hasTagData()) ...[
-            const SizedBox(height: 12),
-            _pills(),
-          ],
+          if (_hasTagData()) ...[const SizedBox(height: 12), _pills()],
           const SizedBox(height: 20),
           _statsRow(),
-          const SizedBox(height: 16),
-          _logoutButton(),
         ],
       ),
     );
@@ -381,44 +389,6 @@ class _ProfileHeaderCard extends StatelessWidget {
     );
   }
 
-  Widget _logoutButton() {
-    return GestureDetector(
-      onTap: isLoggingOut ? null : onLogout,
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: ProfileColors.danger.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ProfileColors.danger.withOpacity(0.3)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (isLoggingOut)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  color: ProfileColors.danger,
-                  strokeWidth: 2,
-                ),
-              )
-            else
-              const Icon(Icons.logout_rounded, color: ProfileColors.danger, size: 17),
-            const SizedBox(width: 8),
-            Text(
-              isLoggingOut ? 'Logging out...' : 'Log Out',
-              style: const TextStyle(
-                color: ProfileColors.danger,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _pill({required String label, IconData? icon, required Color color}) {
     return Container(
@@ -477,11 +447,13 @@ class _ProfileHeaderCard extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: ProfileColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 11,
+              color: ProfileColors.textSecondary,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

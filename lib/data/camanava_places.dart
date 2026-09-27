@@ -18,8 +18,9 @@ class CamanavaBounds {
 
 /// Curated CAMANAVA points of interest used by the "Nearby Places" module.
 ///
-/// This is a hand-compiled community dataset for the beta: coordinates are
-/// approximate (city-level accuracy) and descriptions are short summaries.
+/// This is a hand-compiled community dataset for the beta. Most entries have
+/// now been re-pinned via the in-app tap-to-copy coord chip (Sep 2026).
+/// A few remain approximate/pending — see inline notes below.
 /// Categories map to the toggleable map filters (Attractions, Schools,
 /// Hospitals, Malls, Parks).
 const List<Place> camanavaPlaces = [
@@ -29,8 +30,8 @@ const List<Place> camanavaPlaces = [
     name: 'Bonifacio Monument',
     city: 'Caloocan',
     categories: [PlaceCategory.tourist, PlaceCategory.park],
-    lat: 14.6533,
-    lng: 120.9829,
+    lat: 14.657028,
+    lng: 120.983952,
     address: 'Rizal Ave. Ext., Grace Park, Caloocan',
     description:
         'Iconsikong pambansang bantayog ni Andres Bonifacio na dinisenyo ni '
@@ -42,8 +43,8 @@ const List<Place> camanavaPlaces = [
     name: 'San Bartolome Church (Malabon)',
     city: 'Malabon',
     categories: [PlaceCategory.tourist],
-    lat: 14.6610,
-    lng: 120.9560,
+    lat: 14.658696,
+    lng: 120.951531,
     address: 'C. Arellano St., Malabon',
     description:
         'Isa sa mga pinakalumang simbahan sa bansa (itinatag noong 1590s). '
@@ -55,53 +56,29 @@ const List<Place> camanavaPlaces = [
     name: 'San Jose de Navotas Parish Church',
     city: 'Navotas',
     categories: [PlaceCategory.tourist],
-    lat: 14.6450,
-    lng: 120.9390,
+    lat: 14.648979,
+    lng: 120.976529,
     address: 'M. Naval St., Navotas',
     description:
         'Makasaysayang simbahan ng Navotas malapit sa fish port. Dito '
         'nagsisimula ang routicon ng mga deboto at turista tuwing fiesta ng '
         'San Jose sa buwan ng Marso.',
   ),
-  Place(
-    id: 'navotas-fish-port',
-    name: 'Navotas Fish Port Complex',
-    city: 'Navotas',
-    categories: [PlaceCategory.tourist],
-    lat: 14.6480,
-    lng: 120.9330,
-    address: 'N. Corner of M. Naval St., Navotas',
-    description:
-        'Pinakamalaking fish port sa Pilipinas. Bukal ng sariwang seafood — '
-        'best sa madaling araw para sa palengke tour at pansit ng mga '
-        'pagkaing-dagat na kainan sa paligid.',
-  ),
+  // NOTE: 'navotas-fish-port' (Navotas Fish Port Complex) removed per request.
   Place(
     id: 'pio-valenzuela-shrine',
     name: 'Pio Valenzuela Shrine',
     city: 'Valenzuela',
     categories: [PlaceCategory.tourist],
-    lat: 14.7060,
-    lng: 120.9540,
+    lat: 14.708556,
+    lng: 120.944992,
     address: 'Pariancillo Villa, Valenzuela',
     description:
         'Apo ng makabayang si Dr. Pio Valenzuela, Katipunero at kasapi ng '
         'Kataas-taasang Kagalang-galangang Katipunan. Historical site na '
         'nagpapakita ng pamumuhay noong panahon ng rebolusyon.',
   ),
-  Place(
-    id: 'malabon-zoo',
-    name: 'Malabon Zoo & Wildlife Park',
-    city: 'Malabon',
-    categories: [PlaceCategory.tourist, PlaceCategory.park],
-    lat: 14.6640,
-    lng: 120.9530,
-    address: 'C. Arellano St., Malabon',
-    description:
-        'Pangalawa sa pinakamatandang zoo sa bansa, tahanan ng sikat na '
-        'crocodile collection at native wildlife. Family-friendly galaan '
-        'destination para sa weekend.',
-  ),
+  // NOTE: 'malabon-zoo' (Malabon Zoo & Wildlife Park) removed per request.
 
   // ── Schools ─────────────────────────────────────────────────────────────
   Place(
@@ -109,20 +86,31 @@ const List<Place> camanavaPlaces = [
     name: 'Manila Central University',
     city: 'Caloocan',
     categories: [PlaceCategory.school],
-    lat: 14.6490,
-    lng: 120.9720,
+    lat: 14.658945,
+    lng: 120.98638,
     address: 'Samson Rd., Caloocan',
     description:
         'Pioneer private university sa Caloocan, kilala sa nursing at med. '
         'Malapit sa ospital nito — MCU-FDTMF Hospital.',
   ),
   Place(
+    id: 'ue-caloocan',
+    name: 'University of the East Caloocan',
+    city: 'Caloocan',
+    categories: [PlaceCategory.school],
+    lat: 14.658043,
+    lng: 120.976026,
+    address: 'Samson Rd., Caloocan',
+    description: 'UE Caloocan campus sa Samson Road — kilala sa business, '
+        'engineering at basic education programs.',
+  ),
+  Place(
     id: 'sti-caloocan',
     name: 'STI College Caloocan',
     city: 'Caloocan',
     categories: [PlaceCategory.school],
-    lat: 14.6488,
-    lng: 120.9718,
+    lat: 14.657767,
+    lng: 120.976511,
     address: 'Samson Rd., Caloocan',
     description:
         'STI campus malapit sa MCU. Sikat sa IT at business programs nito.',
@@ -132,8 +120,8 @@ const List<Place> camanavaPlaces = [
     name: 'Caloocan High School',
     city: 'Caloocan',
     categories: [PlaceCategory.school],
-    lat: 14.6620,
-    lng: 120.9770,
+    lat: 14.651012,
+    lng: 120.981581,
     address: '10th Ave., Grace Park, Caloocan',
     description: 'Isa sa pinakamalaking public high schools sa Caloocan.',
   ),
@@ -142,8 +130,8 @@ const List<Place> camanavaPlaces = [
     name: 'La Consolacion College Caloocan',
     city: 'Caloocan',
     categories: [PlaceCategory.school],
-    lat: 14.6625,
-    lng: 120.9760,
+    lat: 14.652095,
+    lng: 120.972932,
     address: '8th Ave., Grace Park, Caloocan',
     description: 'Catholic school na kilala sa basic at higher education.',
   ),
@@ -152,8 +140,8 @@ const List<Place> camanavaPlaces = [
     name: 'Malabon National High School',
     city: 'Malabon',
     categories: [PlaceCategory.school],
-    lat: 14.6680,
-    lng: 120.9600,
+    lat: 14.677065,
+    lng: 120.942084,
     address: 'D. Gregorio, Malabon',
     description: 'Public high school sa puso ng Malabon.',
   ),
@@ -162,8 +150,8 @@ const List<Place> camanavaPlaces = [
     name: 'Navotas National High School',
     city: 'Navotas',
     categories: [PlaceCategory.school],
-    lat: 14.6530,
-    lng: 120.9430,
+    lat: 14.657873,
+    lng: 120.948418,
     address: 'M. Naval St., Navotas',
     description: 'Pangunahing public secondary school ng Navotas.',
   ),
@@ -172,8 +160,8 @@ const List<Place> camanavaPlaces = [
     name: 'St. Louis College Valenzuela',
     city: 'Valenzuela',
     categories: [PlaceCategory.school],
-    lat: 14.6900,
-    lng: 120.9650,
+    lat: 14.695719,
+    lng: 120.971437,
     address: 'Maysan Rd., Valenzuela',
     description: 'Catholic school kilala sa edukasyon at vocational training.',
   ),
@@ -182,22 +170,34 @@ const List<Place> camanavaPlaces = [
     name: 'Pamantasan ng Lungsod ng Valenzuela',
     city: 'Valenzuela',
     categories: [PlaceCategory.school],
-    lat: 14.7040,
-    lng: 120.9580,
+    lat: 14.693982,
+    lng: 120.969447,
     address: 'Tongco St., Poblacion II, Valenzuela',
     description: 'City university ng Valenzuela (dating Valenzuela City '
         'Polytechnic College).',
   ),
   Place(
-    id: 'pio-valenzuela-nhs',
-    name: 'Pio Valenzuela National High School',
+    id: 'valenzuela-nhs',
+    name: 'Valenzuela National High School',
     city: 'Valenzuela',
     categories: [PlaceCategory.school],
-    lat: 14.7050,
-    lng: 120.9630,
+    lat: 14.672602,
+    lng: 120.984830,
     address: 'Marulas, Valenzuela',
-    description: 'Public high school na ipinangalan sa bayaning si Dr. Pio '
-        'Valenzuela.',
+    description: 'Public high school sa Valenzuela — dating tinawag na Pio '
+        'Valenzuela National High School.',
+  ),
+  Place(
+    id: 'olfu',
+    name: 'Our Lady of Fatima University',
+    city: 'Valenzuela',
+    categories: [PlaceCategory.school],
+    lat: 14.716363,
+    lng: 121.060954,
+    address: 'To confirm — see note below',
+    description: 'Pribadong unibersidad na kilala sa nursing, medicine at '
+        'allied health programs. Pinagmulan ng Fatima University Medical '
+        'Center.',
   ),
 
   // ── Hospitals ───────────────────────────────────────────────────────────
@@ -216,8 +216,8 @@ const List<Place> camanavaPlaces = [
     name: 'MCU-FDTMF Hospital',
     city: 'Caloocan',
     categories: [PlaceCategory.hospital],
-    lat: 14.6490,
-    lng: 120.9720,
+    lat: 14.657536,
+    lng: 120.987050,
     address: 'Samson Rd., Caloocan',
     description: 'University hospital ng MCU, kilala sa pangkalahatang '
         'medical at surgical care.',
@@ -227,8 +227,8 @@ const List<Place> camanavaPlaces = [
     name: 'Caloocan Medical Center',
     city: 'Caloocan',
     categories: [PlaceCategory.hospital],
-    lat: 14.6550,
-    lng: 120.9790,
+    lat: 14.648295,
+    lng: 120.973461,
     address: 'Gen. Luna St., Caloocan',
     description: 'Secondary hospital sa Caloocan para sa outpatient at '
         'inpatient care.',
@@ -238,8 +238,8 @@ const List<Place> camanavaPlaces = [
     name: 'Ospital ng Malabon',
     city: 'Malabon',
     categories: [PlaceCategory.hospital],
-    lat: 14.6660,
-    lng: 120.9600,
+    lat: 14.657190,
+    lng: 120.950643,
     address: 'Brgy. San Agustin, Malabon',
     description: 'Lokal na pampublikong ospital ng Malabon.',
   ),
@@ -248,6 +248,7 @@ const List<Place> camanavaPlaces = [
     name: 'Navotas City Hospital',
     city: 'Navotas',
     categories: [PlaceCategory.hospital],
+    // TODO: coordinates still pending re-pin ("pa").
     lat: 14.6460,
     lng: 120.9440,
     address: 'M. Naval St., Navotas',
@@ -258,21 +259,22 @@ const List<Place> camanavaPlaces = [
     name: 'Fatima University Medical Center',
     city: 'Valenzuela',
     categories: [PlaceCategory.hospital],
-    lat: 14.6680,
-    lng: 120.9690,
+    lat: 14.678057,
+    lng: 120.980371,
     address: 'McArthur Hwy., Karuhatan, Valenzuela',
     description: 'Teaching hospital ng Our Lady of Fatima University, kilala '
         'sa Malasakit at specialist care.',
   ),
   Place(
-    id: 'valenzuela-general-hospital',
-    name: 'Valenzuela City General Hospital',
+    id: 'valenzuela-medical-center',
+    name: 'Valenzuela Medical Center',
     city: 'Valenzuela',
     categories: [PlaceCategory.hospital],
-    lat: 14.7010,
-    lng: 120.9540,
+    lat: 14.689841,
+    lng: 120.977759,
     address: 'A. Pablo St., Valenzuela',
-    description: 'Pampublikong ospital ng Lungsod ng Valenzuela.',
+    description: 'Pampublikong ospital ng Lungsod ng Valenzuela — dating '
+        'tinawag na Valenzuela City General Hospital.',
   ),
 
   // ── Malls ───────────────────────────────────────────────────────────────
@@ -281,60 +283,75 @@ const List<Place> camanavaPlaces = [
     name: 'SM Center Sangandaan',
     city: 'Caloocan',
     categories: [PlaceCategory.mall],
-    lat: 14.6490,
-    lng: 120.9790,
+    lat: 14.658071,
+    lng: 120.971969,
     address: 'Sangandaan, Caloocan',
     description: 'Compact SM center malapit sa Monumento — madalas na '
         'meeting point ng mga commuter.',
+  ),
+  Place(
+    id: 'sm-grand-central',
+    name: 'SM City Grand Central',
+    city: 'Caloocan',
+    categories: [PlaceCategory.mall],
+    lat: 14.654965,
+    lng: 120.984256,
+    address: 'Rizal Ave. Ext., Monumento, Caloocan',
+    description: 'Malaking SM mall sa Monumento — dating Ever Gotesco Grand '
+        'Central, katabi ng LRT Monumento.',
   ),
   Place(
     id: 'monumento-mall',
     name: 'Monumento Mall',
     city: 'Caloocan',
     categories: [PlaceCategory.mall],
-    lat: 14.6540,
-    lng: 120.9830,
+    lat: 14.654384,
+    lng: 120.984039,
     address: 'Rizal Ave. Ext., Caloocan',
     description: 'Mall sa tabi ng LRT Monumento, sikat sa local stalls at '
         'foodcourt.',
   ),
   Place(
-    id: 'metro-mall-monumento',
-    name: 'Metro Mall Monumento',
+    id: 'caloocan-mall',
+    name: 'Caloocan Mall',
     city: 'Caloocan',
     categories: [PlaceCategory.mall],
-    lat: 14.6550,
-    lng: 120.9820,
+    lat: 14.654141,
+    lng: 120.984023,
     address: 'Rizal Ave. Ext., Caloocan',
-    description: 'Lumang public market-mall combo ng Monumento.',
+    description: 'Lumang public market-mall combo ng Monumento — dating '
+        'tinawag na Metro Mall Monumento.',
+  ),
+  // NOTE: 'sm-malabon' (SM Center Malabon) removed per request.
+  Place(
+    id: 'vmall-monumento',
+    name: 'VMall Monumento',
+    city: 'Caloocan',
+    categories: [PlaceCategory.mall],
+    lat: 14.655445,
+    lng: 120.983665,
+    address: 'Rizal Ave. Ext., Monumento, Caloocan',
+    description: 'Victory Mall sa Monumento circle — foodcourt at local stalls '
+        'katabi ng LRT.',
   ),
   Place(
-    id: 'sm-malabon',
-    name: 'SM Center Malabon',
-    city: 'Malabon',
+    id: 'waltermart-caloocan',
+    name: 'WalterMart Caloocan',
+    city: 'Caloocan',
     categories: [PlaceCategory.mall],
-    lat: 14.6670,
-    lng: 120.9570,
-    address: 'Brgy. Catmon, Malabon',
-    description: 'Malaking mall sa Malabon na nagsisilbing mall ng bayan.',
-  ),
-  Place(
-    id: 'waltermart-navotas',
-    name: 'WalterMart Navotas',
-    city: 'Navotas',
-    categories: [PlaceCategory.mall],
-    lat: 14.6500,
-    lng: 120.9390,
-    address: 'M. Naval St., Navotas',
-    description: 'Supermarket at retail na paborito ng mga Navoteño.',
+    lat: 14.641783,
+    lng: 120.976003,
+    address: 'Caloocan',
+    description: 'Supermarket at retail — dating naka-tag bilang WalterMart '
+        'Navotas, ngayon nakumpirma na nasa Caloocan.',
   ),
   Place(
     id: 'sm-city-valenzuela',
     name: 'SM City Valenzuela',
     city: 'Valenzuela',
     categories: [PlaceCategory.mall],
-    lat: 14.6670,
-    lng: 120.9700,
+    lat: 14.685566,
+    lng: 120.976647,
     address: 'McArthur Hwy., Karuhatan, Valenzuela',
     description: 'Pinakamalaking mall sa Valenzuela, mayron cinema at '
         'central foodcourt near McArthur Highway.',
@@ -349,6 +366,17 @@ const List<Place> camanavaPlaces = [
     address: 'McArthur Hwy., Valenzuela',
     description: 'Lokal na mall at palengke ng Valenzuela poblacion.',
   ),
+  Place(
+    id: 'fisher-mall-malabon',
+    name: 'Fisher Mall Malabon',
+    city: 'Malabon',
+    categories: [PlaceCategory.mall],
+    lat: 14.656757,
+    lng: 120.960674,
+    address: 'Dagat-Dagatan Ave., Longos, Malabon',
+    description: 'Shopping mall sa Longos na may sinehan, supermarket at '
+        'malawak na foodcourt.',
+  ),
 
   // ── Parks ───────────────────────────────────────────────────────────────
   Place(
@@ -356,8 +384,8 @@ const List<Place> camanavaPlaces = [
     name: 'Navotas Centennial Park',
     city: 'Navotas',
     categories: [PlaceCategory.park],
-    lat: 14.6460,
-    lng: 120.9400,
+    lat: 14.651015,
+    lng: 120.94673,
     address: 'Along R-10 dike, Navotas',
     description:
         'Seafront park sa dike ng Navotas — magandang tambayan sa gabi '
@@ -368,21 +396,22 @@ const List<Place> camanavaPlaces = [
     name: 'Valenzuela People\'s Park',
     city: 'Valenzuela',
     categories: [PlaceCategory.park],
-    lat: 14.7030,
-    lng: 120.9550,
+    lat: 14.691548,
+    lng: 120.969967,
     address: 'Malinta, Valenzuela',
     description: 'City park na may jogging path, playgrounds at event space '
         '— paboritong palaruan ng mga pamilya.',
   ),
+  // NOTE: 'caloocan-city-hall-plaza' removed per request, replaced below.
   Place(
-    id: 'caloocan-city-hall-plaza',
-    name: 'Caloocan City Hall Plaza',
+    id: 'caloocan-city-peoples-park',
+    name: 'Caloocan City People\'s Park',
     city: 'Caloocan',
     categories: [PlaceCategory.park],
-    lat: 14.6560,
-    lng: 120.9790,
-    address: 'Rizal Ave., Grace Park, Caloocan',
-    description: 'Plaza sa harap ng City Hall ng Caloocan, kilalang tambayan '
-        'para sa mga simpleng lakad at gatherings.',
+    lat: 14.647914,
+    lng: 120.990402,
+    address: 'Grace Park East, Caloocan',
+    description: 'Community park sa Grace Park East, tambayan para sa mga '
+        'simpleng lakad, ehersisyo at pamilyang gatherings.',
   ),
 ];

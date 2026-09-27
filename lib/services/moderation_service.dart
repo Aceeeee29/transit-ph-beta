@@ -224,6 +224,7 @@ class ModerationService {
               id: DateTime.now().millisecondsSinceEpoch.toString(),
               userId: recipientId,
               type: 'route_rejected',
+              routeId: routeId,
               timestamp: DateTime.now(),
               message:
                   'Your submitted route ($routeTitle) was rejected by moderators.',

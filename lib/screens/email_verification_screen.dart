@@ -175,6 +175,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Container(
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: _surface,
                 borderRadius: BorderRadius.circular(20),

@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 import '../models/place.dart';
+import '../models/location_search_result.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
@@ -104,6 +105,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _isFormExpanded = false;
   bool _snapToRoadEnabled = true;
   bool _showEditHandles = false;
+  bool _showPins = true;
   bool _showTutorial = false;
   late MapTabMode _mapMode;
   LatLng? _searchedLocation;
@@ -513,6 +515,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return true;
   }
 
+  void _onLocationPicked(double lat, double lng, String name) {
+    final target = LatLng(lat, lng);
+    if (!mounted) return;
+    _mapController.move(target, 15.0);
+    setState(() {
+      _searchedLocation = target;
+      _lastLocationSearchQuery = name;
+      selectedRegion = null;
+      _currentZoom = 15.0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Showing $name'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _openLocationSearchScreen() async {
     await this._openLocationSearchScreenSection();
   }
@@ -879,6 +899,18 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
+  void _togglePins() {
+    setState(() => _showPins = !_showPins);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _showPins ? 'Pins shown on map.' : 'Pins hidden on map.',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   // ─── Route utilities ─────────────────────────────────────────────────────────
 
   /// setState bridge for extension part files (e.g. contribute_screen_route_builder).
@@ -1196,6 +1228,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     if (isNearby) ...[
                       _buildNearbyFilterChips(),
                       _buildNearbyDebugCoordChip(),
+                      _buildPinsToggle(),
                       if (_nearbySelectedPlace != null)
                         _buildNearbyInfoCard(_nearbySelectedPlace!),
                       _buildNearbyFabs(),
@@ -1205,6 +1238,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
                       _buildStepChipsBar(),
                       _buildLocationSearchBar(),
                       _buildRegionSelector(),
+                      _buildPinsToggle(),
                       _buildVerticalZoomSlider(),
                       _buildFormDrawer(context, constraints.maxHeight),
                     ],
@@ -1255,6 +1289,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   Widget _buildLocationSearchBar() {
     return this._buildLocationSearchBarSection();
+  }
+
+  Widget _buildPinsToggle() {
+    return this._buildPinsToggleSection();
   }
 
   Widget _buildFormDrawer(BuildContext context, double availableHeight) {

@@ -1,11 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
 import '../services/notifications_service.dart';
+import '../services/route_service.dart';
 import '../models/notification.dart';
+import 'post_detail_screen.dart';
+import 'route_map_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final String currentUserId;
+  final String? currentUserName;
 
-  const NotificationsScreen({super.key, required this.currentUserId});
+  const NotificationsScreen({
+    super.key,
+    required this.currentUserId,
+    this.currentUserName,
+  });
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -100,6 +109,162 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+
+  static const _postNotificationTypes = {
+    'upvote',
+    'like',
+    'downvote',
+    'comment',
+    'reply',
+  };
+
+  static const _routeNotificationTypes = {'route_approved', 'route_rejected'};
+
+  bool _isNavigable(NotificationModel n) {
+    if (_postNotificationTypes.contains(n.type)) {
+      return n.postId != null && n.postId!.trim().isNotEmpty;
+    }
+    if (_routeNotificationTypes.contains(n.type)) {
+      return n.routeId != null && n.routeId!.trim().isNotEmpty;
+    }
+    return false;
+  }
+
+  String get _effectiveUserName {
+    final passed = widget.currentUserName?.trim();
+    if (passed != null && passed.isNotEmpty) return passed;
+    final displayName =
+        firebase_auth.FirebaseAuth.instance.currentUser?.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) return displayName;
+    return 'User';
+  }
+
+  Future<void> _handleNotificationTap(NotificationModel notification) async {
+    // Always mark as read first.
+    if (!notification.isRead) {
+      try {
+        await NotificationsService.markAsRead(notification.id);
+      } catch (_) {
+        // Non-fatal — continue to navigation.
+      }
+      if (mounted) {
+        setState(() {
+          _loadNotifications();
+        });
+      }
+      notification.isRead = true;
+    }
+
+    if (!mounted) return;
+
+    // ── Post notifications (like / upvote / downvote / comment / reply) ──
+    if (_postNotificationTypes.contains(notification.type)) {
+      final postId = notification.postId?.trim();
+      if (postId == null || postId.isEmpty) {
+        _showInfo('This notification is not linked to a post.');
+        return;
+      }
+      _openPost(postId, notification);
+      return;
+    }
+
+    // ── Route approval notifications ──
+    if (_routeNotificationTypes.contains(notification.type)) {
+      final routeId = notification.routeId?.trim();
+      if (routeId == null || routeId.isEmpty) {
+        // Legacy notification created before routeId was stored.
+        _showInfo(notification.message);
+        return;
+      }
+      await _openRoute(routeId, notification.type);
+      return;
+    }
+  }
+
+  void _openPost(String postId, NotificationModel notification) {
+    final isCommentThread =
+        notification.type == 'comment' || notification.type == 'reply';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PostDetailScreen(
+          postId: postId,
+          currentUserId: widget.currentUserId,
+          currentUserName: _effectiveUserName,
+          highlightCommentId: notification.commentId,
+          openCommentsInitially: isCommentThread,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRoute(String routeId, String type) async {
+    _showLoading('Loading route…');
+    try {
+      final route = await RouteService.getRouteById(routeId);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      if (route == null) {
+        final hint = type == 'route_rejected'
+            ? 'The rejected route is no longer available.'
+            : 'This route is no longer available.';
+        _showInfo(hint);
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      _showInfo('Failed to load route. Please try again.');
+    }
+  }
+
+  void _showInfo(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showLoading(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  color: _accent,
+                  strokeWidth: 2,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Flexible(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: _textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -355,18 +520,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 final notification = notifications[dataIndex];
                 final color = _notifColor(notification.type);
                 final isUnread = !notification.isRead;
+                final navigable = _isNavigable(notification);
 
                     return GestureDetector(
-                      onTap: () async {
-                        if (!notification.isRead) {
-                          await NotificationsService.markAsRead(
-                            notification.id,
-                          );
-                          setState(() {
-                            _loadNotifications();
-                          });
-                        }
-                      },
+                      onTap: () => _handleNotificationTap(notification),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
@@ -470,20 +627,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     // Message
-                                    Text(
-                                      notification.message,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color:
-                                            isUnread
-                                                ? _textPrimary
-                                                : _textSecondary,
-                                        fontWeight:
-                                            isUnread
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                        height: 1.4,
-                                      ),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            notification.message,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isUnread
+                                                  ? _textPrimary
+                                                  : _textSecondary,
+                                              fontWeight: isUnread
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                        if (navigable) ...[
+                                          const SizedBox(width: 8),
+                                          const Padding(
+                                            padding: EdgeInsets.only(top: 2),
+                                            child: Icon(
+                                              Icons
+                                                  .arrow_forward_ios_rounded,
+                                              size: 13,
+                                              color: _textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ],
                                 ),

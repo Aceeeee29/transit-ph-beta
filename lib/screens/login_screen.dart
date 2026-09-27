@@ -47,21 +47,24 @@ class _LoginScreenState extends State<LoginScreen> {
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
+            password: _passwordController.text,
           );
 
       try {
         await UserProfileBootstrapService.ensureUserProfileExists(
           userCredential.user!,
         );
-      } catch (_) {
-        // Allow login to continue; document bootstrap can be retried later.
+      } catch (e) {
+        await FirebaseAuth.instance.signOut();
+        throw Exception('Could not load your account profile: $e');
       }
       // AuthGate handles navigation
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
-      setState(() => _errorMessage = 'An unexpected error occurred');
+      setState(
+        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -96,18 +99,26 @@ class _LoginScreenState extends State<LoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
       try {
         await UserProfileBootstrapService.ensureUserProfileExists(
           userCredential.user!,
         );
-      } catch (_) {
-        // Allow login to continue; document bootstrap can be retried later.
+      } catch (e) {
+        await FirebaseAuth.instance.signOut();
+        throw Exception('Could not load your account profile: $e');
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Failed to sign in with Google: ${e.toString()}');
+      final message = e.toString();
+      setState(
+        () =>
+            _errorMessage =
+                message.contains('ApiException: 10')
+                    ? 'Google sign-in is not configured for this Android build. Add the app SHA-1 fingerprint to Firebase, download google-services.json again, and rebuild.'
+                    : 'Failed to sign in with Google: ${message.replaceFirst('Exception: ', '')}',
+      );
     } finally {
       setState(() => _isGoogleLoading = false);
     }
@@ -123,6 +134,11 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'The email address is not valid.';
       case 'user-disabled':
         return 'This user has been disabled.';
+      case 'invalid-credential':
+      case 'invalid-login-credentials':
+        return 'The email or password is incorrect.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
       default:
         return 'An error occurred. Please try again.';
     }
@@ -238,8 +254,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         textSecondary: _textSecondary,
                         obscure: !_isPasswordVisible,
                         suffix: GestureDetector(
-                          onTap: () => setState(
-                              () => _isPasswordVisible = !_isPasswordVisible),
+                          onTap:
+                              () => setState(
+                                () => _isPasswordVisible = !_isPasswordVisible,
+                              ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Icon(
@@ -261,8 +279,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) =>
-                                    const ForgotPasswordScreen(),
+                                builder:
+                                    (context) => const ForgotPasswordScreen(),
                               ),
                             );
                           },
@@ -328,46 +346,49 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
-                            gradient: _isLoading
-                                ? null
-                                : const LinearGradient(
-                                    colors: [
-                                      Color(0xFF4A7CE0),
-                                      Color(0xFF6A9EFF),
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
+                            gradient:
+                                _isLoading
+                                    ? null
+                                    : const LinearGradient(
+                                      colors: [
+                                        Color(0xFF4A7CE0),
+                                        Color(0xFF6A9EFF),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
                             color: _isLoading ? _border : null,
                             borderRadius: BorderRadius.circular(13),
-                            boxShadow: _isLoading
-                                ? null
-                                : [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                            boxShadow:
+                                _isLoading
+                                    ? null
+                                    : [
+                                      BoxShadow(
+                                        color: _accent.withOpacity(0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                           ),
                           alignment: Alignment.center,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.5,
+                                    ),
+                                  )
+                                  : const Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                )
-                              : const Text(
-                                  'Sign In',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
                         ),
                       ),
 
@@ -378,8 +399,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Expanded(child: Divider(color: _border)),
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
                             child: Text(
                               'or',
                               style: TextStyle(

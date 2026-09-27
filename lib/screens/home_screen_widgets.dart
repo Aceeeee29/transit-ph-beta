@@ -883,6 +883,44 @@ extension _HomeScreenSections on _HomeScreenState {
             style: TextStyle(fontSize: 13, color: _textSecondary, height: 1.4),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: widget.onOpenContributeRoute,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.alt_route, color: Colors.white, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Contribute a Route',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

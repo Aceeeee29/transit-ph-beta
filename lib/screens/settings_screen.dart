@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+
 import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
 import '../repositories/route_cache_repository.dart';
@@ -30,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingPreferences = true;
   bool _isSavingPreferences = false;
   bool _isClearingRouteCache = false;
+  bool _isLoggingOut = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
@@ -121,6 +123,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _displayName = value;
     });
+  }
+
+  Future<void> _logout() async {
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+    try {
+      await firebase_auth.FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pushNamedAndRemoveUntil('/', (route) => false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoggingOut = false);
+    }
   }
 
   // ─── Color tokens
@@ -783,7 +806,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+
+            // ─── Log out
+            _logoutButton(),
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _logoutButton() {
+    const danger = Color(0xFFD14343);
+    return GestureDetector(
+      onTap: _isLoggingOut ? null : _logout,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: danger.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: danger.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isLoggingOut)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(color: danger, strokeWidth: 2),
+              )
+            else
+              const Icon(Icons.logout_rounded, color: danger, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              _isLoggingOut ? 'Logging out...' : 'Log Out',
+              style: const TextStyle(
+                color: danger,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
           ],
         ),
       ),

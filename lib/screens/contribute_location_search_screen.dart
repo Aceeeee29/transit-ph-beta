@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../data/camanava_places.dart';
+import '../models/location_search_result.dart';
 
 class ContributeLocationSearchScreen extends StatefulWidget {
   final String initialQuery;
@@ -17,6 +22,9 @@ class _ContributeLocationSearchScreenState
     extends State<ContributeLocationSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  Timer? _debounce;
+  List<LocationSearchResult> _suggestions = [];
+  bool _isLoadingSuggestions = false;
 
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
@@ -30,16 +38,116 @@ class _ContributeLocationSearchScreenState
   void initState() {
     super.initState();
     _searchController.text = widget.initialQuery;
+    if (widget.initialQuery.trim().isNotEmpty) {
+      _scheduleSuggest(widget.initialQuery);
+    }
   }
 
   void _submitQuery() {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
+    // Manual submit — caller geocodes the raw query.
     Navigator.of(context).pop(query);
+  }
+
+  void _onQueryChanged(String value) {
+    setState(() {});
+    _scheduleSuggest(value);
+  }
+
+  void _scheduleSuggest(String value) {
+    _debounce?.cancel();
+    final query = value.trim();
+    if (query.length < 3) {
+      setState(() {
+        _suggestions = [];
+        _isLoadingSuggestions = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      _fetchSuggestions(query);
+    });
+  }
+
+  Future<void> _fetchSuggestions(String query) async {
+    setState(() => _isLoadingSuggestions = true);
+    try {
+      final lower = query.toLowerCase();
+      final local = camanavaPlaces
+          .where(
+            (p) =>
+                p.name.toLowerCase().contains(lower) ||
+                p.city.toLowerCase().contains(lower) ||
+                (p.address ?? '').toLowerCase().contains(lower),
+          )
+          .take(4)
+          .map(
+            (p) => LocationSearchResult(
+              name: '${p.name}, ${p.city}',
+              latitude: p.lat,
+              longitude: p.lng,
+            ),
+          )
+          .toList();
+
+      final remote = await _fetchNominatimSuggestions(query);
+      final seen = local.map((e) => e.name.toLowerCase()).toSet();
+      final merged = List<LocationSearchResult>.from(local);
+      for (final r in remote) {
+        if (!seen.contains(r.name.toLowerCase())) merged.add(r);
+        if (merged.length >= 7) break;
+      }
+      if (!mounted) return;
+      setState(() {
+        _suggestions = merged;
+        _isLoadingSuggestions = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingSuggestions = false);
+    }
+  }
+
+  Future<List<LocationSearchResult>> _fetchNominatimSuggestions(
+    String query,
+  ) async {
+    try {
+      final encoded = Uri.encodeComponent(query);
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?format=jsonv2'
+        '&q=$encoded&countrycodes=ph&limit=5&addressdetails=1',
+      );
+      final response = await http
+          .get(uri, headers: {'User-Agent': 'transitph-beta/1.0'})
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      if (data is! List) return [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map((item) {
+            final lat = double.tryParse('${item['lat']}');
+            final lng = double.tryParse('${item['lon']}');
+            final name = '${item['display_name'] ?? query}';
+            if (lat == null || lng == null) return null;
+            final short = name.split(',').take(3).join(',').trim();
+            return LocationSearchResult(
+              name: short.isEmpty ? name : short,
+              latitude: lat,
+              longitude: lng,
+            );
+          })
+          .whereType<LocationSearchResult>()
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -115,8 +223,12 @@ class _ContributeLocationSearchScreenState
                     suffixIcon: _searchController.text.isNotEmpty
                         ? GestureDetector(
                             onTap: () {
+                              _debounce?.cancel();
                               _searchController.clear();
-                              setState(() {});
+                              setState(() {
+                                _suggestions = [];
+                                _isLoadingSuggestions = false;
+                              });
                             },
                             child: Container(
                               margin: const EdgeInsets.all(10),
@@ -138,10 +250,105 @@ class _ContributeLocationSearchScreenState
                       horizontal: 4,
                     ),
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onQueryChanged,
                   onSubmitted: (_) => _submitQuery(),
                 ),
               ),
+              const SizedBox(height: 8),
+              if (_isLoadingSuggestions)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _accent,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Finding suggestions…',
+                        style: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (!_isLoadingSuggestions && _suggestions.isNotEmpty)
+                Flexible(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _border),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      itemCount: _suggestions.length,
+                      separatorBuilder: (_, __) => const Divider(
+                        height: 1,
+                        indent: 48,
+                        color: _border,
+                      ),
+                      itemBuilder: (_, index) {
+                        final suggestion = _suggestions[index];
+                        return InkWell(
+                          onTap: () =>
+                              Navigator.of(context).pop(suggestion),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: _surfaceAlt,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.location_on_outlined,
+                                    color: _accent,
+                                    size: 17,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    suggestion.name,
+                                    style: const TextStyle(
+                                      color: _textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.north_west_rounded,
+                                  size: 15,
+                                  color: _textSecondary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
               GestureDetector(
                 onTap: _submitQuery,
@@ -187,7 +394,7 @@ class _ContributeLocationSearchScreenState
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Use specific place names or landmarks for better results.',
+                        'Tap a suggestion to jump straight there, or use Search on Map for an exact match.',
                         style: TextStyle(
                           color: _textSecondary,
                           fontSize: 12,

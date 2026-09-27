@@ -6,6 +6,7 @@ class NotificationModel {
   final String type; // 'upvote', 'downvote', 'comment', 'reply', 'achievement', 'system'
   final String? postId;
   final String? commentId;
+  final String? routeId;
   final String? fromUserId;
   final String? fromUserName;
   final DateTime timestamp;
@@ -18,6 +19,7 @@ class NotificationModel {
     required this.type,
     this.postId,
     this.commentId,
+    this.routeId,
     this.fromUserId,
     this.fromUserName,
     required this.timestamp,
@@ -32,6 +34,7 @@ class NotificationModel {
       'type': type,
       'postId': postId,
       'commentId': commentId,
+      'routeId': routeId,
       'fromUserId': fromUserId,
       'fromUserName': fromUserName,
       'timestamp': timestamp.toIso8601String(),
@@ -57,6 +60,7 @@ class NotificationModel {
       type: json['type'],
       postId: json['postId'],
       commentId: json['commentId'],
+      routeId: json['routeId'],
       fromUserId: json['fromUserId'],
       fromUserName: json['fromUserName'],
       timestamp: parsedTimestamp,
