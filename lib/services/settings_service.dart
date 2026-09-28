@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_language_service.dart';
 import 'route_metrics_service.dart';
 
 class SettingsService {
@@ -16,6 +17,7 @@ class SettingsService {
     'weeklyDigest': false,
     'distanceUnit': 'Miles',
     'showEmailInProfile': false,
+    'language': 'English',
   };
 
   static String? _getCurrentUserUid() {
@@ -34,12 +36,12 @@ class SettingsService {
         final data = docSnapshot.data();
         final preferences = data?[_preferencesField];
         if (preferences is Map<String, dynamic>) {
-          final merged = {
-            ..._defaultPreferences,
-            ...preferences,
-          };
+          final merged = {..._defaultPreferences, ...preferences};
           RouteMetricsService.setDistanceUnit(
             merged['distanceUnit'] as String?,
+          );
+          AppLanguageService.syncFromLanguageLabel(
+            merged['language'] as String?,
           );
           return merged;
         }
@@ -53,11 +55,9 @@ class SettingsService {
   }
 
   static Future<void> savePreferences(Map<String, dynamic> preferences) async {
-    final sanitized = {
-      ..._defaultPreferences,
-      ...preferences,
-    };
+    final sanitized = {..._defaultPreferences, ...preferences};
     RouteMetricsService.setDistanceUnit(sanitized['distanceUnit'] as String?);
+    AppLanguageService.syncFromLanguageLabel(sanitized['language'] as String?);
 
     final uid = _getCurrentUserUid();
 
@@ -84,17 +84,16 @@ class SettingsService {
     if (cached == null) {
       final defaults = {..._defaultPreferences};
       RouteMetricsService.setDistanceUnit(defaults['distanceUnit'] as String?);
+      AppLanguageService.syncFromLanguageLabel(defaults['language'] as String?);
       return defaults;
     }
 
     try {
       final decoded = jsonDecode(cached);
       if (decoded is Map<String, dynamic>) {
-        final merged = {
-          ..._defaultPreferences,
-          ...decoded,
-        };
+        final merged = {..._defaultPreferences, ...decoded};
         RouteMetricsService.setDistanceUnit(merged['distanceUnit'] as String?);
+        AppLanguageService.syncFromLanguageLabel(merged['language'] as String?);
         return merged;
       }
     } catch (_) {
@@ -103,10 +102,13 @@ class SettingsService {
 
     final defaults = {..._defaultPreferences};
     RouteMetricsService.setDistanceUnit(defaults['distanceUnit'] as String?);
+    AppLanguageService.syncFromLanguageLabel(defaults['language'] as String?);
     return defaults;
   }
 
-  static Future<void> _cachePreferences(Map<String, dynamic> preferences) async {
+  static Future<void> _cachePreferences(
+    Map<String, dynamic> preferences,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsCacheKey, jsonEncode(preferences));
   }

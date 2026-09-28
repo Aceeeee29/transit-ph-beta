@@ -14,6 +14,7 @@ import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
+import '../widgets/translated_text.dart';
 part 'home_screen_widgets.dart';
 
 enum RouteSortMode { community, budget, fastest, balanced }
@@ -42,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   WeatherData? _weatherData;
   bool _isLoadingWeather = true;
+  String? _weatherError;
   bool _isDetectingLocation = false;
   final Set<String> _selectedModes = {};
   Map<String, List<route_model.Route>> _recommendations = {};
@@ -85,7 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     try {
-      final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final snap =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = snap.data();
       if (data == null || !mounted) return;
       final tags = List<String>.from(data['userTags'] ?? const []);
@@ -100,9 +103,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDownloadedRoutes() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()));
   }
 
   @override
@@ -114,10 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadTotalUsers() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .count()
-          .get();
+      final snap =
+          await FirebaseFirestore.instance.collection('users').count().get();
       if (mounted) setState(() => _totalUsers = snap.count);
     } catch (_) {
       // silently ignore — widget simply won't render
@@ -127,11 +128,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadRecommendations() async {
     setState(() => _isLoadingRecommendations = true);
     try {
-      final recs = await RecommendationService.getAllRecommendations(widget.routes);
+      final recs = await RecommendationService.getAllRecommendations(
+        widget.routes,
+      );
       final sortedRecs = <String, List<route_model.Route>>{};
       recs.forEach((key, value) {
-        final sorted = List<route_model.Route>.from(value)
-          ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+        final sorted = List<route_model.Route>.from(value)..sort(
+          (a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)),
+        );
         sortedRecs[key] = sorted;
       });
       setState(() {
@@ -144,7 +148,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _getWeather() async {
-    setState(() => _isLoadingWeather = true);
+    setState(() {
+      _isLoadingWeather = true;
+      _weatherError = null;
+    });
     try {
       final weatherData = await WeatherService.getCurrentWeatherAndLocation();
       if (weatherData != null) {
@@ -154,14 +161,30 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoadingWeather = false;
         });
       } else {
-        setState(() => _isLoadingWeather = false);
+        setState(() {
+          _isLoadingWeather = false;
+          _weatherError = 'Weather unavailable right now.';
+        });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error getting weather: $e')),
-      );
-      setState(() => _isLoadingWeather = false);
+      if (!mounted) return;
+      setState(() {
+        _isLoadingWeather = false;
+        _weatherError = _describeWeatherError(e);
+      });
     }
+  }
+
+  String _describeWeatherError(Object e) {
+    final message = e.toString();
+    if (message.contains('Location services are disabled') ||
+        message.contains('location service')) {
+      return 'Location (GPS) is turned off — enable it to see weather.';
+    }
+    if (message.contains('permission')) {
+      return 'Location permission denied — enable it in app settings to see weather.';
+    }
+    return 'Couldn\'t load weather. Tap to retry.';
   }
 
   Future<void> _detectCurrentLocation() async {
@@ -182,16 +205,18 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Could not detect location. Please check permissions.'),
+              content: Text(
+                'Could not detect location. Please check permissions.',
+              ),
             ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error detecting location: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error detecting location: $e')));
       }
     } finally {
       setState(() => _isDetectingLocation = false);
@@ -217,7 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final user = await GamificationService.loadUser();
-    final unlockedItems = await GamificationService.incrementRoutesSearched(user);
+    final unlockedItems = await GamificationService.incrementRoutesSearched(
+      user,
+    );
     if (unlockedItems.isNotEmpty) {
       setState(() {
         _pendingNotifications = unlockedItems;
@@ -225,36 +252,40 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    final matched = widget.routes.where((route) {
-      final matchesDest =
-          route.endLocation.trim().toLowerCase().contains(destination) ||
-          route.shortDescription.trim().toLowerCase().contains(destination);
-      if (_selectedModes.isNotEmpty) {
-        return matchesDest &&
-            route.steps.any((s) => _selectedModes.contains(s.mode));
-      }
-      return matchesDest;
-    }).toList();
+    final matched =
+        widget.routes.where((route) {
+          final matchesDest =
+              route.endLocation.trim().toLowerCase().contains(destination) ||
+              route.shortDescription.trim().toLowerCase().contains(destination);
+          if (_selectedModes.isNotEmpty) {
+            return matchesDest &&
+                route.steps.any((s) => _selectedModes.contains(s.mode));
+          }
+          return matchesDest;
+        }).toList();
 
     _showSearchResultsSheet(matched);
   }
 
   int _tagMatchScore(route_model.Route route) {
     if (_userTags.isEmpty || route.audienceTags.isEmpty) return 0;
-    final personaUserTags = _userTags
-        .where((tag) => _personaTags.contains(tag))
-        .toList();
+    final personaUserTags =
+        _userTags.where((tag) => _personaTags.contains(tag)).toList();
     if (personaUserTags.isEmpty) return 0;
 
     final userTagsLower = personaUserTags.map((e) => e.toLowerCase()).toSet();
-    final matches = route.audienceTags
-        .where((t) => userTagsLower.contains(t.toLowerCase()))
-        .length;
+    final matches =
+        route.audienceTags
+            .where((t) => userTagsLower.contains(t.toLowerCase()))
+            .length;
     return matches * 120;
   }
 
   int _routePriorityScore(route_model.Route route) {
-    return _tagMatchScore(route) + route.views + route.upvotes - route.downvotes;
+    return _tagMatchScore(route) +
+        route.views +
+        route.upvotes -
+        route.downvotes;
   }
 
   double _routeEstimatedFare(route_model.Route route) {
@@ -264,31 +295,37 @@ class _HomeScreenState extends State<HomeScreen> {
     final transportSteps = route.steps.where((s) => s.mode != 'Walk').toList();
     if (transportSteps.isEmpty) return 0;
 
-    final totalDistanceKm = route.distanceMeters != null && route.distanceMeters! > 0
-        ? route.distanceMeters! / 1000
-        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final totalDistanceKm =
+        route.distanceMeters != null && route.distanceMeters! > 0
+            ? route.distanceMeters! / 1000
+            : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
     final perStepDistance = totalDistanceKm / transportSteps.length;
 
     var total = 0.0;
     for (final step in transportSteps) {
-      total += step.actualFare ??
+      total +=
+          step.actualFare ??
           RouteMetricsService.calculateFareForMode(step.mode, perStepDistance);
     }
     return total;
   }
 
   int _routeEstimatedMinutes(route_model.Route route) {
-    final parsedEta = int.tryParse((route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
+    final parsedEta = int.tryParse(
+      (route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''),
+    );
     if (parsedEta != null && parsedEta > 0) return parsedEta;
 
-    final distanceKm = route.distanceMeters != null && route.distanceMeters! > 0
-        ? route.distanceMeters! / 1000
-        : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
+    final distanceKm =
+        route.distanceMeters != null && route.distanceMeters! > 0
+            ? route.distanceMeters! / 1000
+            : (RouteMetricsService.parseDistanceToKm(route.distance) ?? 5.0);
 
     final hasTrain = route.steps.any((s) => s.mode == 'Train');
     final speed = hasTrain ? 28.0 : 20.0;
     final minutes = ((distanceKm / speed) * 60).ceil();
-    final transferPenalty = (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
+    final transferPenalty =
+        (route.steps.where((s) => s.mode != 'Walk').length - 1) * 4;
     return (minutes + transferPenalty).clamp(8, 180);
   }
 
@@ -299,22 +336,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final sorted = List<route_model.Route>.from(source);
     switch (mode) {
       case RouteSortMode.community:
-        sorted.sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+        sorted.sort(
+          (a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)),
+        );
         break;
       case RouteSortMode.budget:
         sorted.sort((a, b) {
-          final fareCmp = _routeEstimatedFare(a).compareTo(_routeEstimatedFare(b));
+          final fareCmp = _routeEstimatedFare(
+            a,
+          ).compareTo(_routeEstimatedFare(b));
           if (fareCmp != 0) return fareCmp;
           return _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b));
         });
         break;
       case RouteSortMode.fastest:
-        sorted.sort((a, b) => _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b)));
+        sorted.sort(
+          (a, b) =>
+              _routeEstimatedMinutes(a).compareTo(_routeEstimatedMinutes(b)),
+        );
         break;
       case RouteSortMode.balanced:
         sorted.sort((a, b) {
-          final aScore = _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
-          final bScore = _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
+          final aScore =
+              _routeEstimatedFare(a) * 0.6 + _routeEstimatedMinutes(a) * 0.4;
+          final bScore =
+              _routeEstimatedFare(b) * 0.6 + _routeEstimatedMinutes(b) * 0.4;
           return aScore.compareTo(bScore);
         });
         break;
@@ -339,13 +385,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final activeTagsLower = activeTags.map((t) => t.toLowerCase()).toSet();
 
-    final matched = widget.routes.where((route) {
-      if (route.audienceTags.isEmpty) return false;
-      return route.audienceTags
-          .map((t) => t.toLowerCase())
-          .any((t) => activeTagsLower.contains(t));
-    }).toList()
-      ..sort((a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)));
+    final matched =
+        widget.routes.where((route) {
+            if (route.audienceTags.isEmpty) return false;
+            return route.audienceTags
+                .map((t) => t.toLowerCase())
+                .any((t) => activeTagsLower.contains(t));
+          }).toList()
+          ..sort(
+            (a, b) => _routePriorityScore(b).compareTo(_routePriorityScore(a)),
+          );
 
     return matched.take(8).toList();
   }
@@ -353,62 +402,71 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─── Dialogs / modals ────────────────────────────────────────────────────────
 
   void _showFareMatrixDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => const HomeFareMatrixDialog(),
-    );
+    showDialog(context: context, builder: (_) => const HomeFareMatrixDialog());
   }
 
   void _showFilterDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filter by Transport Mode'),
-        content: StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: ['Jeepney', 'Bus', 'Train', 'Tricycle', 'FX/Van', 'Ferry', 'Walk']
-                  .map((mode) => CheckboxListTile(
-                        title: Row(
-                          children: [
-                            _modeIcon(mode),
-                            const SizedBox(width: 8),
-                            Text(mode),
-                          ],
-                        ),
-                        value: _selectedModes.contains(mode),
-                        onChanged: (checked) {
-                          setDialogState(() {
-                            setState(() {
-                              if (checked == true) {
-                                _selectedModes.add(mode);
-                              } else {
-                                _selectedModes.remove(mode);
-                              }
-                            });
-                          });
-                        },
-                      ))
-                  .toList(),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() => _selectedModes.clear());
-              Navigator.pop(context);
-              _findRoute();
-            },
-            child: const Text('Clear All'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Filter by Transport Mode'),
+            content: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children:
+                      [
+                            'Jeepney',
+                            'Bus',
+                            'Train',
+                            'Tricycle',
+                            'FX/Van',
+                            'Ferry',
+                            'Walk',
+                          ]
+                          .map(
+                            (mode) => CheckboxListTile(
+                              title: Row(
+                                children: [
+                                  _modeIcon(mode),
+                                  const SizedBox(width: 8),
+                                  Text(mode),
+                                ],
+                              ),
+                              value: _selectedModes.contains(mode),
+                              onChanged: (checked) {
+                                setDialogState(() {
+                                  setState(() {
+                                    if (checked == true) {
+                                      _selectedModes.add(mode);
+                                    } else {
+                                      _selectedModes.remove(mode);
+                                    }
+                                  });
+                                });
+                              },
+                            ),
+                          )
+                          .toList(),
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() => _selectedModes.clear());
+                  Navigator.pop(context);
+                  _findRoute();
+                },
+                child: const Text('Clear All'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Apply'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -418,164 +476,200 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          final sortedRoutes = _sortRoutesByMode(matchedRoutes, sheetSortMode);
-          final cheapestFare = sortedRoutes.isEmpty
-              ? null
-              : sortedRoutes.map(_routeEstimatedFare).reduce((a, b) => a < b ? a : b);
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setSheetState) {
+              final sortedRoutes = _sortRoutesByMode(
+                matchedRoutes,
+                sheetSortMode,
+              );
+              final cheapestFare =
+                  sortedRoutes.isEmpty
+                      ? null
+                      : sortedRoutes
+                          .map(_routeEstimatedFare)
+                          .reduce((a, b) => a < b ? a : b);
 
-          return DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            minChildSize: 0.5,
-            maxChildSize: 0.95,
-            builder: (context, scrollController) => Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Search Results (${sortedRoutes.length})',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+              return DraggableScrollableSheet(
+                initialChildSize: 0.7,
+                minChildSize: 0.5,
+                maxChildSize: 0.95,
+                builder:
+                    (context, scrollController) => Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
                         ),
-                        TextButton.icon(
-                          onPressed: _showFilterDialog,
-                          icon: const Icon(Icons.filter_list),
-                          label: Text(
-                            'Filter${_selectedModes.isNotEmpty ? ' (${_selectedModes.length})' : ''}',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: 38,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        _sortChip(
-                          label: 'Community',
-                          active: sheetSortMode == RouteSortMode.community,
-                          onTap: () => setSheetState(() {
-                            sheetSortMode = RouteSortMode.community;
-                            _routeSortMode = sheetSortMode;
-                          }),
-                        ),
-                        _sortChip(
-                          label: 'Budget',
-                          active: sheetSortMode == RouteSortMode.budget,
-                          onTap: () => setSheetState(() {
-                            sheetSortMode = RouteSortMode.budget;
-                            _routeSortMode = sheetSortMode;
-                          }),
-                        ),
-                        _sortChip(
-                          label: 'Fastest',
-                          active: sheetSortMode == RouteSortMode.fastest,
-                          onTap: () => setSheetState(() {
-                            sheetSortMode = RouteSortMode.fastest;
-                            _routeSortMode = sheetSortMode;
-                          }),
-                        ),
-                        _sortChip(
-                          label: 'Balanced',
-                          active: sheetSortMode == RouteSortMode.balanced,
-                          onTap: () => setSheetState(() {
-                            sheetSortMode = RouteSortMode.balanced;
-                            _routeSortMode = sheetSortMode;
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_selectedModes.isNotEmpty)
-                    SizedBox(
-                      height: 40,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: _selectedModes
-                            .map((mode) => Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: Chip(
-                                    label: Text(mode),
-                                    deleteIcon: const Icon(Icons.close, size: 18),
-                                    onDeleted: () {
-                                      setState(() => _selectedModes.remove(mode));
-                                      _findRoute();
-                                    },
-                                  ),
-                                ))
-                            .toList(),
                       ),
-                    ),
-                  const Divider(),
-                  Expanded(
-                    child: sortedRoutes.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                      child: Column(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.symmetric(vertical: 12),
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Icon(
-                                  Icons.search_off,
-                                  size: 64,
-                                  color: Colors.grey.shade400,
-                                ),
-                                const SizedBox(height: 16),
                                 Text(
-                                  'No routes found',
-                                  style: TextStyle(
+                                  'Search Results (${sortedRoutes.length})',
+                                  style: const TextStyle(
                                     fontSize: 18,
-                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Try adjusting your filters',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
+                                TextButton.icon(
+                                  onPressed: _showFilterDialog,
+                                  icon: const Icon(Icons.filter_list),
+                                  label: Text(
+                                    'Filter${_selectedModes.isNotEmpty ? ' (${_selectedModes.length})' : ''}',
                                   ),
                                 ),
                               ],
                             ),
-                          )
-                        : ListView.builder(
-                            controller: scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: sortedRoutes.length,
-                            itemBuilder: (context, index) => _buildRouteCard(
-                              sortedRoutes[index],
-                              cheapestFare: cheapestFare,
+                          ),
+                          SizedBox(
+                            height: 38,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              children: [
+                                _sortChip(
+                                  label: 'Community',
+                                  active:
+                                      sheetSortMode == RouteSortMode.community,
+                                  onTap:
+                                      () => setSheetState(() {
+                                        sheetSortMode = RouteSortMode.community;
+                                        _routeSortMode = sheetSortMode;
+                                      }),
+                                ),
+                                _sortChip(
+                                  label: 'Budget',
+                                  active: sheetSortMode == RouteSortMode.budget,
+                                  onTap:
+                                      () => setSheetState(() {
+                                        sheetSortMode = RouteSortMode.budget;
+                                        _routeSortMode = sheetSortMode;
+                                      }),
+                                ),
+                                _sortChip(
+                                  label: 'Fastest',
+                                  active:
+                                      sheetSortMode == RouteSortMode.fastest,
+                                  onTap:
+                                      () => setSheetState(() {
+                                        sheetSortMode = RouteSortMode.fastest;
+                                        _routeSortMode = sheetSortMode;
+                                      }),
+                                ),
+                                _sortChip(
+                                  label: 'Balanced',
+                                  active:
+                                      sheetSortMode == RouteSortMode.balanced,
+                                  onTap:
+                                      () => setSheetState(() {
+                                        sheetSortMode = RouteSortMode.balanced;
+                                        _routeSortMode = sheetSortMode;
+                                      }),
+                                ),
+                              ],
                             ),
                           ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+                          if (_selectedModes.isNotEmpty)
+                            SizedBox(
+                              height: 40,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                children:
+                                    _selectedModes
+                                        .map(
+                                          (mode) => Padding(
+                                            padding: const EdgeInsets.only(
+                                              right: 8,
+                                            ),
+                                            child: Chip(
+                                              label: Text(mode),
+                                              deleteIcon: const Icon(
+                                                Icons.close,
+                                                size: 18,
+                                              ),
+                                              onDeleted: () {
+                                                setState(
+                                                  () => _selectedModes.remove(
+                                                    mode,
+                                                  ),
+                                                );
+                                                _findRoute();
+                                              },
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                              ),
+                            ),
+                          const Divider(),
+                          Expanded(
+                            child:
+                                sortedRoutes.isEmpty
+                                    ? Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.search_off,
+                                            size: 64,
+                                            color: Colors.grey.shade400,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'No routes found',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Try adjusting your filters',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                    : ListView.builder(
+                                      controller: scrollController,
+                                      padding: const EdgeInsets.all(16),
+                                      itemCount: sortedRoutes.length,
+                                      itemBuilder:
+                                          (context, index) => _buildRouteCard(
+                                            sortedRoutes[index],
+                                            cheapestFare: cheapestFare,
+                                          ),
+                                    ),
+                          ),
+                        ],
+                      ),
+                    ),
+              );
+            },
+          ),
     );
   }
 
@@ -585,7 +679,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return this._buildRouteCardSection(route, cheapestFare: cheapestFare);
   }
 
-  Widget _buildRecommendationSection(String title, List<route_model.Route> routes) {
+  Widget _buildRecommendationSection(
+    String title,
+    List<route_model.Route> routes,
+  ) {
     if (routes.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -605,8 +702,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: routes.length > 5 ? 5 : routes.length,
-            itemBuilder: (context, index) =>
-                _buildRecommendationCard(routes[index]),
+            itemBuilder:
+                (context, index) => _buildRecommendationCard(routes[index]),
           ),
         ),
         const SizedBox(height: 24),
@@ -626,7 +723,11 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 3),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
@@ -658,7 +759,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Jeepney':
         return const Icon(Icons.directions_bus, color: Colors.blue, size: 20);
       case 'Bus':
-        return const Icon(Icons.directions_bus_filled, color: Colors.red, size: 20);
+        return const Icon(
+          Icons.directions_bus_filled,
+          color: Colors.red,
+          size: 20,
+        );
       case 'Train':
         return const Icon(Icons.train, color: Colors.purple, size: 20);
       case 'Tricycle':
@@ -666,7 +771,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'FX/Van':
         return const Icon(Icons.directions_car, color: Colors.amber, size: 20);
       case 'Ferry':
-        return const Icon(Icons.directions_boat, color: Colors.lightBlue, size: 20);
+        return const Icon(
+          Icons.directions_boat,
+          color: Colors.lightBlue,
+          size: 20,
+        );
       default:
         return const Icon(Icons.directions_walk, color: Colors.green, size: 20);
     }
@@ -676,23 +785,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<Map<String, int>>(
       stream: RouteService.watchRouteFeedbackSummary(route.id),
       builder: (context, snapshot) {
-        final summary = snapshot.data ?? const {
-          'fareAccurateYes': 0,
-          'fareAccurateNo': 0,
-          'scheduleAccurateYes': 0,
-          'scheduleAccurateNo': 0,
-          'stillOperatingYes': 0,
-          'stillOperatingNo': 0,
-        };
+        final summary =
+            snapshot.data ??
+            const {
+              'fareAccurateYes': 0,
+              'fareAccurateNo': 0,
+              'scheduleAccurateYes': 0,
+              'scheduleAccurateNo': 0,
+              'stillOperatingYes': 0,
+              'stillOperatingNo': 0,
+            };
 
         final trust = RouteTrustService.computeConfidence(
           route: route,
           feedbackSummary: summary,
         );
         final trustLabel = RouteTrustService.confidenceLabel(trust.total);
-        final trustColor = trust.total >= 85
-            ? const Color(0xFF2D9F63)
-            : trust.total >= 65
+        final trustColor =
+            trust.total >= 85
+                ? const Color(0xFF2D9F63)
+                : trust.total >= 65
                 ? _accent
                 : const Color(0xFFB8732F);
 
@@ -809,7 +921,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 4),
           Text(
             mode,
-            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

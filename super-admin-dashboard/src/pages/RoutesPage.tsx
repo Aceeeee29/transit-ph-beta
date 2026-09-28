@@ -352,11 +352,22 @@ export function RoutesPage() {
               </div>
               {[
                 ['Trust', `${computeRouteTrust(preview).total}/100 (${computeRouteTrust(preview).label})`],
-                ['Steps', (preview.steps ?? []).join(' -> ') || 'No step data'],
+                [
+                  'Steps',
+                  (preview.steps ?? []).length
+                    ? preview.steps!.map((s) => `${s.mode}: ${s.instruction}`).join(' -> ')
+                    : 'No step data',
+                ],
                 ['Transport Modes', (preview.transportModes ?? []).join(', ') || 'N/A'],
-                ['ETA', `${preview.etaMinutes ?? 'N/A'} mins`],
-                ['Fare Estimate', preview.fareEstimate ?? 'N/A'],
-                ['Distance', `${preview.distanceKm ?? 'N/A'} km`],
+                ['ETA', preview.eta ? `${preview.eta} mins` : 'N/A'],
+                ['Fare Estimate', preview.price ?? 'N/A'],
+                [
+                  'Distance',
+                  preview.distance ??
+                    (preview.distanceMeters != null
+                      ? `${(preview.distanceMeters / 1000).toFixed(1)} km`
+                      : 'N/A'),
+                ],
               ].map(([label, value]) => (
                 <div key={String(label)} className="dialog-field">
                   <span className="dialog-field-label">{label}</span>

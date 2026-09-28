@@ -19,11 +19,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: GestureDetector(
-        onTap: () async {
-          final canLeave = await _handleBackPressed();
-          if (!mounted || !canLeave) return;
-          Navigator.of(context).pop();
-        },
+        onTap: () => Navigator.of(context).pop(),
         child: Container(
           margin: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -134,7 +130,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: _danger.withValues(alpha: 0.25)),
             ),
-            child: const Icon(Icons.report_problem_outlined, color: _danger, size: 17),
+            child: const Icon(
+              Icons.report_problem_outlined,
+              color: _danger,
+              size: 17,
+            ),
           ),
         ),
       ],
@@ -146,8 +146,13 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   }
 
   Widget _buildStepTileSection(int idx, route_model.Step step) {
-    final modeColor = modeColors[step.mode] ?? _accent;
-    final scheduleView = ScheduleWindowService.findStepView(_scheduleSnapshot, idx);
+    final isCompleted = _isStepCompleted(idx);
+    final modeColor =
+        isCompleted ? _textSecondary : (modeColors[step.mode] ?? _accent);
+    final scheduleView = ScheduleWindowService.findStepView(
+      _scheduleSnapshot,
+      idx,
+    );
     final stepSchedule = scheduleView?.displayText ?? _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
@@ -155,174 +160,195 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final baseFareValue = step.actualFare ?? estimatedFare;
     final fareValue = _applyFareDiscount(baseFareValue);
     final fareProfileLabel = FareDiscountToggle.defaultLabel;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Column(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: modeColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: modeColor.withValues(alpha: 0.3)),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 250),
+      opacity: isCompleted ? 0.5 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isCompleted ? _surfaceAlt : _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: modeColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: modeColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Icon(
+                      isCompleted
+                          ? Icons.check_rounded
+                          : _getModeIcon(step.mode),
+                      color: modeColor,
+                      size: 18,
+                    ),
                   ),
-                  child: Icon(_getModeIcon(step.mode), color: modeColor, size: 18),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: _surfaceAlt,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _border),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${idx + 1}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: _textSecondary,
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: _surfaceAlt,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _border),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${idx + 1}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: _textSecondary,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    step.mode,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: modeColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    step.instruction,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _textPrimary,
-                      height: 1.4,
-                    ),
-                  ),
-                  if (step.details.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      step.details,
-                      style: const TextStyle(
+                      step.mode,
+                      style: TextStyle(
                         fontSize: 12,
-                        color: _textSecondary,
+                        fontWeight: FontWeight.w700,
+                        color: modeColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      step.instruction,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _textPrimary,
                         height: 1.4,
                       ),
                     ),
-                  ],
-                  if (stepSchedule != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: (scheduleView != null
-                                ? _scheduleStateColor(scheduleView.state)
-                                : const Color(0xFFE89A3C))
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
+                    if (step.details.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        step.details,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: _textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    if (stepSchedule != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
                           color: (scheduleView != null
                                   ? _scheduleStateColor(scheduleView.state)
-                                  : const Color(0xFFFFD9AE))
-                              .withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        scheduleView == null ? 'Schedule: $stepSchedule' : stepSchedule,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: scheduleView != null
-                              ? _scheduleStateColor(scheduleView.state)
-                              : const Color(0xFF9A5A17),
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (altSuggestion != null && altSuggestion.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF8E1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFFFD54F)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 14,
-                            color: Color(0xFF7A5800),
+                                  : const Color(0xFFE89A3C))
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (scheduleView != null
+                                    ? _scheduleStateColor(scheduleView.state)
+                                    : const Color(0xFFFFD9AE))
+                                .withValues(alpha: 0.35),
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              altSuggestion,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                height: 1.35,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF7A5800),
+                        ),
+                        child: Text(
+                          scheduleView == null
+                              ? 'Schedule: $stepSchedule'
+                              : stepSchedule,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                scheduleView != null
+                                    ? _scheduleStateColor(scheduleView.state)
+                                    : const Color(0xFF9A5A17),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (altSuggestion != null && altSuggestion.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFFD54F)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              size: 14,
+                              color: Color(0xFF7A5800),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                altSuggestion,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF7A5800),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (isTransport) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF8F2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFB9E4C6)),
-                      ),
-                      child: Text(
-                        _isDiscountFareEnabled
-                            ? 'Fare ($fareProfileLabel): PHP ${fareValue.toStringAsFixed(0)} '
-                                '(${step.actualFare != null ? 'actual' : 'estimated'})'
-                            : 'Fare: PHP ${fareValue.toStringAsFixed(0)} '
-                                '(${step.actualFare != null ? 'actual' : 'estimated'})',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF2D9F63),
+                          ],
                         ),
                       ),
-                    ),
+                    ],
+                    if (isTransport) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF8F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFB9E4C6)),
+                        ),
+                        child: Text(
+                          _isDiscountFareEnabled
+                              ? 'Fare ($fareProfileLabel): PHP ${fareValue.toStringAsFixed(0)} '
+                                  '(${step.actualFare != null ? 'actual' : 'estimated'})'
+                              : 'Fare: PHP ${fareValue.toStringAsFixed(0)} '
+                                  '(${step.actualFare != null ? 'actual' : 'estimated'})',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2D9F63),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -333,22 +359,71 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     bool schedule = _scheduleAccurate;
     bool operating = _stillOperating;
 
+    Widget yesNoToggle({
+      required bool value,
+      required ValueChanged<bool> onChanged,
+    }) {
+      Widget pill({
+        required String label,
+        required bool selected,
+        required VoidCallback onTap,
+      }) {
+        return InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? _accent.withValues(alpha: 0.12) : _surfaceAlt,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected ? _accent.withValues(alpha: 0.35) : _border,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: TranslatedText(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected ? _accent : _textSecondary,
+              ),
+            ),
+          ),
+        );
+      }
+
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pill(label: 'Yes', selected: value, onTap: () => onChanged(true)),
+          const SizedBox(width: 6),
+          pill(label: 'No', selected: !value, onTap: () => onChanged(false)),
+        ],
+      );
+    }
+
     return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final score = _trustScore ??
+            final score =
+                _trustScore ??
                 RouteTrustService.computeConfidence(
                   route: widget.route,
                   feedbackSummary: _feedbackSummary,
                 );
             final trustLabel = RouteTrustService.confidenceLabel(score.total);
-            final trustColor = score.total >= 85
-                ? const Color(0xFF2D9F63)
-                : score.total >= 65
-                    ? const Color(0xFF2E7CF6)
+            final trustColor =
+                score.total >= 85
+                    ? _green
+                    : score.total >= 65
+                    ? _accent
                     : const Color(0xFFE89A3C);
 
             Widget questionRow({
@@ -358,105 +433,50 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             }) {
               return Row(
                 children: [
-                  Expanded(
-                    child: Text(
+                  Flexible(
+                    child: TranslatedText(
                       label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: _textPrimary,
                       ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () => setDialogState(() => onChanged(true)),
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            value
-                                ? _accent.withValues(alpha: 0.12)
-                                : _surfaceAlt,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color:
-                              value
-                                  ? _accent.withValues(alpha: 0.35)
-                                  : _border,
-                        ),
-                      ),
-                      child: Text(
-                        'Yes',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: value ? _accent : _textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () => setDialogState(() => onChanged(false)),
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            !value
-                                ? _accent.withValues(alpha: 0.12)
-                                : _surfaceAlt,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color:
-                              !value
-                                  ? _accent.withValues(alpha: 0.35)
-                                  : _border,
-                        ),
-                      ),
-                      child: Text(
-                        'No',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: !value ? _accent : _textSecondary,
-                        ),
-                      ),
-                    ),
+                  const SizedBox(width: 10),
+                  yesNoToggle(
+                    value: value,
+                    onChanged: (v) => setDialogState(() => onChanged(v)),
                   ),
                 ],
               );
             }
 
-            return Dialog(
+            return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _border),
-                ),
+              title: const TranslatedText('Before You Go'),
+              content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.verified_outlined, size: 16, color: trustColor),
+                        Icon(
+                          Icons.verified_outlined,
+                          size: 16,
+                          color: trustColor,
+                        ),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
+                        Flexible(
+                          child: TranslatedText(
                             'Route confidence: ${score.total}/100 ($trustLabel)',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -467,136 +487,74 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Before leaving, help improve route reliability with quick trust feedback (once every 30 days).',
+                    const TranslatedText(
+                      'Quick trust feedback helps other commuters (asked at most once every 30 days).',
                       style: TextStyle(
                         fontSize: 11,
                         color: _textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 14),
                     questionRow(
                       label: 'Fare accurate?',
                       value: fare,
                       onChanged: (v) => fare = v,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     questionRow(
                       label: 'Schedule accurate?',
                       value: schedule,
                       onChanged: (v) => schedule = v,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     questionRow(
                       label: 'Still operating?',
                       value: operating,
                       onChanged: (v) => operating = v,
                     ),
-                    const SizedBox(height: 12),
-                    OverflowBar(
-                      alignment: MainAxisAlignment.end,
-                      spacing: 6,
-                      overflowSpacing: 6,
-                      children: [
-                        TextButton(
-                          onPressed:
-                              () => Navigator.of(dialogContext).pop({
-                                'action': 'dismiss',
-                                'fareAccurate': fare,
-                                'scheduleAccurate': schedule,
-                                'stillOperating': operating,
-                              }),
-                          child: const Text('Dismiss'),
-                        ),
-                        TextButton(
-                          onPressed:
-                              () => Navigator.of(dialogContext).pop({
-                                'action': 'skip_today',
-                                'fareAccurate': fare,
-                                'scheduleAccurate': schedule,
-                                'stillOperating': operating,
-                              }),
-                          child: const Text('Don\'t ask again today'),
-                        ),
-                        ElevatedButton(
-                          onPressed:
-                              () => Navigator.of(dialogContext).pop({
-                                'action': 'submit',
-                                'fareAccurate': fare,
-                                'scheduleAccurate': schedule,
-                                'stillOperating': operating,
-                              }),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _accent,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Submit'),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
+              actionsAlignment: MainAxisAlignment.end,
+              actions: [
+                TextButton(
+                  onPressed:
+                      () => Navigator.of(dialogContext).pop({
+                        'action': 'dismiss',
+                        'fareAccurate': fare,
+                        'scheduleAccurate': schedule,
+                        'stillOperating': operating,
+                      }),
+                  child: const TranslatedText('Dismiss'),
+                ),
+                TextButton(
+                  onPressed:
+                      () => Navigator.of(dialogContext).pop({
+                        'action': 'skip_today',
+                        'fareAccurate': fare,
+                        'scheduleAccurate': schedule,
+                        'stillOperating': operating,
+                      }),
+                  child: const TranslatedText('Skip for Today'),
+                ),
+                FilledButton(
+                  onPressed:
+                      () => Navigator.of(dialogContext).pop({
+                        'action': 'submit',
+                        'fareAccurate': fare,
+                        'scheduleAccurate': schedule,
+                        'stillOperating': operating,
+                      }),
+                  style: FilledButton.styleFrom(backgroundColor: _accent),
+                  child: const TranslatedText('Submit'),
+                ),
+              ],
             );
           },
         );
       },
     );
-  }
-
-  Future<bool> _handleBackPressedSection() async {
-    if (!widget.enableRouteIntegrity) {
-      return true;
-    }
-
-    if (await _isTrustPromptSkippedToday()) {
-      return true;
-    }
-
-    if (_hasSubmittedTrustFeedback) {
-      final nextAllowedAt = _trustFeedbackNextAllowedAt;
-      if (nextAllowedAt == null || DateTime.now().isBefore(nextAllowedAt)) {
-        return true;
-      }
-    }
-
-    if (_isExitPromptOpen) return false;
-    _isExitPromptOpen = true;
-    try {
-      final result = await _showExitTrustFeedbackDialog();
-      if (!mounted || result == null) return false;
-
-      final action = (result['action'] as String?) ?? 'dismiss';
-      final fare = (result['fareAccurate'] as bool?) ?? _fareAccurate;
-      final schedule =
-          (result['scheduleAccurate'] as bool?) ?? _scheduleAccurate;
-      final operating =
-          (result['stillOperating'] as bool?) ?? _stillOperating;
-
-      _applyTrustFeedbackSelection(
-        fareAccurate: fare,
-        scheduleAccurate: schedule,
-        stillOperating: operating,
-      );
-
-      if (action == 'submit') {
-        final ok = await _submitTrustFeedbackValues(
-          fareAccurate: fare,
-          scheduleAccurate: schedule,
-          stillOperating: operating,
-        );
-        return ok;
-      }
-
-      if (action == 'skip_today') {
-        await _setTrustPromptSkipToday();
-      }
-
-      return true;
-    } finally {
-      _isExitPromptOpen = false;
-    }
   }
 
   Widget _buildEmptyStateSection() {
@@ -726,8 +684,8 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
           const SizedBox(height: 16),
           _buildSectionLabel('Route Steps (${widget.route.steps.length})'),
           ...widget.route.steps.asMap().entries.map(
-                (e) => _buildStepTile(e.key, e.value),
-              ),
+            (e) => _buildStepTile(e.key, e.value),
+          ),
           if (_routeReports.isNotEmpty) ...[
             const SizedBox(height: 6),
             _buildSectionLabel('Recent Reports'),
@@ -772,11 +730,16 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
 
   Widget _buildMetricsRowSection() {
     final distanceValue = () {
-      if (widget.route.distanceMeters != null && widget.route.distanceMeters! > 0) {
-        return RouteMetricsService.formatDistance(widget.route.distanceMeters! / 1000);
+      if (widget.route.distanceMeters != null &&
+          widget.route.distanceMeters! > 0) {
+        return RouteMetricsService.formatDistance(
+          widget.route.distanceMeters! / 1000,
+        );
       }
       if (widget.route.distance != null && widget.route.distance!.isNotEmpty) {
-        final parsedKm = RouteMetricsService.parseDistanceToKm(widget.route.distance);
+        final parsedKm = RouteMetricsService.parseDistanceToKm(
+          widget.route.distance,
+        );
         if (parsedKm != null) {
           return RouteMetricsService.formatDistance(parsedKm);
         }
@@ -876,7 +839,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 color: _danger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(_getReportIcon(report.type), color: _danger, size: 17),
+              child: Icon(
+                _getReportIcon(report.type),
+                color: _danger,
+                size: 17,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -891,21 +858,32 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       color: _textPrimary,
                     ),
                   ),
-                  if (report.description != null && report.description!.isNotEmpty) ...[
+                  if (report.description != null &&
+                      report.description!.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       report.description!,
-                      style: const TextStyle(fontSize: 12, color: _textSecondary),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _textSecondary,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 11, color: _textSecondary),
+                      const Icon(
+                        Icons.access_time,
+                        size: 11,
+                        color: _textSecondary,
+                      ),
                       const SizedBox(width: 3),
                       Text(
                         _formatTime(report.timestamp),
-                        style: const TextStyle(fontSize: 11, color: _textSecondary),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -990,5 +968,4 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       ),
     );
   }
-
 }

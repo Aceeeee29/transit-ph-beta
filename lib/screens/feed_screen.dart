@@ -12,6 +12,7 @@ import '../widgets/feed/feed_colors.dart';
 import '../widgets/feed/feed_post_card.dart';
 import '../screens/comments_screen.dart';
 import '../widgets/feed/report_post_dialog.dart';
+import '../widgets/translated_text.dart';
 
 class FeedScreen extends StatefulWidget {
   final List<Post> posts;
@@ -39,6 +40,7 @@ class _FeedScreenState extends State<FeedScreen> {
   final _postVotes = <String, bool?>{};
   final _upvoteCounts = <String, int>{};
   final _downvoteCounts = <String, int>{};
+  final _pendingVotePostIds = <String>{};
   final _postComments = <String, List<Comment>>{};
   final _loadedPostIds = <String>{};
 
@@ -63,11 +65,12 @@ class _FeedScreenState extends State<FeedScreen> {
   void _showCreatePostDialog() {
     showDialog(
       context: context,
-      builder: (_) => CreatePostDialog(
-        onPostCreated: widget.onPostCreated,
-        currentUserName: widget.currentUserName,
-        currentUserId: widget.currentUserId,
-      ),
+      builder:
+          (_) => CreatePostDialog(
+            onPostCreated: widget.onPostCreated,
+            currentUserName: widget.currentUserName,
+            currentUserId: widget.currentUserId,
+          ),
     );
   }
 
@@ -75,46 +78,47 @@ class _FeedScreenState extends State<FeedScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CommentsScreen(
-          postId: postId,
-          post: post,
-          initialComments: _postComments[postId] ?? [],
-          currentUserId: widget.currentUserId,
-          currentUserName: widget.currentUserName,
-          onCommentPosted: () => _loadComments(postId),
-        ),
+        builder:
+            (_) => CommentsScreen(
+              postId: postId,
+              post: post,
+              initialComments: _postComments[postId] ?? [],
+              currentUserId: widget.currentUserId,
+              currentUserName: widget.currentUserName,
+              onCommentPosted: () => _loadComments(postId),
+            ),
       ),
     );
   }
 
   void _showReportDialog(Post post) {
-    showDialog(
-      context: context,
-      builder: (_) => ReportPostDialog(post: post),
-    );
+    showDialog(context: context, builder: (_) => ReportPostDialog(post: post));
   }
 
   Future<void> _deletePost(Post post) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Post'),
-        content: const Text(
-          'Are you sure you want to delete this post? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const TranslatedText('Delete Post'),
+            content: const TranslatedText(
+              'Are you sure you want to delete this post? This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const TranslatedText('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const TranslatedText('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
     if (confirmed == true) {
       try {
@@ -123,7 +127,11 @@ class _FeedScreenState extends State<FeedScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to delete post. Please try again.')),
+            const SnackBar(
+              content: TranslatedText(
+                'Failed to delete post. Please try again.',
+              ),
+            ),
           );
         }
       }
@@ -136,12 +144,14 @@ class _FeedScreenState extends State<FeedScreen> {
     return null;
   }
 
-  int _effectiveUpvoteCount(Post post) => _upvoteCounts[post.id] ?? post.upvoteCount;
+  int _effectiveUpvoteCount(Post post) =>
+      _upvoteCounts[post.id] ?? post.upvoteCount;
 
   int _effectiveDownvoteCount(Post post) =>
       _downvoteCounts[post.id] ?? post.downvoteCount;
 
-  bool? _effectiveVote(Post post) => _postVotes[post.id] ?? _initialVoteForPost(post);
+  bool? _effectiveVote(Post post) =>
+      _postVotes[post.id] ?? _initialVoteForPost(post);
 
   void _applyLocalVoteState(Post post, bool? previousVote, bool? nextVote) {
     var upvotes = _effectiveUpvoteCount(post);
@@ -164,27 +174,90 @@ class _FeedScreenState extends State<FeedScreen> {
     _downvoteCounts[post.id] = downvotes;
   }
 
+  Future<void> _handleVote(Post post, {required bool isUpvote}) async {
+    if (_pendingVotePostIds.contains(post.id)) return;
+
+    final previousVote = _effectiveVote(post);
+    // Mirror the server's toggle logic optimistically: tapping the same
+    // vote again clears it, otherwise it becomes the tapped vote.
+    final optimisticVote = previousVote == isUpvote ? null : isUpvote;
+
+    setState(() {
+      _pendingVotePostIds.add(post.id);
+      _applyLocalVoteState(post, previousVote, optimisticVote);
+    });
+
+    try {
+      final serverVote = await PostActionsService.votePost(
+        post.id,
+        widget.currentUserId,
+        isUpvote: isUpvote,
+      );
+      if (!mounted) return;
+
+      if (serverVote != optimisticVote) {
+        // Reconcile with the server's actual result (e.g. state changed
+        // elsewhere between our optimistic guess and this response).
+        setState(() => _applyLocalVoteState(post, optimisticVote, serverVote));
+      }
+
+      if (serverVote == isUpvote &&
+          post.userId != null &&
+          post.userId != widget.currentUserId) {
+        NotificationsService.addNotification(
+          NotificationModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            userId: post.userId!,
+            type: isUpvote ? 'upvote' : 'downvote',
+            postId: post.id,
+            fromUserName: widget.currentUserName,
+            timestamp: DateTime.now(),
+            message:
+                '${widget.currentUserName} ${isUpvote ? 'upvoted' : 'downvoted'} your post.',
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Roll back the optimistic update — the request never landed.
+      setState(() => _applyLocalVoteState(post, optimisticVote, previousVote));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TranslatedText('Vote failed. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _pendingVotePostIds.remove(post.id));
+      } else {
+        _pendingVotePostIds.remove(post.id);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final approvedPosts = widget.posts
-        .where((p) => p.moderationStatus == ModerationStatus.approved)
-        .toList();
+    final approvedPosts =
+        widget.posts
+            .where((p) => p.moderationStatus == ModerationStatus.approved)
+            .toList();
 
     return Scaffold(
       backgroundColor: FeedColors.bg,
       appBar: _buildAppBar(approvedPosts),
       floatingActionButton: _buildFab(),
-      body: approvedPosts.isEmpty
-          ? _buildEmptyState()
-          : RefreshIndicator(
-              onRefresh: widget.onRefresh ?? () async {},
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                itemCount: approvedPosts.length,
-                itemBuilder: (context, index) =>
-                    _buildPostCard(approvedPosts[index]),
+      body:
+          approvedPosts.isEmpty
+              ? _buildEmptyState()
+              : RefreshIndicator(
+                onRefresh: widget.onRefresh ?? () async {},
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  itemCount: approvedPosts.length,
+                  itemBuilder:
+                      (context, index) => _buildPostCard(approvedPosts[index]),
+                ),
               ),
-            ),
     );
   }
 
@@ -197,64 +270,15 @@ class _FeedScreenState extends State<FeedScreen> {
       downvoteCount: _effectiveDownvoteCount(post),
       currentUserId: widget.currentUserId,
       currentUserName: widget.currentUserName,
-      onUpvoteTapped: () async {
-        final previousVote = _effectiveVote(post);
-        final nextVote = await PostActionsService.votePost(
-          post.id,
-          widget.currentUserId,
-          isUpvote: true,
-        );
-        if (!mounted) return;
-        setState(() => _applyLocalVoteState(post, previousVote, nextVote));
-        if (nextVote == true &&
-            post.userId != null &&
-            post.userId != widget.currentUserId) {
-          NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: post.userId!,
-              type: 'upvote',
-              postId: post.id,
-              fromUserName: widget.currentUserName,
-              timestamp: DateTime.now(),
-              message: '${widget.currentUserName} upvoted your post.',
-            ),
-          );
-        }
-      },
-      onDownvoteTapped: () async {
-        final previousVote = _effectiveVote(post);
-        final nextVote = await PostActionsService.votePost(
-          post.id,
-          widget.currentUserId,
-          isUpvote: false,
-        );
-        if (!mounted) return;
-        setState(() => _applyLocalVoteState(post, previousVote, nextVote));
-        if (nextVote == false &&
-            post.userId != null &&
-            post.userId != widget.currentUserId) {
-          NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: post.userId!,
-              type: 'downvote',
-              postId: post.id,
-              fromUserName: widget.currentUserName,
-              timestamp: DateTime.now(),
-              message: '${widget.currentUserName} downvoted your post.',
-            ),
-          );
-        }
-      },
+      onUpvoteTapped: () => _handleVote(post, isUpvote: true),
+      onDownvoteTapped: () => _handleVote(post, isUpvote: false),
       onCommentTapped: () async {
         if (!_loadedPostIds.contains(post.id)) await _loadComments(post.id);
         _showCommentSheet(post.id, post);
       },
       onReportTapped: () => _showReportDialog(post),
-      onDeleteTapped: post.userId == widget.currentUserId
-          ? () => _deletePost(post)
-          : null,
+      onDeleteTapped:
+          post.userId == widget.currentUserId ? () => _deletePost(post) : null,
     );
   }
 
@@ -275,12 +299,16 @@ class _FeedScreenState extends State<FeedScreen> {
           children: [
             Icon(Icons.forum_rounded, color: FeedColors.accent, size: 16),
             SizedBox(width: 8),
-            Text(
-              'Community Feed',
-              style: TextStyle(
-                color: FeedColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+            Flexible(
+              child: TranslatedText(
+                'Community Feed',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  color: FeedColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
             ),
           ],
@@ -288,12 +316,13 @@ class _FeedScreenState extends State<FeedScreen> {
       ),
       actions: [
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PostSearchScreen(posts: approvedPosts),
-            ),
-          ),
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PostSearchScreen(posts: approvedPosts),
+                ),
+              ),
           child: Container(
             margin: const EdgeInsets.only(right: 8),
             padding: const EdgeInsets.all(8),
@@ -310,15 +339,17 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ),
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => NotificationsScreen(
-                currentUserId: widget.currentUserId,
-                currentUserName: widget.currentUserName,
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (_) => NotificationsScreen(
+                        currentUserId: widget.currentUserId,
+                        currentUserName: widget.currentUserName,
+                      ),
+                ),
               ),
-            ),
-          ),
           child: Container(
             margin: const EdgeInsets.only(right: 16),
             padding: const EdgeInsets.all(8),
@@ -412,7 +443,7 @@ class _FeedScreenState extends State<FeedScreen> {
           children: [
             Icon(Icons.edit_rounded, color: Colors.white, size: 18),
             SizedBox(width: 8),
-            Text(
+            TranslatedText(
               'New Post',
               style: TextStyle(
                 color: Colors.white,
@@ -446,7 +477,7 @@ class _FeedScreenState extends State<FeedScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          const TranslatedText(
             'No posts yet',
             style: TextStyle(
               color: FeedColors.textPrimary,
@@ -455,7 +486,7 @@ class _FeedScreenState extends State<FeedScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          const TranslatedText(
             'Be the first to share something\nwith the community.',
             textAlign: TextAlign.center,
             style: TextStyle(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/comment.dart';
 import '../../models/notification.dart';
 import '../../models/post.dart';
@@ -42,15 +43,25 @@ class _FeedCommentDialogState extends State<FeedCommentDialog> {
   Future<void> _submit() async {
     if (_controller.text.isEmpty) {
       Navigator.pop(context);
-      
+
       return;
     }
     try {
+      // Prefer the live Firebase Auth name over the widget-provided one,
+      // which can be stale if the profile was edited since this dialog's
+      // ancestor route last rebuilt.
+      final authDisplayName =
+          FirebaseAuth.instance.currentUser?.displayName?.trim();
+      final currentUserName =
+          (authDisplayName != null && authDisplayName.isNotEmpty)
+              ? authDisplayName
+              : widget.currentUserName;
+
       final comment = Comment(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         postId: widget.postId,
         userId: widget.currentUserId,
-        userName: widget.currentUserName,
+        userName: currentUserName,
         content: _controller.text,
         parentId: widget.parentComment?.id,
         timestamp: DateTime.now(),
@@ -65,12 +76,12 @@ class _FeedCommentDialogState extends State<FeedCommentDialog> {
             userId: post.userId!,
             type: widget.parentComment != null ? 'reply' : 'comment',
             postId: widget.postId,
-            fromUserName: widget.currentUserName,
+            fromUserName: currentUserName,
             timestamp: DateTime.now(),
             message:
                 widget.parentComment != null
-                    ? '${widget.currentUserName} replied to a comment.'
-                    : '${widget.currentUserName} commented on your post.',
+                    ? '$currentUserName replied to a comment.'
+                    : '$currentUserName commented on your post.',
           ),
         );
       }

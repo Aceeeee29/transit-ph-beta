@@ -11,13 +11,20 @@ extension _HomeScreenSections on _HomeScreenState {
   static const _border = _HomeScreenState._border;
   static const _danger = _HomeScreenState._danger;
 
-  Widget _buildRouteCardSection(route_model.Route route, {double? cheapestFare}) {
+  Widget _buildRouteCardSection(
+    route_model.Route route, {
+    double? cheapestFare,
+  }) {
     final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
-    final hasActualFare = hasTransportSteps &&
-        route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
+    final hasActualFare =
+        hasTransportSteps &&
+        route.steps
+            .where((s) => s.mode != 'Walk')
+            .every((s) => s.actualFare != null);
     final estimatedFare = _routeEstimatedFare(route);
     final estimatedMins = _routeEstimatedMinutes(route);
-    final possibleSavings = cheapestFare != null ? (estimatedFare - cheapestFare) : 0;
+    final possibleSavings =
+        cheapestFare != null ? (estimatedFare - cheapestFare) : 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -34,9 +41,10 @@ extension _HomeScreenSections on _HomeScreenState {
         ],
       ),
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
-        ),
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
+            ),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -46,7 +54,7 @@ extension _HomeScreenSections on _HomeScreenState {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: TranslatedText(
                       '${route.startLocation} -> ${route.endLocation}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
@@ -61,7 +69,7 @@ extension _HomeScreenSections on _HomeScreenState {
               const SizedBox(height: 8),
               _routeIntegrityChip(route),
               const SizedBox(height: 8),
-              Text(
+              TranslatedText(
                 route.shortDescription,
                 style: const TextStyle(
                   fontStyle: FontStyle.italic,
@@ -77,32 +85,48 @@ extension _HomeScreenSections on _HomeScreenState {
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: route.audienceTags.take(4).map((tag) => _audienceTagChip(tag)).toList(),
+                  children:
+                      route.audienceTags
+                          .take(4)
+                          .map((tag) => _audienceTagChip(tag))
+                          .toList(),
                 ),
               ],
               const SizedBox(height: 10),
               Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: route.steps.map((step) => _modeChip(step.mode)).toList(),
+                children:
+                    route.steps.map((step) => _modeChip(step.mode)).toList(),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  _statItem(Icons.payments_outlined, 'PHP ${estimatedFare.toStringAsFixed(0)}', const Color(0xFF2D9F63)),
+                  _statItem(
+                    Icons.payments_outlined,
+                    'PHP ${estimatedFare.toStringAsFixed(0)}',
+                    const Color(0xFF2D9F63),
+                  ),
                   const SizedBox(width: 14),
-                  _statItem(Icons.timer_outlined, '${estimatedMins} min', _textSecondary),
+                  _statItem(
+                    Icons.timer_outlined,
+                    '${estimatedMins} min',
+                    _textSecondary,
+                  ),
                 ],
               ),
               if (possibleSavings > 0.9) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0x143EC97A),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text(
+                  child: TranslatedText(
                     'You save PHP ${possibleSavings.toStringAsFixed(0)} vs higher-fare options',
                     style: const TextStyle(
                       fontSize: 11,
@@ -114,18 +138,33 @@ extension _HomeScreenSections on _HomeScreenState {
               ],
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: _surfaceAlt,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    _statItem(Icons.visibility_outlined, '${route.views}', _textSecondary),
+                    _statItem(
+                      Icons.visibility_outlined,
+                      '${route.views}',
+                      _textSecondary,
+                    ),
                     const SizedBox(width: 14),
-                    _statItem(Icons.thumb_up_outlined, '${route.upvotes}', const Color(0xFF3EC97A)),
+                    _statItem(
+                      Icons.thumb_up_outlined,
+                      '${route.upvotes}',
+                      const Color(0xFF3EC97A),
+                    ),
                     const SizedBox(width: 14),
-                    _statItem(Icons.thumb_down_outlined, '${route.downvotes}', _danger),
+                    _statItem(
+                      Icons.thumb_down_outlined,
+                      '${route.downvotes}',
+                      _danger,
+                    ),
                     if (route.eta != null) ...[
                       const SizedBox(width: 14),
                       _statItem(
@@ -136,26 +175,39 @@ extension _HomeScreenSections on _HomeScreenState {
                     ],
                     if (route.price != null) ...[
                       const SizedBox(width: 14),
-                      _statItem(Icons.payments_outlined, route.price!, const Color(0xFF3EC97A)),
+                      _statItem(
+                        Icons.payments_outlined,
+                        route.price!,
+                        const Color(0xFF3EC97A),
+                      ),
                     ],
                     if (hasTransportSteps) ...[
                       const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: hasActualFare
-                              ? const Color(0x143EC97A)
-                              : const Color(0x14E89A3C),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          hasActualFare ? 'Actual' : 'Estimated',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: hasActualFare
-                                ? const Color(0xFF2D9F63)
-                                : const Color(0xFFB8732F),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                hasActualFare
+                                    ? const Color(0x143EC97A)
+                                    : const Color(0x14E89A3C),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: TranslatedText(
+                            hasActualFare ? 'Actual' : 'Estimated',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color:
+                                  hasActualFare
+                                      ? const Color(0xFF2D9F63)
+                                      : const Color(0xFFB8732F),
+                            ),
                           ),
                         ),
                       ),
@@ -172,8 +224,11 @@ extension _HomeScreenSections on _HomeScreenState {
 
   Widget _buildRecommendationCardSection(route_model.Route route) {
     final hasTransportSteps = route.steps.any((s) => s.mode != 'Walk');
-    final hasActualFare = hasTransportSteps &&
-        route.steps.where((s) => s.mode != 'Walk').every((s) => s.actualFare != null);
+    final hasActualFare =
+        hasTransportSteps &&
+        route.steps
+            .where((s) => s.mode != 'Walk')
+            .every((s) => s.actualFare != null);
     return Container(
       width: 240,
       margin: const EdgeInsets.only(right: 12),
@@ -197,7 +252,7 @@ extension _HomeScreenSections on _HomeScreenState {
             Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: TranslatedText(
                     '${route.startLocation} → ${route.endLocation}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
@@ -214,7 +269,7 @@ extension _HomeScreenSections on _HomeScreenState {
             const SizedBox(height: 6),
             _routeIntegrityChip(route),
             const SizedBox(height: 6),
-            Text(
+            TranslatedText(
               route.shortDescription,
               style: const TextStyle(
                 fontStyle: FontStyle.italic,
@@ -230,38 +285,56 @@ extension _HomeScreenSections on _HomeScreenState {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: route.audienceTags
-                      .take(3)
-                      .map(
-                        (tag) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: _audienceTagChip(tag),
-                        ),
-                      )
-                      .toList(),
+                  children:
+                      route.audienceTags
+                          .take(3)
+                          .map(
+                            (tag) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: _audienceTagChip(tag),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
             ],
             const Spacer(),
             Row(
               children: [
-                _statItem(Icons.visibility_outlined, '${route.views}', _textSecondary),
+                _statItem(
+                  Icons.visibility_outlined,
+                  '${route.views}',
+                  _textSecondary,
+                ),
                 const SizedBox(width: 10),
-                _statItem(Icons.thumb_up_outlined, '${route.upvotes}', const Color(0xFF3EC97A)),
+                _statItem(
+                  Icons.thumb_up_outlined,
+                  '${route.upvotes}',
+                  const Color(0xFF3EC97A),
+                ),
                 if (route.price != null) ...[
                   const SizedBox(width: 10),
-                  _statItem(Icons.payments_outlined, route.price!, const Color(0xFF3EC97A)),
+                  _statItem(
+                    Icons.payments_outlined,
+                    route.price!,
+                    const Color(0xFF3EC97A),
+                  ),
                 ],
                 if (hasTransportSteps) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    hasActualFare ? 'Actual fare' : 'Estimated fare',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: hasActualFare
-                          ? const Color(0xFF2D9F63)
-                          : const Color(0xFFB8732F),
+                  Flexible(
+                    child: TranslatedText(
+                      hasActualFare ? 'Actual fare' : 'Estimated fare',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color:
+                            hasActualFare
+                                ? const Color(0xFF2D9F63)
+                                : const Color(0xFFB8732F),
+                      ),
                     ),
                   ),
                 ],
@@ -269,9 +342,12 @@ extension _HomeScreenSections on _HomeScreenState {
             ),
             const SizedBox(height: 10),
             GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
-              ),
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RouteMapScreen(route: route),
+                    ),
+                  ),
               child: Container(
                 height: 36,
                 decoration: BoxDecoration(
@@ -294,12 +370,16 @@ extension _HomeScreenSections on _HomeScreenState {
                   children: [
                     Icon(Icons.map_outlined, color: Colors.white, size: 14),
                     SizedBox(width: 6),
-                    Text(
-                      'View Route',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: TranslatedText(
+                        'View Route',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -340,23 +420,30 @@ extension _HomeScreenSections on _HomeScreenState {
           ),
         ),
         const SizedBox(width: 12),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'TransitPH',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: _textPrimary,
-                letterSpacing: -0.5,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              TranslatedText(
+                'TransitPH',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: _textPrimary,
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            Text(
-              'Your community transit guide',
-              style: TextStyle(fontSize: 12, color: _textSecondary),
-            ),
-          ],
+              TranslatedText(
+                'Your community transit guide',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(fontSize: 12, color: _textSecondary),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -381,7 +468,37 @@ extension _HomeScreenSections on _HomeScreenState {
       );
     }
 
-    if (_weatherData == null) return const SizedBox.shrink();
+    if (_weatherData == null) {
+      if (_weatherError == null) return const SizedBox.shrink();
+      return GestureDetector(
+        onTap: _getWeather,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.cloud_off_outlined,
+                color: _textSecondary,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TranslatedText(
+                  _weatherError!,
+                  style: const TextStyle(fontSize: 12, color: _textSecondary),
+                ),
+              ),
+              const Icon(Icons.refresh_rounded, color: _accent, size: 18),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Column(
       children: [
@@ -409,7 +526,7 @@ extension _HomeScreenSections on _HomeScreenState {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
+                child: TranslatedText(
                   '${_weatherData!.condition}  •  ${_weatherData!.temp}  •  💧 ${_weatherData!.humidity}',
                   style: const TextStyle(
                     fontSize: 13,
@@ -447,7 +564,7 @@ extension _HomeScreenSections on _HomeScreenState {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text(
+                  child: TranslatedText(
                     'Storm Warning: Severe weather expected. Plan accordingly.',
                     style: TextStyle(
                       fontSize: 13,
@@ -502,7 +619,10 @@ extension _HomeScreenSections on _HomeScreenState {
                           size: 18,
                         ),
                         hintText: 'Starting from...',
-                        hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
+                        hintStyle: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 14,
+                        ),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(
                           vertical: 13,
@@ -522,23 +642,29 @@ extension _HomeScreenSections on _HomeScreenState {
                       color: _isDetectingLocation ? _surfaceAlt : _accentSoft,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _isDetectingLocation
-                            ? _border
-                            : _accent.withOpacity(0.3),
+                        color:
+                            _isDetectingLocation
+                                ? _border
+                                : _accent.withOpacity(0.3),
                       ),
                     ),
-                    child: _isDetectingLocation
-                        ? const Center(
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _accent,
+                    child:
+                        _isDetectingLocation
+                            ? const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _accent,
+                                ),
                               ),
+                            )
+                            : const Icon(
+                              Icons.my_location,
+                              color: _accent,
+                              size: 18,
                             ),
-                          )
-                        : const Icon(Icons.my_location, color: _accent, size: 18),
                   ),
                 ),
               ],
@@ -561,14 +687,16 @@ extension _HomeScreenSections on _HomeScreenState {
               ),
             ),
             GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SearchScreen(
-                    routes: widget.routes,
-                    onRefresh: widget.onRefresh,
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => SearchScreen(
+                            routes: widget.routes,
+                            onRefresh: widget.onRefresh,
+                          ),
+                    ),
                   ),
-                ),
-              ),
               child: AbsorbPointer(
                 child: Container(
                   decoration: BoxDecoration(
@@ -602,7 +730,10 @@ extension _HomeScreenSections on _HomeScreenState {
               onTap: () => widget.onOpenNearbyPlaces(),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF7B61FF), Color(0xFF2E7CF6)],
@@ -627,12 +758,16 @@ extension _HomeScreenSections on _HomeScreenState {
                       color: Colors.white,
                     ),
                     SizedBox(width: 8),
-                    Text(
-                      'Nearby Places',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                    Flexible(
+                      child: TranslatedText(
+                        'Nearby Places',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],
@@ -644,7 +779,10 @@ extension _HomeScreenSections on _HomeScreenState {
               onTap: _openDownloadedRoutes,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: _accentSoft,
                   borderRadius: BorderRadius.circular(12),
@@ -659,12 +797,16 @@ extension _HomeScreenSections on _HomeScreenState {
                       color: _accent,
                     ),
                     SizedBox(width: 8),
-                    Text(
-                      'Open Offline Routes',
-                      style: TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                    Flexible(
+                      child: TranslatedText(
+                        'Open Offline Routes',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: _accent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],
@@ -716,7 +858,7 @@ extension _HomeScreenSections on _HomeScreenState {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              TranslatedText(
                 '${_totalUsers!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} commuters',
                 style: const TextStyle(
                   fontSize: 18,
@@ -725,12 +867,9 @@ extension _HomeScreenSections on _HomeScreenState {
                   letterSpacing: -0.4,
                 ),
               ),
-              const Text(
+              const TranslatedText(
                 'Community members & counting',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 12, color: _textSecondary),
               ),
             ],
           ),
@@ -745,7 +884,7 @@ extension _HomeScreenSections on _HomeScreenState {
               children: [
                 Icon(Icons.circle, size: 7, color: Color(0xFF3EC97A)),
                 SizedBox(width: 5),
-                Text(
+                TranslatedText(
                   'Live',
                   style: TextStyle(
                     fontSize: 11,
@@ -776,13 +915,17 @@ extension _HomeScreenSections on _HomeScreenState {
         if (_tagMatchedRoutes.isNotEmpty) ...[
           Row(
             children: [
-              const Text(
-                '🏷️ Routes Matching Your Tags',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 17,
-                  color: _textPrimary,
-                  letterSpacing: -0.3,
+              const Flexible(
+                child: TranslatedText(
+                  '🏷️ Routes Matching Your Tags',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    color: _textPrimary,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -790,27 +933,33 @@ extension _HomeScreenSections on _HomeScreenState {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _activePersonaTags
-                        .map(
-                          (tag) => Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _accentSoft,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: _accent.withOpacity(0.2)),
-                            ),
-                            child: Text(
-                              tag,
-                              style: const TextStyle(
-                                color: _accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
+                    children:
+                        _activePersonaTags
+                            .map(
+                              (tag) => Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentSoft,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: _accent.withOpacity(0.2),
+                                  ),
+                                ),
+                                child: TranslatedText(
+                                  tag,
+                                  style: const TextStyle(
+                                    color: _accent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                            )
+                            .toList(),
                   ),
                 ),
               ),
@@ -822,8 +971,9 @@ extension _HomeScreenSections on _HomeScreenState {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _tagMatchedRoutes.length,
-              itemBuilder: (context, index) =>
-                  _buildRecommendationCard(_tagMatchedRoutes[index]),
+              itemBuilder:
+                  (context, index) =>
+                      _buildRecommendationCard(_tagMatchedRoutes[index]),
             ),
           ),
           const SizedBox(height: 24),
@@ -869,7 +1019,7 @@ extension _HomeScreenSections on _HomeScreenState {
             child: const Icon(Icons.add_road, color: _accent, size: 20),
           ),
           const SizedBox(height: 10),
-          const Text(
+          const TranslatedText(
             'New to the area?',
             style: TextStyle(
               fontWeight: FontWeight.w700,
@@ -878,7 +1028,7 @@ extension _HomeScreenSections on _HomeScreenState {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          const TranslatedText(
             'Help build our database by contributing a route you know!',
             style: TextStyle(fontSize: 13, color: _textSecondary, height: 1.4),
             textAlign: TextAlign.center,
@@ -909,12 +1059,16 @@ extension _HomeScreenSections on _HomeScreenState {
                 children: [
                   Icon(Icons.alt_route, color: Colors.white, size: 16),
                   SizedBox(width: 8),
-                  Text(
-                    'Contribute a Route',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+                  Flexible(
+                    child: TranslatedText(
+                      'Contribute a Route',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],

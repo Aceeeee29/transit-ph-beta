@@ -156,7 +156,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Need at least start and end points on map'),
+          content: TranslatedText('Need at least start and end points on map'),
         ),
       );
       return;
@@ -215,7 +215,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
     if (pathPoints.length < 2 || steps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Need at least start, end points and one step'),
+          content: TranslatedText(
+            'Need at least start, end points and one step',
+          ),
         ),
       );
       return;
@@ -268,7 +270,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   isNearby
                       ? 'Nearby Places'
                       : (widget.routeToEdit != null
@@ -282,7 +284,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   ),
                 ),
                 if (isNearby)
-                  const Text(
+                  const TranslatedText(
                     'Places across CAMANAVA',
                     style: TextStyle(
                       color: _textSecondary,
@@ -302,9 +304,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 isNearby ? MapTabMode.contribute : MapTabMode.nearby,
               ),
           child: Tooltip(
-            message: isNearby
-                ? 'Back to route contribution'
-                : 'Show Nearby Places',
+            message:
+                isNearby ? 'Back to route contribution' : 'Show Nearby Places',
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               height: 36,
@@ -318,14 +319,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isNearby
-                        ? Icons.add_road_outlined
-                        : Icons.near_me_outlined,
+                    isNearby ? Icons.add_road_outlined : Icons.near_me_outlined,
                     color: _accent,
                     size: 18,
                   ),
                   const SizedBox(width: 6),
-                  Text(
+                  TranslatedText(
                     isNearby ? 'Contribute' : 'Show Nearby Places',
                     style: const TextStyle(
                       color: _accent,
@@ -350,9 +349,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 color: _showPins ? _accentSoft : _surfaceAlt,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: _showPins
-                      ? _accent.withOpacity(0.35)
-                      : _border,
+                  color: _showPins ? _accent.withOpacity(0.35) : _border,
                 ),
               ),
               child: Icon(
@@ -393,87 +390,100 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   size: 18,
                 ),
               ),
-            onSelected: (value) {
-              switch (value) {
-                case 'handles':
-                  _toggleEditHandles();
-                case 'preview':
-                  _onPreviewRoute();
-                case 'tutorial':
-                  _showTutorialOverlay();
-              }
-            },
-            itemBuilder: (_) => [
-              if (selectionMode == 'done' && steps.isNotEmpty)
-                PopupMenuItem(
-                  value: 'handles',
-                  child: Row(
-                    children: [
-                      Icon(
-                        _showEditHandles
-                            ? Icons.edit_location_alt_rounded
-                            : Icons.edit_location_alt_outlined,
-                        color: _accent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _showEditHandles
-                            ? 'Hide edit handles'
-                            : 'Show edit handles',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: _textPrimary,
-                          fontWeight: FontWeight.w600,
+              onSelected: (value) {
+                switch (value) {
+                  case 'handles':
+                    _toggleEditHandles();
+                  case 'preview':
+                    _onPreviewRoute();
+                  case 'tutorial':
+                    _showTutorialOverlay();
+                }
+              },
+              itemBuilder:
+                  (_) => [
+                    if (selectionMode == 'done' && steps.isNotEmpty)
+                      PopupMenuItem(
+                        value: 'handles',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _showEditHandles
+                                  ? Icons.edit_location_alt_rounded
+                                  : Icons.edit_location_alt_outlined,
+                              color: _accent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TranslatedText(
+                                _showEditHandles
+                                    ? 'Hide edit handles'
+                                    : 'Show edit handles',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: _textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              if (selectionMode == 'done')
-                const PopupMenuItem(
-                  value: 'preview',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.preview_rounded,
-                        color: _accent,
-                        size: 18,
-                      ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Preview route',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _textPrimary,
-                          fontWeight: FontWeight.w600,
+                    if (selectionMode == 'done')
+                      const PopupMenuItem(
+                        value: 'preview',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.preview_rounded,
+                              color: _accent,
+                              size: 18,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: TranslatedText(
+                                'Preview route',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              const PopupMenuItem(
-                value: 'tutorial',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.help_outline_rounded,
-                      color: _textSecondary,
-                      size: 18,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      'Tutorial',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _textPrimary,
-                        fontWeight: FontWeight.w600,
+                    const PopupMenuItem(
+                      value: 'tutorial',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.help_outline_rounded,
+                            color: _textSecondary,
+                            size: 18,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: TranslatedText(
+                              'Tutorial',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
             ),
           ),
       ],
@@ -524,16 +534,17 @@ extension _ContributeScreenSections on _ContributeScreenState {
               // them. Deliberately non-interactive (IgnorePointer) so taps
               // always fall through to route-point drawing; full details
               // stay in Nearby Places mode. Hidden via the pins toggle.
-              if (_showPins)
+              if (_showPins && _poiPinScale > 0.02)
                 for (final place in camanavaPlaces)
                   Marker(
                     point: LatLng(place.lat, place.lng),
-                    width: 34,
-                    height: 34,
+                    width: 34 * _poiPinScale,
+                    height: 34 * _poiPinScale,
                     child: IgnorePointer(
                       child: _NearbyPlacePin(
                         place: place,
                         selected: false,
+                        scale: _poiPinScale,
                       ),
                     ),
                   ),
@@ -574,19 +585,11 @@ extension _ContributeScreenSections on _ContributeScreenState {
           MarkerLayer(
             markers: [
               if (_showPins)
-                for (final place in _visibleNearbyPlaces)
-                  Marker(
-                    point: LatLng(place.lat, place.lng),
-                    width: _nearbySelectedPlace?.id == place.id ? 48 : 34,
-                    height: _nearbySelectedPlace?.id == place.id ? 48 : 34,
-                    child: GestureDetector(
-                      onTap: () => _onNearbyPlaceTapped(place),
-                      child: _NearbyPlacePin(
-                        place: place,
-                        selected: place.id == _nearbySelectedPlace?.id,
-                      ),
-                    ),
-                  ),
+                for (final marker
+                    in _visibleNearbyPlaces
+                        .map(_buildNearbyPlaceMarker)
+                        .whereType<Marker>())
+                  marker,
               if (_showPins && _nearbyPosition != null)
                 Marker(
                   point: LatLng(
@@ -892,7 +895,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
         ),
         child: DropdownButtonFormField<String>(
           initialValue: selectedRegion,
-          hint: const Text(
+          hint: const TranslatedText(
             'Select Area',
             style: TextStyle(fontSize: 11, color: _textSecondary),
           ),
@@ -963,9 +966,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               color: _showPins ? _accentSoft : _surface.withOpacity(0.97),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _showPins
-                    ? _accent.withOpacity(0.35)
-                    : _border,
+                color: _showPins ? _accent.withOpacity(0.35) : _border,
               ),
               boxShadow: [
                 BoxShadow(
@@ -986,7 +987,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   size: 16,
                 ),
                 const SizedBox(width: 6),
-                Text(
+                TranslatedText(
                   _showPins ? 'Hide Pins' : 'Show Pins',
                   style: TextStyle(
                     color: _showPins ? _accent : _textSecondary,
@@ -1075,12 +1076,16 @@ extension _ContributeScreenSections on _ContributeScreenState {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              _isFormExpanded ? 'Hide Form' : 'Route Details',
-              style: const TextStyle(
-                color: _textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: TranslatedText(
+                _isFormExpanded ? 'Hide Form' : 'Route Details',
+                style: const TextStyle(
+                  color: _textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 6),
@@ -1147,7 +1152,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
       children: [
         Row(
           children: [
-            const Text(
+            const TranslatedText(
               'Route Steps',
               style: TextStyle(
                 fontSize: 13,
@@ -1172,14 +1177,18 @@ extension _ContributeScreenSections on _ContributeScreenState {
               ),
             ),
             const Spacer(),
-            GestureDetector(
-              onTap: _toggleEditHandles,
-              child: Text(
-                _showEditHandles ? 'Drag handles ON' : 'Drag handles',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: _accent,
+            Flexible(
+              child: GestureDetector(
+                onTap: _toggleEditHandles,
+                child: TranslatedText(
+                  _showEditHandles ? 'Drag handles ON' : 'Drag handles',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _accent,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1319,7 +1328,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     if (position == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: TranslatedText(
             'Location unavailable. Enable location to see distances from where you are.',
           ),
           duration: Duration(seconds: 3),
@@ -1349,6 +1358,24 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
   void _onNearbyPlaceTapped(Place place) {
     _setUiState(() => _nearbySelectedPlace = place);
+  }
+
+  /// Builds a nearby-place marker, or null when it should be auto-hidden
+  /// (zoomed out too far and not the currently-selected place).
+  Marker? _buildNearbyPlaceMarker(Place place) {
+    final selected = place.id == _nearbySelectedPlace?.id;
+    final scale = selected ? 1.0 : _poiPinScale;
+    if (scale <= 0.02) return null;
+    final size = (selected ? 48.0 : 34.0) * scale;
+    return Marker(
+      point: LatLng(place.lat, place.lng),
+      width: size,
+      height: size,
+      child: GestureDetector(
+        onTap: () => _onNearbyPlaceTapped(place),
+        child: _NearbyPlacePin(place: place, selected: selected, scale: scale),
+      ),
+    );
   }
 
   void _centerOnNearbyPlace(Place place) {
@@ -1433,7 +1460,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             children: [
               Icon(icon, size: 14, color: selected ? Colors.white : color),
               const SizedBox(width: 5),
-              Text(
+              TranslatedText(
                 label,
                 style: TextStyle(
                   color: selected ? Colors.white : _textPrimary,
@@ -1520,7 +1547,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Coordinates copied to clipboard'),
+                    content: TranslatedText('Coordinates copied to clipboard'),
                     duration: Duration(seconds: 2),
                   ),
                 );
@@ -1617,7 +1644,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  TranslatedText(
                     typeLabel,
                     style: const TextStyle(
                       color: _accent,
@@ -1674,7 +1701,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             const Icon(Icons.near_me, color: _accent, size: 13),
             const SizedBox(width: 4),
             Text(
-              '${formatDistanceKm(distanceKm)} from your location',
+              '${RouteMetricsService.formatDistance(distanceKm)} from your location',
               style: const TextStyle(
                 color: _accent,
                 fontSize: 11,
@@ -1698,7 +1725,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
           children: [
             Icon(Icons.location_on, color: _textSecondary, size: 13),
             const SizedBox(width: 4),
-            const Text(
+            const TranslatedText(
               'Enable location to see distance',
               style: TextStyle(
                 color: _textSecondary,
@@ -1734,10 +1761,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: _border),
                   boxShadow: [
-                    BoxShadow(
-                      color: _accent.withOpacity(0.12),
-                      blurRadius: 12,
-                    ),
+                    BoxShadow(color: _accent.withOpacity(0.12), blurRadius: 12),
                   ],
                 ),
                 child: const Row(
@@ -1749,7 +1773,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       size: 20,
                     ),
                     SizedBox(width: 6),
-                    Text(
+                    TranslatedText(
                       'Show Nearby Places',
                       style: TextStyle(
                         color: _accent,
@@ -1800,20 +1824,30 @@ extension _ContributeScreenSections on _ContributeScreenState {
 class _NearbyPlacePin extends StatelessWidget {
   final Place place;
   final bool selected;
+  final double scale;
 
-  const _NearbyPlacePin({required this.place, required this.selected});
+  const _NearbyPlacePin({
+    required this.place,
+    required this.selected,
+    this.scale = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = place.categories.first.color;
+    final baseSize = selected ? 48.0 : 34.0;
+    final size = baseSize * scale;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      width: selected ? 48 : 34,
-      height: selected ? 48 : 34,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: selected ? 3 : 2),
+        border: Border.all(
+          color: Colors.white,
+          width: (selected ? 3 : 2) * scale,
+        ),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(selected ? 0.6 : 0.45),
@@ -1824,7 +1858,7 @@ class _NearbyPlacePin extends StatelessWidget {
       child: Icon(
         place.categories.first.icon,
         color: Colors.white,
-        size: selected ? 22 : 17,
+        size: (selected ? 22 : 17) * scale,
       ),
     );
   }
@@ -2010,7 +2044,7 @@ class _NearbyPlaceListTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  formatDistanceKm(distanceKm!),
+                  RouteMetricsService.formatDistance(distanceKm!),
                   style: const TextStyle(
                     color: Color(0xFF2E7CF6),
                     fontSize: 11,

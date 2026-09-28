@@ -4,9 +4,10 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
   Future<void> _openLocationSearchScreenSection() async {
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ContributeLocationSearchScreen(
-          initialQuery: _lastLocationSearchQuery,
-        ),
+        builder:
+            (_) => ContributeLocationSearchScreen(
+              initialQuery: _lastLocationSearchQuery,
+            ),
       ),
     );
 
@@ -16,11 +17,7 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
 
     // Tapped a live suggestion — coordinates included, no re-geocode needed.
     if (result is LocationSearchResult) {
-      _onLocationPicked(
-        result.latitude,
-        result.longitude,
-        result.name,
-      );
+      _onLocationPicked(result.latitude, result.longitude, result.name);
       return;
     }
 
@@ -39,7 +36,9 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Location not found. Try a more specific place.'),
+        content: TranslatedText(
+          'Location not found. Try a more specific place.',
+        ),
         duration: Duration(seconds: 2),
       ),
     );
@@ -69,7 +68,9 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
     final bodyHandles = <DraggableStepBodyHandle>[];
 
     for (int i = 0; i < steps.length; i++) {
-      var safeStartIdx = _clampPathIndexSection(i == 0 ? 0 : stepBoundaries[i - 1]);
+      var safeStartIdx = _clampPathIndexSection(
+        i == 0 ? 0 : stepBoundaries[i - 1],
+      );
       var safeEndIdx = _clampPathIndexSection(
         i < stepBoundaries.length ? stepBoundaries[i] : pathPoints.length - 1,
       );
@@ -85,7 +86,10 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
       final controlsForStep = <LatLng>[pathPoints[safeStartIdx]];
 
       if (safeEndIdx - safeStartIdx >= 2) {
-        final bodyPathIndex = _pickStepBodyHandleIndexSection(safeStartIdx, safeEndIdx);
+        final bodyPathIndex = _pickStepBodyHandleIndexSection(
+          safeStartIdx,
+          safeEndIdx,
+        );
         if (bodyPathIndex > safeStartIdx && bodyPathIndex < safeEndIdx) {
           controlsForStep.add(pathPoints[bodyPathIndex]);
           bodyHandles.add(
@@ -115,11 +119,12 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
   ) async {
     if (steps.isEmpty || stepControlPoints.isEmpty) return;
 
-    final rebuilt = await ContributeRouteEditService.rebuildFromStepControlPoints(
-      steps: List<route_model.Step>.from(steps),
-      stepControlPoints: stepControlPoints,
-      snapToRoadEnabled: _snapToRoadEnabled,
-    );
+    final rebuilt =
+        await ContributeRouteEditService.rebuildFromStepControlPoints(
+          steps: List<route_model.Step>.from(steps),
+          stepControlPoints: stepControlPoints,
+          snapToRoadEnabled: _snapToRoadEnabled,
+        );
 
     if (!mounted ||
         rebuilt.pathPoints.length < 2 ||
@@ -147,9 +152,10 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
   ) async {
     if (steps.isEmpty) return;
 
-    final stepControlPoints = _stepEditControlsSection.stepControlPoints
-        .map((controls) => List<LatLng>.from(controls))
-        .toList();
+    final stepControlPoints =
+        _stepEditControlsSection.stepControlPoints
+            .map((controls) => List<LatLng>.from(controls))
+            .toList();
 
     if (stepControlPoints.length != steps.length) {
       return;
@@ -182,9 +188,10 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
   ) async {
     if (steps.isEmpty) return;
 
-    final stepControlPoints = _stepEditControlsSection.stepControlPoints
-        .map((controls) => List<LatLng>.from(controls))
-        .toList();
+    final stepControlPoints =
+        _stepEditControlsSection.stepControlPoints
+            .map((controls) => List<LatLng>.from(controls))
+            .toList();
 
     if (stepIndex < 0 || stepIndex >= stepControlPoints.length) {
       return;

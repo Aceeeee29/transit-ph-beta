@@ -295,11 +295,27 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
           stillOperatingNo: Number(feedbackSummaryRaw.stillOperatingNo ?? 0),
         }
       : undefined,
-    steps: data.steps ?? [],
-    transportModes: data.transportModes ?? [],
-    etaMinutes: data.etaMinutes,
-    fareEstimate: data.fareEstimate,
-    distanceKm: data.distanceKm,
+    steps: Array.isArray(data.steps)
+      ? data.steps.map((s: Record<string, unknown>) => ({
+          mode: typeof s?.mode === 'string' ? s.mode : 'Unknown',
+          instruction: typeof s?.instruction === 'string' ? s.instruction : '',
+          details: typeof s?.details === 'string' ? s.details : undefined,
+          actualFare: typeof s?.actualFare === 'number' ? s.actualFare : undefined,
+        }))
+      : [],
+    transportModes: Array.isArray(data.steps)
+      ? Array.from(
+          new Set(
+            data.steps
+              .map((s: Record<string, unknown>) => s?.mode)
+              .filter((m: unknown): m is string => typeof m === 'string'),
+          ),
+        )
+      : [],
+    eta: typeof data.eta === 'string' ? data.eta : undefined,
+    price: typeof data.price === 'string' ? data.price : undefined,
+    distance: typeof data.distance === 'string' ? data.distance : undefined,
+    distanceMeters: typeof data.distanceMeters === 'number' ? data.distanceMeters : undefined,
   }
 }
 
@@ -749,16 +765,19 @@ export async function deleteFeedback(feedbackId: string) {
 
 export async function getAnnouncements(): Promise<AnnouncementItem[]> {
   const docs = await getDocsWithCreatedAtFallback(announcementsCol)
-  return docs.map((d) => {
-    const data = d.data() as Omit<AnnouncementItem, 'id'> & Record<string, unknown>
-    return {
-      id: d.id,
-      ...data,
-      createdAt: normalizeTimestamp(data.createdAt),
-      scheduledAt: normalizeTimestamp(data.scheduledAt),
-      expiresAt: normalizeTimestamp(data.expiresAt),
-    }
-  })
+  const now = Date.now()
+  return docs
+    .map((d) => {
+      const data = d.data() as Omit<AnnouncementItem, 'id'> & Record<string, unknown>
+      return {
+        id: d.id,
+        ...data,
+        createdAt: normalizeTimestamp(data.createdAt),
+        scheduledAt: normalizeTimestamp(data.scheduledAt),
+        expiresAt: normalizeTimestamp(data.expiresAt),
+      }
+    })
+    .filter((a) => !a.expiresAt || a.expiresAt.toDate().getTime() > now)
 }
 
 export async function createAnnouncement(payload: Omit<AnnouncementItem, 'id' | 'createdAt'>) {

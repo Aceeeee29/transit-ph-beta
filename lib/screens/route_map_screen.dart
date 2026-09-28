@@ -18,10 +18,12 @@ import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../services/offline_tile_service.dart';
+import '../services/active_navigation_service.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
 import '../widgets/route_map/route_report_dialog.dart';
+import '../widgets/translated_text.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_overlays.dart';
 part 'route_map_screen_data.dart';
@@ -45,8 +47,7 @@ class RouteMapScreen extends StatefulWidget {
 // FIX: Added SingleTickerProviderStateMixin for smooth camera animation
 class _RouteMapScreenState extends State<RouteMapScreen>
     with SingleTickerProviderStateMixin {
-  static const _skipTrustPromptDateKey =
-      'route_trust_feedback_skip_until_date';
+  static const _skipTrustPromptDateKey = 'route_trust_feedback_skip_until_date';
 
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionSubscription;
@@ -136,6 +137,11 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     );
     _cameraAnimController.addListener(_onCameraAnimTick);
 
+    if (ActiveNavigationService.instance.activeRoute?.id == widget.route.id) {
+      _isNavigationStarted = true;
+      _isAutoFollowEnabled = true;
+    }
+
     _initLocation();
     _loadReports();
     _loadEngagementState();
@@ -155,12 +161,17 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     final t = _cameraAnim.value;
 
     final lat = _lerpDouble(
-        _animStartCenter!.latitude, _animTargetCenter!.latitude, t);
+      _animStartCenter!.latitude,
+      _animTargetCenter!.latitude,
+      t,
+    );
     final lng = _lerpDouble(
-        _animStartCenter!.longitude, _animTargetCenter!.longitude, t);
+      _animStartCenter!.longitude,
+      _animTargetCenter!.longitude,
+      t,
+    );
     final zoom = _lerpDouble(_animStartZoom, _animTargetZoom, t);
-    final rotation =
-        _lerpRotation(_animStartRotation, _animTargetRotation, t);
+    final rotation = _lerpRotation(_animStartRotation, _animTargetRotation, t);
 
     _mapController.moveAndRotate(LatLng(lat, lng), zoom, rotation);
   }
@@ -212,19 +223,17 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     setState(() => _isDownloadingRoute = true);
     try {
       await OfflineRouteRepository.saveRoute(widget.route);
-      await OfflineTileService.cacheRouteTiles(
-        _pointsForTileCaching(),
-      );
+      await OfflineTileService.cacheRouteTiles(_pointsForTileCaching());
       if (!mounted) return;
       setState(() => _isRouteDownloaded = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Route downloaded for offline mode.')),
+        const SnackBar(content: Text('Route downloaded for offline mode.')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isDownloadingRoute = false);
@@ -245,8 +254,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   }
 
   Future<void> _loadScheduleWindowSnapshot() async {
-    final snapshot =
-        await ScheduleWindowService.getRouteScheduleSnapshot(widget.route);
+    final snapshot = await ScheduleWindowService.getRouteScheduleSnapshot(
+      widget.route,
+    );
     if (!mounted) return;
     setState(() => _scheduleSnapshot = snapshot);
   }
@@ -290,16 +300,15 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       final data = snapshot.data();
       if (data == null || !mounted || _hasManualFareDiscountOverride) return;
 
-        final category =
+      final category =
           (data['userCategory'] as String?)?.toLowerCase().trim() ?? '';
-        if (!_isStudentCategory(category)) return;
+      if (!_isStudentCategory(category)) return;
       setState(() => _isDiscountFareEnabled = true);
     } catch (_) {}
   }
 
   Future<void> _loadRouteTrustState() async {
-    final summary =
-        await RouteService.getRouteFeedbackSummary(widget.route.id);
+    final summary = await RouteService.getRouteFeedbackSummary(widget.route.id);
     final score = RouteTrustService.computeConfidence(
       route: widget.route,
       feedbackSummary: summary,
@@ -331,8 +340,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       _trustFeedbackNextAllowedAt = nextAllowedAt;
       if (mine != null) {
         _fareAccurate = mine['fareAccurate'] ?? _fareAccurate;
-        _scheduleAccurate =
-            mine['scheduleAccurate'] ?? _scheduleAccurate;
+        _scheduleAccurate = mine['scheduleAccurate'] ?? _scheduleAccurate;
         _stillOperating = mine['stillOperating'] ?? _stillOperating;
       }
     });
@@ -348,8 +356,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content:
-                Text('Sign in to submit route trust feedback.')),
+          content: Text('Sign in to submit route trust feedback.'),
+        ),
       );
       return false;
     }
@@ -367,8 +375,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       await _loadRouteTrustState();
       if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Thanks! Route trust feedback saved.')),
+        const SnackBar(content: Text('Thanks! Route trust feedback saved.')),
       );
       return true;
     } catch (e) {
@@ -380,9 +387,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       }
 
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not submit feedback: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not submit feedback: $e')));
       return false;
     } finally {
       if (mounted) {
@@ -395,8 +402,51 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     return _showExitTrustFeedbackDialogSection();
   }
 
-  Future<bool> _handleBackPressed() async {
-    return _handleBackPressedSection();
+  /// Shown when the user taps Stop Route (never on back/minimize), subject
+  /// to the same rarity gate as before: guaranteed the first time a user
+  /// stops a route they haven't given feedback on, then throttled by
+  /// [_trustFeedbackNextAllowedAt] / the daily skip flag after that.
+  Future<void> _maybeShowTrustFeedbackPrompt() async {
+    if (!widget.enableRouteIntegrity) return;
+    if (await _isTrustPromptSkippedToday()) return;
+
+    if (_hasSubmittedTrustFeedback) {
+      final nextAllowedAt = _trustFeedbackNextAllowedAt;
+      if (nextAllowedAt == null || DateTime.now().isBefore(nextAllowedAt)) {
+        return;
+      }
+    }
+
+    if (_isExitPromptOpen) return;
+    _isExitPromptOpen = true;
+    try {
+      final result = await _showExitTrustFeedbackDialog();
+      if (!mounted || result == null) return;
+
+      final action = (result['action'] as String?) ?? 'dismiss';
+      final fare = (result['fareAccurate'] as bool?) ?? _fareAccurate;
+      final schedule =
+          (result['scheduleAccurate'] as bool?) ?? _scheduleAccurate;
+      final operating = (result['stillOperating'] as bool?) ?? _stillOperating;
+
+      _applyTrustFeedbackSelection(
+        fareAccurate: fare,
+        scheduleAccurate: schedule,
+        stillOperating: operating,
+      );
+
+      if (action == 'submit') {
+        await _submitTrustFeedbackValues(
+          fareAccurate: fare,
+          scheduleAccurate: schedule,
+          stillOperating: operating,
+        );
+      } else if (action == 'skip_today') {
+        await _setTrustPromptSkipToday();
+      }
+    } finally {
+      _isExitPromptOpen = false;
+    }
   }
 
   void _applyTrustFeedbackSelection({
@@ -448,14 +498,15 @@ class _RouteMapScreenState extends State<RouteMapScreen>
             accuracy: LocationAccuracy.high,
           ),
         );
-        _displayPosition =
-            LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+        _displayPosition = LatLng(
+          _currentPosition!.latitude,
+          _currentPosition!.longitude,
+        );
         _displayHeading = _normalizeHeading(_currentPosition!.heading);
         if (mounted) setState(() {});
         _startLocationTracking();
       } catch (e) {
-        debugPrint(
-            'RouteMapScreen: failed to get current position: $e');
+        debugPrint('RouteMapScreen: failed to get current position: $e');
       }
     }
   }
@@ -466,20 +517,18 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   void _startLocationTracking() {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: Platform.isAndroid
-          ? AndroidSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 3,
-              intervalDuration: const Duration(milliseconds: 800),
-            )
-          : const LocationSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 3,
-            ),
-    ).listen(
-      _handleLocationUpdate,
-      onError: (_) {},
-    );
+      locationSettings:
+          Platform.isAndroid
+              ? AndroidSettings(
+                accuracy: LocationAccuracy.best,
+                distanceFilter: 3,
+                intervalDuration: const Duration(milliseconds: 800),
+              )
+              : const LocationSettings(
+                accuracy: LocationAccuracy.best,
+                distanceFilter: 3,
+              ),
+    ).listen(_handleLocationUpdate, onError: (_) {});
   }
 
   // FIX: Replaced undefined `nextDisplay` with `raw`.
@@ -559,8 +608,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       return;
     }
 
-    final start =
-        LatLng(widget.route.startLat!, widget.route.startLng!);
+    final start = LatLng(widget.route.startLat!, widget.route.startLng!);
     final end = LatLng(widget.route.endLat!, widget.route.endLng!);
     if (widget.route.steps.isEmpty) {
       _pathPoints = [start, end];
@@ -568,20 +616,29 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     }
 
     final numSegments = widget.route.steps.length;
-    final latStep =
-        (end.latitude - start.latitude) / numSegments;
-    final lngStep =
-        (end.longitude - start.longitude) / numSegments;
+    final latStep = (end.latitude - start.latitude) / numSegments;
+    final lngStep = (end.longitude - start.longitude) / numSegments;
     _pathPoints = List.generate(
       numSegments + 1,
-      (i) => LatLng(
-        start.latitude + latStep * i,
-        start.longitude + lngStep * i,
-      ),
+      (i) =>
+          LatLng(start.latitude + latStep * i, start.longitude + lngStep * i),
     );
   }
 
   // ─── Actions ───────────────────────────────────────────────────────────────
+
+  void _applyVoteDelta(bool? previousVote, bool? nextVote) {
+    if (previousVote == true) {
+      widget.route.upvotes = (widget.route.upvotes - 1).clamp(0, 1 << 31);
+    } else if (previousVote == false) {
+      widget.route.downvotes = (widget.route.downvotes - 1).clamp(0, 1 << 31);
+    }
+    if (nextVote == true) {
+      widget.route.upvotes += 1;
+    } else if (nextVote == false) {
+      widget.route.downvotes += 1;
+    }
+  }
 
   Future<void> _vote(bool isUpvote) async {
     if (_isApplyingVote) return;
@@ -596,14 +653,26 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     if (_userVote != null && _userVote != isUpvote) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Remove your current vote first before voting again'),
+          content: Text('Remove your current vote first before voting again'),
         ),
       );
       return;
     }
 
-    setState(() => _isApplyingVote = true);
+    // Mirror the server's toggle logic optimistically: tapping the same
+    // vote again clears it, otherwise it becomes the tapped vote (the
+    // pre-checks above already guarantee _userVote is null or == isUpvote
+    // here, so this always matches what the transaction below will do).
+    final previousVote = _userVote;
+    final previousUpvotes = widget.route.upvotes;
+    final previousDownvotes = widget.route.downvotes;
+    final optimisticVote = previousVote == isUpvote ? null : isUpvote;
+
+    setState(() {
+      _isApplyingVote = true;
+      _userVote = optimisticVote;
+      _applyVoteDelta(previousVote, optimisticVote);
+    });
 
     try {
       final updatedVote = await RouteService.setUserVote(
@@ -611,40 +680,46 @@ class _RouteMapScreenState extends State<RouteMapScreen>
         userId: _currentUserId!,
         isUpvote: isUpvote,
       );
-
-      final latestRoute =
-          await RouteService.getRouteById(widget.route.id);
       if (!mounted) return;
 
-      setState(() {
-        _userVote = updatedVote;
-        if (latestRoute != null) {
-          widget.route.upvotes = latestRoute.upvotes;
-          widget.route.downvotes = latestRoute.downvotes;
-          widget.route.views = latestRoute.views;
-        }
-      });
+      if (updatedVote != optimisticVote) {
+        // Reconcile with the server's actual result.
+        setState(() {
+          _userVote = updatedVote;
+          _applyVoteDelta(optimisticVote, updatedVote);
+        });
+      }
 
-      final message = updatedVote == null
-          ? 'Vote removed'
-          : (updatedVote ? 'Upvoted route' : 'Downvoted route');
+      final message =
+          updatedVote == null
+              ? 'Vote removed'
+              : (updatedVote ? 'Upvoted route' : 'Downvoted route');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(message),
-            duration: const Duration(seconds: 1)),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
       );
     } on StateError catch (e) {
       if (!mounted) return;
-      final message = e.message == 'remove_first'
-          ? 'Remove your current vote first before voting again'
-          : 'Unable to save vote right now';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      setState(() {
+        _userVote = previousVote;
+        widget.route.upvotes = previousUpvotes;
+        widget.route.downvotes = previousDownvotes;
+      });
+      final message =
+          e.message == 'remove_first'
+              ? 'Remove your current vote first before voting again'
+              : 'Unable to save vote right now';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
       if (!mounted) return;
+      setState(() {
+        _userVote = previousVote;
+        widget.route.upvotes = previousUpvotes;
+        widget.route.downvotes = previousDownvotes;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Unable to save vote right now')),
+        const SnackBar(content: Text('Unable to save vote right now')),
       );
     } finally {
       if (mounted) setState(() => _isApplyingVote = false);
@@ -654,8 +729,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   void _showReportDialog() {
     showRouteReportDialog(
       context,
-      onSubmit: (type, description) =>
-          _submitReport(type, description),
+      onSubmit: (type, description) => _submitReport(type, description),
     );
   }
 
@@ -669,8 +743,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     await _saveReports();
 
     final user = await GamificationService.loadUser();
-    final unlockedItems =
-        await GamificationService.incrementReportsSubmitted(user);
+    final unlockedItems = await GamificationService.incrementReportsSubmitted(
+      user,
+    );
     if (unlockedItems.isNotEmpty) {
       setState(() {
         _pendingNotifications = unlockedItems;
@@ -680,9 +755,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
     setState(() {});
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report submitted!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Report submitted!')));
     }
   }
 
@@ -702,8 +777,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   void _startNavigation() {
     if (_displayPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Waiting for live location...')),
+        const SnackBar(content: Text('Waiting for live location...')),
       );
       return;
     }
@@ -713,7 +787,47 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       _isAutoFollowEnabled = true;
       _traversedIndex = 0;
     });
+    ActiveNavigationService.instance.start(
+      widget.route,
+      enableRouteIntegrity: widget.enableRouteIntegrity,
+      showDownloadButton: widget.showDownloadButton,
+    );
     _centerOnCurrentLocation();
+  }
+
+  Future<void> _stopNavigation() async {
+    final shouldStop = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const TranslatedText('Stop this route?'),
+            content: const TranslatedText(
+              'Your progress along the route will be cleared. You can start again anytime.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const TranslatedText('Keep Going'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const TranslatedText('Stop Route'),
+              ),
+            ],
+          ),
+    );
+
+    if (!mounted || shouldStop != true) return;
+
+    await _maybeShowTrustFeedbackPrompt();
+    if (!mounted) return;
+
+    setState(() {
+      _isNavigationStarted = false;
+      _isAutoFollowEnabled = false;
+      _traversedIndex = 0;
+    });
+    ActiveNavigationService.instance.stop();
   }
 
   void _onNotificationsDismissed() {
@@ -730,8 +844,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _positionSubscription?.cancel();
     super.dispose();
   }
-
- 
 
   bool get _hasFareSteps =>
       widget.route.steps.any((step) => step.mode != 'Walk');
@@ -760,13 +872,15 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   double _estimateStepDistanceKm(int stepIndex) {
     if (_pathPoints.length < 2) return 0.0;
 
-    final boundaries = widget.route.stepBoundaries.isNotEmpty
-        ? widget.route.stepBoundaries
-        : _computeEvenBoundaries();
+    final boundaries =
+        widget.route.stepBoundaries.isNotEmpty
+            ? widget.route.stepBoundaries
+            : _computeEvenBoundaries();
     final startIdx = stepIndex == 0 ? 0 : boundaries[stepIndex - 1];
-    final endIdx = stepIndex < boundaries.length
-        ? boundaries[stepIndex]
-        : _pathPoints.length - 1;
+    final endIdx =
+        stepIndex < boundaries.length
+            ? boundaries[stepIndex]
+            : _pathPoints.length - 1;
 
     if (endIdx <= startIdx) return 0.0;
     final distance = const Distance();
@@ -895,18 +1009,18 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       return track(_pathPoints, Colors.blue, trimStart);
     }
 
-    final boundaries = widget.route.stepBoundaries.isNotEmpty
-        ? widget.route.stepBoundaries
-        : _computeEvenBoundaries();
+    final boundaries =
+        widget.route.stepBoundaries.isNotEmpty
+            ? widget.route.stepBoundaries
+            : _computeEvenBoundaries();
 
     final result = <Polyline>[];
     for (int i = 0; i < widget.route.steps.length; i++) {
       final step = widget.route.steps[i];
       final color = modeColors[step.mode] ?? Colors.blue;
       final startIdx = i == 0 ? 0 : boundaries[i - 1];
-      final endIdx = i < boundaries.length
-          ? boundaries[i]
-          : _pathPoints.length - 1;
+      final endIdx =
+          i < boundaries.length ? boundaries[i] : _pathPoints.length - 1;
       if (endIdx > startIdx) {
         final pts = _pathPoints.sublist(startIdx, endIdx + 1);
         final relStart = trimStart - startIdx;
@@ -937,6 +1051,21 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     return _traversedIndex;
   }
 
+  /// Whether the traveler has already passed step [stepIndex] while navigating,
+  /// using the same boundary math as [polylines] so the two stay in sync.
+  bool _isStepCompleted(int stepIndex) {
+    if (!_isNavigationStarted) return false;
+    final boundaries =
+        widget.route.stepBoundaries.isNotEmpty
+            ? widget.route.stepBoundaries
+            : _computeEvenBoundaries();
+    final endIdx =
+        stepIndex < boundaries.length
+            ? boundaries[stepIndex]
+            : _pathPoints.length - 1;
+    return _trimStartIndex() >= endIdx;
+  }
+
   List<int> _computeEvenBoundaries() {
     final total = _pathPoints.length;
     final numSteps = widget.route.steps.length;
@@ -949,31 +1078,31 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   List<Marker> get markers {
     final result = <Marker>[];
     if (_pathPoints.isNotEmpty) {
-      result.add(Marker(
-        point: _pathPoints.first,
-        child: const Icon(Icons.location_on,
-            color: Colors.green, size: 40),
-      ));
+      result.add(
+        Marker(
+          point: _pathPoints.first,
+          child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+        ),
+      );
     }
     if (_pathPoints.length > 1) {
-      result.add(Marker(
-        point: _pathPoints.last,
-        child:
-            const Icon(Icons.flag, color: Colors.red, size: 40),
-      ));
+      result.add(
+        Marker(
+          point: _pathPoints.last,
+          child: const Icon(Icons.flag, color: Colors.red, size: 40),
+        ),
+      );
     }
     if (_displayPosition != null) {
-      result.add(Marker(
-        point: _displayPosition!,
-        child: Transform.rotate(
-          angle: _displayHeading * (math.pi / 180),
-          child: const Icon(
-            Icons.navigation,
-            color: Colors.blue,
-            size: 38,
+      result.add(
+        Marker(
+          point: _displayPosition!,
+          child: Transform.rotate(
+            angle: _displayHeading * (math.pi / 180),
+            child: const Icon(Icons.navigation, color: Colors.blue, size: 38),
           ),
         ),
-      ));
+      );
     }
     return result;
   }
@@ -991,24 +1120,14 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
     return Stack(
       children: [
-        PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) async {
-            if (didPop) return;
-            final navigator = Navigator.of(context);
-            final canLeave = await _handleBackPressed();
-            if (!mounted || !canLeave) return;
-            navigator.pop();
-          },
-          child: Scaffold(
-            backgroundColor: _bg,
-            appBar: _buildAppBar(),
-            body: Column(
-              children: [
-                Expanded(flex: 2, child: _buildMapSection(center)),
-                Expanded(flex: 1, child: _buildInfoPanel()),
-              ],
-            ),
+        Scaffold(
+          backgroundColor: _bg,
+          appBar: _buildAppBar(),
+          body: Column(
+            children: [
+              Expanded(flex: 2, child: _buildMapSection(center)),
+              Expanded(flex: 1, child: _buildInfoPanel()),
+            ],
           ),
         ),
         if (_showNotificationOverlay)
@@ -1052,9 +1171,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     final saved = widget.route.schedule?.trim();
     if (saved != null && saved.isNotEmpty) return saved;
 
-    final transportSteps = widget.route.steps
-        .where((s) => s.mode != 'Walk')
-        .toList();
+    final transportSteps =
+        widget.route.steps.where((s) => s.mode != 'Walk').toList();
     if (transportSteps.isEmpty) return null;
 
     final has24x7Leg = transportSteps.any((s) => s.is24_7);
@@ -1066,8 +1184,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       final start = _parseTimeToMinutes(step.startTime);
       final end = _parseTimeToMinutes(step.endTime);
       if (start == null || end == null) continue;
-      earliest =
-          earliest == null ? start : math.min(earliest, start);
+      earliest = earliest == null ? start : math.min(earliest, start);
       latest = latest == null ? end : math.max(latest, end);
     }
 
@@ -1106,10 +1223,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     if (step.is24_7) return '24/7';
     final start = step.startTime?.trim();
     final end = step.endTime?.trim();
-    if (start == null ||
-        start.isEmpty ||
-        end == null ||
-        end.isEmpty) return null;
+    if (start == null || start.isEmpty || end == null || end.isEmpty)
+      return null;
     return '$start-$end';
   }
 
@@ -1158,8 +1273,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     );
   }
 
-  Widget _buildSectionLabel(String label) =>
-      _buildSectionLabelSection(label);
+  Widget _buildSectionLabel(String label) => _buildSectionLabelSection(label);
 }
 
 // ─── Vote button widget ────────────────────────────────────────────────────────
@@ -1190,24 +1304,17 @@ class _VoteButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 4),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: active
-              ? activeColor.withValues(alpha: 0.12)
-              : _surfaceAlt,
+          color: active ? activeColor.withValues(alpha: 0.12) : _surfaceAlt,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color: active
-                ? activeColor.withValues(alpha: 0.4)
-                : _border,
+            color: active ? activeColor.withValues(alpha: 0.4) : _border,
           ),
         ),
         child: Row(
           children: [
-            Icon(icon,
-                size: 15,
-                color: active ? activeColor : _textSecondary),
+            Icon(icon, size: 15, color: active ? activeColor : _textSecondary),
             const SizedBox(width: 4),
             Text(
               '$count',

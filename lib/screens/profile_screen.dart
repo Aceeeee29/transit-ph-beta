@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'settings_screen.dart';
 import '../services/gamification_service.dart';
 import '../services/settings_service.dart';
@@ -8,6 +9,7 @@ import '../widgets/profile/profile_colors.dart';
 import '../widgets/profile/achievements_tab.dart';
 import '../widgets/profile/badges_tab.dart';
 import '../widgets/profile/contributions_tab.dart';
+import '../widgets/translated_text.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -150,6 +152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     (_) => SettingsScreen(
                       userName: user!.name,
                       userEmail: user!.email,
+                      userPhotoUrl: user!.photoUrl,
                     ),
               ),
             );
@@ -198,9 +201,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           fontSize: 13,
         ),
         tabs: [
-          Tab(text: 'Achievements'),
-          Tab(text: 'Badges'),
-          Tab(text: 'Contributions'),
+          Tab(child: TranslatedText('Achievements')),
+          Tab(child: TranslatedText('Badges')),
+          Tab(child: TranslatedText('Contributions')),
         ],
       ),
     );
@@ -313,14 +316,29 @@ class _ProfileHeaderCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Center(
-        child: Text(
-          initials,
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-          ),
+      child: ClipOval(
+        child:
+            (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+                ? CachedNetworkImage(
+                  imageUrl: user.photoUrl!,
+                  fit: BoxFit.cover,
+                  width: 80,
+                  height: 80,
+                  errorWidget: (_, __, ___) => _initialsFallback(),
+                )
+                : _initialsFallback(),
+      ),
+    );
+  }
+
+  Widget _initialsFallback() {
+    return Center(
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
         ),
       ),
     );
@@ -388,7 +406,6 @@ class _ProfileHeaderCard extends StatelessWidget {
       ),
     );
   }
-
 
   Widget _pill({required String label, IconData? icon, required Color color}) {
     return Container(

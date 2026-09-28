@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:video_player/video_player.dart';
 import '../../models/post.dart';
@@ -110,17 +111,18 @@ class _FeedPostCardState extends State<FeedPostCard> {
     final post = widget.post;
     final catColor = postCategoryColor(post.category);
     final authorName = post.userName?.trim();
-    final displayName = post.anonymous
-      ? 'Anonymous'
-      : (authorName != null && authorName.isNotEmpty
-        ? authorName
-        : 'User');
+    final displayName =
+        post.anonymous
+            ? 'Anonymous'
+            : (authorName != null && authorName.isNotEmpty
+                ? authorName
+                : 'User');
     final initials =
         post.anonymous
             ? 'A'
-        : (authorName != null && authorName.isNotEmpty
-          ? authorName[0].toUpperCase()
-          : 'U');
+            : (authorName != null && authorName.isNotEmpty
+                ? authorName[0].toUpperCase()
+                : 'U');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -146,7 +148,8 @@ class _FeedPostCardState extends State<FeedPostCard> {
               displayName: displayName,
               initials: initials,
               catColor: catColor,
-              isOwnPost: widget.currentUserId.isNotEmpty &&
+              isOwnPost:
+                  widget.currentUserId.isNotEmpty &&
                   widget.currentUserId == post.userId,
               onDeleteTapped: widget.onDeleteTapped,
             ),
@@ -170,10 +173,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
     return Row(
       children: [
         FeedActionButton(
-          icon:
-              widget.isUpvoted
-                  ? Icons.thumb_up
-                  : Icons.thumb_up_alt_outlined,
+          icon: widget.isUpvoted ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
           color:
               widget.isUpvoted ? FeedColors.accent : FeedColors.textSecondary,
           active: widget.isUpvoted,
@@ -187,9 +187,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
                   ? Icons.thumb_down
                   : Icons.thumb_down_alt_outlined,
           color:
-              widget.isDownvoted
-                  ? FeedColors.danger
-                  : FeedColors.textSecondary,
+              widget.isDownvoted ? FeedColors.danger : FeedColors.textSecondary,
           active: widget.isDownvoted,
           label: '${widget.downvoteCount}',
           onTap: widget.onDownvoteTapped,
@@ -209,7 +207,6 @@ class _FeedPostCardState extends State<FeedPostCard> {
       ],
     );
   }
-
 }
 
 // ─── Private sub-widgets ──────────────────────────────────────────────────────
@@ -233,20 +230,28 @@ class _PostHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photoUrl = post.anonymous ? null : post.userPhotoUrl;
     return Row(
       children: [
         CircleAvatar(
           radius: 18,
           backgroundColor:
               post.anonymous ? FeedColors.surfaceAlt : FeedColors.accentSoft,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              color: FeedColors.accent,
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
-          ),
+          backgroundImage:
+              (photoUrl != null && photoUrl.isNotEmpty)
+                  ? CachedNetworkImageProvider(photoUrl)
+                  : null,
+          child:
+              (photoUrl != null && photoUrl.isNotEmpty)
+                  ? null
+                  : Text(
+                    initials,
+                    style: const TextStyle(
+                      color: FeedColors.accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -297,21 +302,22 @@ class _PostHeader extends StatelessWidget {
             onSelected: (value) {
               if (value == 'delete') onDeleteTapped!();
             },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'Delete Post',
-                      style: TextStyle(color: Colors.red),
+            itemBuilder:
+                (_) => [
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Delete Post',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
           ),
         ],
       ],
@@ -448,15 +454,16 @@ Widget _mediaImage(String url) {
           ),
         );
       },
-      errorBuilder: (_, __, ___) => Container(
-        width: 200,
-        height: 200,
-        color: FeedColors.surfaceAlt,
-        child: const Icon(
-          Icons.broken_image_outlined,
-          color: FeedColors.textSecondary,
-        ),
-      ),
+      errorBuilder:
+          (_, __, ___) => Container(
+            width: 200,
+            height: 200,
+            color: FeedColors.surfaceAlt,
+            child: const Icon(
+              Icons.broken_image_outlined,
+              color: FeedColors.textSecondary,
+            ),
+          ),
     );
   }
   if (!kIsWeb) {
@@ -465,15 +472,16 @@ Widget _mediaImage(String url) {
       width: 200,
       height: 200,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
-        width: 200,
-        height: 200,
-        color: FeedColors.surfaceAlt,
-        child: const Icon(
-          Icons.broken_image_outlined,
-          color: FeedColors.textSecondary,
-        ),
-      ),
+      errorBuilder:
+          (_, __, ___) => Container(
+            width: 200,
+            height: 200,
+            color: FeedColors.surfaceAlt,
+            child: const Icon(
+              Icons.broken_image_outlined,
+              color: FeedColors.textSecondary,
+            ),
+          ),
     );
   }
   return Container(
@@ -495,32 +503,32 @@ class _PostImageStrip extends StatelessWidget {
   void _openFullScreen(BuildContext context, int initialIndex) {
     showDialog(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            SizedBox(
-              height: 400,
-              child: PageView.builder(
-                itemCount: urls.length,
-                controller: PageController(initialPage: initialIndex),
-                itemBuilder: (_, i) => Center(
-                  child: _fullScreenImage(urls[i]),
+      builder:
+          (_) => Dialog(
+            backgroundColor: Colors.black,
+            insetPadding: const EdgeInsets.all(12),
+            child: Stack(
+              children: [
+                SizedBox(
+                  height: 400,
+                  child: PageView.builder(
+                    itemCount: urls.length,
+                    controller: PageController(initialPage: initialIndex),
+                    itemBuilder:
+                        (_, i) => Center(child: _fullScreenImage(urls[i])),
+                  ),
                 ),
-              ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ],
             ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -533,16 +541,17 @@ class _PostImageStrip extends StatelessWidget {
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           itemCount: urls.length,
-          itemBuilder: (_, index) => Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => _openFullScreen(context, index),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _mediaImage(urls[index]),
+          itemBuilder:
+              (_, index) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => _openFullScreen(context, index),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _mediaImage(urls[index]),
+                  ),
+                ),
               ),
-            ),
-          ),
         ),
       ),
     );
@@ -554,22 +563,24 @@ Widget _fullScreenImage(String url) {
     return Image.network(
       url,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => const Icon(
-        Icons.broken_image_outlined,
-        color: Colors.white70,
-        size: 48,
-      ),
+      errorBuilder:
+          (_, __, ___) => const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.white70,
+            size: 48,
+          ),
     );
   }
   if (!kIsWeb) {
     return Image.file(
       File(url),
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => const Icon(
-        Icons.broken_image_outlined,
-        color: Colors.white70,
-        size: 48,
-      ),
+      errorBuilder:
+          (_, __, ___) => const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.white70,
+            size: 48,
+          ),
     );
   }
   return const Icon(
@@ -632,9 +643,10 @@ class _VideoPlayerState extends State<_VideoPlayer> {
     final isPlaying = controller.value.isPlaying;
     final position = controller.value.position;
     final duration = controller.value.duration;
-    final progress = duration.inMilliseconds == 0
-        ? 0.0
-        : position.inMilliseconds / duration.inMilliseconds;
+    final progress =
+        duration.inMilliseconds == 0
+            ? 0.0
+            : position.inMilliseconds / duration.inMilliseconds;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -721,10 +733,7 @@ class _VideoPlayerState extends State<_VideoPlayer> {
                   const SizedBox(width: 8),
                   Text(
                     '${_formatDuration(position)} / ${_formatDuration(duration)}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
               ),

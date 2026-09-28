@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../translated_text.dart';
 
 class HomeFareMatrixDialog extends StatelessWidget {
   static const _bg = Color(0xFFF4F8FF);
@@ -38,15 +39,40 @@ class HomeFareMatrixDialog extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _fareRow('Jeepney', '₱13 base fare', Icons.directions_bus, _accent),
+                  _fareRow(
+                    'Jeepney',
+                    '₱13 base fare',
+                    Icons.directions_bus,
+                    _accent,
+                  ),
                   const SizedBox(height: 8),
-                  _fareRow('City Bus', '₱13 – ₱40+', Icons.directions_bus_filled, _danger),
+                  _fareRow(
+                    'City Bus',
+                    '₱13 – ₱40+',
+                    Icons.directions_bus_filled,
+                    _danger,
+                  ),
                   const SizedBox(height: 8),
-                  _fareRow('Train (LRT/MRT)', '₱20 – ₱55', Icons.train, const Color(0xFF9B7FE8)),
+                  _fareRow(
+                    'Train (LRT/MRT)',
+                    '₱20 – ₱55',
+                    Icons.train,
+                    const Color(0xFF9B7FE8),
+                  ),
                   const SizedBox(height: 8),
-                  _fareRow('Tricycle', '₱15 – ₱60+', Icons.pedal_bike, const Color(0xFFE89A3C)),
+                  _fareRow(
+                    'Tricycle',
+                    '₱15 – ₱60+',
+                    Icons.pedal_bike,
+                    const Color(0xFFE89A3C),
+                  ),
                   const SizedBox(height: 8),
-                  _fareRow('FX / UV Express', '₱30 – ₱100+', Icons.directions_car, const Color(0xFFD4A017)),
+                  _fareRow(
+                    'FX / UV Express',
+                    '₱30 – ₱100+',
+                    Icons.directions_car,
+                    const Color(0xFFD4A017),
+                  ),
                 ],
               ),
             ),
@@ -73,16 +99,24 @@ class HomeFareMatrixDialog extends StatelessWidget {
               color: _accentSoft,
               borderRadius: BorderRadius.circular(9),
             ),
-            child: const Icon(Icons.payments_outlined, color: _accent, size: 16),
+            child: const Icon(
+              Icons.payments_outlined,
+              color: _accent,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 10),
-          const Text(
-            'Fare Matrix',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
+          const Flexible(
+            child: TranslatedText(
+              'Fare Matrix',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
           const Spacer(),
@@ -116,8 +150,10 @@ class HomeFareMatrixDialog extends StatelessWidget {
           Icon(icon, size: 16, color: color),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: TranslatedText(
               label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -125,12 +161,17 @@ class HomeFareMatrixDialog extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            fare,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: color,
+          Flexible(
+            child: TranslatedText(
+              fare,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
         ],

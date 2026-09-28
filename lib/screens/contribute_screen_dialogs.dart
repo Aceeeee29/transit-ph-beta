@@ -8,7 +8,7 @@ class _QuickLinkDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('24h Quick Link Created'),
+      title: const TranslatedText('24h Quick Link Created'),
       content: SelectableText(
         '$url\n\nThis link can be used for 24 hours only.',
       ),
@@ -18,11 +18,11 @@ class _QuickLinkDialog extends StatelessWidget {
             await Clipboard.setData(ClipboardData(text: url));
             if (context.mounted) Navigator.of(context).pop();
           },
-          child: const Text('Copy Again'),
+          child: const TranslatedText('Copy Again'),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
+          child: const TranslatedText('Done'),
         ),
       ],
     );
@@ -71,14 +71,16 @@ class _SubmitSuccessDialog extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: isEdit
-                    ? _green.withOpacity(0.12)
-                    : _warning.withOpacity(0.12),
+                color:
+                    isEdit
+                        ? _green.withOpacity(0.12)
+                        : _warning.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: isEdit
-                      ? _green.withOpacity(0.3)
-                      : _warning.withOpacity(0.3),
+                  color:
+                      isEdit
+                          ? _green.withOpacity(0.3)
+                          : _warning.withOpacity(0.3),
                 ),
               ),
               child: Icon(
@@ -92,10 +94,12 @@ class _SubmitSuccessDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
+            TranslatedText(
               isEdit
                   ? 'Route Updated'
-                  : (quickCreateMode ? 'Quick Route Created' : 'Pending Review'),
+                  : (quickCreateMode
+                      ? 'Quick Route Created'
+                      : 'Pending Review'),
               style: const TextStyle(
                 color: _textPrimary,
                 fontSize: 18,
@@ -106,7 +110,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
+              child: TranslatedText(
                 isEdit
                     ? 'Your route has been updated successfully.'
                     : (quickCreateMode
@@ -216,7 +220,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
+          child: TranslatedText(
             label,
             style: TextStyle(
               fontSize: 13,

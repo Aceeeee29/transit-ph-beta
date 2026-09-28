@@ -6,6 +6,7 @@ class Post {
   final String? userName;
   final String? userEmail;
   final String? userId;
+  final String? userPhotoUrl;
   final bool anonymous;
   final String content;
   final PostType type;
@@ -28,6 +29,7 @@ class Post {
     this.userName,
     this.userEmail,
     this.userId,
+    this.userPhotoUrl,
     this.anonymous = false,
     required this.content,
     required this.type,
@@ -52,6 +54,7 @@ class Post {
       'userName': userName,
       'userEmail': userEmail,
       'userId': userId,
+      'userPhotoUrl': userPhotoUrl,
       'anonymous': anonymous,
       'content': content,
       'type': type.name,
@@ -77,6 +80,7 @@ class Post {
       userName: json['userName'],
       userEmail: json['userEmail'],
       userId: json['userId'],
+      userPhotoUrl: json['userPhotoUrl'],
       anonymous: json['anonymous'] ?? false,
       content: json['content'],
       type: PostType.values.firstWhere(
@@ -104,11 +108,12 @@ class Post {
               : null,
       taggedUsers: List<String>.from(json['taggedUsers'] ?? []),
       routeId: json['routeId'],
-      expiresAt: json['expiresAt'] != null
-          ? (json['expiresAt'] is Timestamp
-              ? (json['expiresAt'] as Timestamp).toDate()
-              : DateTime.tryParse(json['expiresAt'] as String))
-          : null,
+      expiresAt:
+          json['expiresAt'] != null
+              ? (json['expiresAt'] is Timestamp
+                  ? (json['expiresAt'] as Timestamp).toDate()
+                  : DateTime.tryParse(json['expiresAt'] as String))
+              : null,
     );
   }
 }

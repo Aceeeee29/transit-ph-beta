@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/media_service.dart';
 import '../services/moderation_service.dart';
 import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
+import '../widgets/translated_text.dart';
 part 'settings_screen_dialogs.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userName;
   final String userEmail;
+  final String? userPhotoUrl;
 
   const SettingsScreen({
     super.key,
     required this.userName,
     required this.userEmail,
+    this.userPhotoUrl,
   });
 
   @override
@@ -32,18 +37,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSavingPreferences = false;
   bool _isClearingRouteCache = false;
   bool _isLoggingOut = false;
+  bool _isUploadingPhoto = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
 
   bool showEmailInProfile = false;
   late String _displayName;
+  String? _photoUrl;
 
   @override
   void initState() {
     super.initState();
     _displayName = widget.userName;
+    _photoUrl = widget.userPhotoUrl;
     _loadPreferences();
+  }
+
+  void _setPhotoUrl(String? value) {
+    setState(() {
+      _photoUrl = value;
+    });
+  }
+
+  void _setUploadingPhoto(bool value) {
+    setState(() {
+      _isUploadingPhoto = value;
+    });
   }
 
   Future<void> _showEditProfileDialog() async {
@@ -61,6 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         newDiscussions = preferences['newDiscussions'] as bool? ?? false;
         weeklyDigest = preferences['weeklyDigest'] as bool? ?? false;
         distanceUnit = preferences['distanceUnit'] as String? ?? 'Miles';
+        language = preferences['language'] as String? ?? 'English';
         showEmailInProfile =
             preferences['showEmailInProfile'] as bool? ?? false;
         _isLoadingPreferences = false;
@@ -83,6 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'newDiscussions': newDiscussions,
       'weeklyDigest': weeklyDigest,
       'distanceUnit': distanceUnit,
+      'language': language,
       'showEmailInProfile': showEmailInProfile,
     });
 
@@ -105,6 +127,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _updateDistanceUnit(String value) {
     setState(() {
       distanceUnit = value;
+    });
+    _savePreferences();
+  }
+
+  void _updateLanguage(String value) {
+    setState(() {
+      language = value;
     });
     _savePreferences();
   }
@@ -193,7 +222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Icon(icon, color: _accent, size: 15),
                 ),
                 const SizedBox(width: 10),
-                Text(
+                TranslatedText(
                   title,
                   style: const TextStyle(
                     fontSize: 15,
@@ -230,7 +259,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    TranslatedText(
                       title,
                       style: const TextStyle(
                         fontSize: 14,
@@ -239,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    TranslatedText(
                       subtitle,
                       style: const TextStyle(
                         fontSize: 12,
@@ -287,7 +316,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    TranslatedText(
                       title,
                       style: const TextStyle(
                         fontSize: 14,
@@ -296,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    TranslatedText(
                       subtitle,
                       style: const TextStyle(
                         fontSize: 12,
@@ -368,10 +397,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 14, color: _textSecondary),
+              Flexible(
+                child: TranslatedText(
+                  label,
+                  style: const TextStyle(fontSize: 14, color: _textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
@@ -424,15 +458,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Icon(icon, size: 15, color: c),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: c,
+                Expanded(
+                  child: TranslatedText(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: c,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Icon(
                   Icons.arrow_forward_ios_rounded,
                   size: 13,
@@ -514,7 +552,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            const TranslatedText(
               'Settings',
               style: TextStyle(
                 color: _textPrimary,
@@ -537,7 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Page title
-            const Text(
+            const TranslatedText(
               'Customize your experience',
               style: TextStyle(fontSize: 13, color: _textSecondary),
             ),
@@ -552,28 +590,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            _displayName.isNotEmpty
-                                ? _displayName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
+                      GestureDetector(
+                        onTap:
+                            _isUploadingPhoto
+                                ? null
+                                : () => _changeProfilePhotoSection(),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 46,
+                              height: 46,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF4A7CE0),
+                                    Color(0xFF6A9EFF),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child:
+                                  _isUploadingPhoto
+                                      ? const Center(
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      )
+                                      : (_photoUrl != null &&
+                                          _photoUrl!.isNotEmpty)
+                                      ? CachedNetworkImage(
+                                        imageUrl: _photoUrl!,
+                                        fit: BoxFit.cover,
+                                        width: 46,
+                                        height: 46,
+                                        errorWidget:
+                                            (_, __, ___) => Center(
+                                              child: Text(
+                                                _displayName.isNotEmpty
+                                                    ? _displayName[0]
+                                                        .toUpperCase()
+                                                    : '?',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                            ),
+                                      )
+                                      : Center(
+                                        child: Text(
+                                          _displayName.isNotEmpty
+                                              ? _displayName[0].toUpperCase()
+                                              : '?',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
                             ),
-                          ),
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: _accent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: _surface, width: 2),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 10,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -686,7 +791,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: language,
                   items: ['English', 'Filipino', 'Spanish'],
                   onChanged: (val) {
-                    if (val != null) setState(() => language = val);
+                    if (val != null) _updateLanguage(val);
                   },
                 ),
                 _dropdownRow<String>(
@@ -728,7 +833,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: EdgeInsets.only(bottom: 16),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(
+                  child: TranslatedText(
                     'Saving settings...',
                     style: TextStyle(fontSize: 12, color: _textSecondary),
                   ),
@@ -840,7 +945,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             else
               const Icon(Icons.logout_rounded, color: danger, size: 18),
             const SizedBox(width: 8),
-            Text(
+            TranslatedText(
               _isLoggingOut ? 'Logging out...' : 'Log Out',
               style: const TextStyle(
                 color: danger,
@@ -904,7 +1009,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Text(
+                        const TranslatedText(
                           'Post Feedback',
                           style: TextStyle(
                             color: _textPrimary,
@@ -958,7 +1063,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 border: Border.all(color: _border),
                               ),
                               alignment: Alignment.center,
-                              child: const Text(
+                              child: const TranslatedText(
                                 'Cancel',
                                 style: TextStyle(
                                   color: _textSecondary,
@@ -1026,7 +1131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ],
                               ),
                               alignment: Alignment.center,
-                              child: const Text(
+                              child: const TranslatedText(
                                 'Submit Feedback',
                                 style: TextStyle(
                                   color: Colors.white,

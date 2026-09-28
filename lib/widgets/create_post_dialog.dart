@@ -8,6 +8,7 @@ import '../models/location.dart';
 import '../models/route.dart' as route_model;
 import '../services/media_service.dart';
 import '../services/route_service.dart';
+import 'translated_text.dart';
 
 class CreatePostDialog extends StatefulWidget {
   final Function(Post) onPostCreated;
@@ -83,7 +84,9 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     if (trimmedContent.isEmpty) return;
     if (trimmedContent.length > _maxPostContentLength) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post must be 500 characters or less.')),
+        const SnackBar(
+          content: TranslatedText('Post must be 500 characters or less.'),
+        ),
       );
       return;
     }
@@ -96,15 +99,19 @@ class _CreatePostDialogState extends State<CreatePostDialog>
       final authEmail = authUser?.email?.trim();
       final authUid = authUser?.uid.trim();
       final widgetName = widget.currentUserName.trim();
-      final firestoreName = await _resolveFirestoreUserName(
+      final firestoreProfile = await _resolveFirestoreUserProfile(
         uid: authUid,
         email: authEmail,
       );
-      final resolvedUserName = widgetName.isNotEmpty && widgetName != 'User'
-          ? widgetName
-          : (authDisplayName != null && authDisplayName.isNotEmpty
+      // Prefer live sources (Firebase Auth, then Firestore) over the
+      // widget-provided name, which can be stale if the profile was
+      // edited since this dialog's ancestor last rebuilt.
+      final resolvedUserName =
+          (authDisplayName != null && authDisplayName.isNotEmpty)
               ? authDisplayName
-              : (firestoreName ?? 'User'));
+              : (firestoreProfile.name ??
+                  (widgetName.isNotEmpty ? widgetName : 'User'));
+      final resolvedPhotoUrl = authUser?.photoURL ?? firestoreProfile.photoUrl;
 
       final postId = DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -129,16 +136,16 @@ class _CreatePostDialogState extends State<CreatePostDialog>
           setState(() => _isPublishing = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.userMessage),
+              content: TranslatedText(e.userMessage),
               duration: const Duration(seconds: 6),
-              action: e.details.isNotEmpty
-                  ? SnackBarAction(
-                      label: 'DETAILS',
-                      textColor: Colors.white,
-                      onPressed: () =>
-                          _showUploadErrorDetails(e.details),
-                    )
-                  : null,
+              action:
+                  e.details.isNotEmpty
+                      ? SnackBarAction(
+                        label: 'DETAILS',
+                        textColor: Colors.white,
+                        onPressed: () => _showUploadErrorDetails(e.details),
+                      )
+                      : null,
             ),
           );
         }
@@ -150,7 +157,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
           final details = e.toString();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text(
+              content: const TranslatedText(
                 'Failed to upload media. Check your connection and try again.',
               ),
               duration: const Duration(seconds: 6),
@@ -170,11 +177,13 @@ class _CreatePostDialogState extends State<CreatePostDialog>
         userName: _anonymous ? null : resolvedUserName,
         userEmail: _anonymous ? null : authEmail,
         userId: widget.currentUserId,
+        userPhotoUrl: _anonymous ? null : resolvedPhotoUrl,
         anonymous: _anonymous,
         content: trimmedContent,
-        type: videoUrl != null
-            ? PostType.video
-            : imageUrls.isNotEmpty
+        type:
+            videoUrl != null
+                ? PostType.video
+                : imageUrls.isNotEmpty
                 ? PostType.image
                 : PostType.text,
         category: _selectedCategory,
@@ -192,7 +201,9 @@ class _CreatePostDialogState extends State<CreatePostDialog>
       debugPrint('Failed to create post: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to publish post. Try again.')),
+          const SnackBar(
+            content: TranslatedText('Failed to publish post. Try again.'),
+          ),
         );
         setState(() => _isPublishing = false);
       }
@@ -204,70 +215,83 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   void _showUploadErrorDetails(String details) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Upload error details'),
-        content: SingleChildScrollView(
-          child: SelectableText(
-            details.isEmpty ? '(no details captured)' : details,
-            style: const TextStyle(fontSize: 12),
+      builder:
+          (ctx) => AlertDialog(
+            title: const TranslatedText('Upload error details'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                details.isEmpty ? '(no details captured)' : details,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const TranslatedText('Close'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: details));
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: TranslatedText(
+                          'Error details copied. Send them to support.',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: const TranslatedText('Copy'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: details));
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Error details copied. Send them to support.',
-                    ),
-                  ),
-                );
-              }
-            },
-            child: const Text('Copy'),
-          ),
-        ],
-      ),
     );
   }
 
-  Future<String?> _resolveFirestoreUserName({
+  Future<({String? name, String? photoUrl})> _resolveFirestoreUserProfile({
     String? uid,
     String? email,
   }) async {
     try {
       if (uid != null && uid.isNotEmpty) {
-        final byUid = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
-        final name = (byUid.data()?['name'] as String?)?.trim();
-        if (name != null && name.isNotEmpty) return name;
+        final byUid =
+            await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final data = byUid.data();
+        final name = (data?['name'] as String?)?.trim();
+        final photoUrl = (data?['photoUrl'] as String?)?.trim();
+        if ((name != null && name.isNotEmpty) ||
+            (photoUrl != null && photoUrl.isNotEmpty)) {
+          return (
+            name: name != null && name.isNotEmpty ? name : null,
+            photoUrl: photoUrl != null && photoUrl.isNotEmpty ? photoUrl : null,
+          );
+        }
       }
 
       if (email != null && email.isNotEmpty) {
-        final byEmail = await FirebaseFirestore.instance
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
+        final byEmail =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .where('email', isEqualTo: email)
+                .limit(1)
+                .get();
         if (byEmail.docs.isNotEmpty) {
-          final name = (byEmail.docs.first.data()['name'] as String?)?.trim();
-          if (name != null && name.isNotEmpty) return name;
+          final data = byEmail.docs.first.data();
+          final name = (data['name'] as String?)?.trim();
+          final photoUrl = (data['photoUrl'] as String?)?.trim();
+          return (
+            name: name != null && name.isNotEmpty ? name : null,
+            photoUrl: photoUrl != null && photoUrl.isNotEmpty ? photoUrl : null,
+          );
         }
       }
     } catch (e) {
-      debugPrint('Failed to resolve Firestore user name: $e');
+      debugPrint('Failed to resolve Firestore user profile: $e');
     }
 
-    return null;
+    return (name: null, photoUrl: null);
   }
 
   Future<void> _pickImage() async {
@@ -437,13 +461,17 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             child: const Icon(Icons.edit_outlined, color: _accent, size: 18),
           ),
           const SizedBox(width: 12),
-          const Text(
-            'New Post',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
+          const Flexible(
+            child: TranslatedText(
+              'New Post',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
             ),
           ),
           const Spacer(),
@@ -626,7 +654,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        TranslatedText(
                           'Video attached',
                           style: TextStyle(
                             color: _textPrimary,
@@ -634,7 +662,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                             fontSize: 13,
                           ),
                         ),
-                        Text(
+                        TranslatedText(
                           'Tap × to remove',
                           style: TextStyle(color: _textSecondary, fontSize: 11),
                         ),
@@ -689,8 +717,10 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             children: [
               Icon(icon, color: _accent, size: 18),
               const SizedBox(height: 4),
-              Text(
+              TranslatedText(
                 label,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
                 style: const TextStyle(
                   color: _textSecondary,
                   fontSize: 10,
@@ -742,13 +772,17 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                           color: selected ? color : _textSecondary,
                         ),
                         const SizedBox(width: 5),
-                        Text(
-                          _categoryLabel(cat),
-                          style: TextStyle(
-                            color: selected ? color : _textSecondary,
-                            fontSize: 12,
-                            fontWeight:
-                                selected ? FontWeight.w600 : FontWeight.w400,
+                        Flexible(
+                          child: TranslatedText(
+                            _categoryLabel(cat),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: selected ? color : _textSecondary,
+                              fontSize: 12,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w400,
+                            ),
                           ),
                         ),
                       ],
@@ -825,15 +859,12 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    hasTag
-                        ? _taggedLocation!.name
-                        : 'Tag a route or stop',
+                  child: TranslatedText(
+                    hasTag ? _taggedLocation!.name : 'Tag a route or stop',
                     style: TextStyle(
                       color: hasTag ? _textPrimary : _textSecondary,
                       fontSize: 14,
-                      fontWeight:
-                          hasTag ? FontWeight.w600 : FontWeight.w400,
+                      fontWeight: hasTag ? FontWeight.w600 : FontWeight.w400,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -880,12 +911,16 @@ class _CreatePostDialogState extends State<CreatePostDialog>
               children: [
                 Icon(Icons.check_circle_outline, size: 13, color: _accent),
                 SizedBox(width: 5),
-                Text(
-                  'Route tagged — shown on your post',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _accent,
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: TranslatedText(
+                    'Route tagged — shown on your post',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _accent,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -925,7 +960,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              TranslatedText(
                 'Post Anonymously',
                 style: TextStyle(
                   color: _anonymous ? _textPrimary : _textSecondary,
@@ -933,7 +968,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                   fontSize: 13,
                 ),
               ),
-              Text(
+              TranslatedText(
                 'Your name won\'t be shown',
                 style: const TextStyle(color: _textSecondary, fontSize: 11),
               ),
@@ -971,7 +1006,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                 border: Border.all(color: _border),
               ),
               alignment: Alignment.center,
-              child: const Text(
+              child: const TranslatedText(
                 'Cancel',
                 style: TextStyle(
                   color: _textSecondary,
@@ -990,69 +1025,80 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             child: Container(
               height: 48,
               decoration: BoxDecoration(
-                gradient: _isPublishing
-                    ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
+                gradient:
+                    _isPublishing
+                        ? null
+                        : const LinearGradient(
+                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
                 color: _isPublishing ? _border : null,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: _isPublishing
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: _accent.withOpacity(0.35),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                boxShadow:
+                    _isPublishing
+                        ? null
+                        : [
+                          BoxShadow(
+                            color: _accent.withOpacity(0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
               ),
               alignment: Alignment.center,
-              child: _isPublishing
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+              child:
+                  _isPublishing
+                      ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Publishing…',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: TranslatedText(
+                              'Publishing…',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Publish Post',
-                          style: TextStyle(
+                        ],
+                      )
+                      : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.send_rounded,
                             color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            letterSpacing: 0.2,
+                            size: 16,
                           ),
-                        ),
-                      ],
-                    ),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: TranslatedText(
+                              'Publish Post',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
             ),
           ),
         ),
@@ -1061,7 +1107,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   }
 
   Widget _sectionLabel(String label) {
-    return Text(
+    return TranslatedText(
       label.toUpperCase(),
       style: const TextStyle(
         color: _textSecondary,
@@ -1141,7 +1187,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      TranslatedText(
                         'Tag a route',
                         style: TextStyle(
                           fontSize: 16,
@@ -1149,12 +1195,9 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                           color: _textPrimary,
                         ),
                       ),
-                      Text(
+                      TranslatedText(
                         'Choose an approved route to attach',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _textSecondary,
-                        ),
+                        style: TextStyle(fontSize: 12, color: _textSecondary),
                       ),
                     ],
                   ),
@@ -1190,10 +1233,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
               child: TextField(
                 decoration: const InputDecoration(
                   hintText: 'Search routes…',
-                  hintStyle: TextStyle(
-                    color: _textSecondary,
-                    fontSize: 14,
-                  ),
+                  hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
                   prefixIcon: Icon(
                     Icons.search_rounded,
                     color: _textSecondary,
@@ -1203,8 +1243,8 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
                 style: const TextStyle(color: _textPrimary, fontSize: 14),
-                onChanged: (v) =>
-                    setState(() => _query = v.trim().toLowerCase()),
+                onChanged:
+                    (v) => setState(() => _query = v.trim().toLowerCase()),
               ),
             ),
           ),
@@ -1222,14 +1262,15 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                   );
                 }
                 final all = snapshot.data ?? [];
-                final filtered = _query.isEmpty
-                    ? all
-                    : all.where((r) {
-                        final hay =
-                            '${r.startLocation} ${r.endLocation} ${r.shortDescription}'
-                                .toLowerCase();
-                        return hay.contains(_query);
-                      }).toList();
+                final filtered =
+                    _query.isEmpty
+                        ? all
+                        : all.where((r) {
+                          final hay =
+                              '${r.startLocation} ${r.endLocation} ${r.shortDescription}'
+                                  .toLowerCase();
+                          return hay.contains(_query);
+                        }).toList();
                 if (filtered.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(32),
@@ -1242,7 +1283,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                           color: _textSecondary,
                         ),
                         SizedBox(height: 10),
-                        Text(
+                        TranslatedText(
                           'No routes found',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
@@ -1250,12 +1291,9 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                           ),
                         ),
                         SizedBox(height: 4),
-                        Text(
+                        TranslatedText(
                           'Try a different search.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 12, color: _textSecondary),
                         ),
                       ],
                     ),
@@ -1295,10 +1333,9 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
+                                  TranslatedText(
                                     route.shortDescription.isNotEmpty
                                         ? route.shortDescription
                                         : '${route.startLocation} → ${route.endLocation}',
@@ -1310,7 +1347,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
+                                  TranslatedText(
                                     '${route.startLocation} → ${route.endLocation}',
                                     style: const TextStyle(
                                       fontSize: 12,

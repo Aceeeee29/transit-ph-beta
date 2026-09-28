@@ -5,6 +5,7 @@ import '../services/route_service.dart';
 import '../models/notification.dart';
 import 'post_detail_screen.dart';
 import 'route_map_screen.dart';
+import '../widgets/translated_text.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final String currentUserId;
@@ -188,13 +189,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PostDetailScreen(
-          postId: postId,
-          currentUserId: widget.currentUserId,
-          currentUserName: _effectiveUserName,
-          highlightCommentId: notification.commentId,
-          openCommentsInitially: isCommentThread,
-        ),
+        builder:
+            (_) => PostDetailScreen(
+              postId: postId,
+              currentUserId: widget.currentUserId,
+              currentUserName: _effectiveUserName,
+              highlightCommentId: notification.commentId,
+              openCommentsInitially: isCommentThread,
+            ),
       ),
     );
   }
@@ -206,9 +208,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(); // dismiss loading
       if (route == null) {
-        final hint = type == 'route_rejected'
-            ? 'The rejected route is no longer available.'
-            : 'This route is no longer available.';
+        final hint =
+            type == 'route_rejected'
+                ? 'The rejected route is no longer available.'
+                : 'This route is no longer available.';
         _showInfo(hint);
         return;
       }
@@ -227,43 +230,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: TranslatedText(message)));
   }
 
   void _showLoading(String message) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  color: _accent,
-                  strokeWidth: 2,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Flexible(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: _textPrimary,
-                    fontWeight: FontWeight.w600,
+      builder:
+          (_) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      color: _accent,
+                      strokeWidth: 2,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 14),
+                  Flexible(
+                    child: TranslatedText(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: _textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -310,13 +316,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'Notifications',
-              style: TextStyle(
-                color: _textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
+            const Flexible(
+              child: TranslatedText(
+                'Notifications',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
               ),
             ),
           ],
@@ -358,7 +368,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  const TranslatedText(
                     'Something went wrong',
                     style: TextStyle(
                       fontSize: 16,
@@ -397,7 +407,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  const TranslatedText(
                     'No notifications yet',
                     style: TextStyle(
                       fontSize: 17,
@@ -406,7 +416,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  const TranslatedText(
                     'Upvotes, downvotes, comments, replies, and route approvals\nwill appear here.',
                     style: TextStyle(
                       fontSize: 13,
@@ -471,7 +481,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
+                          child: TranslatedText(
                             '$unreadCount unread notification${unreadCount > 1 ? 's' : ''}',
                             style: const TextStyle(
                               color: Colors.white,
@@ -480,33 +490,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             ),
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () async {
-                            for (final n in notifications.where(
-                              (n) => !n.isRead,
-                            )) {
-                              await NotificationsService.markAsRead(n.id);
-                            }
-                            setState(_loadNotifications);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                        Flexible(
+                          child: GestureDetector(
+                            onTap: () async {
+                              for (final n in notifications.where(
+                                (n) => !n.isRead,
+                              )) {
+                                await NotificationsService.markAsRead(n.id);
+                              }
+                              setState(_loadNotifications);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
                               ),
-                            ),
-                            child: const Text(
-                              'Mark all read',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
+                              ),
+                              child: const TranslatedText(
+                                'Mark all read',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
@@ -522,152 +536,155 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 final isUnread = !notification.isRead;
                 final navigable = _isNavigable(notification);
 
-                    return GestureDetector(
-                      onTap: () => _handleNotificationTap(notification),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: isUnread ? _accentSoft : _surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color:
-                                isUnread ? _accent.withOpacity(0.25) : _border,
-                            width: isUnread ? 1.5 : 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _accent.withOpacity(
-                                isUnread ? 0.07 : 0.04,
-                              ),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
+                return GestureDetector(
+                  onTap: () => _handleNotificationTap(notification),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: isUnread ? _accentSoft : _surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isUnread ? _accent.withOpacity(0.25) : _border,
+                        width: isUnread ? 1.5 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accent.withOpacity(isUnread ? 0.07 : 0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Icon badge
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: color.withOpacity(0.25),
-                                  ),
-                                ),
-                                child: Icon(
-                                  _notifIcon(notification.type),
-                                  size: 20,
-                                  color: color,
-                                ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Icon badge
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: color.withOpacity(0.25),
                               ),
-                              const SizedBox(width: 12),
+                            ),
+                            child: Icon(
+                              _notifIcon(notification.type),
+                              size: 20,
+                              color: color,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
 
-                              // Content
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                          // Content
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Type label + time row
+                                Row(
                                   children: [
-                                    // Type label + time row
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              5,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _notifTypeLabel(notification.type),
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: color,
-                                            ),
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: color.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            5,
                                           ),
                                         ),
-                                        const Spacer(),
-                                        Text(
-                                          _formatTime(notification.timestamp),
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: _textSecondary,
+                                        child: TranslatedText(
+                                          _notifTypeLabel(notification.type),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: color,
                                           ),
                                         ),
-                                        if (isUnread) ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            width: 7,
-                                            height: 7,
-                                            decoration: BoxDecoration(
-                                              color: _accent,
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: _accent.withOpacity(
-                                                    0.4,
-                                                  ),
-                                                  blurRadius: 4,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 6),
-                                    // Message
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            notification.message,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: isUnread
-                                                  ? _textPrimary
-                                                  : _textSecondary,
-                                              fontWeight: isUnread
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w400,
-                                              height: 1.4,
-                                            ),
-                                          ),
+                                    const Spacer(),
+                                    Flexible(
+                                      child: TranslatedText(
+                                        _formatTime(notification.timestamp),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: _textSecondary,
                                         ),
-                                        if (navigable) ...[
-                                          const SizedBox(width: 8),
-                                          const Padding(
-                                            padding: EdgeInsets.only(top: 2),
-                                            child: Icon(
-                                              Icons
-                                                  .arrow_forward_ios_rounded,
-                                              size: 13,
-                                              color: _textSecondary,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
+                                      ),
                                     ),
+                                    if (isUnread) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          color: _accent,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: _accent.withOpacity(0.4),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 6),
+                                // Message
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: TranslatedText(
+                                        notification.message,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color:
+                                              isUnread
+                                                  ? _textPrimary
+                                                  : _textSecondary,
+                                          fontWeight:
+                                              isUnread
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                    if (navigable) ...[
+                                      const SizedBox(width: 8),
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          size: 13,
+                                          color: _textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    );
+                    ),
+                  ),
+                );
               },
             ),
           );

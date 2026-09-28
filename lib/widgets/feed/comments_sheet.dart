@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/comment.dart';
 import '../../models/notification.dart';
 import '../../models/post.dart';
@@ -61,11 +62,21 @@ class _CommentsSheetState extends State<CommentsSheet> {
 
     setState(() => _isSubmitting = true);
 
+    // Prefer the live Firebase Auth name over the widget-provided one,
+    // which can be stale if the profile was edited since this sheet's
+    // ancestor route last rebuilt.
+    final authDisplayName =
+        FirebaseAuth.instance.currentUser?.displayName?.trim();
+    final currentUserName =
+        (authDisplayName != null && authDisplayName.isNotEmpty)
+            ? authDisplayName
+            : widget.currentUserName;
+
     final comment = Comment(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       postId: widget.postId,
       userId: widget.currentUserId,
-      userName: widget.currentUserName,
+      userName: currentUserName,
       content: text,
       parentId: _replyingTo?.id,
       timestamp: DateTime.now(),
@@ -111,18 +122,23 @@ class _CommentsSheetState extends State<CommentsSheet> {
             userId: post.userId!,
             type: comment.parentId != null ? 'reply' : 'comment',
             postId: widget.postId,
-            fromUserName: widget.currentUserName,
+            fromUserName: currentUserName,
             timestamp: DateTime.now(),
-            message: comment.parentId != null
-                ? '${widget.currentUserName} replied to a comment.'
-                : '${widget.currentUserName} commented on your post.',
+            message:
+                comment.parentId != null
+                    ? '$currentUserName replied to a comment.'
+                    : '$currentUserName commented on your post.',
           ),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to sync comment. Please check your connection.')),
+          const SnackBar(
+            content: Text(
+              'Failed to sync comment. Please check your connection.',
+            ),
+          ),
         );
       }
     }
@@ -157,7 +173,9 @@ class _CommentsSheetState extends State<CommentsSheet> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete comment. Please try again.')),
+          const SnackBar(
+            content: Text('Failed to delete comment. Please try again.'),
+          ),
         );
       }
     }
@@ -288,10 +306,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
             const SizedBox(height: 4),
             const Text(
               'Be the first to comment!',
-              style: TextStyle(
-                color: FeedColors.textSecondary,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: FeedColors.textSecondary, fontSize: 13),
             ),
           ],
         ),
@@ -302,13 +317,14 @@ class _CommentsSheetState extends State<CommentsSheet> {
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       itemCount: _comments.length,
-      itemBuilder: (_, i) => CommentItem(
-        comment: _comments[i],
-        depth: 0,
-        onReply: _startReply,
-        currentUserId: widget.currentUserId,
-        onDelete: _deleteComment,
-      ),
+      itemBuilder:
+          (_, i) => CommentItem(
+            comment: _comments[i],
+            depth: 0,
+            onReply: _startReply,
+            currentUserId: widget.currentUserId,
+            onDelete: _deleteComment,
+          ),
     );
   }
 
@@ -318,11 +334,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       color: FeedColors.accentSoft,
       child: Row(
         children: [
-          const Icon(
-            Icons.reply_rounded,
-            size: 14,
-            color: FeedColors.accent,
-          ),
+          const Icon(Icons.reply_rounded, size: 14, color: FeedColors.accent),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -354,9 +366,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomPadding),
       decoration: BoxDecoration(
         color: FeedColors.surface,
-        border: const Border(
-          top: BorderSide(color: FeedColors.border),
-        ),
+        border: const Border(top: BorderSide(color: FeedColors.border)),
       ),
       child: Row(
         children: [
@@ -378,9 +388,10 @@ class _CommentsSheetState extends State<CommentsSheet> {
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
-                  hintText: _replyingTo != null
-                      ? 'Reply to ${_replyingTo!.userName}...'
-                      : 'Write a comment...',
+                  hintText:
+                      _replyingTo != null
+                          ? 'Reply to ${_replyingTo!.userName}...'
+                          : 'Write a comment...',
                   hintStyle: const TextStyle(
                     color: FeedColors.textSecondary,
                     fontSize: 14,
@@ -402,38 +413,41 @@ class _CommentsSheetState extends State<CommentsSheet> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                gradient: _isSubmitting
-                    ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                gradient:
+                    _isSubmitting
+                        ? null
+                        : const LinearGradient(
+                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                 color: _isSubmitting ? FeedColors.border : null,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: _isSubmitting
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: FeedColors.accent.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                boxShadow:
+                    _isSubmitting
+                        ? null
+                        : [
+                          BoxShadow(
+                            color: FeedColors.accent.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
               ),
-              child: _isSubmitting
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: FeedColors.textSecondary,
+              child:
+                  _isSubmitting
+                      ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: FeedColors.textSecondary,
+                        ),
+                      )
+                      : const Icon(
+                        Icons.send_rounded,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                    )
-                  : const Icon(
-                      Icons.send_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
             ),
           ),
         ],

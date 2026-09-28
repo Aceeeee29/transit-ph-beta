@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/comment.dart';
+import '../../services/app_language_service.dart';
 import 'feed_colors.dart';
 
 /// Renders a single comment and its nested replies recursively.
-class CommentItem extends StatelessWidget {
+class CommentItem extends StatefulWidget {
   final Comment comment;
   final int depth;
   final void Function(Comment) onReply;
@@ -19,53 +20,88 @@ class CommentItem extends StatelessWidget {
     this.depth = 0,
   });
 
+  @override
+  State<CommentItem> createState() => _CommentItemState();
+}
+
+class _CommentItemState extends State<CommentItem> {
+  Comment get comment => widget.comment;
+  int get depth => widget.depth;
+  String get currentUserId => widget.currentUserId;
+
+  String? _translated;
+  bool _showTranslated = false;
+  bool _isTranslating = false;
+
+  Future<void> _toggleTranslation() async {
+    if (_showTranslated) {
+      setState(() => _showTranslated = false);
+      return;
+    }
+    if (_translated != null) {
+      setState(() => _showTranslated = true);
+      return;
+    }
+    setState(() => _isTranslating = true);
+    final result = await AppLanguageService.translate(comment.content);
+    if (!mounted) return;
+    setState(() {
+      _translated = result;
+      _showTranslated = result != comment.content;
+      _isTranslating = false;
+    });
+  }
+
   Future<void> _confirmDelete(BuildContext context) async {
     final isReply = depth > 0;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: FeedColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text(
-          'Delete ${isReply ? 'reply' : 'comment'}?',
-          style: const TextStyle(
-            color: FeedColors.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Text(
-          isReply
-              ? 'This reply will be permanently deleted.'
-              : 'This comment and all its replies will be permanently deleted.',
-          style: const TextStyle(
-            color: FeedColors.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: FeedColors.textSecondary),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: FeedColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.redAccent,
+            title: Text(
+              'Delete ${isReply ? 'reply' : 'comment'}?',
+              style: const TextStyle(
+                color: FeedColors.textPrimary,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
             ),
+            content: Text(
+              isReply
+                  ? 'This reply will be permanently deleted.'
+                  : 'This comment and all its replies will be permanently deleted.',
+              style: const TextStyle(
+                color: FeedColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: FeedColors.textSecondary),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
     if (confirmed == true) {
-      onDelete?.call(comment, depth == 0);
+      widget.onDelete?.call(comment, depth == 0);
     }
   }
 
@@ -79,8 +115,7 @@ class CommentItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color:
-                  depth == 0 ? FeedColors.surfaceAlt : FeedColors.accentSoft,
+              color: depth == 0 ? FeedColors.surfaceAlt : FeedColors.accentSoft,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: FeedColors.border),
             ),
@@ -116,18 +151,46 @@ class CommentItem extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        comment.content,
+                        (_showTranslated && _translated != null)
+                            ? _translated!
+                            : comment.content,
                         style: const TextStyle(
                           fontSize: 13,
                           color: FeedColors.textSecondary,
                           height: 1.4,
                         ),
                       ),
+                      if (!AppLanguageService.isEnglish) ...[
+                        const SizedBox(height: 3),
+                        GestureDetector(
+                          onTap: _isTranslating ? null : _toggleTranslation,
+                          child:
+                              _isTranslating
+                                  ? const SizedBox(
+                                    width: 10,
+                                    height: 10,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      color: FeedColors.accent,
+                                    ),
+                                  )
+                                  : Text(
+                                    _showTranslated
+                                        ? 'See original'
+                                        : 'Translate to ${AppLanguageService.currentLanguageLabel}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: FeedColors.accent,
+                                    ),
+                                  ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 GestureDetector(
-                  onTap: () => onReply(comment),
+                  onTap: () => widget.onReply(comment),
                   child: Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
@@ -169,9 +232,9 @@ class CommentItem extends StatelessWidget {
               (reply) => CommentItem(
                 comment: reply,
                 depth: depth + 1,
-                onReply: onReply,
+                onReply: widget.onReply,
                 currentUserId: currentUserId,
-                onDelete: onDelete,
+                onDelete: widget.onDelete,
               ),
             ),
         ],

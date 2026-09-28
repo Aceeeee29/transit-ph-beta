@@ -47,11 +47,19 @@ export interface RouteItem {
     stillOperatingYes?: number
     stillOperatingNo?: number
   }
-  steps?: string[]
+  steps?: RouteStepItem[]
   transportModes?: string[]
-  etaMinutes?: number
-  fareEstimate?: number
-  distanceKm?: number
+  eta?: string
+  price?: string
+  distance?: string
+  distanceMeters?: number
+}
+
+export interface RouteStepItem {
+  mode: string
+  instruction: string
+  details?: string
+  actualFare?: number
 }
 
 export interface PostItem {

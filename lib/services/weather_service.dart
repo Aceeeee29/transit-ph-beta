@@ -28,6 +28,11 @@ class WeatherData {
 class WeatherService {
   static Future<WeatherData?> getCurrentWeatherAndLocation() async {
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('Location services are disabled');
+      }
+
       // Request location permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -74,10 +79,12 @@ class WeatherService {
           }
         }
         if (address.isEmpty) {
-          address = 'Lat: ${lat.toStringAsFixed(4)}, Lng: ${lng.toStringAsFixed(4)}';
+          address =
+              'Lat: ${lat.toStringAsFixed(4)}, Lng: ${lng.toStringAsFixed(4)}';
         }
       } catch (e) {
-        address = 'Lat: ${lat.toStringAsFixed(4)}, Lng: ${lng.toStringAsFixed(4)}';
+        address =
+            'Lat: ${lat.toStringAsFixed(4)}, Lng: ${lng.toStringAsFixed(4)}';
       }
 
       // Fetch weather from OpenMeteo
@@ -95,12 +102,14 @@ class WeatherService {
         final temp = '${currentWeather['temperature']}°C';
         final code = currentWeather['weathercode'];
         final condition = _getWeatherDescription(code);
-        final precipitation = hourly != null && hourly['precipitation'] != null
-            ? '${hourly['precipitation'][0] ?? 0} mm'
-            : '0 mm';
-        final humidity = hourly != null && hourly['relative_humidity_2m'] != null
-            ? '${hourly['relative_humidity_2m'][0] ?? 0}%'
-            : '0%';
+        final precipitation =
+            hourly != null && hourly['precipitation'] != null
+                ? '${hourly['precipitation'][0] ?? 0} mm'
+                : '0 mm';
+        final humidity =
+            hourly != null && hourly['relative_humidity_2m'] != null
+                ? '${hourly['relative_humidity_2m'][0] ?? 0}%'
+                : '0%';
         final isStorm = code >= 95;
 
         return WeatherData(

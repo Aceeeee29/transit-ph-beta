@@ -10,24 +10,23 @@ import 'feed_screen.dart';
 import 'moderator_screen.dart';
 import 'offline_mode_prompt_screen.dart';
 import 'downloaded_routes_screen.dart';
+import 'route_map_screen.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
 import '../services/gamification_service.dart';
 import '../services/post_service.dart';
 import '../services/route_service.dart';
+import '../services/active_navigation_service.dart';
 import '../widgets/announcement_dialog.dart';
 import '../widgets/translate_chathead.dart';
+import '../widgets/translated_text.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
   final String? quickRouteToken;
 
-  const MainScreen({
-    super.key,
-    this.isAdmin = false,
-    this.quickRouteToken,
-  });
+  const MainScreen({super.key, this.isAdmin = false, this.quickRouteToken});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -41,6 +40,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _isOfflinePromptVisible = false;
   bool _offlineModeAccepted = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<User?>? _userSubscription;
   String? _pendingQuickRouteToken;
 
   List<Post> posts = [];
@@ -69,19 +69,28 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _pendingQuickRouteToken = widget.quickRouteToken;
-    if (_pendingQuickRouteToken != null && _pendingQuickRouteToken!.isNotEmpty) {
+    if (_pendingQuickRouteToken != null &&
+        _pendingQuickRouteToken!.isNotEmpty) {
       _selectedIndex = 2;
     }
     ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
     _loadData();
     _startConnectivityMonitoring();
+    // Rebuild whenever the signed-in user's profile (name, photo) changes,
+    // e.g. after editing it in Settings, so it propagates live to every
+    // tab (Feed, Contribute, etc.) instead of only on the next unrelated
+    // rebuild.
+    _userSubscription = FirebaseAuth.instance.userChanges().listen((_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAnnouncements());
   }
 
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
+    _userSubscription?.cancel();
     super.dispose();
   }
 
@@ -257,15 +266,100 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: IndexedStack(index: _selectedIndex, children: screens),
-          ),
-          const TranslateChatHead(),
-        ],
+      body: ListenableBuilder(
+        listenable: ActiveNavigationService.instance,
+        builder: (context, _) {
+          final activeRoute = ActiveNavigationService.instance.activeRoute;
+          final content = Stack(
+            children: [
+              Positioned.fill(
+                child: IndexedStack(index: _selectedIndex, children: screens),
+              ),
+              const TranslateChatHead(),
+            ],
+          );
+
+          if (activeRoute == null) return content;
+
+          // The banner already consumes the top status-bar inset via its own
+          // SafeArea, so strip it before the tab content below — otherwise
+          // each tab's own AppBar reserves that space a second time, leaving
+          // a dead gap under the banner.
+          return Column(
+            children: [
+              _buildActiveNavigationBanner(activeRoute),
+              Expanded(
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  child: content,
+                ),
+              ),
+            ],
+          );
+        },
       ),
       bottomNavigationBar: _buildNavBar(navItems),
+    );
+  }
+
+  Widget _buildActiveNavigationBanner(route_model.Route activeRoute) {
+    return SafeArea(
+      bottom: false,
+      child: GestureDetector(
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder:
+                    (_) => RouteMapScreen(
+                      route: activeRoute,
+                      enableRouteIntegrity:
+                          ActiveNavigationService.instance.enableRouteIntegrity,
+                      showDownloadButton:
+                          ActiveNavigationService.instance.showDownloadButton,
+                    ),
+              ),
+            ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: _accent,
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.navigation_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: TranslatedText(
+                  'Route still ongoing, tap to return',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -287,109 +381,115 @@ class _MainScreenState extends State<MainScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
-            children: items.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final item = entry.value;
-              final isSelected = _selectedIndex == idx;
+            children:
+                items.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final item = entry.value;
+                  final isSelected = _selectedIndex == idx;
 
-              // Centre "Contribute" gets a gradient circle treatment
-              if (item.isAccent) {
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedIndex = idx),
-                    behavior: HitTestBehavior.opaque,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: isSelected
-                                  ? [
-                                      const Color(0xFF4A7CE0),
-                                      const Color(0xFF6A9EFF),
-                                    ]
-                                  : [
-                                      const Color(0xFFD4E4F7),
-                                      const Color(0xFFEAF2FF),
-                                    ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                  // Centre "Contribute" gets a gradient circle treatment
+                  if (item.isAccent) {
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedIndex = idx),
+                        behavior: HitTestBehavior.opaque,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors:
+                                      isSelected
+                                          ? [
+                                            const Color(0xFF4A7CE0),
+                                            const Color(0xFF6A9EFF),
+                                          ]
+                                          : [
+                                            const Color(0xFFD4E4F7),
+                                            const Color(0xFFEAF2FF),
+                                          ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                shape: BoxShape.circle,
+                                boxShadow:
+                                    isSelected
+                                        ? [
+                                          BoxShadow(
+                                            color: _accent.withOpacity(0.35),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ]
+                                        : null,
+                              ),
+                              child: Icon(
+                                isSelected ? item.activeIcon : item.icon,
+                                color:
+                                    isSelected ? Colors.white : _textSecondary,
+                                size: 22,
+                              ),
                             ),
-                            shape: BoxShape.circle,
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.35),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Icon(
-                            isSelected ? item.activeIcon : item.icon,
-                            color: isSelected ? Colors.white : _textSecondary,
-                            size: 22,
-                          ),
+                            const SizedBox(height: 4),
+                            TranslatedText(
+                              item.label,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected ? _accent : _textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.label,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: isSelected ? _accent : _textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
+                      ),
+                    );
+                  }
 
-              // Regular tabs
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedIndex = idx),
-                  behavior: HitTestBehavior.opaque,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 44,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: isSelected ? _accentSoft : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          isSelected ? item.activeIcon : item.icon,
-                          color: isSelected ? _accent : _textSecondary,
-                          size: 20,
-                        ),
+                  // Regular tabs
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedIndex = idx),
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 44,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected ? _accentSoft : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isSelected ? item.activeIcon : item.icon,
+                              color: isSelected ? _accent : _textSecondary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                              color: isSelected ? _accent : _textSecondary,
+                            ),
+                            child: TranslatedText(item.label),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 3),
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: isSelected ? _accent : _textSecondary,
-                        ),
-                        child: Text(item.label),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+                    ),
+                  );
+                }).toList(),
           ),
         ),
       ),

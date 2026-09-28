@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'dart:async';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
+import 'cloudinary_service.dart';
 
 /// Thrown when a post media upload fails — carries a user-facing message
 /// plus the raw details for logs.
@@ -22,7 +22,6 @@ class MediaUploadException implements Exception {
 
 class MediaService {
   static final ImagePicker _imagePicker = ImagePicker();
-  static FirebaseStorage get _storage => FirebaseStorage.instance;
   static bool _isRecording = false;
   static bool _isPlaying = false;
 
@@ -54,52 +53,17 @@ class MediaService {
     }
   }
 
-  static Never _throwForFirebaseError(
-    Object e,
-    String kind,
-    String context,
-  ) {
+  static Never _throwForUploadError(Object e, String kind, String context) {
     debugPrint('[MediaService] $context failed: $e');
     if (e is MediaUploadException) throw e;
+    if (e is CloudinaryUploadException) {
+      throw MediaUploadException(e.userMessage, e.details);
+    }
     if (e is TimeoutException) {
       throw MediaUploadException(
         'Upload timed out. Check your connection and try again.',
         e.toString(),
       );
-    }
-    if (e is FirebaseException) {
-      switch (e.code) {
-        case 'unauthenticated':
-          throw MediaUploadException(
-            'You must be signed in to attach $kind.',
-            e.toString(),
-          );
-        case 'unauthorized':
-        case 'permission-denied':
-        case 'denied':
-          throw MediaUploadException(
-            'Server rejected the upload (permission denied). Storage may not be enabled yet — try again later or contact support.',
-            e.toString(),
-          );
-        case 'quota-exceeded':
-          throw MediaUploadException(
-            'Server storage quota exceeded. Try again later.',
-            e.toString(),
-          );
-        case 'retry-limit-exceeded':
-        case 'unavailable':
-        case 'network-request-failed':
-        case 'unknown':
-          throw MediaUploadException(
-            'Upload failed — check your internet connection and try again. (If it keeps failing, Storage may not be enabled on the server.)',
-            e.toString(),
-          );
-        case 'object-not-found':
-          throw MediaUploadException(
-            'Upload failed unexpectedly. Please re-select the file.',
-            e.toString(),
-          );
-      }
     }
     throw MediaUploadException(
       'Failed to upload $kind. Check your connection and try again.',
@@ -107,53 +71,48 @@ class MediaService {
     );
   }
 
-  /// Upload a post image to Firebase Storage and return its download URL.
+  /// Upload a post image to Cloudinary and return its URL.
   /// Throws [MediaUploadException] with a specific message on failure.
   static Future<String> uploadPostImage(File file, String postId) async {
     const kind = 'photo';
     try {
       await _checkUploadable(file, kind);
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
-      final ref = _storage.ref().child('posts/$postId/images/$fileName');
-      final ext = path.extension(file.path).toLowerCase();
-      final contentType = ext == '.png'
-          ? 'image/png'
-          : ext == '.gif'
-              ? 'image/gif'
-              : ext == '.webp'
-                  ? 'image/webp'
-                  : 'image/jpeg';
-      await ref
-          .putFile(file, SettableMetadata(contentType: contentType))
-          .timeout(const Duration(minutes: 2));
-      return await ref.getDownloadURL();
+      return await CloudinaryService.uploadImage(
+        file,
+        folder: 'posts/$postId/images',
+      );
     } catch (e) {
-      _throwForFirebaseError(e, kind, 'uploadPostImage');
+      _throwForUploadError(e, kind, 'uploadPostImage');
     }
   }
 
-  /// Upload a post video to Firebase Storage and return its download URL.
+  /// Upload a profile picture to Cloudinary and return its URL.
+  /// Throws [MediaUploadException] with a specific message on failure.
+  static Future<String> uploadProfilePhoto(File file, String uid) async {
+    const kind = 'photo';
+    try {
+      await _checkUploadable(file, kind);
+      return await CloudinaryService.uploadImage(
+        file,
+        folder: 'users/$uid/profile',
+      );
+    } catch (e) {
+      _throwForUploadError(e, kind, 'uploadProfilePhoto');
+    }
+  }
+
+  /// Upload a post video to Cloudinary and return its URL.
   /// Throws [MediaUploadException] with a specific message on failure.
   static Future<String> uploadPostVideo(File file, String postId) async {
     const kind = 'video';
     try {
       await _checkUploadable(file, kind);
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
-      final ref = _storage.ref().child('posts/$postId/videos/$fileName');
-      final ext = path.extension(file.path).toLowerCase();
-      final contentType = ext == '.mov'
-          ? 'video/quicktime'
-          : ext == '.webm'
-              ? 'video/webm'
-              : 'video/mp4';
-      await ref
-          .putFile(file, SettableMetadata(contentType: contentType))
-          .timeout(const Duration(minutes: 2));
-      return await ref.getDownloadURL();
+      return await CloudinaryService.uploadVideo(
+        file,
+        folder: 'posts/$postId/videos',
+      );
     } catch (e) {
-      _throwForFirebaseError(e, kind, 'uploadPostVideo');
+      _throwForUploadError(e, kind, 'uploadPostVideo');
     }
   }
 

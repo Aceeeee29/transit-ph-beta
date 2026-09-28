@@ -26,6 +26,7 @@ import 'contribute_location_search_screen.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
+import '../widgets/translated_text.dart';
 import 'dart:async';
 part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_editor.dart';
@@ -97,6 +98,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   double? _pendingOrsDistM;
   double? _pendingOrsDurS;
   int? _pendingStepStartIndex;
+  bool _isPlacingStep = false;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
   String? selectedRegion = 'CAMANAVA';
@@ -121,11 +123,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Zoom slider state ───────────────────────────────────────────────────────
   double _currentZoom = 11.0;
-  bool _zoomControlsVisible = false; 
-  Timer? _zoomVisibilityTimer;  
+  bool _zoomControlsVisible = false;
+  Timer? _zoomVisibilityTimer;
 
-  
-  // ─── Color tokens 
+  // ─── Color tokens
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
@@ -149,7 +150,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
       const LatLng(14.95, 121.20),
     ),
     'CAMANAVA': LatLngBounds(
-      const LatLng(14.60, 120.92), // tightened north edge — excludes North Caloocan
+      const LatLng(
+        14.60,
+        120.92,
+      ), // tightened north edge — excludes North Caloocan
       const LatLng(14.74, 121.03),
     ),
     'Caloocan': LatLngBounds(
@@ -172,7 +176,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
   };
 
   static const List<String> modes = [
-    'Jeepney', 'Bus', 'Train', 'Tricycle', 'FX/Van', 'Walk', 'Ferry',
+    'Jeepney',
+    'Bus',
+    'Train',
+    'Tricycle',
+    'FX/Van',
+    'Walk',
+    'Ferry',
   ];
 
   static const List<String> onboardingUserTags = [
@@ -211,7 +221,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
     super.initState();
     _mapMode = widget.mapMode;
     _checkTutorialStatus();
-    if (widget.quickRouteToken != null && widget.quickRouteToken!.trim().isNotEmpty) {
+    if (widget.quickRouteToken != null &&
+        widget.quickRouteToken!.trim().isNotEmpty) {
       _loadQuickRouteLink(widget.quickRouteToken!.trim());
     } else {
       _loadRouteToEdit();
@@ -235,7 +246,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (mode == MapTabMode.nearby) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _mapController.move(CamanavaBounds.center, CamanavaBounds.initialZoom);
+          _mapController.move(
+            CamanavaBounds.center,
+            CamanavaBounds.initialZoom,
+          );
         }
       });
     }
@@ -277,7 +291,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (payload == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This quick route link is invalid or has expired.'),
+          content: TranslatedText(
+            'This quick route link is invalid or has expired.',
+          ),
         ),
       );
       return;
@@ -301,7 +317,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Future<void> _createQuickLink() async {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Need at least start and end points on map')),
+        const SnackBar(
+          content: TranslatedText('Need at least start and end points on map'),
+        ),
       );
       return;
     }
@@ -313,7 +331,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     final ownerId = FirebaseAuth.instance.currentUser?.uid;
     if (ownerId == null || ownerId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to create a quick link.')),
+        const SnackBar(
+          content: TranslatedText('Please sign in to create a quick link.'),
+        ),
       );
       return;
     }
@@ -403,14 +423,18 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _saveToHistory();
       if (_startLocationController.text.isEmpty) {
         final name = await LocationService.getAddressFromCoordinates(
-            point.latitude, point.longitude);
+          point.latitude,
+          point.longitude,
+        );
         if (mounted && _startLocationController.text.isEmpty) {
-          _startLocationController.text = name ??
+          _startLocationController.text =
+              name ??
               '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
         }
       }
     } else if (selectionMode == 'step') {
-      if (pathPoints.isNotEmpty) {
+      if (pathPoints.isNotEmpty && !_isPlacingStep) {
+        _isPlacingStep = true;
         final lastPoint = pathPoints.last;
         _pendingStepStartIndex = pathPoints.length;
 
@@ -425,15 +449,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
               _pendingOrsDistM = result.distanceMeters;
               _pendingOrsDurS = result.durationSeconds;
               setState(() => pathPoints.addAll(result.polyline));
+              _isPlacingStep = false;
               _showStepDialog();
               return;
             }
           } catch (e) {
-            if (!mounted) return;
+            if (!mounted) {
+              _isPlacingStep = false;
+              return;
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text(
-                    'Snap-to-road failed, using straight line instead'),
+                content: TranslatedText(
+                  'Snap-to-road failed, using straight line instead',
+                ),
                 duration: Duration(seconds: 2),
               ),
             );
@@ -443,9 +472,21 @@ class _ContributeScreenState extends State<ContributeScreen> {
         _pendingOrsDistM = null;
         _pendingOrsDurS = null;
         setState(() => pathPoints.add(point));
+        _isPlacingStep = false;
         _showStepDialog();
       }
     }
+  }
+
+  /// POI/nearby-place pin scale for the current zoom: 0 (hidden) below
+  /// [_pinHideZoom] so a wide-out view isn't swamped with markers, ramping
+  /// up to full size by [_pinFullSizeZoom].
+  static const double _pinHideZoom = 10.5;
+  static const double _pinFullSizeZoom = 13.5;
+
+  double get _poiPinScale {
+    final t = (_currentZoom - _pinHideZoom) / (_pinFullSizeZoom - _pinHideZoom);
+    return t.clamp(0.0, 1.0);
   }
 
   void _onRegionChanged(String? region) {
@@ -466,7 +507,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
           break;
         case 'Malabon':
         case 'Navotas':
-          zoom = 14.5; // small, compact cities need a tighter zoom to feel focused
+          zoom =
+              14.5; // small, compact cities need a tighter zoom to feel focused
           break;
         case 'Caloocan':
           zoom = 14.0;
@@ -477,7 +519,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         default:
           zoom = 13.0;
           break;
-      } 
+      }
 
       _mapController.move(center, zoom);
       setState(() {
@@ -507,7 +549,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Location found and map locked to that place'),
+        content: TranslatedText('Location found and map locked to that place'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -566,33 +608,34 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void _showStepDialog() {
     showDialog(
       context: context,
-      builder: (_) => StepDialog(
-        mode: currentMode,
-        modeColors: modeColors,
-        getModeIcon: _getModeIcon,
-        onCancel: _cancelPendingStep,
-        onSaved: (step) {
-          setState(() {
-            steps.add(step);
-            stepBoundaries.add(pathPoints.length - 1);
-            _stepOrsDistM.add(_pendingOrsDistM);
-            _stepOrsDurS.add(_pendingOrsDurS);
-            _pendingStepStartIndex = null;
-            _pendingOrsDistM = null;
-            _pendingOrsDurS = null;
-          });
-          _saveToHistory();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Step ${steps.length} saved. Tap the map for the next point, '
-                'pick a new mode, or tap Finish Route.',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        },
-      ),
+      builder:
+          (_) => StepDialog(
+            mode: currentMode,
+            modeColors: modeColors,
+            getModeIcon: _getModeIcon,
+            onCancel: _cancelPendingStep,
+            onSaved: (step) {
+              setState(() {
+                steps.add(step);
+                stepBoundaries.add(pathPoints.length - 1);
+                _stepOrsDistM.add(_pendingOrsDistM);
+                _stepOrsDurS.add(_pendingOrsDurS);
+                _pendingStepStartIndex = null;
+                _pendingOrsDistM = null;
+                _pendingOrsDurS = null;
+              });
+              _saveToHistory();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Step ${steps.length} saved. Tap the map for the next point, '
+                    'pick a new mode, or tap Finish Route.',
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
     );
   }
 
@@ -620,10 +663,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (_endLocationController.text.isEmpty && pathPoints.isNotEmpty) {
       final last = pathPoints.last;
       final name = await LocationService.getAddressFromCoordinates(
-          last.latitude, last.longitude);
+        last.latitude,
+        last.longitude,
+      );
       if (mounted && _endLocationController.text.isEmpty) {
         setState(() {
-          _endLocationController.text = name ??
+          _endLocationController.text =
+              name ??
               '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
         });
       }
@@ -635,23 +681,24 @@ class _ContributeScreenState extends State<ContributeScreen> {
     final step = steps[index];
     showDialog(
       context: context,
-      builder: (_) => StepDialog(
-        mode: step.mode,
-        modeColors: modeColors,
-        getModeIcon: _getModeIcon,
-        initialStep: step,
-        onCancel: () {},
-        onSaved: (updated) {
-          setState(() => steps[index] = updated);
-          _saveToHistory();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Step updated.'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
-      ),
+      builder:
+          (_) => StepDialog(
+            mode: step.mode,
+            modeColors: modeColors,
+            getModeIcon: _getModeIcon,
+            initialStep: step,
+            onCancel: () {},
+            onSaved: (updated) {
+              setState(() => steps[index] = updated);
+              _saveToHistory();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: TranslatedText('Step updated.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
     );
   }
 
@@ -659,21 +706,23 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (index < 0 || index >= steps.length) return;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove this step?'),
-        content: Text(
-            '${steps[index].instruction} will be removed and the remaining steps reconnected.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const TranslatedText('Remove this step?'),
+            content: Text(
+              '${steps[index].instruction} will be removed and the remaining steps reconnected.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const TranslatedText('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const TranslatedText('Remove'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
     );
     if (!mounted || confirm != true) return;
 
@@ -687,11 +736,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (index >= controlPoints.length) return;
     controlPoints.removeAt(index);
 
-    final rebuilt = await ContributeRouteEditService.rebuildFromStepControlPoints(
-      steps: remaining,
-      stepControlPoints: controlPoints,
-      snapToRoadEnabled: _snapToRoadEnabled,
-    );
+    final rebuilt =
+        await ContributeRouteEditService.rebuildFromStepControlPoints(
+          steps: remaining,
+          stepControlPoints: controlPoints,
+          snapToRoadEnabled: _snapToRoadEnabled,
+        );
     if (!mounted) return;
 
     setState(() {
@@ -704,7 +754,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _saveToHistory();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Step removed.'),
+        content: TranslatedText('Step removed.'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -728,11 +778,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
     final movedCp = controlPoints.removeAt(index);
     controlPoints.insert(target, movedCp);
 
-    final rebuilt = await ContributeRouteEditService.rebuildFromStepControlPoints(
-      steps: reordered,
-      stepControlPoints: controlPoints,
-      snapToRoadEnabled: _snapToRoadEnabled,
-    );
+    final rebuilt =
+        await ContributeRouteEditService.rebuildFromStepControlPoints(
+          steps: reordered,
+          stepControlPoints: controlPoints,
+          snapToRoadEnabled: _snapToRoadEnabled,
+        );
     if (!mounted) return;
 
     setState(() {
@@ -748,25 +799,51 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Future<bool> _confirmFinishRoute() async {
     final shouldFinish = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Finish route now?'),
-        content: const Text(
-          'You can still preview and submit after this. If you need to add more steps, tap Keep Adding.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep Adding'),
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const TranslatedText('Finish route now?'),
+            content: const TranslatedText(
+              'You can still preview and submit after this. If you need to add more steps, tap Keep Adding.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const TranslatedText('Keep Adding'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const TranslatedText('Finish Route'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Finish Route'),
-          ),
-        ],
-      ),
     );
 
     return shouldFinish ?? false;
+  }
+
+  Future<bool> _confirmDiscardRouteProgress() async {
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const TranslatedText('Discard this route?'),
+            content: const TranslatedText(
+              'Going back now will lose the points and steps you\'ve placed. This can\'t be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const TranslatedText('Keep Editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const TranslatedText('Discard'),
+              ),
+            ],
+          ),
+    );
+
+    return shouldDiscard ?? false;
   }
 
   // ─── History controls ────────────────────────────────────────────────────────
@@ -865,7 +942,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() => _snapToRoadEnabled = enabled);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
+        content: TranslatedText(
           enabled
               ? 'Snap to road enabled - routes will follow roads'
               : 'Snap to road disabled - routes will use straight lines',
@@ -879,7 +956,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (selectionMode != 'done' || steps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Finish adding steps first to edit route handles.'),
+          content: TranslatedText(
+            'Finish adding steps first to edit route handles.',
+          ),
           duration: Duration(seconds: 2),
         ),
       );
@@ -889,9 +968,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() => _showEditHandles = !_showEditHandles);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
+        content: TranslatedText(
           _showEditHandles
-            ? 'Edit handles enabled. Drag markers to adjust route.'
+              ? 'Edit handles enabled. Drag markers to adjust route.'
               : 'Edit handles disabled.',
         ),
         duration: const Duration(seconds: 2),
@@ -903,7 +982,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() => _showPins = !_showPins);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
+        content: TranslatedText(
           _showPins ? 'Pins shown on map.' : 'Pins hidden on map.',
         ),
         duration: const Duration(seconds: 2),
@@ -1002,10 +1081,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
 
     if (earliest != null && latest != null) {
-      final startLabel = TimeOfDay(hour: earliest.hour, minute: earliest.minute)
-          .format(context);
-      final endLabel = TimeOfDay(hour: latest.hour, minute: latest.minute)
-          .format(context);
+      final startLabel = TimeOfDay(
+        hour: earliest.hour,
+        minute: earliest.minute,
+      ).format(context);
+      final endLabel = TimeOfDay(
+        hour: latest.hour,
+        minute: latest.minute,
+      ).format(context);
       return has24x7Leg
           ? '$startLabel - $endLabel (some legs run 24/7)'
           : '$startLabel - $endLabel';
@@ -1021,25 +1104,30 @@ class _ContributeScreenState extends State<ContributeScreen> {
       final step = steps[i];
       final color = modeColors[step.mode] ?? Colors.blue;
       final startIdx = (i == 0) ? 0 : stepBoundaries[i - 1];
-      final endIdx = (i < stepBoundaries.length)
-          ? stepBoundaries[i]
-          : pathPoints.length - 1;
+      final endIdx =
+          (i < stepBoundaries.length)
+              ? stepBoundaries[i]
+              : pathPoints.length - 1;
       if (endIdx > startIdx) {
         final pts = pathPoints.sublist(startIdx, endIdx + 1);
-        result.add(Polyline(
-          points: pts,
-          color: Colors.black.withOpacity(0.5),
-          strokeWidth: 8.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ));
-        result.add(Polyline(
-          points: pts,
-          color: color,
-          strokeWidth: 6.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ));
+        result.add(
+          Polyline(
+            points: pts,
+            color: Colors.black.withOpacity(0.5),
+            strokeWidth: 8.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+        );
+        result.add(
+          Polyline(
+            points: pts,
+            color: color,
+            strokeWidth: 6.0,
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+        );
       }
     }
     return result;
@@ -1063,7 +1151,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
     await this._rebuildFromStepControlsSection(stepControlPoints);
   }
 
-  Future<void> _onBoundaryWaypointDragEnd(int index, LatLng updatedPoint) async {
+  Future<void> _onBoundaryWaypointDragEnd(
+    int index,
+    LatLng updatedPoint,
+  ) async {
     await this._onBoundaryWaypointDragEndSection(index, updatedPoint);
   }
 
@@ -1129,8 +1220,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     this._onPreviewRouteSection();
   }
 
-
-  void _revealZoomControls() {          
+  void _revealZoomControls() {
     setState(() => _zoomControlsVisible = true);
     _zoomVisibilityTimer?.cancel();
     _zoomVisibilityTimer = Timer(const Duration(seconds: 2), () {
@@ -1141,110 +1231,131 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Vertical zoom slider ────────────────────────────────────────────────────
 
   Widget _buildVerticalZoomSlider() {
-  return Positioned(
-    right: 12,
-    top: 140,
-    bottom: 160,
-    child: IgnorePointer(
-      ignoring: !_zoomControlsVisible,
-      child: AnimatedOpacity(
-        opacity: _zoomControlsVisible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 200),
-        child: GestureDetector(
-          onTap: _revealZoomControls,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  _revealZoomControls();
-                  final z = (_currentZoom + 1).clamp(9.0, 18.0);
-                  setState(() => _currentZoom = z);
-                  _mapController.move(_mapController.camera.center, z);
-                },
-                child: const Icon(Icons.add_circle, size: 22, color: _accent),
-              ),
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: 3,
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      activeTrackColor: _accent,
-                      inactiveTrackColor: _border,
-                      thumbColor: _accent,
-                      overlayColor: _accent.withOpacity(0.15),
-                      trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    ),
-                    child: Slider(
-                      min: 9.0,
-                      max: 18.0,
-                      value: _currentZoom.clamp(9.0, 18.0),
-                      onChanged: (value) {
-                        _revealZoomControls();
-                        setState(() {
-                          _currentZoom = value;
-                          selectedRegion = null;
-                        });
-                        _mapController.move(_mapController.camera.center, value);
-                      },
+    return Positioned(
+      right: 12,
+      top: 140,
+      bottom: 160,
+      child: IgnorePointer(
+        ignoring: !_zoomControlsVisible,
+        child: AnimatedOpacity(
+          opacity: _zoomControlsVisible ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: GestureDetector(
+            onTap: _revealZoomControls,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    _revealZoomControls();
+                    final z = (_currentZoom + 1).clamp(9.0, 18.0);
+                    setState(() => _currentZoom = z);
+                    _mapController.move(_mapController.camera.center, z);
+                  },
+                  child: const Icon(Icons.add_circle, size: 22, color: _accent),
+                ),
+                Expanded(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: _accent,
+                        inactiveTrackColor: _border,
+                        thumbColor: _accent,
+                        overlayColor: _accent.withOpacity(0.15),
+                        trackHeight: 2,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                      ),
+                      child: Slider(
+                        min: 9.0,
+                        max: 18.0,
+                        value: _currentZoom.clamp(9.0, 18.0),
+                        onChanged: (value) {
+                          _revealZoomControls();
+                          setState(() {
+                            _currentZoom = value;
+                            selectedRegion = null;
+                          });
+                          _mapController.move(
+                            _mapController.camera.center,
+                            value,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  _revealZoomControls();
-                  final z = (_currentZoom - 1).clamp(9.0, 18.0);
-                  setState(() => _currentZoom = z);
-                  _mapController.move(_mapController.camera.center, z);
-                },
-                child: const Icon(Icons.remove_circle, size: 22, color: _accent),
-              ),
-            ],
+                GestureDetector(
+                  onTap: () {
+                    _revealZoomControls();
+                    final z = (_currentZoom - 1).clamp(9.0, 18.0);
+                    setState(() => _currentZoom = z);
+                    _mapController.move(_mapController.camera.center, z);
+                  },
+                  child: const Icon(
+                    Icons.remove_circle,
+                    size: 22,
+                    color: _accent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // ─── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final isNearby = _mapMode == MapTabMode.nearby;
+    final hasRouteProgress = pathPoints.isNotEmpty || steps.isNotEmpty;
+    final guardPop = !isNearby && Navigator.canPop(context) && hasRouteProgress;
     return Stack(
       children: [
-        Scaffold(
-          backgroundColor: _bg,
-          appBar: _buildAppBar(),
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                return Stack(
-                  children: [
-                    _buildMapLayer(),
-                    if (isNearby) ...[
-                      _buildNearbyFilterChips(),
-                      _buildNearbyDebugCoordChip(),
-                      _buildPinsToggle(),
-                      if (_nearbySelectedPlace != null)
-                        _buildNearbyInfoCard(_nearbySelectedPlace!),
-                      _buildNearbyFabs(),
-                    ] else ...[
-                      _buildMapControlsOverlay(),
-                      if (selectionMode != 'done') _buildInstructionPill(),
-                      _buildStepChipsBar(),
-                      _buildLocationSearchBar(),
-                      _buildRegionSelector(),
-                      _buildPinsToggle(),
-                      _buildVerticalZoomSlider(),
-                      _buildFormDrawer(context, constraints.maxHeight),
+        PopScope(
+          canPop: !guardPop,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final navigator = Navigator.of(context);
+            final discard = await _confirmDiscardRouteProgress();
+            if (!mounted || !discard) return;
+            navigator.pop();
+          },
+          child: Scaffold(
+            backgroundColor: _bg,
+            appBar: _buildAppBar(),
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  return Stack(
+                    children: [
+                      _buildMapLayer(),
+                      if (isNearby) ...[
+                        _buildNearbyFilterChips(),
+                        _buildNearbyDebugCoordChip(),
+                        _buildPinsToggle(),
+                        if (_nearbySelectedPlace != null)
+                          _buildNearbyInfoCard(_nearbySelectedPlace!),
+                        _buildNearbyFabs(),
+                      ] else ...[
+                        _buildMapControlsOverlay(),
+                        if (selectionMode != 'done') _buildInstructionPill(),
+                        _buildStepChipsBar(),
+                        _buildLocationSearchBar(),
+                        _buildRegionSelector(),
+                        _buildPinsToggle(),
+                        _buildVerticalZoomSlider(),
+                        _buildFormDrawer(context, constraints.maxHeight),
+                      ],
                     ],
-                  ],
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
