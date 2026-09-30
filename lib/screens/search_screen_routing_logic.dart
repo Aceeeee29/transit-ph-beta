@@ -18,14 +18,22 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       String originName;
 
       if (_useCurrentLocation) {
-        final position = await LocationService.getCurrentPosition();
+        final hasAccess = await ensureLocationAccess(
+          context,
+          reason: 'plan a route from where you are',
+        );
+        if (!mounted) return;
+        final position =
+            hasAccess ? await LocationService.getCurrentPosition() : null;
         if (!mounted) return;
         if (position == null) {
           setState(() {
             _isLoadingOrs = false;
             _orsError = true;
             _orsErrorMessage =
-                'Could not get your current location. Check location permissions.';
+                hasAccess
+                    ? 'Could not get a GPS fix. Try again in a moment.'
+                    : 'Location is needed to start from where you are. Allow it, or type a starting point instead.';
           });
           return;
         }
@@ -77,24 +85,32 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       var fallbackAlternatives = <int, OrsRouteResult>{};
       var labelsByIndex = <int, String>{};
       try {
+        final communityRoutes =
+            _routes
+                .map(CommunityRoute.fromRoute)
+                .whereType<CommunityRoute>()
+                .toList();
         final pools = await Future.wait([
           RoutingService.getRouteAlternatives(
             origin: origin,
             destination: destLatLng,
             optimization: 'balanced',
             maxAlternatives: 8,
+            communityRoutes: communityRoutes,
           ),
           RoutingService.getRouteAlternatives(
             origin: origin,
             destination: destLatLng,
             optimization: 'fastest',
             maxAlternatives: 8,
+            communityRoutes: communityRoutes,
           ),
           RoutingService.getRouteAlternatives(
             origin: origin,
             destination: destLatLng,
             optimization: 'budget',
             maxAlternatives: 8,
+            communityRoutes: communityRoutes,
           ),
         ]);
         if (!mounted) return;

@@ -27,6 +27,7 @@ import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
 import '../widgets/contribute/location_search_bar.dart';
 import '../widgets/translated_text.dart';
+import '../widgets/location_permission_notice.dart';
 import 'dart:async';
 part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_editor.dart';

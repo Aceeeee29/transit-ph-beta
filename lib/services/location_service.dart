@@ -24,6 +24,18 @@ class LocationService {
     return true;
   }
 
+  /// Shows the OS location prompt if the user hasn't answered it yet.
+  /// Deliberately silent after a permanent denial so the app doesn't nag on
+  /// every launch; features explain how to re-enable it when they need it.
+  static Future<void> requestPermissionIfUndecided() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+    } catch (_) {}
+  }
+
   /// Get the current GPS position
   static Future<Position?> getCurrentPosition() async {
     try {

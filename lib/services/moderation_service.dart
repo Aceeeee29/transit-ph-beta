@@ -88,6 +88,10 @@ class ModerationService {
   static StreamSubscription<QuerySnapshot>? _usersSubscription;
   static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
   static StreamSubscription<QuerySnapshot>? _routesSubscription;
+  static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _roleSubscription;
+  static String? _roleWatchUid;
+  static bool _dataListenersRunning = false;
   static bool _initialized = false;
   static const int maxRestrictionDays = 7;
 
@@ -96,24 +100,64 @@ class ModerationService {
     if (_initialized) return;
     _initialized = true;
 
-    _auth.authStateChanges().listen((user) {
-      if (user == null) {
-        _stopDataListeners(clearData: true);
-        return;
-      }
-      _startDataListeners();
-    });
+    _auth.authStateChanges().listen(_onAuthUserChanged);
 
     // Also handle the current auth state immediately.
-    if (_auth.currentUser != null) {
-      _startDataListeners();
-    } else {
+    _onAuthUserChanged(_auth.currentUser);
+  }
+
+  /// The whole-collection listeners below are for the moderator screen, and
+  /// Firestore only lets staff read posts and feedbacks that way, so they run
+  /// only while the signed-in user's profile has a moderator or admin role.
+  /// Watching the profile means a promotion or demotion applies without an
+  /// app restart. Regular users' feed loads through PostService instead.
+  static void _onAuthUserChanged(firebase_auth.User? user) {
+    if (user == null) {
+      _roleSubscription?.cancel();
+      _roleSubscription = null;
+      _roleWatchUid = null;
       _stopDataListeners(clearData: true);
+      return;
     }
+    if (user.uid == _roleWatchUid) return;
+
+    _roleSubscription?.cancel();
+    _stopDataListeners(clearData: true);
+    _roleWatchUid = user.uid;
+    _roleSubscription = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen(
+      (doc) {
+        final isStaff = _isStaffRole(doc.data()?['role']);
+        if (isStaff && !_dataListenersRunning) {
+          _startDataListeners();
+        } else if (!isStaff && _dataListenersRunning) {
+          _stopDataListeners(clearData: true);
+        }
+      },
+      onError: (error) {
+        debugPrint('[ModerationService] Role watch failed: $error');
+      },
+    );
+  }
+
+  static bool _isStaffRole(Object? rawRole) {
+    final role = (rawRole is String ? rawRole : '')
+        .trim()
+        .toLowerCase()
+        .replaceAll('-', '_')
+        .replaceAll(' ', '_');
+    return role == 'moderator' ||
+        role == 'admin' ||
+        role == 'superadmin' ||
+        role == 'super_admin';
   }
 
   static void _startDataListeners() {
     _stopDataListeners(clearData: false);
+    _dataListenersRunning = true;
 
     _postsSubscription =
         _firestore.collection('posts').snapshots().listen((snapshot) {
@@ -168,6 +212,7 @@ class ModerationService {
   }
 
   static void _stopDataListeners({required bool clearData}) {
+    _dataListenersRunning = false;
     _postsSubscription?.cancel();
     _usersSubscription?.cancel();
     _feedbacksSubscription?.cancel();

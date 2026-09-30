@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../data/camanava_places.dart';
+import '../models/route.dart' as route_model;
 import 'transport_mode_inference.dart';
 
 /// A single vehicle ride between two stops.
@@ -22,6 +24,18 @@ class TransitLeg {
   final double alightLat;
   final double alightLon;
 
+  /// Set only for legs taken from an approved community route: the
+  /// contributor's own drawn path between board and alight, their paid fare
+  /// (only when the whole step is ridden), and a ready-made instruction.
+  final List<LatLng>? communityPath;
+  final double? communityFare;
+  final String? communityLabel;
+
+  /// The trip's stops strictly between board and alight, in riding order.
+  /// Used to draw legs whose trip has no GTFS shape along the vehicle's
+  /// actual route instead of a straight line between the end stops.
+  final List<LatLng> viaStops;
+
   const TransitLeg({
     required this.tripId,
     required this.routeId,
@@ -38,6 +52,84 @@ class TransitLeg {
     required this.boardLon,
     required this.alightLat,
     required this.alightLon,
+    this.communityPath,
+    this.communityFare,
+    this.communityLabel,
+    this.viaStops = const [],
+  });
+
+  bool get isCommunity => communityLabel != null;
+}
+
+/// An admin-approved user route, reduced to what the router needs.
+class CommunityRoute {
+  final String id;
+  final String startLocation;
+  final String endLocation;
+  final List<CommunityRouteStep> steps;
+
+  const CommunityRoute({
+    required this.id,
+    required this.startLocation,
+    required this.endLocation,
+    required this.steps,
+  });
+
+  /// Splits the drawn path into per-step geometry using [stepBoundaries]
+  /// (the path index where each step ends). Returns null when the route
+  /// can't be split reliably, e.g. older routes saved without boundaries.
+  static CommunityRoute? fromRoute(route_model.Route route) {
+    if (!route.isApproved) return null;
+    final path = route.pathPoints;
+    if (path.length < 2 || route.steps.isEmpty) return null;
+
+    final steps = <CommunityRouteStep>[];
+    for (var i = 0; i < route.steps.length; i++) {
+      final List<LatLng> stepPath;
+      if (route.stepBoundaries.isEmpty) {
+        if (route.steps.length != 1) return null;
+        stepPath = path;
+      } else {
+        final start = i == 0 ? 0 : route.stepBoundaries[i - 1];
+        final end =
+            i < route.stepBoundaries.length
+                ? route.stepBoundaries[i]
+                : path.length - 1;
+        if (start < 0 || end >= path.length || end <= start) continue;
+        stepPath = path.sublist(start, end + 1);
+      }
+      final step = route.steps[i];
+      steps.add(
+        CommunityRouteStep(
+          mode: step.mode,
+          instruction: step.instruction,
+          path: stepPath,
+          actualFare: step.actualFare,
+        ),
+      );
+    }
+    if (steps.isEmpty) return null;
+
+    return CommunityRoute(
+      id: route.id,
+      startLocation: route.startLocation,
+      endLocation: route.endLocation,
+      steps: steps,
+    );
+  }
+}
+
+class CommunityRouteStep {
+  final String mode;
+  final String instruction;
+  final List<LatLng> path;
+  final double? actualFare;
+
+  const CommunityRouteStep({
+    required this.mode,
+    required this.instruction,
+    required this.path,
+    this.actualFare,
   });
 }
 
@@ -103,6 +195,9 @@ class _GraphEdge {
   final String? routeColor;
   final int? routeType;
 
+  /// Search-only preference multiplier; [costSeconds] stays the real time.
+  final double weightFactor;
+
   const _GraphEdge({
     required this.from,
     required this.to,
@@ -116,6 +211,31 @@ class _GraphEdge {
     this.routeLongName,
     this.routeColor,
     this.routeType,
+    this.weightFactor = 1.0,
+  });
+}
+
+/// One riding step of a community route, in one direction.
+class _CommunityTrip {
+  /// Always in the contributor's drawn direction; [reversed] flips riding.
+  final List<LatLng> path;
+  final bool reversed;
+  final String mode;
+
+  /// "Start → End" in riding direction.
+  final String routeLabel;
+
+  /// The contributor's own instruction (e.g. the jeep's signboard).
+  final String note;
+  final double? actualFare;
+
+  const _CommunityTrip({
+    required this.path,
+    required this.reversed,
+    required this.mode,
+    required this.routeLabel,
+    required this.note,
+    this.actualFare,
   });
 }
 
@@ -129,10 +249,16 @@ class _QueueNode {
 class _DijkstraGraphContext {
   final Map<String, List<_GraphEdge>> adjacency;
   final Map<String, Map<String, dynamic>> allStopsById;
+  final Map<String, _CommunityTrip> communityTrips;
+
+  /// Each GTFS trip's corridor stop IDs in stop_sequence order.
+  final Map<String, List<String>> tripStopSequences;
 
   const _DijkstraGraphContext({
     required this.adjacency,
     required this.allStopsById,
+    this.communityTrips = const {},
+    this.tripStopSequences = const {},
   });
 }
 
@@ -157,6 +283,22 @@ class _DijkstraPathResult {
     required this.edges,
     required this.weightedCostSeconds,
     required this.baseCostSeconds,
+  });
+}
+
+/// Bundles everything the repeated-Dijkstra search needs so it can run on a
+/// background isolate via [compute] instead of blocking the UI thread.
+class _DijkstraComputeArgs {
+  final _DijkstraGraphContext context;
+  final RouteOptimizationMode optimizationMode;
+  final int maxAlternatives;
+  final double edgePenaltyFactor;
+
+  const _DijkstraComputeArgs({
+    required this.context,
+    required this.optimizationMode,
+    required this.maxAlternatives,
+    required this.edgePenaltyFactor,
   });
 }
 
@@ -270,8 +412,10 @@ class SupabaseRouteService {
     int maxAlternatives = 3,
     RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
     double edgePenaltyFactor = 0.45,
+    List<CommunityRoute> communityRoutes = const [],
   }) async {
-    if (originCandidates.isEmpty || destCandidates.isEmpty) {
+    if ((originCandidates.isEmpty || destCandidates.isEmpty) &&
+        communityRoutes.isEmpty) {
       return const <DijkstraRouteAlternative>[];
     }
 
@@ -281,6 +425,7 @@ class SupabaseRouteService {
       originCandidates: originCandidates,
       destCandidates: destCandidates,
       allowFerry: allowFerry,
+      communityRoutes: communityRoutes,
     );
 
     var context = _getCachedDijkstraContext(contextKey);
@@ -290,17 +435,77 @@ class SupabaseRouteService {
       originCandidates: originCandidates,
       destCandidates: destCandidates,
       allowFerry: allowFerry,
+      communityRoutes: communityRoutes,
     );
     if (context != null) {
       _cacheDijkstraContext(contextKey, context);
     }
     if (context == null) return const <DijkstraRouteAlternative>[];
 
+    // The repeated-Dijkstra search below can run 30+ full graph searches
+    // back-to-back with no await in between, which previously blocked the
+    // UI thread for the whole batch (visible as dropped frames / a frozen
+    // screen during "Generate Route"). Running it via compute() moves that
+    // CPU-bound work to a background isolate so the UI stays responsive.
+    final results = await compute(
+      _runDijkstraAlternatives,
+      _DijkstraComputeArgs(
+        context: context,
+        optimizationMode: optimizationMode,
+        maxAlternatives: maxAlternatives,
+        edgePenaltyFactor: edgePenaltyFactor,
+      ),
+    );
+
+    if (results.isEmpty) return const <DijkstraRouteAlternative>[];
+    return _scoreAndSortAlternatives(results, optimizationMode);
+  }
+
+  /// Plans over community routes alone, with no Supabase access.
+  @visibleForTesting
+  static Future<List<DijkstraRouteAlternative>> planWithCommunityRoutesOnly({
+    required LatLng origin,
+    required LatLng destination,
+    required List<CommunityRoute> communityRoutes,
+    RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
+  }) async {
+    final context = await _buildDijkstraGraphContext(
+      origin: origin,
+      destination: destination,
+      originCandidates: const [],
+      destCandidates: const [],
+      allowFerry: false,
+      communityRoutes: communityRoutes,
+      includeGtfs: false,
+    );
+    if (context == null) return const [];
+    final results = _runDijkstraAlternatives(
+      _DijkstraComputeArgs(
+        context: context,
+        optimizationMode: optimizationMode,
+        maxAlternatives: 3,
+        edgePenaltyFactor: 0.45,
+      ),
+    );
+    if (results.isEmpty) return const [];
+    return _scoreAndSortAlternatives(results, optimizationMode);
+  }
+
+  /// Pure, isolate-safe: repeatedly runs Dijkstra with growing edge
+  /// penalties to approximate k-shortest diverse paths. No network or
+  /// instance state — safe to run off the main isolate via [compute].
+  static List<DijkstraTripPlanResult> _runDijkstraAlternatives(
+    _DijkstraComputeArgs args,
+  ) {
+    final context = args.context;
+    final optimizationMode = args.optimizationMode;
+    final edgePenaltyFactor = args.edgePenaltyFactor;
+
     final results = <DijkstraTripPlanResult>[];
     final uniquePathSignatures = <String>{};
     final edgePenalties = <String, double>{};
 
-    final targetCount = maxAlternatives.clamp(1, 6);
+    final targetCount = args.maxAlternatives.clamp(1, 6);
     final maxIterations = targetCount * 5;
 
     for (var i = 0; i < maxIterations && results.length < targetCount; i++) {
@@ -320,6 +525,8 @@ class SupabaseRouteService {
           pathEdges: path.edges,
           totalCostSeconds: path.baseCostSeconds,
           allStopsById: context.allStopsById,
+          communityTrips: context.communityTrips,
+          tripStopSequences: context.tripStopSequences,
         );
         if (materialized != null) {
           results.add(materialized);
@@ -334,8 +541,7 @@ class SupabaseRouteService {
       }
     }
 
-    if (results.isEmpty) return const <DijkstraRouteAlternative>[];
-    return _scoreAndSortAlternatives(results, optimizationMode);
+    return results;
   }
 
   /// K-shortest approximation using repeated Dijkstra runs with edge penalties.
@@ -366,6 +572,8 @@ class SupabaseRouteService {
     _GraphEdge start,
     _GraphEdge end,
     Map<String, Map<String, dynamic>> stopById,
+    Map<String, _CommunityTrip> communityTrips,
+    Map<String, List<String>> tripStopSequences,
   ) {
     final boardStop = stopById[start.from];
     final alightStop = stopById[end.to];
@@ -374,6 +582,17 @@ class SupabaseRouteService {
         start.tripId == null ||
         start.routeId == null) {
       return null;
+    }
+
+    final community = communityTrips[start.tripId];
+    if (community != null) {
+      return _communityLegFromEdges(
+        start,
+        end,
+        boardStop,
+        alightStop,
+        community,
+      );
     }
 
     return TransitLeg(
@@ -392,7 +611,38 @@ class SupabaseRouteService {
       boardLon: (boardStop['stop_lon'] as num).toDouble(),
       alightLat: (alightStop['stop_lat'] as num).toDouble(),
       alightLon: (alightStop['stop_lon'] as num).toDouble(),
+      viaStops: viaStopPoints(
+        tripStopSequences[start.tripId!],
+        start.from,
+        end.to,
+        stopById,
+      ),
     );
+  }
+
+  /// Coordinates of the stops [sequence] visits strictly between
+  /// [boardStopId] and the first [alightStopId] after it.
+  @visibleForTesting
+  static List<LatLng> viaStopPoints(
+    List<String>? sequence,
+    String boardStopId,
+    String alightStopId,
+    Map<String, Map<String, dynamic>> stopById,
+  ) {
+    if (sequence == null) return const [];
+    final boardIdx = sequence.indexOf(boardStopId);
+    if (boardIdx < 0) return const [];
+    final alightIdx = sequence.indexOf(alightStopId, boardIdx + 1);
+    if (alightIdx < 0) return const [];
+
+    return [
+      for (final id in sequence.sublist(boardIdx + 1, alightIdx))
+        if (stopById[id] case final stop?)
+          LatLng(
+            (stop['stop_lat'] as num).toDouble(),
+            (stop['stop_lon'] as num).toDouble(),
+          ),
+    ];
   }
 
   static _DijkstraPathResult? _runDijkstra(
@@ -451,6 +701,10 @@ class SupabaseRouteService {
   }
 
   static double _edgeWeight(_GraphEdge edge, RouteOptimizationMode mode) {
+    return _baseEdgeWeight(edge, mode) * edge.weightFactor;
+  }
+
+  static double _baseEdgeWeight(_GraphEdge edge, RouteOptimizationMode mode) {
     switch (mode) {
       case RouteOptimizationMode.balanced:
         return edge.costSeconds;
@@ -476,9 +730,13 @@ class SupabaseRouteService {
     required List<Map<String, dynamic>> originCandidates,
     required List<Map<String, dynamic>> destCandidates,
     required bool allowFerry,
+    List<CommunityRoute> communityRoutes = const [],
+    bool includeGtfs = true,
   }) async {
-    final corridorStops = await _fetchCorridorStops(origin, destination);
-    if (corridorStops.isEmpty) return null;
+    final corridorStops =
+        includeGtfs
+            ? await _fetchCorridorStops(origin, destination)
+            : const <Map<String, dynamic>>[];
 
     final allStopsById = <String, Map<String, dynamic>>{};
     for (final stop in corridorStops) {
@@ -491,165 +749,33 @@ class SupabaseRouteService {
       allStopsById[stop['stop_id'].toString()] = stop;
     }
 
-    final stopIds = allStopsById.keys.toList();
-    if (stopIds.isEmpty) return null;
-
-    final stopTimes = await _fetchStopTimesForStopIds(stopIds);
-    if (stopTimes.isEmpty) return null;
-
-    final tripIds =
-        stopTimes
-            .map((r) => r['trip_id']?.toString())
-            .whereType<String>()
-            .toSet()
-            .toList();
-    if (tripIds.isEmpty) return null;
-
-    final tripRows = await _fetchTripsByIds(tripIds);
-    if (tripRows.isEmpty) return null;
-
-    final routeIds =
-        tripRows
-            .map((r) => r['route_id']?.toString())
-            .whereType<String>()
-            .toSet()
-            .toList();
-    final routeRows = await _fetchRoutesByIds(routeIds);
-
-    final tripById = <String, Map<String, dynamic>>{};
-    for (final row in tripRows) {
-      tripById[row['trip_id'].toString()] = row;
-    }
-
-    final routeById = <String, Map<String, dynamic>>{};
-    for (final row in routeRows) {
-      routeById[row['route_id'].toString()] = row;
-    }
-
-    final stopTimesByTrip = <String, List<Map<String, dynamic>>>{};
-    for (final row in stopTimes) {
-      final tripId = row['trip_id']?.toString();
-      final stopId = row['stop_id']?.toString();
-      if (tripId == null || stopId == null) continue;
-      if (!allStopsById.containsKey(stopId)) continue;
-      stopTimesByTrip.putIfAbsent(tripId, () => []).add(row);
-    }
-
     final adjacency = <String, List<_GraphEdge>>{};
+    final tripStopSequences = <String, List<String>>{};
 
     void addEdge(_GraphEdge edge) {
       adjacency.putIfAbsent(edge.from, () => []).add(edge);
     }
 
-    for (final entry in stopTimesByTrip.entries) {
-      final tripId = entry.key;
-      final seq = entry.value;
-      seq.sort(
-        (a, b) =>
-            _asInt(a['stop_sequence']).compareTo(_asInt(b['stop_sequence'])),
+    if (includeGtfs && allStopsById.isNotEmpty) {
+      await _addGtfsRideEdges(
+        allStopsById: allStopsById,
+        allowFerry: allowFerry,
+        addEdge: addEdge,
+        tripStopSequences: tripStopSequences,
       );
-      if (seq.length < 2) continue;
-
-      final trip = tripById[tripId];
-      if (trip == null) continue;
-      final routeId = trip['route_id']?.toString();
-      final route = routeId != null ? routeById[routeId] : null;
-      final routeType = _parseRouteType(route?['route_type']);
-      final inferredMode = _inferRouteMode(
-        routeId: routeId,
-        routeType: routeType,
-        routeShortName: route?['route_short_name'] as String?,
-        routeLongName: route?['route_long_name'] as String?,
-      );
-      if (!allowFerry && inferredMode == 'Ferry') continue;
-      final fallbackSpeedKmh = _fallbackSpeedForMode(inferredMode);
-
-      final segmentSeconds = <double>[];
-      final segmentMeters = <double>[];
-      for (var i = 0; i < seq.length - 1; i++) {
-        final a = seq[i];
-        final b = seq[i + 1];
-        final fromId = a['stop_id']?.toString();
-        final toId = b['stop_id']?.toString();
-        if (fromId == null || toId == null) {
-          segmentSeconds.add(double.infinity);
-          segmentMeters.add(0.0);
-          continue;
-        }
-
-        final fromStop = allStopsById[fromId];
-        final toStop = allStopsById[toId];
-        if (fromStop == null || toStop == null) {
-          segmentSeconds.add(double.infinity);
-          segmentMeters.add(0.0);
-          continue;
-        }
-
-        final segKm = _haversineKm(
-          LatLng(
-            (fromStop['stop_lat'] as num).toDouble(),
-            (fromStop['stop_lon'] as num).toDouble(),
-          ),
-          LatLng(
-            (toStop['stop_lat'] as num).toDouble(),
-            (toStop['stop_lon'] as num).toDouble(),
-          ),
-        );
-
-        var segSec = _gtfsTimeDiffSeconds(
-          a['departure_time']?.toString(),
-          b['arrival_time']?.toString(),
-        );
-
-        if (segSec <= 0 || segSec > 7200) {
-          segSec = ((segKm / fallbackSpeedKmh) * 3600).clamp(20, 2400);
-        }
-        segmentSeconds.add(segSec);
-        segmentMeters.add(segKm * 1000.0);
-      }
-
-      final prefix = List<double>.filled(segmentSeconds.length + 1, 0.0);
-      for (var i = 0; i < segmentSeconds.length; i++) {
-        prefix[i + 1] = prefix[i] + segmentSeconds[i];
-      }
-      final prefixMeters = List<double>.filled(segmentMeters.length + 1, 0.0);
-      for (var i = 0; i < segmentMeters.length; i++) {
-        prefixMeters[i + 1] = prefixMeters[i] + segmentMeters[i];
-      }
-
-      for (var i = 0; i < seq.length - 1; i++) {
-        final fromId = seq[i]['stop_id']?.toString();
-        if (fromId == null) continue;
-
-        final maxJ = math.min(seq.length - 1, i + _maxRideStopsSpan);
-        for (var j = i + 1; j <= maxJ; j++) {
-          final toId = seq[j]['stop_id']?.toString();
-          if (toId == null || toId == fromId) continue;
-
-          final runSec = prefix[j] - prefix[i];
-          final runMeters = prefixMeters[j] - prefixMeters[i];
-          if (!runSec.isFinite || runSec <= 0) continue;
-          if (!runMeters.isFinite || runMeters <= 0) continue;
-
-          addEdge(
-            _GraphEdge(
-              from: fromId,
-              to: toId,
-              costSeconds: runSec + _boardingPenaltySec,
-              distanceMeters: runMeters,
-              isWalk: false,
-              tripId: tripId,
-              routeId: routeId,
-              shapeId: _normalizeShapeId(trip['shape_id']),
-              routeShortName: route?['route_short_name'] as String?,
-              routeLongName: route?['route_long_name'] as String?,
-              routeColor: route?['route_color'] as String?,
-              routeType: routeType,
-            ),
-          );
-        }
-      }
     }
+
+    final communityTrips = <String, _CommunityTrip>{};
+    _addCommunityLegs(
+      routes: communityRoutes,
+      bounds: _corridorBounds(origin, destination),
+      allowFerry: allowFerry,
+      allStopsById: allStopsById,
+      communityTrips: communityTrips,
+      addEdge: addEdge,
+    );
+
+    if (adjacency.isEmpty) return null;
 
     final stopList = allStopsById.values.toList();
     for (var i = 0; i < stopList.length; i++) {
@@ -740,13 +866,452 @@ class SupabaseRouteService {
     return _DijkstraGraphContext(
       adjacency: adjacency,
       allStopsById: allStopsById,
+      communityTrips: communityTrips,
+      tripStopSequences: tripStopSequences,
     );
+  }
+
+  /// Adds a ride edge for every stop pair a GTFS trip serves in the corridor,
+  /// and records each trip's ordered stops in [tripStopSequences].
+  static Future<void> _addGtfsRideEdges({
+    required Map<String, Map<String, dynamic>> allStopsById,
+    required bool allowFerry,
+    required void Function(_GraphEdge edge) addEdge,
+    required Map<String, List<String>> tripStopSequences,
+  }) async {
+    final stopIds = allStopsById.keys.toList();
+    if (stopIds.isEmpty) return;
+
+    final stopTimes = await _fetchStopTimesForStopIds(stopIds);
+    if (stopTimes.isEmpty) return;
+
+    final tripIds =
+        stopTimes
+            .map((r) => r['trip_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
+    if (tripIds.isEmpty) return;
+
+    final tripRows = await _fetchTripsByIds(tripIds);
+    if (tripRows.isEmpty) return;
+
+    final routeIds =
+        tripRows
+            .map((r) => r['route_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
+    final routeRows = await _fetchRoutesByIds(routeIds);
+
+    final tripById = <String, Map<String, dynamic>>{};
+    for (final row in tripRows) {
+      tripById[row['trip_id'].toString()] = row;
+    }
+
+    final routeById = <String, Map<String, dynamic>>{};
+    for (final row in routeRows) {
+      routeById[row['route_id'].toString()] = row;
+    }
+
+    final stopTimesByTrip = <String, List<Map<String, dynamic>>>{};
+    for (final row in stopTimes) {
+      final tripId = row['trip_id']?.toString();
+      final stopId = row['stop_id']?.toString();
+      if (tripId == null || stopId == null) continue;
+      if (!allStopsById.containsKey(stopId)) continue;
+      stopTimesByTrip.putIfAbsent(tripId, () => []).add(row);
+    }
+
+    for (final entry in stopTimesByTrip.entries) {
+      final tripId = entry.key;
+      final seq = entry.value;
+      seq.sort(
+        (a, b) =>
+            _asInt(a['stop_sequence']).compareTo(_asInt(b['stop_sequence'])),
+      );
+      if (seq.length < 2) continue;
+
+      final trip = tripById[tripId];
+      if (trip == null) continue;
+      final routeId = trip['route_id']?.toString();
+      final route = routeId != null ? routeById[routeId] : null;
+      final routeType = _parseRouteType(route?['route_type']);
+      final inferredMode = _inferRouteMode(
+        routeId: routeId,
+        routeType: routeType,
+        routeShortName: route?['route_short_name'] as String?,
+        routeLongName: route?['route_long_name'] as String?,
+      );
+      if (!allowFerry && inferredMode == 'Ferry') continue;
+      tripStopSequences[tripId] = [
+        for (final row in seq) row['stop_id'].toString(),
+      ];
+      final fallbackSpeedKmh = _fallbackSpeedForMode(inferredMode);
+
+      final segmentSeconds = <double>[];
+      final segmentMeters = <double>[];
+      for (var i = 0; i < seq.length - 1; i++) {
+        final a = seq[i];
+        final b = seq[i + 1];
+        final fromId = a['stop_id']?.toString();
+        final toId = b['stop_id']?.toString();
+        if (fromId == null || toId == null) {
+          segmentSeconds.add(double.infinity);
+          segmentMeters.add(0.0);
+          continue;
+        }
+
+        final fromStop = allStopsById[fromId];
+        final toStop = allStopsById[toId];
+        if (fromStop == null || toStop == null) {
+          segmentSeconds.add(double.infinity);
+          segmentMeters.add(0.0);
+          continue;
+        }
+
+        final segKm = _haversineKm(
+          LatLng(
+            (fromStop['stop_lat'] as num).toDouble(),
+            (fromStop['stop_lon'] as num).toDouble(),
+          ),
+          LatLng(
+            (toStop['stop_lat'] as num).toDouble(),
+            (toStop['stop_lon'] as num).toDouble(),
+          ),
+        );
+
+        var segSec = _gtfsTimeDiffSeconds(
+          a['departure_time']?.toString(),
+          b['arrival_time']?.toString(),
+        );
+
+        if (segSec <= 0 || segSec > 7200) {
+          segSec = ((segKm / fallbackSpeedKmh) * 3600).clamp(20, 2400);
+        }
+        segmentSeconds.add(segSec);
+        segmentMeters.add(segKm * 1000.0);
+      }
+
+      final prefix = List<double>.filled(segmentSeconds.length + 1, 0.0);
+      for (var i = 0; i < segmentSeconds.length; i++) {
+        prefix[i + 1] = prefix[i] + segmentSeconds[i];
+      }
+      final prefixMeters = List<double>.filled(segmentMeters.length + 1, 0.0);
+      for (var i = 0; i < segmentMeters.length; i++) {
+        prefixMeters[i + 1] = prefixMeters[i] + segmentMeters[i];
+      }
+
+      for (var i = 0; i < seq.length - 1; i++) {
+        final fromId = seq[i]['stop_id']?.toString();
+        if (fromId == null) continue;
+
+        final maxJ = math.min(seq.length - 1, i + _maxRideStopsSpan);
+        for (var j = i + 1; j <= maxJ; j++) {
+          final toId = seq[j]['stop_id']?.toString();
+          if (toId == null || toId == fromId) continue;
+
+          final runSec = prefix[j] - prefix[i];
+          final runMeters = prefixMeters[j] - prefixMeters[i];
+          if (!runSec.isFinite || runSec <= 0) continue;
+          if (!runMeters.isFinite || runMeters <= 0) continue;
+
+          addEdge(
+            _GraphEdge(
+              from: fromId,
+              to: toId,
+              costSeconds: runSec + _boardingPenaltySec,
+              distanceMeters: runMeters,
+              isWalk: false,
+              tripId: tripId,
+              routeId: routeId,
+              shapeId: _normalizeShapeId(trip['shape_id']),
+              routeShortName: route?['route_short_name'] as String?,
+              routeLongName: route?['route_long_name'] as String?,
+              routeColor: route?['route_color'] as String?,
+              routeType: routeType,
+            ),
+          );
+        }
+      }
+    }
+
+  }
+
+  // ── Community routes ──────────────────────────────────────────────────────
+
+  /// Riding a contributed route backwards is a guess (one-way streets,
+  /// different pickup points), so it's allowed but discouraged and labelled.
+  static const allowReversedCommunityLegs = true;
+  static const _communityNodeSpacingKm = 0.3;
+  static const _communityWeightFactor = 0.8;
+  static const _reversedCommunityWeightFactor = 1.3;
+
+  /// Turns each riding step of an approved route into boardable nodes every
+  /// ~300 m along the contributor's path (stations only at the ends for
+  /// trains) plus ride edges between them. Walking links to GTFS stops, other
+  /// community routes, origin and destination are added later by the shared
+  /// transfer/access pass, which is what lets separate routes combine.
+  static void _addCommunityLegs({
+    required List<CommunityRoute> routes,
+    required ({double minLat, double maxLat, double minLng, double maxLng})
+    bounds,
+    required bool allowFerry,
+    required Map<String, Map<String, dynamic>> allStopsById,
+    required Map<String, _CommunityTrip> communityTrips,
+    required void Function(_GraphEdge edge) addEdge,
+  }) {
+    if (routes.isEmpty) return;
+
+    // Snapshot of GTFS stops, taken before community nodes are added.
+    final transitStops = [
+      for (final s in allStopsById.values)
+        (
+          name: s['stop_name']?.toString() ?? '',
+          point: LatLng(
+            (s['stop_lat'] as num).toDouble(),
+            (s['stop_lon'] as num).toDouble(),
+          ),
+        ),
+    ];
+
+    for (final route in routes) {
+      final forwardLabel = '${route.startLocation} → ${route.endLocation}';
+      final reverseLabel = '${route.endLocation} → ${route.startLocation}';
+      final lastStepIndex = route.steps.length - 1;
+
+      for (var i = 0; i < route.steps.length; i++) {
+        final step = route.steps[i];
+        if (step.mode == 'Walk') continue;
+        if (!allowFerry && step.mode == 'Ferry') continue;
+        final path = step.path;
+        if (path.length < 2 || !_pathTouchesBounds(path, bounds)) continue;
+
+        final nodePathIndices =
+            step.mode == 'Train'
+                ? [0, path.length - 1]
+                : _sampleIndicesAlongPath(path, _communityNodeSpacingKm);
+        final alongKm = _cumulativeKm(path);
+
+        final nodeIds = <String>[];
+        for (var k = 0; k < nodePathIndices.length; k++) {
+          final pathIndex = nodePathIndices[k];
+          final point = path[pathIndex];
+          final id = 'community|${route.id}|$i|$k';
+          String? name;
+          if (i == 0 && k == 0) {
+            name = route.startLocation;
+          } else if (i == lastStepIndex && k == nodePathIndices.length - 1) {
+            name = route.endLocation;
+          } else {
+            final landmark = _nearestLandmark(point, transitStops);
+            if (landmark != null) name = 'the stop near $landmark';
+          }
+          allStopsById[id] = {
+            'stop_id': id,
+            'stop_name': name ?? 'the ${step.mode} route ($forwardLabel)',
+            'stop_lat': point.latitude,
+            'stop_lon': point.longitude,
+            'path_index': pathIndex,
+            'named': name != null,
+          };
+          nodeIds.add(id);
+        }
+
+        final tripId = 'community|${route.id}|$i';
+        final reverseTripId = '$tripId|rev';
+        communityTrips[tripId] = _CommunityTrip(
+          path: path,
+          reversed: false,
+          mode: step.mode,
+          routeLabel: forwardLabel,
+          note: step.instruction.trim(),
+          actualFare: step.actualFare,
+        );
+        if (allowReversedCommunityLegs) {
+          communityTrips[reverseTripId] = _CommunityTrip(
+            path: path,
+            reversed: true,
+            mode: step.mode,
+            routeLabel: reverseLabel,
+            note: step.instruction.trim(),
+            actualFare: step.actualFare,
+          );
+        }
+
+        // Mode is carried only via routeType + routeShortName: mode inference
+        // scans route text for tokens like "uv", "van" or "mrt", so free text
+        // (place names, Firestore IDs) must never go into these fields.
+        final routeType = switch (step.mode) {
+          'Train' => 2,
+          'Ferry' => 4,
+          _ => 3,
+        };
+        final speedKmh = _fallbackSpeedForMode(step.mode);
+
+        for (var a = 0; a < nodeIds.length - 1; a++) {
+          for (var b = a + 1; b < nodeIds.length; b++) {
+            final km =
+                alongKm[nodePathIndices[b]] - alongKm[nodePathIndices[a]];
+            if (km <= 0) continue;
+            final seconds = (km / speedKmh) * 3600 + _boardingPenaltySec;
+
+            _GraphEdge ride(String from, String to, String trip, double f) =>
+                _GraphEdge(
+                  from: from,
+                  to: to,
+                  costSeconds: seconds,
+                  distanceMeters: km * 1000.0,
+                  isWalk: false,
+                  tripId: trip,
+                  routeId: 'COMMUNITY',
+                  routeShortName: step.mode,
+                  routeType: routeType,
+                  weightFactor: f,
+                );
+
+            addEdge(ride(nodeIds[a], nodeIds[b], tripId, _communityWeightFactor));
+            if (allowReversedCommunityLegs) {
+              addEdge(
+                ride(
+                  nodeIds[b],
+                  nodeIds[a],
+                  reverseTripId,
+                  _reversedCommunityWeightFactor,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  static const _landmarkRadiusKm = 0.35;
+  static const _transitStopNameRadiusKm = 0.2;
+
+  /// A recognisable name for a point along a community route: the closest
+  /// CAMANAVA place within ~350 m, else the closest transit stop within
+  /// ~200 m. Null when nothing is close enough to be meaningful.
+  static String? _nearestLandmark(
+    LatLng point,
+    List<({String name, LatLng point})> transitStops,
+  ) {
+    String? best;
+    var bestKm = _landmarkRadiusKm;
+    for (final place in camanavaPlaces) {
+      final km = _haversineKm(point, LatLng(place.lat, place.lng));
+      if (km <= bestKm) {
+        best = place.name;
+        bestKm = km;
+      }
+    }
+    if (best != null) return best;
+
+    bestKm = _transitStopNameRadiusKm;
+    for (final stop in transitStops) {
+      if (stop.name.isEmpty) continue;
+      final km = _haversineKm(point, stop.point);
+      if (km <= bestKm) {
+        best = stop.name;
+        bestKm = km;
+      }
+    }
+    return best;
+  }
+
+  static String _communityInstruction(
+    _CommunityTrip trip,
+    Map<String, dynamic> alightStop,
+  ) {
+    var text = 'Ride ${trip.mode} along the community route ${trip.routeLabel}';
+    if (alightStop['named'] == true) {
+      text += ', get off at ${alightStop['stop_name']}';
+    }
+    if (trip.reversed) {
+      return '$text (opposite direction of what was contributed — '
+          'not verified yet)';
+    }
+    return trip.note.isEmpty ? text : '$text — "${trip.note}"';
+  }
+
+  static TransitLeg _communityLegFromEdges(
+    _GraphEdge start,
+    _GraphEdge end,
+    Map<String, dynamic> boardStop,
+    Map<String, dynamic> alightStop,
+    _CommunityTrip trip,
+  ) {
+    final boardIndex = boardStop['path_index'] as int;
+    final alightIndex = alightStop['path_index'] as int;
+    final lo = math.min(boardIndex, alightIndex);
+    final hi = math.max(boardIndex, alightIndex);
+    final segment = trip.path.sublist(lo, hi + 1);
+    final wholeStep = lo == 0 && hi == trip.path.length - 1;
+
+    return TransitLeg(
+      tripId: start.tripId!,
+      routeId: start.routeId!,
+      routeShortName: start.routeShortName,
+      routeType: start.routeType,
+      boardStopId: start.from,
+      alightStopId: end.to,
+      boardStopName: boardStop['stop_name'] as String? ?? 'Stop',
+      alightStopName: alightStop['stop_name'] as String? ?? 'Stop',
+      boardLat: (boardStop['stop_lat'] as num).toDouble(),
+      boardLon: (boardStop['stop_lon'] as num).toDouble(),
+      alightLat: (alightStop['stop_lat'] as num).toDouble(),
+      alightLon: (alightStop['stop_lon'] as num).toDouble(),
+      communityPath: trip.reversed ? segment.reversed.toList() : segment,
+      // The contributor's fare covers the whole step; partial rides fall
+      // back to the LTFRB formula downstream.
+      communityFare: wholeStep ? trip.actualFare : null,
+      communityLabel: _communityInstruction(trip, alightStop),
+    );
+  }
+
+  static bool _pathTouchesBounds(
+    List<LatLng> path,
+    ({double minLat, double maxLat, double minLng, double maxLng}) b,
+  ) {
+    return path.any(
+      (p) =>
+          p.latitude >= b.minLat &&
+          p.latitude <= b.maxLat &&
+          p.longitude >= b.minLng &&
+          p.longitude <= b.maxLng,
+    );
+  }
+
+  /// Path indices roughly every [spacingKm], always including both ends.
+  static List<int> _sampleIndicesAlongPath(List<LatLng> path, double spacingKm) {
+    final out = <int>[0];
+    var sinceLast = 0.0;
+    for (var i = 1; i < path.length; i++) {
+      sinceLast += _haversineKm(path[i - 1], path[i]);
+      if (sinceLast >= spacingKm) {
+        out.add(i);
+        sinceLast = 0.0;
+      }
+    }
+    if (out.last != path.length - 1) out.add(path.length - 1);
+    return out;
+  }
+
+  static List<double> _cumulativeKm(List<LatLng> path) {
+    final out = List<double>.filled(path.length, 0.0);
+    for (var i = 1; i < path.length; i++) {
+      out[i] = out[i - 1] + _haversineKm(path[i - 1], path[i]);
+    }
+    return out;
   }
 
   static DijkstraTripPlanResult? _materializeDijkstraResult({
     required List<_GraphEdge> pathEdges,
     required double totalCostSeconds,
     required Map<String, Map<String, dynamic>> allStopsById,
+    required Map<String, _CommunityTrip> communityTrips,
+    required Map<String, List<String>> tripStopSequences,
   }) {
     final transitEdges =
         pathEdges.where((e) => !e.isWalk && e.tripId != null).toList();
@@ -766,12 +1331,24 @@ class SupabaseRouteService {
         endEdge = e;
         continue;
       }
-      final leg = _legFromEdges(startEdge, endEdge, allStopsById);
+      final leg = _legFromEdges(
+        startEdge,
+        endEdge,
+        allStopsById,
+        communityTrips,
+        tripStopSequences,
+      );
       if (leg != null) legs.add(leg);
       startEdge = e;
       endEdge = e;
     }
-    final lastLeg = _legFromEdges(startEdge, endEdge, allStopsById);
+    final lastLeg = _legFromEdges(
+      startEdge,
+      endEdge,
+      allStopsById,
+      communityTrips,
+      tripStopSequences,
+    );
     if (lastLeg != null) legs.add(lastLeg);
 
     if (legs.isEmpty) return null;
@@ -854,32 +1431,48 @@ class SupabaseRouteService {
     return (value - min) / range;
   }
 
+  /// Road distance is roughly 1.3× the straight line between stops in
+  /// Metro Manila; used when a leg has no drawn path to measure.
+  static const _roadDetourFactor = 1.3;
+
   static double _estimateFarePhp(DijkstraTripPlanResult result) {
     var total = 0.0;
     for (final leg in result.plan.legs) {
+      if (leg.communityFare != null) {
+        total += leg.communityFare!;
+        continue;
+      }
       final mode = _inferRouteMode(
         routeId: leg.routeId,
         routeType: leg.routeType,
         routeShortName: leg.routeShortName,
         routeLongName: leg.routeLongName,
       );
-      total += switch (mode) {
-        'Jeepney' => 13.0,
-        'Bus' => 15.0,
-        'Train' => 20.0,
-        'FX/Van' => 25.0,
-        'Tricycle' => 24.0,
-        'Ferry' => 30.0,
-        _ => 15.0,
-      };
+      final path = leg.communityPath;
+      final km =
+          path != null && path.length >= 2
+              ? _polylineKm(path)
+              : _haversineKm(
+                    LatLng(leg.boardLat, leg.boardLon),
+                    LatLng(leg.alightLat, leg.alightLon),
+                  ) *
+                  _roadDetourFactor;
+      total += PhFareCalculator.compute(mode, km * 1000.0);
     }
     return total;
   }
 
-  static Future<List<Map<String, dynamic>>> _fetchCorridorStops(
-    LatLng origin,
-    LatLng destination,
-  ) async {
+  static double _polylineKm(List<LatLng> path) {
+    var km = 0.0;
+    for (var i = 0; i + 1 < path.length; i++) {
+      km += _haversineKm(path[i], path[i + 1]);
+    }
+    return km;
+  }
+
+  /// Origin–destination box padded by a distance-scaled buffer.
+  static ({double minLat, double maxLat, double minLng, double maxLng})
+  _corridorBounds(LatLng origin, LatLng destination) {
     final directKm = _haversineKm(origin, destination);
     final bufferKm = (directKm * 0.35).clamp(
       _dijkstraMinBufferKm,
@@ -889,12 +1482,22 @@ class SupabaseRouteService {
     final avgLat = (origin.latitude + destination.latitude) / 2;
     final lngBuffer = bufferKm / (111.0 * math.cos(avgLat * math.pi / 180));
 
-    final minLat = math.min(origin.latitude, destination.latitude) - latBuffer;
-    final maxLat = math.max(origin.latitude, destination.latitude) + latBuffer;
-    final minLng =
-        math.min(origin.longitude, destination.longitude) - lngBuffer;
-    final maxLng =
-        math.max(origin.longitude, destination.longitude) + lngBuffer;
+    return (
+      minLat: math.min(origin.latitude, destination.latitude) - latBuffer,
+      maxLat: math.max(origin.latitude, destination.latitude) + latBuffer,
+      minLng: math.min(origin.longitude, destination.longitude) - lngBuffer,
+      maxLng: math.max(origin.longitude, destination.longitude) + lngBuffer,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchCorridorStops(
+    LatLng origin,
+    LatLng destination,
+  ) async {
+    final (:minLat, :maxLat, :minLng, :maxLng) = _corridorBounds(
+      origin,
+      destination,
+    );
 
     final out = <Map<String, dynamic>>[];
     var from = 0;
@@ -1206,7 +1809,14 @@ class SupabaseRouteService {
     required List<Map<String, dynamic>> originCandidates,
     required List<Map<String, dynamic>> destCandidates,
     required bool allowFerry,
+    required List<CommunityRoute> communityRoutes,
   }) {
+    final communityKey = communityRoutes
+        .map(
+          (r) =>
+              '${r.id}:${r.steps.fold<int>(0, (n, s) => n + s.path.length)}',
+        )
+        .join(',');
     final originKey =
         '${origin.latitude.toStringAsFixed(5)},${origin.longitude.toStringAsFixed(5)}';
     final destKey =
@@ -1225,7 +1835,7 @@ class SupabaseRouteService {
             .toList()
           ..sort();
 
-    return '${allowFerry ? '1' : '0'}|$originKey|$destKey|o:${originIds.join(',')}|d:${destIds.join(',')}';
+    return '${allowFerry ? '1' : '0'}|$originKey|$destKey|o:${originIds.join(',')}|d:${destIds.join(',')}|c:$communityKey';
   }
 
   static _DijkstraGraphContext? _getCachedDijkstraContext(String key) {

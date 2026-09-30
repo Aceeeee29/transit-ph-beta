@@ -13,7 +13,7 @@ class CamanavaBounds {
   static const northEast = LatLng(14.76, 121.04);
   static final bounds = LatLngBounds(southWest, northEast);
   static const center = LatLng(14.665, 120.96);
-  static const initialZoom = 11.5;
+  static const initialZoom = 13.0;
 }
 
 /// Curated CAMANAVA points of interest used by the "Nearby Places" module.
@@ -192,9 +192,9 @@ const List<Place> camanavaPlaces = [
     name: 'Our Lady of Fatima University',
     city: 'Valenzuela',
     categories: [PlaceCategory.school],
-    lat: 14.716363,
-    lng: 121.060954,
-    address: 'To confirm — see note below',
+    lat: 14.678099,
+    lng: 120.980963,
+    address: '120 McArthur Hwy., Marulas, Valenzuela',
     description: 'Pribadong unibersidad na kilala sa nursing, medicine at '
         'allied health programs. Pinagmulan ng Fatima University Medical '
         'Center.',

@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -12,7 +11,9 @@ import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/offline_tile_service.dart';
 import '../services/route_metrics_service.dart';
+import '../widgets/community_route_badge.dart';
 import '../widgets/fare_discount_toggle.dart';
+import '../widgets/location_permission_notice.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -211,8 +212,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
   Future<void> _initLocation() async {
     setState(() => _isLocating = true);
-    final permission = await Permission.location.request();
-    if (permission.isGranted) {
+    final hasAccess = await ensureLocationAccess(
+      context,
+      reason: 'show where you are on the route',
+    );
+    if (hasAccess) {
       try {
         _currentPosition = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
@@ -871,10 +875,20 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
                                     ),
                                     const SizedBox(width: 6),
                                     Expanded(
-                                      child: Text(
-                                        step.instruction,
-                                        style: const TextStyle(
-                                            fontSize: 13),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            step.instruction,
+                                            style: const TextStyle(
+                                                fontSize: 13),
+                                          ),
+                                          if (step.isCommunity) ...[
+                                            const SizedBox(height: 3),
+                                            const CommunityRouteBadge(),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                   ],

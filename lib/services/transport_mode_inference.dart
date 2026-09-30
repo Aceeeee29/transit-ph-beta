@@ -1,47 +1,7 @@
 import '../models/ors_route_result.dart';
+import 'fare_matrix.dart';
 
-// =============================================================================
-// PHILIPPINE FARE CALCULATOR  (LTFRB MC 2023-2024 rates)
-// =============================================================================
-
-class PhFareCalculator {
-  static const _jeepneyBase    = 13.0;   static const _jeepneyBasKm  = 4000.0; static const _jeepneyPerKm  = 1.80;
-  static const _busOrdBase     = 15.0;   static const _busOrdBaseKm  = 5000.0; static const _busOrdPerKm   = 1.85;
-  static const _busAcBase      = 15.0;   static const _busAcBaseKm   = 5000.0; static const _busAcPerKm    = 2.65;
-  static const _fxBase         = 35.0;   static const _fxBaseKm      = 5000.0; static const _fxPerKm       = 4.00;
-  static const _tricycleBase   = 15.0;   static const _tricycleBaseKm= 2000.0; static const _tricyclePerKm = 5.00;
-  static const _mrtBase        = 13.0;   static const _mrtPerStation  = 2.0;
-  static const _lrt1Base       = 20.0;
-  static const _ferryFlat      = 50.0;
-
-  static double compute(String mode, double distanceMeters) {
-    switch (mode) {
-      case 'Walk':    return 0.0;
-      case 'Jeepney': return _t(distanceMeters, _jeepneyBase,  _jeepneyBasKm,  _jeepneyPerKm);
-      case 'Bus':
-        return _t(distanceMeters,
-          distanceMeters > 10000 ? _busAcBase    : _busOrdBase,
-          distanceMeters > 10000 ? _busAcBaseKm  : _busOrdBaseKm,
-          distanceMeters > 10000 ? _busAcPerKm   : _busOrdPerKm);
-      case 'FX/Van':  return _t(distanceMeters, _fxBase,        _fxBaseKm,       _fxPerKm);
-      case 'Tricycle':return _t(distanceMeters, _tricycleBase,  _tricycleBaseKm, _tricyclePerKm);
-      case 'Train':
-        final stations = (distanceMeters / 500).ceil().clamp(1, 20);
-        return (_mrtBase + (stations - 1) * _mrtPerStation).clamp(_lrt1Base, 50.0);
-      case 'Ferry':   return _ferryFlat;
-      default:        return _t(distanceMeters, _jeepneyBase,  _jeepneyBasKm,  _jeepneyPerKm);
-    }
-  }
-
-  static double _t(double d, double base, double baseM, double perKm) =>
-      d <= baseM ? base : base + ((d - baseM) / 1000.0) * perKm;
-
-  static String format(double fare)      => fare == 0 ? 'Free' : '₱${fare.toStringAsFixed(0)}';
-  static String formatRange(double fare) {
-    if (fare == 0) return 'Free';
-    return '₱${(fare*0.9).round()}-₱${(fare*1.1).round()}';
-  }
-}
+export 'fare_matrix.dart';
 
 // =============================================================================
 // PHILIPPINE ROAD DATABASE  (v2)

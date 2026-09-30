@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -24,6 +23,7 @@ import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 import '../widgets/translated_text.dart';
+import '../widgets/location_permission_notice.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_overlays.dart';
 part 'route_map_screen_data.dart';
@@ -490,24 +490,26 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   }
 
   Future<void> _initLocation() async {
-    final permission = await Permission.location.request();
-    if (permission.isGranted) {
-      try {
-        _currentPosition = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-          ),
-        );
-        _displayPosition = LatLng(
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
-        );
-        _displayHeading = _normalizeHeading(_currentPosition!.heading);
-        if (mounted) setState(() {});
-        _startLocationTracking();
-      } catch (e) {
-        debugPrint('RouteMapScreen: failed to get current position: $e');
-      }
+    final hasAccess = await ensureLocationAccess(
+      context,
+      reason: 'show where you are on the route',
+    );
+    if (!hasAccess) return;
+    try {
+      _currentPosition = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      _displayPosition = LatLng(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+      _displayHeading = _normalizeHeading(_currentPosition!.heading);
+      if (mounted) setState(() {});
+      _startLocationTracking();
+    } catch (e) {
+      debugPrint('RouteMapScreen: failed to get current position: $e');
     }
   }
 

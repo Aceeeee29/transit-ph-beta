@@ -967,7 +967,7 @@ extension _HomeScreenSections on _HomeScreenState {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 212,
+            height: 220,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _tagMatchedRoutes.length,

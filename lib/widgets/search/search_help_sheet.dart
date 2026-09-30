@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/fare_matrix.dart';
 
 /// Full-screen bottom sheet explaining how to use the search & route features.
 /// Self-contained – no state or callbacks required.
@@ -181,11 +182,11 @@ class SearchHelpSheet extends StatelessWidget {
                     style: TextStyle(fontSize: 13, color: Colors.amber.shade900),
                   ),
                   const SizedBox(height: 8),
-                  _example('•', 'Jeepney: ₱13 base + ₱1.80/km', Colors.amber.shade900),
-                  _example('•', 'Bus: ₱13–15 base + ₱1.85–2.65/km', Colors.amber.shade900),
-                  _example('•', 'FX/Van: ₱35 base + ₱4.00/km', Colors.amber.shade900),
-                  _example('•', 'Tricycle: ₱15 base + ₱5.00/km', Colors.amber.shade900),
-                  _example('•', 'Train: ₱20 base', Colors.amber.shade900),
+                  _example('•', 'Jeepney: ${_rule(PhFareCalculator.jeepney)}', Colors.amber.shade900),
+                  _example('•', 'Bus: ${PhFareCalculator.peso(PhFareCalculator.busOrdinary.base)} base + ${PhFareCalculator.peso(PhFareCalculator.busOrdinary.perKm)}–${PhFareCalculator.peso(PhFareCalculator.busAircon.perKm)}/km', Colors.amber.shade900),
+                  _example('•', 'FX/Van: ${_rule(PhFareCalculator.fxVan)}', Colors.amber.shade900),
+                  _example('•', 'Tricycle: ${_rule(PhFareCalculator.tricycle)}', Colors.amber.shade900),
+                  _example('•', 'Train: ${PhFareCalculator.peso(PhFareCalculator.trainMin)} base', Colors.amber.shade900),
                   const SizedBox(height: 8),
                   Text(
                     'A ±15% range is shown to account for real-world variance. Always confirm with the driver or station.',
@@ -226,6 +227,10 @@ class SearchHelpSheet extends StatelessWidget {
         ),
         child: child,
       );
+
+  static String _rule(FareRule rule) =>
+      '${PhFareCalculator.peso(rule.base)} base + '
+      '${PhFareCalculator.peso(rule.perKm)}/km';
 
   Widget _example(String prefix, String text, Color color) => Padding(
         padding: const EdgeInsets.only(bottom: 6),

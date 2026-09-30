@@ -15,6 +15,7 @@ import '../services/route_trust_service.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
 import '../widgets/translated_text.dart';
+import '../widgets/location_permission_notice.dart';
 part 'home_screen_widgets.dart';
 
 enum RouteSortMode { community, budget, fastest, balanced }
@@ -190,6 +191,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _detectCurrentLocation() async {
     setState(() => _isDetectingLocation = true);
     try {
+      final hasAccess = await ensureLocationAccess(
+        context,
+        reason: 'fill in your starting point',
+      );
+      if (!hasAccess) return;
       final address = await LocationService.getCurrentLocationAddress();
       if (address != null) {
         setState(() => _startController.text = address);
@@ -205,9 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Could not detect location. Please check permissions.',
-              ),
+              content: Text('Could not get a GPS fix. Try again in a moment.'),
             ),
           );
         }
@@ -219,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ).showSnackBar(SnackBar(content: Text('Error detecting location: $e')));
       }
     } finally {
-      setState(() => _isDetectingLocation = false);
+      if (mounted) setState(() => _isDetectingLocation = false);
     }
   }
 
@@ -698,7 +702,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 212,
+          height: 220,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: routes.length > 5 ? 5 : routes.length,

@@ -14,6 +14,8 @@ import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
 
+import '../widgets/community_route_badge.dart';
+import '../widgets/location_permission_notice.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/search/route_generation_notice_dialog.dart';
 import '../widgets/search/search_help_sheet.dart';
@@ -653,7 +655,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _detectAndFillOrigin() async {
     setState(() => _isDetectingLocation = true);
-    final position = await LocationService.getCurrentPosition();
+    final hasAccess = await ensureLocationAccess(
+      context,
+      reason: 'fill in your starting point',
+    );
+    if (!mounted) return;
+    final position =
+        hasAccess ? await LocationService.getCurrentPosition() : null;
+    if (!mounted) return;
     if (position != null) {
       final address =
           await LocationService.getAddressFromCoordinates(
@@ -661,16 +670,16 @@ class _SearchScreenState extends State<SearchScreen> {
             position.longitude,
           ) ??
           'Current Location';
+      if (!mounted) return;
       _originController.text = address;
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not detect location. Check permissions.'),
-          ),
-        );
-      }
+    } else if (hasAccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not get a GPS fix. Try again in a moment.'),
+        ),
+      );
     }
+    if (!mounted) return;
     setState(() => _isDetectingLocation = false);
   }
 

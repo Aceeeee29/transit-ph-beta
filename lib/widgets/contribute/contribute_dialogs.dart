@@ -115,12 +115,16 @@ Widget _gradientButton({
         children: [
           Icon(icon, color: Colors.white, size: 18),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -134,6 +138,7 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
     onTap: onTap,
     child: Container(
       height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: ContributeColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -142,6 +147,8 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
       child: Center(
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: ContributeColors.textSecondary,
             fontWeight: FontWeight.w600,
@@ -390,18 +397,20 @@ class _StepDialogState extends State<StepDialog> {
                     ),
                     const SizedBox(height: 18),
 
-                    const _FieldLabel(label: 'Actual Fare (PHP)'),
-                    const SizedBox(height: 6),
-                    _Field(
-                      controller: _actualFareController,
-                      hint: _isMotorizedMode
-                          ? 'e.g., 20'
-                          : 'Optional for walk',
-                      maxLines: 1,
-                      prefixIcon: Icons.payments_outlined,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                    const SizedBox(height: 18),
+                    if (_isMotorizedMode) ...[
+                      const _FieldLabel(label: 'Actual Fare (PHP)'),
+                      const SizedBox(height: 6),
+                      _Field(
+                        controller: _actualFareController,
+                        hint: 'e.g., 20',
+                        maxLines: 1,
+                        prefixIcon: Icons.payments_outlined,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
 
                     // Schedule header row
                     Row(

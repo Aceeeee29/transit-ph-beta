@@ -14,7 +14,7 @@
     <!-- Remove MediaProjection permission added by Agora SDK since screen sharing is not used -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" tools:node="remove" />
     <application
-        android:label="transitph_beta"
+        android:label="TransitPH"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

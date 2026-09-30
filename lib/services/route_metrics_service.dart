@@ -1,5 +1,5 @@
 import 'package:latlong2/latlong.dart' show LatLng, Distance, LengthUnit;
-import 'dart:math' as math;
+import 'fare_matrix.dart';
 
 class RouteMetricsService {
   static const String kilometersUnit = 'Kilometers';
@@ -269,34 +269,10 @@ class RouteMetricsService {
     return _calculateFareForMode(mode, distanceKm);
   }
 
-  /// Calculate fare for a specific mode and distance
-  static double _calculateFareForMode(String mode, double distanceKm) {
-    switch (mode.toLowerCase()) {
-      case 'walk':
-        return 0; // Walking is free
-      case 'jeepney':
-        // Base fare + additional per km
-        return 13.0 + math.max(0, distanceKm - 4) * 1.5;
-      case 'bus':
-        // Base fare + additional per km
-        return 15.0 + distanceKm * 2.0;
-      case 'train':
-        // Base fare + additional per station (approx 1.5km per station)
-        final stations = math.max(1, (distanceKm / 1.5).ceil());
-        return 15.0 + (stations - 1) * 5.0;
-      case 'tricycle':
-        // Base fare + additional per km
-        return 20.0 + distanceKm * 5.0;
-      case 'fx/van':
-        // Base fare + additional per km
-        return 25.0 + distanceKm * 2.5;
-      case 'ferry':
-        // Base fare + additional per km
-        return 0.0 + distanceKm * 3.0;
-      default:
-        return 0;
-    }
-  }
+  /// Calculate fare for a specific mode and distance, from the shared
+  /// fare matrix.
+  static double _calculateFareForMode(String mode, double distanceKm) =>
+      PhFareCalculator.compute(mode, distanceKm * 1000.0);
 
   /// Calculate CO2 emissions saved by using this route instead of driving
   /// Returns CO2 in kg

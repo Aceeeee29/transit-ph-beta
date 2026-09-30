@@ -28,9 +28,14 @@ extension _SearchScreenSections on _SearchScreenState {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Fallback auto-generated route from transit stop data. '
-                  'Use community-verified routes first whenever available. '
-                  'Distances and fares here are estimates.',
+                  _orsResult!.usesCommunityRoutes
+                      ? 'Auto-generated route. Rides marked "Community route" '
+                          'come from admin-approved routes shared by users; '
+                          'the rest uses transit stop data. '
+                          'Distances and fares here are estimates.'
+                      : 'Fallback auto-generated route from transit stop data. '
+                          'Use community-verified routes first whenever available. '
+                          'Distances and fares here are estimates.',
                   style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
                 ),
               ),
@@ -72,7 +77,10 @@ extension _SearchScreenSections on _SearchScreenState {
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (_orsResult!.usesCommunityRoutes)
+                      const CommunityRouteBadge(label: 'Uses community routes'),
                     _infoChip(
                       Icons.straighten,
                       _orsResult!.distanceLabel,
@@ -109,23 +117,33 @@ extension _SearchScreenSections on _SearchScreenState {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _stepModeColor(step.suggestedMode),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    step.suggestedMode,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _stepModeColor(
+                                          step.suggestedMode,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        step.suggestedMode,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    if (step.isCommunity)
+                                      const CommunityRouteBadge(),
+                                  ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
@@ -605,7 +623,8 @@ extension _SearchScreenSections on _SearchScreenState {
           ),
           const SizedBox(height: 4),
           Text(
-            'Best picks for Balanced, Fastest, and Budget from GTFS alternatives.',
+            'Best picks for Balanced, Fastest, and Budget from transit data '
+            'and community routes.',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 10),
@@ -634,6 +653,9 @@ extension _SearchScreenSections on _SearchScreenState {
             if (fallbackRoute != null) {
               tags.add('Walk Fallback');
             }
+            final usesCommunity =
+                fallbackRoute == null &&
+                alt.result.plan.legs.any((leg) => leg.isCommunity);
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -686,6 +708,10 @@ extension _SearchScreenSections on _SearchScreenState {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                            ],
+                            if (usesCommunity) ...[
+                              const SizedBox(height: 4),
+                              const CommunityRouteBadge(),
                             ],
                           ],
                         ),

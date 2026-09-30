@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/fare_matrix.dart';
 import '../translated_text.dart';
 
 class HomeFareMatrixDialog extends StatelessWidget {
@@ -41,16 +42,21 @@ class HomeFareMatrixDialog extends StatelessWidget {
                 children: [
                   _fareRow(
                     'Jeepney',
-                    '₱13 base fare',
+                    PhFareCalculator.jeepney.estimateRange,
                     Icons.directions_bus,
                     _accent,
+                    detail: _ruleDetail(PhFareCalculator.jeepney),
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
                     'City Bus',
-                    '₱13 – ₱40+',
+                    PhFareCalculator.busOrdinary.estimateRange,
                     Icons.directions_bus_filled,
                     _danger,
+                    detail:
+                        'first ${_km(PhFareCalculator.busOrdinary.baseKm)}, '
+                        'then +${PhFareCalculator.peso(PhFareCalculator.busOrdinary.perKm)}/km '
+                        '(aircon +${PhFareCalculator.peso(PhFareCalculator.busAircon.perKm)}/km)',
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
@@ -58,20 +64,23 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     '₱20 – ₱55',
                     Icons.train,
                     const Color(0xFF9B7FE8),
+                    detail: 'depends on the number of stations',
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
                     'Tricycle',
-                    '₱15 – ₱60+',
+                    PhFareCalculator.tricycle.estimateRange,
                     Icons.pedal_bike,
                     const Color(0xFFE89A3C),
+                    detail: _ruleDetail(PhFareCalculator.tricycle),
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
                     'FX / UV Express',
-                    '₱30 – ₱100+',
+                    PhFareCalculator.fxVan.estimateRange,
                     Icons.directions_car,
                     const Color(0xFFD4A017),
+                    detail: _ruleDetail(PhFareCalculator.fxVan),
                   ),
                 ],
               ),
@@ -84,7 +93,9 @@ class HomeFareMatrixDialog extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+      // Same 16px inset as the fare rows below, so the header icon and the
+      // close button line up with the row edges.
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -106,7 +117,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Flexible(
+          const Expanded(
             child: TranslatedText(
               'Fare Matrix',
               overflow: TextOverflow.ellipsis,
@@ -119,17 +130,19 @@ class HomeFareMatrixDialog extends StatelessWidget {
               ),
             ),
           ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(7),
+          const SizedBox(width: 10),
+          // Same size and shape as the icon on the left so both ends balance.
+          Material(
+            color: _surfaceAlt,
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              onTap: () => Navigator.of(context).pop(),
+              borderRadius: BorderRadius.circular(9),
+              child: const SizedBox(
+                width: 32,
+                height: 32,
+                child: Icon(Icons.close, size: 16, color: _textSecondary),
               ),
-              child: const Icon(Icons.close, size: 15, color: _textSecondary),
             ),
           ),
         ],
@@ -137,7 +150,19 @@ class HomeFareMatrixDialog extends StatelessWidget {
     );
   }
 
-  Widget _fareRow(String label, String fare, IconData icon, Color color) {
+  static String _km(double km) =>
+      '${km == km.roundToDouble() ? km.toStringAsFixed(0) : km} km';
+
+  static String _ruleDetail(FareRule rule) =>
+      'first ${_km(rule.baseKm)}, then +${PhFareCalculator.peso(rule.perKm)}/km';
+
+  Widget _fareRow(
+    String label,
+    String fare,
+    IconData icon,
+    Color color, {
+    String? detail,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -150,15 +175,30 @@ class HomeFareMatrixDialog extends StatelessWidget {
           Icon(icon, size: 16, color: color),
           const SizedBox(width: 10),
           Expanded(
-            child: TranslatedText(
-              label,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: _textPrimary,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TranslatedText(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
+                  ),
+                ),
+                if (detail != null)
+                  TranslatedText(
+                    detail,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _textSecondary,
+                    ),
+                  ),
+              ],
             ),
           ),
           Flexible(

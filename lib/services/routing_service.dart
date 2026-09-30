@@ -83,6 +83,7 @@ class RoutingService {
     required LatLng destination,
     String optimization = 'balanced',
     int maxAlternatives = 3,
+    List<CommunityRoute> communityRoutes = const [],
   }) async {
     List<List<Map<String, dynamic>>> candidates;
     try {
@@ -131,7 +132,8 @@ class RoutingService {
 
     final originCandidates = candidates[0];
     final destCandidates = candidates[1];
-    if (originCandidates.isEmpty || destCandidates.isEmpty) {
+    if ((originCandidates.isEmpty || destCandidates.isEmpty) &&
+        communityRoutes.isEmpty) {
       return const <DijkstraRouteAlternative>[];
     }
 
@@ -143,6 +145,7 @@ class RoutingService {
       allowFerry: _allowFerrySuggestions,
       maxAlternatives: maxAlternatives,
       optimizationMode: _parseOptimizationMode(optimization),
+      communityRoutes: communityRoutes,
     );
   }
 
@@ -593,12 +596,24 @@ class RoutingService {
     LatLng from,
     LatLng to,
     String profile,
+  ) => _osrmRoute([from, to], profile);
+
+  static const _maxOsrmWaypoints = 25;
+
+  /// Road-snaps a path that must pass through [waypoints] in order.
+  static Future<List<LatLng>?> _osrmRoute(
+    List<LatLng> waypoints,
+    String profile,
   ) async {
+    if (waypoints.length < 2) return null;
+    final from = waypoints.first;
+    final to = waypoints.last;
+    final via = _sampleWaypoints(waypoints, _maxOsrmWaypoints);
     try {
-      final coords =
-          '${from.longitude},${from.latitude};${to.longitude},${to.latitude}';
+      final coords = via.map((p) => '${p.longitude},${p.latitude}').join(';');
       final uri = Uri.parse(
-        '$_osrmBase/$profile/$coords?overview=full&geometries=geojson',
+        '$_osrmBase/$profile/$coords?overview=full&geometries=geojson'
+        '${via.length > 2 ? '&continue_straight=true' : ''}',
       );
 
       final response = await http.get(uri).timeout(const Duration(seconds: 8));
@@ -626,7 +641,12 @@ class RoutingService {
       // OSRM can occasionally produce pathological small-area loops near
       // roundabouts/interchanges. If detected, skip snap so callers can
       // fall back to GTFS shape or straight segment.
-      if (_shouldRejectSnappedPath(from: from, to: to, points: points)) {
+      if (_shouldRejectSnappedPath(
+        from: from,
+        to: to,
+        points: points,
+        referenceKm: via.length > 2 ? _polylineDistanceKm(via) : null,
+      )) {
         debugPrint('[OSRM] Rejected looped snap geometry, falling back');
         return null;
       }
@@ -638,14 +658,22 @@ class RoutingService {
     }
   }
 
+  /// Evenly thins [points] to at most [max], always keeping both ends.
+  static List<LatLng> _sampleWaypoints(List<LatLng> points, int max) {
+    if (points.length <= max) return points;
+    final step = (points.length - 1) / (max - 1);
+    return [for (var i = 0; i < max; i++) points[(i * step).round()]];
+  }
+
   static bool _shouldRejectSnappedPath({
     required LatLng from,
     required LatLng to,
     required List<LatLng> points,
+    double? referenceKm,
   }) {
     if (points.length < 3) return false;
 
-    final directKm = _haversineKm(from, to);
+    final directKm = referenceKm ?? _haversineKm(from, to);
     final snappedKm = _polylineDistanceKm(points);
     if (directKm <= 0) return false;
 
@@ -777,13 +805,16 @@ class RoutingService {
       steps.add(
         OrsStep(
           instruction:
-              routeLabel != null
+              leg.communityLabel ??
+              (routeLabel != null
                   ? 'Ride $mode ($routeLabel) from ${leg.boardStopName} to ${leg.alightStopName}'
-                  : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}',
+                  : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}'),
           distanceMeters: distM,
           durationSeconds: (distKm / _speedForMode(mode)) * 3600,
           suggestedMode: mode,
-          estimatedFare: PhFareCalculator.compute(mode, distM),
+          estimatedFare:
+              leg.communityFare ?? PhFareCalculator.compute(mode, distM),
+          isCommunity: leg.isCommunity,
           wayPointStart: vehicleStartIdx,
           wayPointEnd: vehicleEndIdx,
         ),
@@ -1029,6 +1060,12 @@ class RoutingService {
     required TransitLeg leg,
     required String preferredMode,
   }) async {
+    // Community legs already carry the contributor's drawn, verified path.
+    final communityPath = leg.communityPath;
+    if (communityPath != null && communityPath.length >= 2) {
+      return communityPath;
+    }
+
     final board = LatLng(leg.boardLat, leg.boardLon);
     final alight = LatLng(leg.alightLat, leg.alightLon);
     final mode = _inferModeFromRoute(
@@ -1039,22 +1076,47 @@ class RoutingService {
       preferredMode: preferredMode,
     );
     
-    // 1. If it's a train, rely exclusively on GTFS shape geometry (with clipping)
-    if (mode == 'Train') {
-      final shapeId = leg.shapeId;
-      if (shapeId != null && shapeId.isNotEmpty) {
-        try {
-          final pts = await SupabaseRouteService.getShapePolyline(shapeId)
-              .timeout(const Duration(seconds: 8));
-          if (pts.length >= 2) {
-            return _clipShapeToStops(pts, board, alight);
-          }
-        } catch (_) {}
+    // 1. The GTFS shape is the route's real path, so it decides which roads
+    //    the leg follows for every mode — OSRM's fastest-car path between two
+    //    stops can leave the jeep's actual route entirely.
+    final shapeId = leg.shapeId;
+    if (shapeId != null && shapeId.isNotEmpty) {
+      List<LatLng> shape = const [];
+      try {
+        shape = await SupabaseRouteService.getShapePolyline(
+          shapeId,
+        ).timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      if (shape.length >= 2) {
+        final clipped = _clipShapeToStops(shape, board, alight);
+        if (mode == 'Train') return clipped;
+        // Road shapes in our feed are station-level (1–3 km between points),
+        // so drawn raw they cut corners. Route through them to follow roads.
+        final roadFollowed = await _osrmRoute(
+          clipped,
+          _osrmProfileForMode(mode),
+        );
+        return roadFollowed ?? clipped;
       }
-      return [board, alight]; // Train fallback
     }
 
-    // 2. For Buses (including Carousel), Jeepneys, etc. use OSRM road snapping.
+    // 2. No shape: route through the trip's own stops in order. OSRM's
+    //    fastest path between just the two end stops can take different
+    //    roads than the vehicle does, and a timeout there leaves a straight
+    //    line; the stop-to-stop line is still close to the real route.
+    if (leg.viaStops.isNotEmpty) {
+      final stopPath = [board, ...leg.viaStops, alight];
+      if (mode == 'Train') return stopPath;
+      final roadFollowed = await _osrmRoute(
+        stopPath,
+        _osrmProfileForMode(mode),
+      );
+      return roadFollowed ?? stopPath;
+    }
+
+    if (mode == 'Train') return [board, alight];
+
+    // 3. Nothing known between the two stops: OSRM between them.
     final snapped = await _osrmSnap(board, alight, _osrmProfileForMode(mode));
     if (snapped != null && snapped.length >= 2) {
       // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry 

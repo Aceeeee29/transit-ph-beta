@@ -337,31 +337,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
             ),
           ),
         ),
-        GestureDetector(
-          onTap: _togglePins,
-          child: Tooltip(
-            message: _showPins ? 'Hide pins' : 'Show pins',
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _showPins ? _accentSoft : _surfaceAlt,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _showPins ? _accent.withOpacity(0.35) : _border,
-                ),
-              ),
-              child: Icon(
-                _showPins
-                    ? Icons.location_on_rounded
-                    : Icons.location_off_rounded,
-                color: _showPins ? _accent : _textSecondary,
-                size: 18,
-              ),
-            ),
-          ),
-        ),
+        // Pin visibility has its own toggle floating on the map itself
+        // (_buildPinsToggleSection) — no duplicate control here.
         // Secondary actions live in an overflow menu so the AppBar can
         // never overflow, no matter how many become visible at once
         // (e.g. after Load Example sets selectionMode to done with steps,
@@ -1009,6 +986,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
     // scrolled content becomes unreachable.
     final expandedHeight =
         (availableHeight * 0.6).clamp(200.0, availableHeight - 8.0).toDouble();
+    // The top border sits inside the container's height, so the collapsed
+    // drawer must be the handle plus the border or the handle overflows.
+    const borderWidth = 1.5;
+    const collapsedHeight = 40.0 + borderWidth;
 
     return Positioned(
       bottom: 0,
@@ -1016,11 +997,13 @@ extension _ContributeScreenSections on _ContributeScreenState {
       right: 0,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        height: _isFormExpanded ? expandedHeight : 40,
+        height: _isFormExpanded ? expandedHeight : collapsedHeight,
         decoration: BoxDecoration(
           color: _surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: _border, width: 1.5)),
+          border: Border(
+            top: BorderSide(color: _border, width: borderWidth),
+          ),
           boxShadow: [
             BoxShadow(
               color: _accent.withOpacity(0.08),
@@ -1141,6 +1124,11 @@ extension _ContributeScreenSections on _ContributeScreenState {
           onReset: _onReset,
           selectionMode: selectionMode,
           quickCreateMode: _isQuickCreateMode,
+          // Same condition as the map's Finish pill.
+          onFinishRoute:
+              selectionMode == 'step' && steps.isNotEmpty
+                  ? _onFinishRoutePressed
+                  : null,
         ),
       ),
     );
@@ -1319,17 +1307,23 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
   Future<void> _tryGetNearbyLocation() async {
     _setUiState(() => _nearbyIsLocating = true);
-    final position = await LocationService.getCurrentPosition();
+    final hasAccess = await ensureLocationAccess(
+      context,
+      reason: 'show how far nearby places are from you',
+    );
+    if (!mounted) return;
+    final position =
+        hasAccess ? await LocationService.getCurrentPosition() : null;
     if (!mounted) return;
     _setUiState(() {
       _nearbyPosition = position;
       _nearbyIsLocating = false;
     });
-    if (position == null) {
+    if (position == null && hasAccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: TranslatedText(
-            'Location unavailable. Enable location to see distances from where you are.',
+            'Could not get a GPS fix. Try again in a moment.',
           ),
           duration: Duration(seconds: 3),
         ),

@@ -19,6 +19,8 @@ class OrsRouteResult {
     required this.bbox,
   });
 
+  bool get usesCommunityRoutes => steps.any((s) => s.isCommunity);
+
   String get distanceLabel {
     if (distanceMeters >= 1000) {
       return '${(distanceMeters / 1000).toStringAsFixed(1)} km';
@@ -75,6 +77,9 @@ class OrsStep {
   final int wayPointStart;
   final int wayPointEnd;
 
+  /// True for rides taken from an admin-approved community route.
+  final bool isCommunity;
+
   const OrsStep({
     required this.instruction,
     required this.distanceMeters,
@@ -83,6 +88,7 @@ class OrsStep {
     this.estimatedFare = 0.0,
     this.wayPointStart = 0,
     this.wayPointEnd = 0,
+    this.isCommunity = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -93,6 +99,7 @@ class OrsStep {
         'estimatedFare': estimatedFare,
         'wayPointStart': wayPointStart,
         'wayPointEnd': wayPointEnd,
+        'isCommunity': isCommunity,
       };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
@@ -103,5 +110,6 @@ class OrsStep {
         estimatedFare: (json['estimatedFare'] as num?)?.toDouble() ?? 0.0,
         wayPointStart: json['wayPointStart'] as int? ?? 0,
         wayPointEnd: json['wayPointEnd'] as int? ?? 0,
+        isCommunity: json['isCommunity'] as bool? ?? false,
       );
 }

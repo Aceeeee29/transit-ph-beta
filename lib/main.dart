@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
+import 'services/location_service.dart';
 import 'services/moderation_service.dart';
 import 'services/settings_service.dart';
 import 'widgets/update_dialog.dart';
@@ -84,6 +85,12 @@ class _TransitPHAppState extends State<TransitPHApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     WidgetsBinding.instance.addPostFrameCallback((_) => _initDeepLinks());
+    // Needs an attached activity, hence after the first frame.
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => LocationService.requestPermissionIfUndecided(),
+      );
+    }
   }
 
   @override

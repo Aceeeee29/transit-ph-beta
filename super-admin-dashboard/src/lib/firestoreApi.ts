@@ -665,18 +665,52 @@ export async function getRoutes(): Promise<RouteItem[]> {
   })
 }
 
+/**
+ * Mirrors the app's Moderator flow (RouteService.approveRoute/rejectRoute +
+ * NotificationsService.addNotification in lib/): same document shape, same
+ * messages, and the same opt-out via users/{uid}.preferences.routeApprovalUpdates,
+ * so the app's notification screen treats both sources identically.
+ */
+async function notifyRouteReviewed(
+  routeId: string,
+  contributorUid: string,
+  routeData: DocumentData,
+  status: 'approved' | 'rejected',
+) {
+  const userSnap = await getDoc(doc(db, 'users', contributorUid))
+  const preferences = userSnap.data()?.preferences
+  if (preferences && preferences.routeApprovalUpdates === false) return
+
+  const start = toNonEmptyString(routeData.startLocation)
+  const end = toNonEmptyString(routeData.endLocation)
+  const routeTitle = start && end ? `${start} to ${end}` : 'your submitted route'
+
+  // Auto IDs: bulk review runs in parallel, so time-based IDs could collide.
+  const notificationRef = doc(collection(db, 'notifications'))
+  await setDoc(notificationRef, {
+    id: notificationRef.id,
+    userId: contributorUid,
+    type: status === 'approved' ? 'route_approved' : 'route_rejected',
+    postId: null,
+    commentId: null,
+    routeId,
+    fromUserId: null,
+    fromUserName: null,
+    timestamp: serverTimestamp(),
+    message:
+      status === 'approved'
+        ? `Your submitted route (${routeTitle}) was approved and is now live.`
+        : `Your submitted route (${routeTitle}) was rejected by moderators.`,
+    isRead: false,
+  })
+}
+
+function currentRouteStatus(data: DocumentData): string {
+  return toNonEmptyString(data.approvalStatus) ?? toNonEmptyString(data.status) ?? 'pending'
+}
+
 export async function updateRouteStatus(routeId: string, status: 'approved' | 'rejected', reviewerUid: string) {
   const routeRef = doc(db, 'routes', routeId)
-
-  if (status !== 'approved') {
-    await updateDoc(routeRef, {
-      approvalStatus: status,
-      reviewedBy: reviewerUid,
-      reviewedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-    return
-  }
 
   const routeSnap = await getDoc(routeRef)
   if (!routeSnap.exists()) {
@@ -686,18 +720,39 @@ export async function updateRouteStatus(routeId: string, status: 'approved' | 'r
   const contributorIdentifier = getRouteContributorIdentifier(routeSnap.data())
   const contributorUid = await resolveContributorUid(contributorIdentifier)
 
+  if (status === 'rejected') {
+    const wasAlreadyRejected = await runTransaction(db, async (transaction) => {
+      const latestRouteSnap = await transaction.get(routeRef)
+      if (!latestRouteSnap.exists()) {
+        throw new Error(`Route ${routeId} not found`)
+      }
+      transaction.update(routeRef, {
+        approvalStatus: status,
+        reviewedBy: reviewerUid,
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      return currentRouteStatus(latestRouteSnap.data()) === 'rejected'
+    })
+
+    if (!wasAlreadyRejected && contributorUid) {
+      try {
+        await notifyRouteReviewed(routeId, contributorUid, routeSnap.data(), 'rejected')
+      } catch (error) {
+        // The rejection itself succeeded; a failed notification must not undo it.
+        console.error(`Route ${routeId} rejected but notification failed`, error)
+      }
+    }
+    return
+  }
+
   const shouldIncrementContribution = await runTransaction(db, async (transaction) => {
     const latestRouteSnap = await transaction.get(routeRef)
     if (!latestRouteSnap.exists()) {
       throw new Error(`Route ${routeId} not found`)
     }
 
-    const latestData = latestRouteSnap.data()
-    const currentStatus =
-      toNonEmptyString(latestData.approvalStatus) ??
-      toNonEmptyString(latestData.status) ??
-      'pending'
-    const wasAlreadyApproved = currentStatus === 'approved'
+    const wasAlreadyApproved = currentRouteStatus(latestRouteSnap.data()) === 'approved'
 
     transaction.update(routeRef, {
       approvalStatus: status,
@@ -712,6 +767,12 @@ export async function updateRouteStatus(routeId: string, status: 'approved' | 'r
 
   if (shouldIncrementContribution && contributorUid) {
     await incrementApprovedContributionStats(contributorUid)
+    try {
+      await notifyRouteReviewed(routeId, contributorUid, routeSnap.data(), 'approved')
+    } catch (error) {
+      // The approval itself succeeded; a failed notification must not undo it.
+      console.error(`Route ${routeId} approved but notification failed`, error)
+    }
   }
 }
 

@@ -15,6 +15,12 @@ class RouteFormStepper extends StatefulWidget {
   final String selectionMode;
   final bool quickCreateMode;
 
+  /// Finishes drawing the route on the map. Submitting and quick links only
+  /// unlock once the route is finished, so the Description step offers this
+  /// directly instead of relying on the map's Finish pill, which the open
+  /// form covers. Null when there is no step to finish yet.
+  final VoidCallback? onFinishRoute;
+
   const RouteFormStepper({
     super.key,
     required this.startLocationController,
@@ -30,6 +36,7 @@ class RouteFormStepper extends StatefulWidget {
     required this.onReset,
     required this.selectionMode,
     this.quickCreateMode = false,
+    this.onFinishRoute,
   });
 
   @override
@@ -65,9 +72,71 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         _buildStepContent(),
         const SizedBox(height: 16),
         _buildControls(),
-        if (widget.selectionMode == 'done' && _activeStep == 2) ...[
+        if (_activeStep == 2) ...[
           const SizedBox(height: 12),
-          _buildSubmitSection(),
+          widget.selectionMode == 'done'
+              ? _buildSubmitSection()
+              : _buildFinishRouteNotice(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFinishRouteNotice() {
+    final canFinish = widget.onFinishRoute != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: _accentSoft,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _accent.withOpacity(0.25)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded, size: 15, color: _accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  canFinish
+                      ? 'Finish your route to submit it or share it as a quick link.'
+                      : 'Add at least one step on the map, then finish your route to submit it or share it as a quick link.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (canFinish) ...[
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: widget.onFinishRoute,
+            icon: const Icon(Icons.check_rounded, size: 18, color: Colors.white),
+            label: const Text(
+              'Finish Route',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3EC97A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+          ),
         ],
       ],
     );
@@ -236,7 +305,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            'Other Tags',
+            'Other Tags (pick one)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: const Color(0xFF67758D),
                   fontWeight: FontWeight.w600,
@@ -269,12 +338,12 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                 borderRadius: BorderRadius.circular(10),
               ),
               onSelected: (selected) {
-                final next = List<String>.from(widget.selectedRouteTags);
-                if (selected) {
-                  if (!next.contains(tag)) next.add(tag);
-                } else {
-                  next.remove(tag);
-                }
+                // Single-select within Other Tags; User Tags are untouched.
+                final next =
+                    widget.selectedRouteTags
+                        .where((t) => !widget.otherTagOptions.contains(t))
+                        .toList();
+                if (selected) next.add(tag);
                 widget.onRouteTagsChanged(next);
               },
             );
