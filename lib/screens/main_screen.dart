@@ -11,6 +11,7 @@ import 'moderator_screen.dart';
 import 'offline_mode_prompt_screen.dart';
 import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
+import 'ors_route_map_screen.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
@@ -122,6 +123,20 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _showOfflinePrompt() async {
     if (!mounted || _isOfflinePromptVisible) return;
+
+    // A route being followed keeps working offline (it's already loaded and
+    // GPS needs no data), so don't cover it with the full-screen prompt.
+    if (ActiveNavigationService.instance.isActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TranslatedText(
+            "You're offline. Following continues with the route already loaded.",
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
 
     _isOfflinePromptVisible = true;
     try {
@@ -269,7 +284,7 @@ class _MainScreenState extends State<MainScreen> {
       body: ListenableBuilder(
         listenable: ActiveNavigationService.instance,
         builder: (context, _) {
-          final activeRoute = ActiveNavigationService.instance.activeRoute;
+          final activeTarget = ActiveNavigationService.instance.activeTarget;
           final content = Stack(
             children: [
               Positioned.fill(
@@ -279,7 +294,7 @@ class _MainScreenState extends State<MainScreen> {
             ],
           );
 
-          if (activeRoute == null) return content;
+          if (activeTarget == null) return content;
 
           // The banner already consumes the top status-bar inset via its own
           // SafeArea, so strip it before the tab content below — otherwise
@@ -287,7 +302,7 @@ class _MainScreenState extends State<MainScreen> {
           // a dead gap under the banner.
           return Column(
             children: [
-              _buildActiveNavigationBanner(activeRoute),
+              _buildActiveNavigationBanner(activeTarget),
               Expanded(
                 child: MediaQuery.removePadding(
                   context: context,
@@ -303,7 +318,12 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildActiveNavigationBanner(route_model.Route activeRoute) {
+  Widget _buildActiveNavigationBanner(FollowTarget target) {
+    final navigation = ActiveNavigationService.instance;
+    final hasArrived = navigation.hasArrived;
+    final color = hasArrived ? const Color(0xFF2D9F63) : _accent;
+    final route = target.route;
+    final generated = target.generatedRoute;
     return SafeArea(
       bottom: false,
       child: GestureDetector(
@@ -311,23 +331,30 @@ class _MainScreenState extends State<MainScreen> {
             () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder:
-                    (_) => RouteMapScreen(
-                      route: activeRoute,
-                      enableRouteIntegrity:
-                          ActiveNavigationService.instance.enableRouteIntegrity,
-                      showDownloadButton:
-                          ActiveNavigationService.instance.showDownloadButton,
-                    ),
+                    (_) =>
+                        route != null
+                            ? RouteMapScreen(
+                              route: route,
+                              enableRouteIntegrity:
+                                  navigation.enableRouteIntegrity,
+                              showDownloadButton: navigation.showDownloadButton,
+                            )
+                            : OrsRouteMapScreen(
+                              result: generated!,
+                              originName: target.startLabel,
+                              destinationName: target.endLabel,
+                              showDownloadButton: navigation.showDownloadButton,
+                            ),
               ),
             ),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: _accent,
+            color: color,
             boxShadow: [
               BoxShadow(
-                color: _accent.withValues(alpha: 0.35),
+                color: color.withValues(alpha: 0.35),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
@@ -335,16 +362,20 @@ class _MainScreenState extends State<MainScreen> {
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.navigation_rounded,
+              Icon(
+                hasArrived
+                    ? Icons.check_circle_rounded
+                    : Icons.navigation_rounded,
                 color: Colors.white,
                 size: 18,
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: TranslatedText(
-                  'Route still ongoing, tap to return',
-                  style: TextStyle(
+                  hasArrived
+                      ? "You've arrived, tap to finish"
+                      : 'Route still ongoing, tap to return',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,

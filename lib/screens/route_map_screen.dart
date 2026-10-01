@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,6 +19,12 @@ import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../services/offline_tile_service.dart';
 import '../services/active_navigation_service.dart';
+import '../services/route_follow_engine.dart';
+import '../services/route_follow_guidance.dart';
+import '../widgets/route_map/follow_guidance_card.dart';
+import '../widgets/route_map/follow_route_layers.dart';
+import '../widgets/route_map/follow_simulator_sheet.dart';
+import '../widgets/route_map/user_location_layer.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
@@ -56,9 +63,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   double _displayHeading = 0;
   LatLng? _lastCameraTarget;
   DateTime? _lastCameraMoveAt;
-  bool _isNavigationStarted = false;
   bool _isAutoFollowEnabled = false;
-  int _traversedIndex = 0;
+  bool _isFinishingRoute = false;
   List<route_model.Report> _routeReports = [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
@@ -137,15 +143,17 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     );
     _cameraAnimController.addListener(_onCameraAnimTick);
 
-    if (ActiveNavigationService.instance.activeRoute?.id == widget.route.id) {
-      _isNavigationStarted = true;
+    final navigation = ActiveNavigationService.instance;
+    navigation.addListener(_onNavigationSessionChanged);
+    navigation.followUpdates.addListener(_onNavigationPosition);
+    if (_isNavigationStarted) {
       _isAutoFollowEnabled = true;
     }
 
+    _generatePathPoints();
     _initLocation();
     _loadReports();
     _loadEngagementState();
-    _generatePathPoints();
     _loadScheduleWindowSnapshot();
     if (widget.enableRouteIntegrity) {
       _loadRouteTrustState();
@@ -489,72 +497,108 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     await _setTrustPromptSkipTodaySection();
   }
 
+  /// True while this screen's route is the active follow session; the
+  /// session (GPS, progress, arrival) lives in [ActiveNavigationService].
+  bool get _isNavigationStarted =>
+      ActiveNavigationService.instance.isFollowing(widget.route.id);
+
+  RouteFollowSnapshot? get _followSnapshot =>
+      _isNavigationStarted
+          ? ActiveNavigationService.instance.followSnapshot
+          : null;
+
+  bool get _hasArrived => _followSnapshot?.hasArrived ?? false;
+
+  FollowGuidance get _guidance =>
+      _isNavigationStarted
+          ? ActiveNavigationService.instance.guidance
+          : FollowGuidance.none;
+
   Future<void> _initLocation() async {
     final hasAccess = await ensureLocationAccess(
       context,
       reason: 'show where you are on the route',
     );
     if (!hasAccess) return;
+
+    // Resuming an active session: its stream already tracks the user.
+    final sessionPosition =
+        _isNavigationStarted
+            ? ActiveNavigationService.instance.lastPosition
+            : null;
+    if (sessionPosition != null) {
+      _onNavigationPosition();
+      return;
+    }
+
     try {
-      _currentPosition = await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
-      _displayPosition = LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
-      _displayHeading = _normalizeHeading(_currentPosition!.heading);
-      if (mounted) setState(() {});
-      _startLocationTracking();
+      if (!mounted) return;
+      setState(() => _applyPosition(position, _rawLatLng(position)));
+      if (!_isNavigationStarted) _startLocationTracking();
     } catch (e) {
       debugPrint('RouteMapScreen: failed to get current position: $e');
     }
   }
 
-  // FIX: Platform-aware stream settings — Android gets intervalDuration to
-  // suppress jitter callbacks; distanceFilter raised 2 → 3 m to further
-  // reduce spurious updates while keeping movement feeling live.
+  /// Preview-only stream for showing the user's location before Start.
+  /// While following, positions come from the navigation session instead.
   void _startLocationTracking() {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings:
-          Platform.isAndroid
-              ? AndroidSettings(
-                accuracy: LocationAccuracy.best,
-                distanceFilter: 3,
-                intervalDuration: const Duration(milliseconds: 800),
-              )
-              : const LocationSettings(
-                accuracy: LocationAccuracy.best,
-                distanceFilter: 3,
-              ),
+      locationSettings: ActiveNavigationService.trackingSettings,
     ).listen(_handleLocationUpdate, onError: (_) {});
   }
 
-  // FIX: Replaced undefined `nextDisplay` with `raw`.
-  // FIX: Passes heading to _maybeMoveCamera for map bearing rotation.
+  void _stopLocationTracking() {
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+  }
+
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    // FIX: Slightly relaxed accuracy gate (45 → 50) to keep updates flowing
-    // in challenging environments while still rejecting wild outliers.
-    if (position.accuracy > 50) return;
+    if (position.accuracy >
+        ActiveNavigationService.maxAcceptedAccuracyMeters) {
+      return;
+    }
+    setState(() => _applyPosition(position, _rawLatLng(position)));
+  }
 
-    final raw = LatLng(position.latitude, position.longitude);
-    final nextHeading = _normalizeHeading(position.heading);
-
-    setState(() {
-      _currentPosition = position;
-      _displayPosition = raw;
-      _displayHeading = nextHeading;
-    });
-
-    if (_isNavigationStarted && _isAutoFollowEnabled) {
-      // FIX: Was `nextDisplay` (undefined) — now correctly passes `raw`
-      _maybeMoveCamera(raw, heading: nextHeading);
+  void _onNavigationPosition() {
+    if (!mounted || !_isNavigationStarted) return;
+    final position = ActiveNavigationService.instance.lastPosition;
+    if (position == null) return;
+    final display =
+        _followSnapshot?.displayPosition ?? _rawLatLng(position);
+    setState(() => _applyPosition(position, display));
+    if (_isAutoFollowEnabled && !_hasArrived) {
+      _maybeMoveCamera(display, heading: _displayHeading);
     }
   }
+
+  void _onNavigationSessionChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  LatLng _rawLatLng(Position position) =>
+      LatLng(position.latitude, position.longitude);
+
+  void _applyPosition(Position position, LatLng display) {
+    _currentPosition = position;
+    _displayPosition = display;
+    // GPS heading is noise when barely moving (often reported as 0, which
+    // spun the map north); keep the last good heading until moving again.
+    if (position.speed >= _minHeadingSpeedMps) {
+      _displayHeading = _normalizeHeading(position.heading);
+    }
+  }
+
+  static const _minHeadingSpeedMps = 1.0;
 
   // FIX: Throttle 450 ms → 120 ms, dead zone 2.5 m → 1.0 m.
   // FIX: Accepts heading so the map rotates to keep travel direction up,
@@ -784,17 +828,55 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       return;
     }
 
-    setState(() {
-      _isNavigationStarted = true;
-      _isAutoFollowEnabled = true;
-      _traversedIndex = 0;
-    });
+    // The session's stream takes over from the preview stream.
+    _stopLocationTracking();
+    _isAutoFollowEnabled = true;
+    final ranges = _stepRanges();
     ActiveNavigationService.instance.start(
-      widget.route,
+      FollowTarget.route(
+        widget.route,
+        path: _pathPoints,
+        steps: [
+          for (var i = 0; i < ranges.length; i++)
+            FollowStep(
+              mode:
+                  i < widget.route.steps.length
+                      ? widget.route.steps[i].mode
+                      : null,
+              startIndex: ranges[i].start,
+              endIndex: ranges[i].end,
+            ),
+        ],
+      ),
+      initialPosition: _currentPosition,
       enableRouteIntegrity: widget.enableRouteIntegrity,
       showDownloadButton: widget.showDownloadButton,
     );
+    _onNavigationPosition();
     _centerOnCurrentLocation();
+  }
+
+  /// Ends a session that reached the end of the route.
+  Future<void> _finishArrivedRoute() async {
+    if (_isFinishingRoute) return;
+    _isFinishingRoute = true;
+    try {
+      await _maybeShowTrustFeedbackPrompt();
+      if (!mounted) return;
+      _endNavigation();
+    } finally {
+      _isFinishingRoute = false;
+    }
+  }
+
+  void _endNavigation() {
+    ActiveNavigationService.instance.stop();
+    setState(() {
+      _isAutoFollowEnabled = false;
+      final position = _currentPosition;
+      if (position != null) _displayPosition = _rawLatLng(position);
+    });
+    _startLocationTracking();
   }
 
   Future<void> _stopNavigation() async {
@@ -823,13 +905,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
     await _maybeShowTrustFeedbackPrompt();
     if (!mounted) return;
-
-    setState(() {
-      _isNavigationStarted = false;
-      _isAutoFollowEnabled = false;
-      _traversedIndex = 0;
-    });
-    ActiveNavigationService.instance.stop();
+    _endNavigation();
   }
 
   void _onNotificationsDismissed() {
@@ -841,6 +917,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
   @override
   void dispose() {
+    final navigation = ActiveNavigationService.instance;
+    navigation.removeListener(_onNavigationSessionChanged);
+    navigation.followUpdates.removeListener(_onNavigationPosition);
     _cameraAnim.dispose();
     _cameraAnimController.dispose();
     _positionSubscription?.cancel();
@@ -926,6 +1005,25 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     return 'PHP ${totalFare.round()}';
   }
 
+  /// The saved ETA, or an estimate from the drawn path when it is missing or
+  /// was saved as 0.
+  String? _routeEtaLabel() {
+    final saved = widget.route.eta?.trim() ?? '';
+    final savedMinutes = int.tryParse(saved.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (saved.isNotEmpty && (savedMinutes == null || savedMinutes > 0)) {
+      return RouteMetricsService.formatEtaLabel(saved);
+    }
+    if (widget.route.steps.isEmpty) return null;
+    final estimated = RouteMetricsService.calculateEta(
+      _pathPoints,
+      widget.route.steps.map((s) => s.mode).toList(),
+      widget.route.stepBoundaries.isNotEmpty
+          ? widget.route.stepBoundaries
+          : _computeEvenBoundaries(),
+    );
+    return estimated > 0 ? RouteMetricsService.formatEtaLabel('$estimated') : null;
+  }
+
   IconData _getModeIcon(String mode) {
     switch (mode) {
       case 'Walk':
@@ -979,93 +1077,53 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       '${time.hour}:${time.minute.toString().padLeft(2, '0')} '
       '${time.day}/${time.month}';
 
-  List<Polyline> get polylines {
-    if (_pathPoints.length < 2) return [];
-
-    final trimStart = _trimStartIndex();
-
-    // One step-polyline, visibly trimmed so the travelled tail disappears.
-    List<Polyline> track(List<LatLng> pts, Color color, int fromIndex) {
-      final start = math.max(0, math.min(pts.length - 1, fromIndex));
-      final rest = pts.sublist(start);
-      if (rest.length < 2) return const [];
-      return [
-        Polyline(
-          points: rest,
-          color: Colors.black,
-          strokeWidth: 8.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-        Polyline(
-          points: rest,
-          color: color,
-          strokeWidth: 6.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-      ];
-    }
-
+  /// Each step's path-index range and colour; one blue range when the route
+  /// has no steps.
+  List<({int start, int end, Color color})> _stepRanges() {
+    final last = _pathPoints.length - 1;
     if (widget.route.steps.isEmpty) {
-      return track(_pathPoints, Colors.blue, trimStart);
+      return [(start: 0, end: last, color: Colors.blue)];
     }
-
     final boundaries =
         widget.route.stepBoundaries.isNotEmpty
             ? widget.route.stepBoundaries
             : _computeEvenBoundaries();
-
-    final result = <Polyline>[];
-    for (int i = 0; i < widget.route.steps.length; i++) {
-      final step = widget.route.steps[i];
-      final color = modeColors[step.mode] ?? Colors.blue;
-      final startIdx = i == 0 ? 0 : boundaries[i - 1];
-      final endIdx =
-          i < boundaries.length ? boundaries[i] : _pathPoints.length - 1;
-      if (endIdx > startIdx) {
-        final pts = _pathPoints.sublist(startIdx, endIdx + 1);
-        final relStart = trimStart - startIdx;
-        result.addAll(track(pts, color, relStart));
-      }
-    }
-    return result;
+    return [
+      for (int i = 0; i < widget.route.steps.length; i++)
+        (
+          start: math.min(i == 0 ? 0 : boundaries[i - 1], last),
+          end: math.min(i < boundaries.length ? boundaries[i] : last, last),
+          color: modeColors[widget.route.steps[i].mode] ?? Colors.blue,
+        ),
+    ];
   }
 
-  /// Index of the path point nearest to the live position (monotonic), used to
-  /// drop the already-passed tail of the drawn route while navigating.
-  int _trimStartIndex() {
-    if (!_isNavigationStarted || _displayPosition == null) return 0;
-    final pos = _displayPosition!;
-    final distCalc = const Distance();
-    int best = 0;
-    double bestDist = double.infinity;
-    for (int i = 0; i < _pathPoints.length; i++) {
-      final d = distCalc.as(LengthUnit.Kilometer, pos, _pathPoints[i]);
-      if (d < bestDist) {
-        bestDist = d;
-        best = i;
-      }
-    }
-    if (best > _traversedIndex) {
-      _traversedIndex = best;
-    }
-    return _traversedIndex;
+  /// The route (travelled part grey while following) plus, when the
+  /// traveler is off it, the dashed temporary path back to it.
+  List<Polyline> get polylines {
+    return [
+      ...FollowRouteLayers.routeLines(
+        path: _pathPoints,
+        ranges: _stepRanges(),
+        snapshot: _followSnapshot,
+        outline: Colors.black,
+      ),
+      if (_isNavigationStarted)
+        ...FollowRouteLayers.connectorLines(
+          ActiveNavigationService.instance.connectorPath,
+        ),
+    ];
   }
 
-  /// Whether the traveler has already passed step [stepIndex] while navigating,
-  /// using the same boundary math as [polylines] so the two stay in sync.
+  /// Whether the traveler has already passed step [stepIndex] while
+  /// following, using the same ranges as [polylines] so the two stay in sync.
   bool _isStepCompleted(int stepIndex) {
-    if (!_isNavigationStarted) return false;
-    final boundaries =
-        widget.route.stepBoundaries.isNotEmpty
-            ? widget.route.stepBoundaries
-            : _computeEvenBoundaries();
-    final endIdx =
-        stepIndex < boundaries.length
-            ? boundaries[stepIndex]
-            : _pathPoints.length - 1;
-    return _trimStartIndex() >= endIdx;
+    final ranges = _stepRanges();
+    if (stepIndex >= ranges.length) return false;
+    return FollowRouteLayers.isRangeCompleted(
+      ranges[stepIndex],
+      _followSnapshot,
+    );
   }
 
   List<int> _computeEvenBoundaries() {
@@ -1095,19 +1153,18 @@ class _RouteMapScreenState extends State<RouteMapScreen>
         ),
       );
     }
-    if (_displayPosition != null) {
-      result.add(
-        Marker(
-          point: _displayPosition!,
-          child: Transform.rotate(
-            angle: _displayHeading * (math.pi / 180),
-            child: const Icon(Icons.navigation, color: Colors.blue, size: 38),
-          ),
-        ),
-      );
-    }
+    final targetMarker = FollowRouteLayers.targetMarker(_guidance);
+    if (targetMarker != null) result.add(targetMarker);
     return result;
   }
+
+  /// The traveler's dot, drawn above every other layer.
+  Widget get _userLocationLayer => UserLocationLayer(
+    position: _displayPosition,
+    accuracyMeters: _currentPosition?.accuracy ?? 0,
+    headingDegrees: _displayHeading,
+    speedMps: _currentPosition?.speed ?? 0,
+  );
 
   // ─── Build ─────────────────────────────────────────────────────────────────
 

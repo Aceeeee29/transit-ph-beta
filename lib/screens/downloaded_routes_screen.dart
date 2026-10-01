@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/route.dart' as route_model;
+import '../repositories/followed_route_repository.dart';
 import '../repositories/offline_route_repository.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/offline_tile_service.dart';
@@ -33,7 +34,16 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
     _routesFuture = _loadAllOfflineRoutes();
   }
 
+  /// Routes the user started following, saved automatically; filled in by
+  /// [_loadAllOfflineRoutes] alongside the downloads.
+  List<FollowedRouteEntry> _recent = const [];
+
   Future<List<route_model.Route>> _loadAllOfflineRoutes() async {
+    try {
+      _recent = await FollowedRouteRepository.getRecent();
+    } catch (_) {
+      _recent = const [];
+    }
     final loaded = await Future.wait([
       OfflineRouteRepository.getDownloadedRoutes(),
       RouteCacheRepository.getCachedGeneratedRoutes(),
@@ -90,6 +100,92 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
           route: route,
           enableRouteIntegrity: false,
           showDownloadButton: false,
+        ),
+      ),
+    );
+  }
+
+  void _openFollowedRoute(FollowedRouteEntry entry) {
+    final route = entry.route;
+    final generated = entry.generatedRoute;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) =>
+                route != null
+                    ? RouteMapScreen(route: route, enableRouteIntegrity: false)
+                    : OrsRouteMapScreen(
+                      result: generated!,
+                      originName: entry.startLabel,
+                      destinationName: entry.endLabel,
+                    ),
+      ),
+    );
+  }
+
+  String _followedAgo(DateTime at) {
+    final diff = DateTime.now().difference(at);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
+  }
+
+  Widget _buildSectionLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          color: _textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFollowedTile(FollowedRouteEntry entry) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+          leading: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _surfaceAlt,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _border),
+            ),
+            child: const Icon(Icons.history_rounded, color: _accent, size: 18),
+          ),
+          title: Text(
+            '${entry.startLabel} to ${entry.endLabel}',
+            style: const TextStyle(
+              color: _textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Text(
+            'Followed ${_followedAgo(entry.followedAt)} · route only, '
+            'map shows if downloaded or cached',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: _textSecondary, fontSize: 12),
+          ),
+          trailing: const Icon(Icons.chevron_right, color: _textSecondary),
+          onTap: () => _openFollowedRoute(entry),
         ),
       ),
     );
@@ -283,8 +379,15 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                 route.endLocation.toLowerCase().contains(q) ||
                 route.shortDescription.toLowerCase().contains(q);
           }).toList();
+          final filteredRecent =
+              _recent.where((entry) {
+                final q = _searchQuery.trim().toLowerCase();
+                if (q.isEmpty) return true;
+                return entry.startLabel.toLowerCase().contains(q) ||
+                    entry.endLabel.toLowerCase().contains(q);
+              }).toList();
 
-          if (routes.isEmpty) {
+          if (routes.isEmpty && _recent.isEmpty) {
             return RefreshIndicator(
               onRefresh: _refresh,
               color: _accent,
@@ -365,7 +468,13 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (filteredRoutes.isEmpty)
+                if (filteredRecent.isNotEmpty) ...[
+                  _buildSectionLabel('Recently followed'),
+                  ...filteredRecent.map(_buildFollowedTile),
+                  const SizedBox(height: 6),
+                  if (routes.isNotEmpty) _buildSectionLabel('Downloaded'),
+                ],
+                if (filteredRoutes.isEmpty && filteredRecent.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

@@ -124,6 +124,13 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
           steps: List<route_model.Step>.from(steps),
           stepControlPoints: stepControlPoints,
           snapToRoadEnabled: _snapToRoadEnabled,
+          baseline: ContributionRouteBaseline(
+            stepControlPoints: _stepEditControlsSection.stepControlPoints,
+            pathPoints: List<LatLng>.from(pathPoints),
+            stepBoundaries: List<int>.from(stepBoundaries),
+            stepOrsDistM: List<double?>.from(_stepOrsDistM),
+            stepOrsDurS: List<double?>.from(_stepOrsDurS),
+          ),
         );
 
     if (!mounted ||

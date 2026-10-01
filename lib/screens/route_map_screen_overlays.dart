@@ -7,8 +7,10 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
   static const _textSecondary = _RouteMapScreenState._textSecondary;
   static const _border = _RouteMapScreenState._border;
   static const _danger = _RouteMapScreenState._danger;
+  static const _green = _RouteMapScreenState._green;
 
   Widget _buildStartControlSection() {
+    if (_hasArrived) return _buildArrivalCard();
     if (!_isNavigationStarted) {
       return ElevatedButton.icon(
         onPressed: _startNavigation,
@@ -75,10 +77,11 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
           onTap: _stopNavigation,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            // Solid background: a translucent one washed out over the map.
             decoration: BoxDecoration(
-              color: _danger.withValues(alpha: 0.1),
+              color: _surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _danger.withValues(alpha: 0.35)),
+              border: Border.all(color: _danger.withValues(alpha: 0.45)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -105,7 +108,73 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
     );
   }
 
+  /// Shown in place of the follow controls once the end is reached.
+  Widget _buildArrivalCard() {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _green.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: _green.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_rounded, color: _green, size: 22),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const TranslatedText(
+                  "You've arrived",
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  widget.route.endLocation,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _finishArrivedRoute,
+            style: FilledButton.styleFrom(
+              backgroundColor: _green,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              minimumSize: const Size(0, 36),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const TranslatedText('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMapLegendSection() {
+    final routeModes = widget.route.steps.map((s) => s.mode).toSet();
+    final entries =
+        modeColors.entries.where((e) => routeModes.contains(e.key)).toList();
+    if (entries.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -123,7 +192,7 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children:
-            modeColors.entries.map((entry) {
+            entries.map((entry) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,15 +6,21 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:math' as math;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/active_navigation_service.dart';
 import '../services/offline_tile_service.dart';
+import '../services/route_follow_engine.dart';
+import '../services/route_follow_guidance.dart';
 import '../services/route_metrics_service.dart';
 import '../widgets/community_route_badge.dart';
 import '../widgets/fare_discount_toggle.dart';
 import '../widgets/location_permission_notice.dart';
+import '../widgets/route_map/follow_guidance_card.dart';
+import '../widgets/route_map/follow_route_layers.dart';
+import '../widgets/route_map/follow_simulator_sheet.dart';
+import '../widgets/route_map/user_location_layer.dart';
+import '../widgets/translated_text.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -47,7 +54,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   LatLng? _lastCameraTarget;
   DateTime? _lastCameraMoveAt;
   bool _isLocating = false;
-  bool _isNavigationStarted = false;
   bool _isAutoFollowEnabled = false;
   bool _isDownloaded = false;
   bool _isDownloading = false;
@@ -81,6 +87,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       curve: Curves.easeOutCubic,
     );
     _cameraAnimController.addListener(_onCameraAnimTick);
+
+    final navigation = ActiveNavigationService.instance;
+    navigation.addListener(_onNavigationSessionChanged);
+    navigation.followUpdates.addListener(_onNavigationPosition);
+    if (_isNavigationStarted) _isAutoFollowEnabled = true;
 
     _initLocation();
     _loadFareProfile();
@@ -210,6 +221,29 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     }
   }
 
+  String get _followId => FollowTarget.generatedId(
+    widget.result,
+    widget.originName,
+    widget.destinationName,
+  );
+
+  /// True while this route is the active follow session; the session (GPS,
+  /// progress, guidance, arrival) lives in [ActiveNavigationService].
+  bool get _isNavigationStarted =>
+      ActiveNavigationService.instance.isFollowing(_followId);
+
+  RouteFollowSnapshot? get _followSnapshot =>
+      _isNavigationStarted
+          ? ActiveNavigationService.instance.followSnapshot
+          : null;
+
+  bool get _hasArrived => _followSnapshot?.hasArrived ?? false;
+
+  FollowGuidance get _guidance =>
+      _isNavigationStarted
+          ? ActiveNavigationService.instance.guidance
+          : FollowGuidance.none;
+
   Future<void> _initLocation() async {
     setState(() => _isLocating = true);
     final hasAccess = await ensureLocationAccess(
@@ -217,61 +251,80 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       reason: 'show where you are on the route',
     );
     if (hasAccess) {
-      try {
-        _currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        _displayPosition =
-            LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-        _displayHeading = _normalizeHeading(_currentPosition!.heading);
-        _startLocationTracking();
-      } catch (_) {}
+      if (_isNavigationStarted &&
+          ActiveNavigationService.instance.lastPosition != null) {
+        // Resuming an active session: its stream already tracks the user.
+        _onNavigationPosition();
+      } else {
+        try {
+          final position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+            ),
+          );
+          if (mounted) {
+            _applyPosition(position, _rawLatLng(position));
+            if (!_isNavigationStarted) _startLocationTracking();
+          }
+        } catch (_) {}
+      }
     }
     if (mounted) setState(() => _isLocating = false);
   }
 
-  // FIX: Platform-aware stream settings — Android gets intervalDuration to
-  // suppress jitter callbacks; distanceFilter raised 2 → 3 m to further
-  // reduce spurious updates while keeping movement feeling live.
+  /// Preview-only stream for showing the user's location before Start.
+  /// While following, positions come from the navigation session instead.
   void _startLocationTracking() {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: Platform.isAndroid
-          ? AndroidSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 3,
-              intervalDuration: const Duration(milliseconds: 800),
-            )
-          : const LocationSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 3,
-            ),
-    ).listen(
-      _handleLocationUpdate,
-      onError: (_) {},
-    );
+      locationSettings: ActiveNavigationService.trackingSettings,
+    ).listen(_handleLocationUpdate, onError: (_) {});
   }
 
-  // FIX: Replaced undefined `nextDisplay` with `raw`.
-  // FIX: Passes heading to _maybeMoveCamera for map bearing rotation.
+  void _stopLocationTracking() {
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+  }
+
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    // FIX: Slightly relaxed accuracy gate (45 → 50) to keep updates flowing
-    // in challenging environments while still rejecting wild outliers.
-    if (position.accuracy > 50) return;
+    if (position.accuracy >
+        ActiveNavigationService.maxAcceptedAccuracyMeters) {
+      return;
+    }
+    setState(() => _applyPosition(position, _rawLatLng(position)));
+  }
 
-    final raw = LatLng(position.latitude, position.longitude);
-    final nextHeading = _normalizeHeading(position.heading);
+  void _onNavigationPosition() {
+    if (!mounted || !_isNavigationStarted) return;
+    final position = ActiveNavigationService.instance.lastPosition;
+    if (position == null) {
+      setState(() {});
+      return;
+    }
+    final display = _followSnapshot?.displayPosition ?? _rawLatLng(position);
+    setState(() => _applyPosition(position, display));
+    if (_isAutoFollowEnabled && !_hasArrived) {
+      _maybeMoveCamera(display, heading: _displayHeading);
+    }
+  }
 
-    setState(() {
-      _currentPosition = position;
-      _displayPosition = raw;
-      _displayHeading = nextHeading;
-    });
+  void _onNavigationSessionChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
 
-    if (_isNavigationStarted && _isAutoFollowEnabled) {
-      // FIX: Was `nextDisplay` (undefined) — now correctly passes `raw`
-      _maybeMoveCamera(raw, heading: nextHeading);
+  LatLng _rawLatLng(Position position) =>
+      LatLng(position.latitude, position.longitude);
+
+  static const _minHeadingSpeedMps = 1.0;
+
+  void _applyPosition(Position position, LatLng display) {
+    _currentPosition = position;
+    _displayPosition = display;
+    // GPS heading is noise when barely moving; keep the last good heading.
+    if (position.speed >= _minHeadingSpeedMps) {
+      _displayHeading = _normalizeHeading(position.heading);
     }
   }
 
@@ -310,6 +363,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
   @override
   void dispose() {
+    final navigation = ActiveNavigationService.instance;
+    navigation.removeListener(_onNavigationSessionChanged);
+    navigation.followUpdates.removeListener(_onNavigationPosition);
     _cameraAnim.dispose();
     _cameraAnimController.dispose();
     _positionSubscription?.cancel();
@@ -348,11 +404,56 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       return;
     }
 
-    setState(() {
-      _isNavigationStarted = true;
-      _isAutoFollowEnabled = true;
-    });
+    // The session's stream takes over from the preview stream.
+    _stopLocationTracking();
+    _isAutoFollowEnabled = true;
+    ActiveNavigationService.instance.start(
+      FollowTarget.generated(
+        widget.result,
+        originName: widget.originName,
+        destinationName: widget.destinationName,
+      ),
+      initialPosition: _currentPosition,
+      enableRouteIntegrity: false,
+      showDownloadButton: widget.showDownloadButton,
+    );
+    _onNavigationPosition();
     _centerOnMe();
+  }
+
+  Future<void> _stopNavigation() async {
+    final shouldStop = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const TranslatedText('Stop this route?'),
+            content: const TranslatedText(
+              'Your progress along the route will be cleared. You can start again anytime.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const TranslatedText('Keep Going'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const TranslatedText('Stop Route'),
+              ),
+            ],
+          ),
+    );
+    if (!mounted || shouldStop != true) return;
+    _endNavigation();
+  }
+
+  void _endNavigation() {
+    ActiveNavigationService.instance.stop();
+    setState(() {
+      _isAutoFollowEnabled = false;
+      final position = _currentPosition;
+      if (position != null) _displayPosition = _rawLatLng(position);
+    });
+    _startLocationTracking();
   }
 
   LatLng get _mapCenter {
@@ -364,64 +465,40 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     );
   }
 
-  /// Builds one colored polyline per step, sliced from the full ORS geometry
-  /// using the way_point indices. Each segment color matches the transit mode.
-  List<Polyline> get _polylines {
-    final allPoints = widget.result.polyline;
-    if (allPoints.length < 2) return [];
-
+  /// One colored range per step, sliced from the full geometry using the
+  /// way_point indices; the whole line in blue when steps carry none.
+  List<({int start, int end, Color color})> get _stepRanges {
+    final last = widget.result.polyline.length - 1;
     final steps = widget.result.steps;
-
     if (steps.isEmpty || steps.every((s) => s.wayPointEnd == 0)) {
-      return [
-        Polyline(
-          points: allPoints,
-          color: Colors.white,
-          strokeWidth: 8.0,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-        Polyline(
-          points: allPoints,
-          color: Colors.blue.shade700,
-          strokeWidth: 5.5,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-      ];
+      return [(start: 0, end: last, color: Colors.blue.shade700)];
     }
+    return [
+      for (final step in steps)
+        (
+          start: step.wayPointStart,
+          end: step.wayPointEnd,
+          color: _modeColor(step.suggestedMode),
+        ),
+    ];
+  }
 
-    final polylines = <Polyline>[];
-
-    for (final step in steps) {
-      final start = step.wayPointStart.clamp(0, allPoints.length - 1);
-      final end = step.wayPointEnd.clamp(0, allPoints.length - 1);
-
-      if (end <= start) continue;
-
-      final segmentPoints = allPoints.sublist(start, end + 1);
-      if (segmentPoints.length < 2) continue;
-
-      final color = _modeColor(step.suggestedMode);
-
-      polylines.add(Polyline(
-        points: segmentPoints,
-        color: Colors.white,
-        strokeWidth: 8.0,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-      ));
-
-      polylines.add(Polyline(
-        points: segmentPoints,
-        color: color,
-        strokeWidth: 5.5,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-      ));
-    }
-
-    return polylines;
+  /// The route (travelled part grey while following) plus, when the
+  /// traveler is off it, the dashed temporary path back to it.
+  List<Polyline> get _polylines {
+    return [
+      ...FollowRouteLayers.routeLines(
+        path: widget.result.polyline,
+        ranges: _stepRanges,
+        snapshot: _followSnapshot,
+        outline: Colors.white,
+        fillWidth: 5.5,
+      ),
+      if (_isNavigationStarted)
+        ...FollowRouteLayers.connectorLines(
+          ActiveNavigationService.instance.connectorPath,
+        ),
+    ];
   }
 
   List<Marker> get _markers {
@@ -478,36 +555,19 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       );
     }
 
-    if (_displayPosition != null) {
-      markers.add(
-        Marker(
-          point: _displayPosition!,
-          width: 40,
-          height: 40,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.blue.shade400,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.4),
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Transform.rotate(
-              angle: _displayHeading * (math.pi / 180),
-              child: const Icon(Icons.navigation, color: Colors.white, size: 20),
-            ),
-          ),
-        ),
-      );
-    }
+    final targetMarker = FollowRouteLayers.targetMarker(_guidance);
+    if (targetMarker != null) markers.add(targetMarker);
 
     return markers;
   }
+
+  /// The traveler's dot, drawn above every other layer.
+  Widget get _userLocationLayer => UserLocationLayer(
+    position: _displayPosition,
+    accuracyMeters: _currentPosition?.accuracy ?? 0,
+    headingDegrees: _displayHeading,
+    speedMps: _currentPosition?.speed ?? 0,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -585,6 +645,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
                 ),
               PolylineLayer(polylines: _polylines),
               MarkerLayer(markers: _markers),
+              _userLocationLayer,
             ],
           ),
 
@@ -633,12 +694,33 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
             ),
           ),
 
+          if (_guidance.kind != FollowGuidanceKind.none)
+            Positioned(
+              top: 60,
+              left: 12,
+              right: 12,
+              child: FollowGuidanceCard(
+                guidance: _guidance,
+                remainingMeters:
+                    ActiveNavigationService.instance.connectorRemainingMeters,
+                isRerouting: ActiveNavigationService.instance.isRerouting,
+                routeStartLabel: widget.originName,
+              ),
+            ),
+
           Positioned(
             left: 12,
             right: 12,
             bottom: 290,
             child: Center(child: _buildStartControl()),
           ),
+
+          if (kDebugMode && _isNavigationStarted && !_hasArrived)
+            Positioned(
+              right: 12,
+              bottom: 290,
+              child: FollowSimulatorButton(path: widget.result.polyline),
+            ),
 
           // ── My location FAB ──────────────────────────────────────────────────
           Positioned(
@@ -965,6 +1047,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   }
 
   Widget _buildStartControl() {
+    if (_hasArrived) return _buildArrivalCard();
     if (!_isNavigationStarted) {
       return ElevatedButton.icon(
         onPressed: _startNavigation,
@@ -982,6 +1065,104 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       );
     }
 
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildFollowToggle(),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: _stopNavigation,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.stop_rounded, size: 16, color: Colors.red.shade600),
+                const SizedBox(width: 6),
+                TranslatedText(
+                  'Stop',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.red.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Shown in place of the follow controls once the end is reached.
+  Widget _buildArrivalCard() {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 300),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_rounded, color: Colors.green.shade600),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const TranslatedText(
+                  "You've arrived",
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                Text(
+                  widget.destinationName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _endNavigation,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              minimumSize: const Size(0, 36),
+            ),
+            child: const TranslatedText('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFollowToggle() {
     return GestureDetector(
       onTap: () =>
           setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled),

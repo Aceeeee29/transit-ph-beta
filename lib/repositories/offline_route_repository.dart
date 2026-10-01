@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/route.dart' as route_model;
+import 'followed_route_repository.dart';
 
 class OfflineRouteRepository {
   static const _dbName = 'transitph_offline.db';
@@ -47,7 +46,7 @@ class OfflineRouteRepository {
       _table,
       {
         'id': route.id,
-        'route_json': jsonEncode(route.toJson()),
+        'route_json': RouteStorageCodec.encode(route),
         'downloaded_at': DateTime.now().millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -72,11 +71,9 @@ class OfflineRouteRepository {
     await _ensureSchema(db);
     final rows = await db.query(_table, orderBy: 'downloaded_at DESC');
 
-    return rows.map((row) {
-      final raw = row['route_json'] as String;
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      return route_model.Route.fromJson(json);
-    }).toList();
+    return rows
+        .map((row) => RouteStorageCodec.decode(row['route_json'] as String))
+        .toList();
   }
 
   static Future<void> deleteRoute(String routeId) async {

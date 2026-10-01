@@ -635,12 +635,33 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 urlTemplate: _offlineTileTemplate!,
                 tileProvider: FileTileProvider(),
               ),
-            MarkerLayer(markers: markers),
+            // Markers after the route so the user's arrow sits on top of it.
             PolylineLayer(polylines: polylines),
+            MarkerLayer(markers: markers),
+            _userLocationLayer,
           ],
         ),
         Positioned(top: 12, right: 12, child: _buildMapLegend()),
+        if (_guidance.kind != FollowGuidanceKind.none)
+          Positioned(
+            left: 12,
+            right: 64,
+            bottom: 64,
+            child: FollowGuidanceCard(
+              guidance: _guidance,
+              remainingMeters:
+                  ActiveNavigationService.instance.connectorRemainingMeters,
+              isRerouting: ActiveNavigationService.instance.isRerouting,
+              routeStartLabel: widget.route.startLocation,
+            ),
+          ),
         Positioned(bottom: 12, left: 12, child: _buildStartControl()),
+        if (kDebugMode && _isNavigationStarted && !_hasArrived)
+          Positioned(
+            bottom: 64,
+            right: 12,
+            child: FollowSimulatorButton(path: _pathPoints),
+          ),
         Positioned(bottom: 12, right: 12, child: _buildCenterButton()),
       ],
     );
@@ -729,6 +750,8 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   }
 
   Widget _buildMetricsRowSection() {
+    // Saved values of 0 (some routes were stored as "0 m" / "0") fall back
+    // to measuring the drawn path.
     final distanceValue = () {
       if (widget.route.distanceMeters != null &&
           widget.route.distanceMeters! > 0) {
@@ -736,19 +759,17 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
           widget.route.distanceMeters! / 1000,
         );
       }
-      if (widget.route.distance != null && widget.route.distance!.isNotEmpty) {
-        final parsedKm = RouteMetricsService.parseDistanceToKm(
-          widget.route.distance,
-        );
-        if (parsedKm != null) {
-          return RouteMetricsService.formatDistance(parsedKm);
-        }
-        return widget.route.distance!;
+      final saved = widget.route.distance?.trim() ?? '';
+      if (saved.isNotEmpty) {
+        final parsedKm = RouteMetricsService.parseDistanceToKm(saved);
+        if (parsedKm == null) return saved;
+        if (parsedKm > 0) return RouteMetricsService.formatDistance(parsedKm);
       }
       return RouteMetricsService.formatDistance(
         RouteMetricsService.calculateRouteDistance(_pathPoints),
       );
     }();
+    final etaValue = _routeEtaLabel();
 
     final scheduleText = _routeScheduleText();
     final trustScore = _trustScore;
@@ -778,13 +799,13 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             label: 'Distance',
             value: distanceValue,
           ),
-          if (widget.route.eta != null) ...[
+          if (etaValue != null) ...[
             const SizedBox(width: 10),
             _metricCard(
               icon: Icons.access_time_rounded,
               iconColor: _accent,
               label: 'ETA',
-              value: RouteMetricsService.formatEtaLabel(widget.route.eta),
+              value: etaValue,
             ),
           ],
           if (fareLabel != null) ...[

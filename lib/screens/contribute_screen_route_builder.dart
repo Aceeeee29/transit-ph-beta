@@ -19,7 +19,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
       final orsDistM = i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
       final orsDurS = i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
 
-      if (orsDistM != null && orsDurS != null) {
+      // A snap that reported 0 m would save the route as "0 m"; measure the
+      // drawn step instead.
+      if (orsDistM != null && orsDistM > 0 && orsDurS != null && orsDurS > 0) {
         totalDistKm += orsDistM / 1000;
         totalDurS += orsDurS;
         totalFare +=

@@ -190,8 +190,10 @@ class _MapControlsState extends State<MapControls> {
                   const SizedBox(height: 8),
                 ],
 
-                // Snap to road toggle
-                if (widget.selectionMode == 'step') ...[
+                // Snap to road toggle — also after finishing, since dragging
+                // edit handles re-routes the dragged steps with this setting.
+                if (widget.selectionMode == 'step' ||
+                    widget.selectionMode == 'done') ...[
                   Row(
                     children: [
                       const Text('Snap to Road:', style: TextStyle(fontSize: 12)),
@@ -212,7 +214,8 @@ class _MapControlsState extends State<MapControls> {
                             builder: (_) => AlertDialog(
                               title: const Text('Snap to Road'),
                               content: const Text(
-                                'When enabled, points you tap on the map are automatically moved to the nearest road using OpenRouteService.\n\n'
+                                'When enabled, the line between the points you tap follows the roads instead of going straight. '
+                                'It also applies when you drag edit handles after finishing the route.\n\n'
                                 'This makes drawn routes more realistic and accurate. '
                                 'Disable it if you need to place points off-road (e.g. ferry terminals, footpaths).',
                               ),

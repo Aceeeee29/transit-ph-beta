@@ -415,3 +415,23 @@ const List<Place> camanavaPlaces = [
         'simpleng lakad, ehersisyo at pamilyang gatherings.',
   ),
 ];
+/// The closest curated place within [maxMeters] of [point], for naming
+/// points along a route ("the stop near Bonifacio Monument"). Null when
+/// nothing is close enough to be meaningful.
+String? nearestCamanavaPlaceName(LatLng point, {double maxMeters = 350}) {
+  const distance = Distance();
+  String? best;
+  var bestMeters = maxMeters;
+  for (final place in camanavaPlaces) {
+    final meters = distance.as(
+      LengthUnit.Meter,
+      point,
+      LatLng(place.lat, place.lng),
+    );
+    if (meters <= bestMeters) {
+      best = place.name;
+      bestMeters = meters;
+    }
+  }
+  return best;
+}

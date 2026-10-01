@@ -1197,18 +1197,13 @@ class SupabaseRouteService {
     LatLng point,
     List<({String name, LatLng point})> transitStops,
   ) {
-    String? best;
-    var bestKm = _landmarkRadiusKm;
-    for (final place in camanavaPlaces) {
-      final km = _haversineKm(point, LatLng(place.lat, place.lng));
-      if (km <= bestKm) {
-        best = place.name;
-        bestKm = km;
-      }
-    }
+    String? best = nearestCamanavaPlaceName(
+      point,
+      maxMeters: _landmarkRadiusKm * 1000,
+    );
     if (best != null) return best;
 
-    bestKm = _transitStopNameRadiusKm;
+    var bestKm = _transitStopNameRadiusKm;
     for (final stop in transitStops) {
       if (stop.name.isEmpty) continue;
       final km = _haversineKm(point, stop.point);
