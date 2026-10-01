@@ -321,7 +321,13 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildActiveNavigationBanner(FollowTarget target) {
     final navigation = ActiveNavigationService.instance;
     final hasArrived = navigation.hasArrived;
-    final color = hasArrived ? const Color(0xFF2D9F63) : _accent;
+    final isPaused = navigation.isPausedForIdle;
+    final color =
+        hasArrived
+            ? const Color(0xFF2D9F63)
+            : isPaused
+            ? const Color(0xFFB8732F)
+            : _accent;
     final route = target.route;
     final generated = target.generatedRoute;
     return SafeArea(
@@ -365,6 +371,8 @@ class _MainScreenState extends State<MainScreen> {
               Icon(
                 hasArrived
                     ? Icons.check_circle_rounded
+                    : isPaused
+                    ? Icons.pause_circle_rounded
                     : Icons.navigation_rounded,
                 color: Colors.white,
                 size: 18,
@@ -374,6 +382,8 @@ class _MainScreenState extends State<MainScreen> {
                 child: TranslatedText(
                   hasArrived
                       ? "You've arrived, tap to finish"
+                      : isPaused
+                      ? 'Following paused to save battery, tap to resume'
                       : 'Route still ongoing, tap to return',
                   style: const TextStyle(
                     color: Colors.white,

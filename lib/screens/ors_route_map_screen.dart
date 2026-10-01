@@ -91,7 +91,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     final navigation = ActiveNavigationService.instance;
     navigation.addListener(_onNavigationSessionChanged);
     navigation.followUpdates.addListener(_onNavigationPosition);
-    if (_isNavigationStarted) _isAutoFollowEnabled = true;
+    if (_isNavigationStarted) {
+      _isAutoFollowEnabled = true;
+      // Reopening a session that paused itself for being idle resumes it.
+      navigation.resumeTracking();
+    }
 
     _initLocation();
     _loadFareProfile();

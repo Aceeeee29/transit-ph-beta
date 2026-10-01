@@ -148,6 +148,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     navigation.followUpdates.addListener(_onNavigationPosition);
     if (_isNavigationStarted) {
       _isAutoFollowEnabled = true;
+      // Reopening a session that paused itself for being idle resumes it.
+      navigation.resumeTracking();
     }
 
     _generatePathPoints();

@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../models/ors_route_result.dart';
 import '../models/route.dart' as route_model;
 import '../repositories/followed_route_repository.dart';
+import 'follow_alert_notifier.dart';
 import 'route_follow_engine.dart';
 import 'route_follow_guidance.dart';
 import 'routing_service.dart';
@@ -110,6 +113,40 @@ class ActiveNavigationService extends ChangeNotifier {
             distanceFilter: 3,
           );
 
+  /// Stream settings for a follow session. On Android, geolocator runs this
+  /// stream as a location foreground service with an ongoing notification,
+  /// so tracking continues while the app is in the background. It needs
+  /// only while-in-use location permission, since it is started from the
+  /// foreground when the user taps Start.
+  static LocationSettings _followSettings(FollowTarget target) =>
+      Platform.isAndroid
+          ? AndroidSettings(
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 3,
+            intervalDuration: const Duration(milliseconds: 800),
+            foregroundNotificationConfig: ForegroundNotificationConfig(
+              notificationTitle:
+                  'Following: ${target.startLabel} → ${target.endLabel}',
+              notificationText:
+                  'TransitPH is tracking your trip along this route.',
+              notificationChannelName: 'Follow Route',
+              notificationIcon: const AndroidResource(
+                name: FollowAlertNotifier.statusIcon,
+                defType: 'drawable',
+              ),
+              setOngoing: true,
+              // Keeps fixes flowing with the screen off; held only while a
+              // route is followed and released on stop, arrival or idle.
+              enableWakeLock: true,
+            ),
+          )
+          : trackingSettings;
+
+  /// Tracking pauses itself after this long without real movement, to save
+  /// battery when a session is left running by mistake.
+  static const _idleTimeout = Duration(minutes: 30);
+  static const _idleMoveMeters = 100.0;
+
   /// Walking paths to the boarding/rejoin point are fetched at most this
   /// often, and only when the target or the traveler has moved this far.
   static const _connectorRefetchInterval = Duration(seconds: 20);
@@ -135,6 +172,11 @@ class ActiveNavigationService extends ChangeNotifier {
   DateTime? _lastConnectorRequestAt;
   int _sessionId = 0;
   bool _isSimulating = false;
+
+  Timer? _idleTimer;
+  LatLng? _idleAnchor;
+  DateTime _lastMovedAt = DateTime.now();
+  bool _isPausedForIdle = false;
 
   final _followTicks = _Ticker();
 
@@ -166,6 +208,10 @@ class ActiveNavigationService extends ChangeNotifier {
 
   bool get isSimulating => _isSimulating;
 
+  /// Tracking was paused after a long time without movement; reopening the
+  /// route resumes it ([resumeTracking]).
+  bool get isPausedForIdle => _isPausedForIdle;
+
   /// Starts following [target]. [initialPosition] seeds progress so the map
   /// is right before the next fix arrives.
   void start(
@@ -174,8 +220,7 @@ class ActiveNavigationService extends ChangeNotifier {
     bool enableRouteIntegrity = true,
     bool showDownloadButton = true,
   }) {
-    _positionSubscription?.cancel();
-    _positionSubscription = null;
+    _stopTracking();
     _sessionId++;
     _target = target;
     _enableRouteIntegrity = enableRouteIntegrity;
@@ -184,16 +229,64 @@ class ActiveNavigationService extends ChangeNotifier {
     _lastPosition = null;
     _previousPosition = null;
     _isSimulating = false;
+    _isPausedForIdle = false;
     _resetGuidance();
     _rememberFollowedRoute(target);
     if (initialPosition != null) _ingest(initialPosition);
 
     if (!hasArrived) {
-      _positionSubscription = Geolocator.getPositionStream(
-        locationSettings: trackingSettings,
-      ).listen(_onPosition, onError: (_) {});
+      _requestNotificationPermission();
+      _startTracking();
     }
     notifyListeners();
+  }
+
+  /// Resumes a session paused for being idle.
+  void resumeTracking() {
+    if (!_isPausedForIdle || _target == null || hasArrived) return;
+    _isPausedForIdle = false;
+    _startTracking();
+    notifyListeners();
+  }
+
+  void _startTracking() {
+    final target = _target;
+    if (target == null) return;
+    _positionSubscription?.cancel();
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: _followSettings(target),
+    ).listen(_onPosition, onError: (_) {});
+    _idleAnchor = null;
+    _lastMovedAt = DateTime.now();
+    _idleTimer?.cancel();
+    _idleTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkIdle());
+  }
+
+  void _stopTracking() {
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _idleTimer?.cancel();
+    _idleTimer = null;
+  }
+
+  void _checkIdle() {
+    if (_isSimulating || hasArrived || _positionSubscription == null) return;
+    if (DateTime.now().difference(_lastMovedAt) < _idleTimeout) return;
+    _stopTracking();
+    _isPausedForIdle = true;
+    notifyListeners();
+  }
+
+  /// Android 13+ hides the tracking notification without this; tracking
+  /// itself works either way.
+  void _requestNotificationPermission() {
+    if (!Platform.isAndroid) return;
+    Permission.notification.status
+        .then((status) {
+          if (status.isDenied) return Permission.notification.request();
+          return status;
+        })
+        .catchError((Object _) => PermissionStatus.denied);
   }
 
   /// Keeps the route on the device so it can be reopened offline from the
@@ -217,14 +310,14 @@ class ActiveNavigationService extends ChangeNotifier {
 
   void stop() {
     if (_target == null) return;
-    _positionSubscription?.cancel();
-    _positionSubscription = null;
+    _stopTracking();
     _sessionId++;
     _target = null;
     _engine = null;
     _lastPosition = null;
     _previousPosition = null;
     _isSimulating = false;
+    _isPausedForIdle = false;
     _resetGuidance();
     notifyListeners();
   }
@@ -252,6 +345,7 @@ class ActiveNavigationService extends ChangeNotifier {
   void endSimulation() {
     if (!_isSimulating) return;
     _isSimulating = false;
+    _lastMovedAt = DateTime.now();
     if (_positionSubscription?.isPaused ?? false) {
       _positionSubscription!.resume();
     }
@@ -268,8 +362,13 @@ class ActiveNavigationService extends ChangeNotifier {
     _ingest(position);
     if (!wasArrived && hasArrived) {
       // Nothing left to track; stop the GPS until the user finishes.
-      _positionSubscription?.cancel();
-      _positionSubscription = null;
+      _stopTracking();
+      final inBackground =
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+      final target = _target;
+      if (inBackground && target != null) {
+        FollowAlertNotifier.showArrived(target.endLabel);
+      }
       notifyListeners();
     }
   }
@@ -278,6 +377,14 @@ class ActiveNavigationService extends ChangeNotifier {
     if (position.accuracy > maxAcceptedAccuracyMeters) return;
     _previousPosition = _lastPosition;
     _lastPosition = position;
+
+    final here = LatLng(position.latitude, position.longitude);
+    final anchor = _idleAnchor;
+    if (anchor == null ||
+        _distance.as(LengthUnit.Meter, anchor, here) > _idleMoveMeters) {
+      _idleAnchor = here;
+      _lastMovedAt = DateTime.now();
+    }
 
     final engine = _engine;
     if (engine != null) {
