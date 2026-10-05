@@ -62,6 +62,44 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     ],
                   ),
                 ),
+                // Approving a correction updates the route it corrects.
+                if (route.correctionOf != null) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message:
+                        'A rider\'s correction to an existing route. Approving '
+                        'it replaces that route\'s line and steps.',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _accent.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.alt_route_rounded, size: 12, color: _accent),
+                          SizedBox(width: 4),
+                          Text(
+                            'CORRECTION',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: _accent,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 if (route.isEdited) ...[
                   const SizedBox(width: 8),
                   Container(

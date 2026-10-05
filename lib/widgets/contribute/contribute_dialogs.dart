@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../models/route.dart' as route_model;
+import '../../screens/step_stops_editor_screen.dart';
 
 // ─── Shared colors ────────────────────────────────────────────────────────────
 
@@ -170,6 +172,9 @@ class StepDialog extends StatefulWidget {
   final void Function(route_model.Step step) onSaved;
   final route_model.Step? initialStep;
 
+  /// This step's drawn line, for placing its stops.
+  final List<LatLng> stepPath;
+
   const StepDialog({
     super.key,
     required this.mode,
@@ -178,6 +183,7 @@ class StepDialog extends StatefulWidget {
     required this.onCancel,
     required this.onSaved,
     this.initialStep,
+    this.stepPath = const [],
   });
 
   @override
@@ -191,6 +197,8 @@ class _StepDialogState extends State<StepDialog> {
   final _actualFareController = TextEditingController();
 
   late bool _is24_7;
+  late route_model.StepBoarding _boarding;
+  late List<route_model.RouteStop> _stops;
   TimeOfDay _startTime = const TimeOfDay(hour: 6, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 22, minute: 0);
 
@@ -205,6 +213,9 @@ class _StepDialogState extends State<StepDialog> {
   void initState() {
     super.initState();
     final existing = widget.initialStep;
+    _boarding =
+        existing?.boarding ?? route_model.Step.defaultBoardingFor(widget.mode);
+    _stops = existing?.stops ?? const [];
     if (existing != null) {
       _instructionController.text = existing.instruction;
       _detailsController.text = existing.details;
@@ -245,6 +256,117 @@ class _StepDialogState extends State<StepDialog> {
       return null;
     }
     return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  /// Trains only stop at stations, so there's no flexible option.
+  bool get _boardsOnlyAtStations => widget.mode == 'Train';
+
+  bool get _isDesignated =>
+      _boardsOnlyAtStations ||
+      _boarding == route_model.StepBoarding.designated;
+
+  Future<void> _editStops(Color modeColor) async {
+    final edited = await Navigator.of(context).push<List<route_model.RouteStop>>(
+      MaterialPageRoute(
+        builder:
+            (_) => StepStopsEditorScreen(
+              mode: widget.mode,
+              color: modeColor,
+              path: widget.stepPath,
+              initialStops: _stops,
+            ),
+      ),
+    );
+    if (edited != null && mounted) setState(() => _stops = edited);
+  }
+
+  Widget _buildBoardingSection(Color modeColor) {
+    Widget choice(route_model.StepBoarding value, String label) {
+      final selected = _boarding == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _boarding = value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+            decoration: BoxDecoration(
+              color:
+                  selected
+                      ? ContributeColors.accent.withValues(alpha: 0.12)
+                      : ContributeColors.surfaceAlt,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color:
+                    selected
+                        ? ContributeColors.accent.withValues(alpha: 0.5)
+                        : ContributeColors.border,
+              ),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color:
+                    selected
+                        ? ContributeColors.accent
+                        : ContributeColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final canPlaceStops = widget.stepPath.length >= 2;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(
+          label:
+              _boardsOnlyAtStations
+                  ? 'Stations'
+                  : 'Where can passengers board and get off?',
+        ),
+        if (!_boardsOnlyAtStations) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              choice(route_model.StepBoarding.flexible, 'Anywhere along it'),
+              const SizedBox(width: 8),
+              choice(route_model.StepBoarding.designated, 'Only at stops'),
+            ],
+          ),
+        ],
+        if (_isDesignated) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _stops.isEmpty
+                      ? (_boardsOnlyAtStations
+                          ? 'No stations added; the step\'s two ends are used.'
+                          : 'No stops added yet; until you add some, riders '
+                              'board at its start and get off at its end.')
+                      : '${_stops.length} stop(s) added',
+                  style: const TextStyle(
+                    color: ContributeColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: canPlaceStops ? () => _editStops(modeColor) : null,
+                icon: const Icon(Icons.place_outlined, size: 16),
+                label: Text(_stops.isEmpty ? 'Add stops' : 'Edit stops'),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 
   bool get _endBeforeStart =>
@@ -313,6 +435,10 @@ class _StepDialogState extends State<StepDialog> {
       }
     }
 
+    final isDesignated =
+        _isMotorizedMode &&
+        (_boardsOnlyAtStations ||
+            _boarding == route_model.StepBoarding.designated);
     final step = route_model.Step(
       mode: widget.mode,
       instruction: instruction,
@@ -325,6 +451,13 @@ class _StepDialogState extends State<StepDialog> {
           (!_is24_7 && _altRouteController.text.trim().isNotEmpty)
               ? _altRouteController.text.trim()
               : null,
+      boarding:
+          !_isMotorizedMode
+              ? null
+              : isDesignated
+              ? route_model.StepBoarding.designated
+              : route_model.StepBoarding.flexible,
+      stops: isDesignated ? _stops : const [],
     );
 
     Navigator.of(context).pop();
@@ -409,6 +542,8 @@ class _StepDialogState extends State<StepDialog> {
                           decimal: true,
                         ),
                       ),
+                      const SizedBox(height: 18),
+                      _buildBoardingSection(modeColor),
                       const SizedBox(height: 18),
                     ],
 

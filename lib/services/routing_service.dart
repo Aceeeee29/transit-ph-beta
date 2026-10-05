@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import 'supabase_route_service.dart';
@@ -189,19 +190,34 @@ class RoutingService {
     );
   }
 
-  /// Lightweight road-snap between two points for map drawing in the
-  /// Contribute screen.
+  /// Whether a [mode] vehicle normally uses expressways when suggesting its
+  /// path: buses and FX/vans do; jeepneys and tricycles normally don't.
+  /// Only a default for suggestions — a contributor's drawn route is never
+  /// re-routed by it.
+  static bool defaultAllowsExpressways(String mode) =>
+      mode == 'Bus' || mode == 'FX/Van';
+
+  /// Lightweight road-snap between two points: drawing in the Contribute
+  /// screen and walking paths back to a followed route.
   ///
-  /// Calls OSRM directly — no Supabase, no GTFS, no caching.
-  /// Returns null if OSRM is unreachable so the caller can fall back to a
-  /// straight line.
+  /// Uses OpenRouteService first, which has a real walking profile and can
+  /// avoid expressways, and falls back to OSRM when it is unavailable or
+  /// rate-limited. No Supabase, no GTFS, no caching. Returns null if both
+  /// are unreachable so the caller can fall back to a straight line.
   static Future<OrsRouteResult?> snapToRoad({
     required LatLng origin,
     required LatLng destination,
     String mode = 'Jeepney',
+    bool? allowExpressways,
   }) async {
-    final profile = _osrmProfileForMode(mode);
-    final pts = await _osrmSnap(origin, destination, profile);
+    final pts =
+        await _orsRoute(
+          origin,
+          destination,
+          mode: mode,
+          allowExpressways: allowExpressways ?? defaultAllowsExpressways(mode),
+        ) ??
+        await _osrmSnap(origin, destination, _osrmProfileForMode(mode));
     if (pts == null || pts.length < 2) return null;
 
     final distKm = _polylineDistanceKm(pts);
@@ -215,6 +231,16 @@ class RoutingService {
       steps: [],
       bbox: [],
     );
+  }
+
+  /// Road path through [points] in order — e.g. a recorded ride — for
+  /// turning it into route geometry. Null when routing fails.
+  static Future<List<LatLng>?> snapThrough(
+    List<LatLng> points, {
+    String mode = 'Jeepney',
+  }) {
+    if (points.length < 2) return Future.value(null);
+    return _osrmRoute(points, _osrmProfileForMode(mode));
   }
 
   static RouteOptimizationMode _parseOptimizationMode(String raw) {
@@ -588,6 +614,78 @@ class RoutingService {
       steps: steps,
       bbox: bbox,
     );
+  }
+
+  // ── OpenRouteService (low-volume snapping) ────────────────────────────────────
+
+  static const _orsBase = 'https://api.openrouteservice.org/v2/directions';
+
+  /// After a rate-limit response, skip ORS for this long (OSRM serves).
+  static const _orsCooldown = Duration(seconds: 60);
+  static DateTime? _orsCooldownUntil;
+
+  /// Road path between two points via OpenRouteService, or null so the
+  /// caller can fall back to OSRM. Walking uses ORS's foot profile; vehicles
+  /// use the car profile, avoiding expressways and tollways unless
+  /// [allowExpressways].
+  static Future<List<LatLng>?> _orsRoute(
+    LatLng from,
+    LatLng to, {
+    required String mode,
+    required bool allowExpressways,
+  }) async {
+    String key;
+    try {
+      key = Config.openRouteServiceApiKey;
+    } catch (_) {
+      return null; // .env not loaded (e.g. in tests)
+    }
+    if (key.isEmpty) return null;
+    final cooldown = _orsCooldownUntil;
+    if (cooldown != null && DateTime.now().isBefore(cooldown)) return null;
+
+    final isWalk = mode == 'Walk';
+    final profile = isWalk ? 'foot-walking' : 'driving-car';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_orsBase/$profile/geojson'),
+            headers: {'Authorization': key, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'coordinates': [
+                [from.longitude, from.latitude],
+                [to.longitude, to.latitude],
+              ],
+              if (!isWalk && !allowExpressways)
+                'options': {
+                  'avoid_features': ['highways', 'tollways'],
+                },
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 429) {
+        _orsCooldownUntil = DateTime.now().add(_orsCooldown);
+        debugPrint('[ORS] Rate limited, using OSRM for a while');
+        return null;
+      }
+      if (response.statusCode != 200) return null;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final features = data['features'] as List?;
+      if (features == null || features.isEmpty) return null;
+      final coordinates =
+          (features.first as Map<String, dynamic>)['geometry']['coordinates']
+              as List;
+      final points = [
+        for (final c in coordinates)
+          LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+      ];
+      return points.length >= 2 ? points : null;
+    } catch (e) {
+      debugPrint('[ORS] Route failed ($profile): $e');
+      return null;
+    }
   }
 
   // ── OSRM road snapping ────────────────────────────────────────────────────────

@@ -19,6 +19,10 @@ class MapControls extends StatefulWidget {
   final Function(bool) onSnapToRoadToggled;
   final bool showPreview;
   final bool snapToRoadEnabled;
+
+  /// Whether snapped lines may use expressways; null hides the switch.
+  final bool? allowExpressways;
+  final ValueChanged<bool>? onAllowExpresswaysToggled;
   final double? orsDistanceKm; // ORS-calculated distance in km
   final int? orsDurationMinutes; // ORS-calculated duration in minutes
 
@@ -37,6 +41,8 @@ class MapControls extends StatefulWidget {
     required this.onSnapToRoadToggled,
     this.showPreview = true,
     this.snapToRoadEnabled = true,
+    this.allowExpressways,
+    this.onAllowExpresswaysToggled,
     this.orsDistanceKm,
     this.orsDurationMinutes,
   });
@@ -236,6 +242,41 @@ class _MapControlsState extends State<MapControls> {
                       ),
                     ],
                   ),
+                  if (widget.snapToRoadEnabled &&
+                      widget.allowExpressways != null &&
+                      widget.onAllowExpresswaysToggled != null)
+                    Row(
+                      children: [
+                        const Text(
+                          'Allow expressways:',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(width: 2),
+                        Transform.scale(
+                          scale: 0.8,
+                          child: Switch(
+                            value: widget.allowExpressways!,
+                            onChanged: widget.onAllowExpresswaysToggled,
+                            activeThumbColor: Colors.blue,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        Tooltip(
+                          triggerMode: TooltipTriggerMode.tap,
+                          message:
+                              'Lets the road line use expressways (NLEX, '
+                              'Skyway…). On by default for buses and FX/vans, '
+                              'off for jeepneys and tricycles. Only affects '
+                              'how new or dragged lines are snapped.',
+                          child: const Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 4),
                 ],
 

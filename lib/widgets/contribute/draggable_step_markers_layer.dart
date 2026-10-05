@@ -16,13 +16,22 @@ class DraggableStepBodyHandle {
 
 class DraggableStepMarkersLayer extends StatelessWidget {
   final List<LatLng> boundaryWaypoints;
+
+  /// Via points inside steps: drag to move, long-press to remove.
   final List<DraggableStepBodyHandle> bodyHandles;
+
+  /// "+" handles at the middle of each piece (controlIndex = piece index):
+  /// drag one to add a via point there.
+  final List<DraggableStepBodyHandle> insertHandles;
   final void Function(int index, LatLng nextPoint) onBoundaryDragEnd;
   final void Function(
     int stepIndex,
     int controlIndex,
     LatLng nextPoint,
   ) onBodyDragEnd;
+  final void Function(int stepIndex, int controlIndex)? onBodyLongPress;
+  final void Function(int stepIndex, int pieceIndex, LatLng point)?
+  onInsertDragEnd;
   final Color accent;
 
   const DraggableStepMarkersLayer({
@@ -32,6 +41,9 @@ class DraggableStepMarkersLayer extends StatelessWidget {
     required this.onBoundaryDragEnd,
     required this.onBodyDragEnd,
     required this.accent,
+    this.insertHandles = const [],
+    this.onBodyLongPress,
+    this.onInsertDragEnd,
   });
 
   @override
@@ -42,6 +54,38 @@ class DraggableStepMarkersLayer extends StatelessWidget {
 
     return DragMarkers(
       markers: [
+        if (onInsertDragEnd != null)
+          for (final handle in insertHandles)
+            DragMarker(
+              key: ValueKey(
+                'insert-${handle.stepIndex}-${handle.controlIndex}-${handle.point.latitude}-${handle.point.longitude}',
+              ),
+              point: handle.point,
+              size: const Size(30, 30),
+              useLongPress: false,
+              onTap: (_) {},
+              onDragEnd:
+                  (details, latLng) => onInsertDragEnd!(
+                    handle.stepIndex,
+                    handle.controlIndex,
+                    latLng,
+                  ),
+              builder: (ctx, pos, isDragging) {
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  width: isDragging ? 22 : 16,
+                  height: isDragging ? 22 : 16,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: accent, width: 1.6),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.add_rounded, color: accent, size: 11),
+                  ),
+                );
+              },
+            ),
         for (int i = 0; i < boundaryWaypoints.length; i++)
           DragMarker(
             key: ValueKey(
@@ -50,6 +94,8 @@ class DraggableStepMarkersLayer extends StatelessWidget {
             point: boundaryWaypoints[i],
             size: const Size(46, 46),
             useLongPress: false,
+            // Absorb taps so tapping a handle doesn't also tap the map.
+            onTap: (_) {},
             onDragEnd: (details, latLng) => onBoundaryDragEnd(i, latLng),
             onLongDragEnd: (details, latLng) => onBoundaryDragEnd(i, latLng),
             builder: (ctx, pos, isDragging) {
@@ -95,10 +141,17 @@ class DraggableStepMarkersLayer extends StatelessWidget {
             point: handle.point,
             size: const Size(32, 32),
             useLongPress: false,
+            // Absorb taps so tapping a handle doesn't also tap the map.
+            onTap: (_) {},
             onDragEnd: (details, latLng) =>
                 onBodyDragEnd(handle.stepIndex, handle.controlIndex, latLng),
             onLongDragEnd: (details, latLng) =>
                 onBodyDragEnd(handle.stepIndex, handle.controlIndex, latLng),
+            onLongPress:
+                onBodyLongPress == null
+                    ? null
+                    : (_) =>
+                        onBodyLongPress!(handle.stepIndex, handle.controlIndex),
             builder: (ctx, pos, isDragging) {
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 120),

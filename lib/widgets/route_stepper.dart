@@ -77,15 +77,9 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
 
   void _updateStep(int index, String instruction, String details) {
     final updatedSteps = List<route_model.Step>.from(widget.steps);
-    updatedSteps[index] = route_model.Step(
-      mode: widget.steps[index].mode,
+    updatedSteps[index] = widget.steps[index].copyWith(
       instruction: instruction,
       details: details,
-      is24_7: widget.steps[index].is24_7,
-      startTime: widget.steps[index].startTime,
-      endTime: widget.steps[index].endTime,
-      actualFare: widget.steps[index].actualFare,
-      alternateRouteSuggestion: widget.steps[index].alternateRouteSuggestion,
     );
     widget.onStepsChanged(updatedSteps);
   }

@@ -85,6 +85,26 @@ class FollowTarget {
       '${result.distanceMeters.round()}|${result.polyline.length}';
 }
 
+/// A stretch where the vehicle left the followed route and later came back
+/// (or the trip ended first), with the path it actually took. Kept on the
+/// device only; the rider can offer it as a correction afterwards.
+class RideDeviation {
+  /// Distance along the route where the vehicle left it.
+  final double fromMeters;
+
+  /// Where it rejoined; null when the trip ended before rejoining.
+  final double? toMeters;
+  final List<LatLng> points;
+  final double lengthMeters;
+
+  const RideDeviation({
+    required this.fromMeters,
+    required this.toMeters,
+    required this.points,
+    required this.lengthMeters,
+  });
+}
+
 /// Owns the in-progress "follow route" session: what is followed, the GPS
 /// stream, progress along it, and guidance back to it. Living here rather
 /// than in a screen means leaving the screen (e.g. via back) keeps tracking
@@ -173,6 +193,16 @@ class ActiveNavigationService extends ChangeNotifier {
   int _sessionId = 0;
   bool _isSimulating = false;
 
+  /// Off-route stretches shorter than this, or not at vehicle speed, are
+  /// noise or the rider walking — not a different way the vehicle goes.
+  static const _minDeviationMeters = 300.0;
+  static const _traceSpacingMeters = 10.0;
+
+  List<LatLng>? _detourTrace;
+  double _detourFromMeters = 0;
+  final List<double> _detourSpeeds = [];
+  final List<RideDeviation> _deviations = [];
+
   Timer? _idleTimer;
   LatLng? _idleAnchor;
   DateTime _lastMovedAt = DateTime.now();
@@ -211,6 +241,17 @@ class ActiveNavigationService extends ChangeNotifier {
   /// Tracking was paused after a long time without movement; reopening the
   /// route resumes it ([resumeTracking]).
   bool get isPausedForIdle => _isPausedForIdle;
+
+  /// The path the vehicle is taking while it is off the route, for drawing.
+  List<LatLng>? get detourPath =>
+      _guidance.kind == FollowGuidanceKind.vehicleDetour ? _detourTrace : null;
+
+  /// Ends any open off-route stretch and returns this session's deviations.
+  /// Call before [stop], which clears them.
+  List<RideDeviation> finishDeviations() {
+    _closeDeviation(rejoinedAt: null, rejoinPoint: null);
+    return List.unmodifiable(_deviations);
+  }
 
   /// Starts following [target]. [initialPosition] seeds progress so the map
   /// is right before the next fix arrives.
@@ -403,8 +444,57 @@ class ActiveNavigationService extends ChangeNotifier {
       engine.expectedJoinMeters =
           _guidance.target != null ? _guidance.targetAlongMeters : null;
       _updateConnector(LatLng(position.latitude, position.longitude));
+      _trackDeviation(snapshot, here, _speedMps(position));
     }
     _followTicks.tick();
+  }
+
+  /// Records the path taken while off the route; when the vehicle rejoins
+  /// (or arrives), keeps it as a [RideDeviation] if it was a real ride.
+  void _trackDeviation(RouteFollowSnapshot snapshot, LatLng here, double speed) {
+    if (!snapshot.hasProgress) return;
+    if (snapshot.status == RouteFollowStatus.awayFromRoute) {
+      final trace = _detourTrace ??= [snapshot.progressPoint];
+      if (trace.length == 1) {
+        _detourFromMeters = snapshot.progressMeters;
+        _detourSpeeds.clear();
+      }
+      if (_distance.as(LengthUnit.Meter, trace.last, here) >=
+          _traceSpacingMeters) {
+        trace.add(here);
+      }
+      _detourSpeeds.add(speed);
+    } else if (_detourTrace != null) {
+      _closeDeviation(
+        rejoinedAt: snapshot.progressMeters,
+        rejoinPoint: snapshot.progressPoint,
+      );
+    }
+  }
+
+  void _closeDeviation({double? rejoinedAt, LatLng? rejoinPoint}) {
+    final trace = _detourTrace;
+    _detourTrace = null;
+    if (trace == null || trace.length < 2) return;
+    final points = [...trace, if (rejoinPoint != null) rejoinPoint];
+    var length = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      length += _distance.as(LengthUnit.Meter, points[i - 1], points[i]);
+    }
+    final speeds = [..._detourSpeeds]..sort();
+    final medianSpeed = speeds.isEmpty ? 0.0 : speeds[speeds.length ~/ 2];
+    if (length < _minDeviationMeters ||
+        medianSpeed < FollowGuidancePlanner.vehicleSpeedMps) {
+      return;
+    }
+    _deviations.add(
+      RideDeviation(
+        fromMeters: _detourFromMeters,
+        toMeters: rejoinedAt,
+        points: points,
+        lengthMeters: length,
+      ),
+    );
   }
 
   /// GPS-reported speed, or speed between the last two fixes when the
@@ -434,6 +524,9 @@ class ActiveNavigationService extends ChangeNotifier {
     _connectorRemainingMeters = null;
     _isFetchingConnector = false;
     _lastConnectorRequestAt = null;
+    _detourTrace = null;
+    _detourSpeeds.clear();
+    _deviations.clear();
   }
 
   void _updateConnector(LatLng position) {

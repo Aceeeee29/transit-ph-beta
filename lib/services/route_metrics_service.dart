@@ -95,6 +95,9 @@ class RouteMetricsService {
     return totalMinutes.ceil();
   }
 
+  /// Typical travel speed (km/h) of [mode], as used for ETAs.
+  static double speedKmhForMode(String mode) => _getSpeedForMode(mode);
+
   /// Get the average speed for a given mode of transport
   static double _getSpeedForMode(String mode) {
     switch (mode.toLowerCase()) {

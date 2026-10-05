@@ -98,6 +98,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
           widget.contributorId ??
           FirebaseAuth.instance.currentUser?.uid,
       approvalStatus: route_model.RouteApprovalStatus.pending,
+      correctionOf: widget.correctionOf,
     );
   }
 
@@ -552,12 +553,18 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 ),
             ],
           ),
-          if (selectionMode == 'done' && steps.isNotEmpty && _showEditHandles)
+          // While drawing, handles are always on so turns can be fixed as
+          // you go; after Finish they follow the "Drag handles" toggle.
+          if ((selectionMode == 'done' && steps.isNotEmpty && _showEditHandles) ||
+              (selectionMode == 'step' && _stepCount > 0))
             DraggableStepMarkersLayer(
               boundaryWaypoints: editControls.boundaryWaypoints,
               bodyHandles: editControls.bodyHandles,
+              insertHandles: editControls.insertHandles,
               onBoundaryDragEnd: _onBoundaryWaypointDragEnd,
               onBodyDragEnd: _onBodyHandleDragEnd,
+              onBodyLongPress: _onViaPointLongPress,
+              onInsertDragEnd: _onInsertHandleDragEnd,
               accent: _accent,
             ),
         ] else
@@ -619,6 +626,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
         showPreview: false,
         onSnapToRoadToggled: _onSnapToRoadToggled,
         snapToRoadEnabled: _snapToRoadEnabled,
+        allowExpressways: _allowExpressways,
+        onAllowExpresswaysToggled:
+            (value) => _setUiState(() => _expresswayOverride = value),
         orsDistanceKm: totalOrsDistKm,
         orsDurationMinutes: totalOrsDurMinutes,
       ),
@@ -631,7 +641,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
     final String text =
         selectionMode == 'start'
             ? 'Tap on the map to select the starting point'
-            : 'Tap to select next point for $currentMode';
+            : _hasOpenStep
+            ? 'Drawing a $_openStepMode step: tap to extend it, drag points '
+                'or + to fix turns'
+            : 'Tap to start the next $currentMode step';
 
     // NOTE: sits above the bottom-left pins toggle (drawer 0-40,
     // pins 46-80), so bottom is 88 to avoid overlap.
@@ -684,7 +697,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       ),
                     ),
                   ),
-                  if (selectionMode == 'step' && steps.isNotEmpty) ...[
+                  if (selectionMode == 'step' &&
+                      steps.isNotEmpty &&
+                      !_hasOpenStep) ...[
                     const SizedBox(width: 10),
                     GestureDetector(
                       onTap: _onFinishRoutePressed,
@@ -721,7 +736,39 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   ],
                 ],
               ),
-              if (selectionMode == 'step') ...[
+              if (_hasOpenStep) ...[
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _pillAction(
+                      icon: Icons.undo_rounded,
+                      label: 'Undo point',
+                      onTap: _undoOpenStepPoint,
+                    ),
+                    const SizedBox(width: 6),
+                    _pillAction(
+                      icon: Icons.close_rounded,
+                      label: 'Discard',
+                      onTap: _discardOpenStep,
+                    ),
+                    const SizedBox(width: 6),
+                    _pillAction(
+                      icon: Icons.check_rounded,
+                      label: 'Save step',
+                      onTap: _saveOpenStep,
+                      primary: true,
+                    ),
+                  ],
+                ),
+              ],
+              if (selectionMode == 'step' &&
+                  _snapToRoadEnabled &&
+                  (_hasOpenStep ? _openStepMode : currentMode) != 'Walk') ...[
+                const SizedBox(height: 8),
+                _expresswayChip(),
+              ],
+              if (selectionMode == 'step' && !_hasOpenStep) ...[
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 32,
@@ -734,7 +781,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
                       final selected = currentMode == mode;
                       final color = modeColors[mode] ?? _accent;
                       return GestureDetector(
-                        onTap: () => _setUiState(() => currentMode = mode),
+                        // A new mode starts from its own expressway default.
+                        onTap:
+                            () => _setUiState(() {
+                              currentMode = mode;
+                              _expresswayOverride = null;
+                            }),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(
@@ -781,12 +833,88 @@ extension _ContributeScreenSections on _ContributeScreenState {
     );
   }
 
+  Widget _pillAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool primary = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: primary ? const Color(0xFF3EC97A) : _surfaceAlt,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: primary ? const Color(0xFF3EC97A) : _border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: primary ? Colors.white : _textPrimary),
+            const SizedBox(width: 4),
+            TranslatedText(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: primary ? Colors.white : _textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "Expressways: On/Off" for how new and dragged lines are snapped. It
+  /// starts from the mode's default and isn't saved with the route.
+  Widget _expresswayChip() {
+    final on = _allowExpressways;
+    return GestureDetector(
+      onTap: () => _setUiState(() => _expresswayOverride = !on),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: on ? _accentSoft : _surfaceAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: on ? _accent.withValues(alpha: 0.5) : _border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.add_road_rounded,
+              size: 14,
+              color: on ? _accent : _textSecondary,
+            ),
+            const SizedBox(width: 4),
+            TranslatedText(
+              on ? 'Expressways: On' : 'Expressways: Off',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: on ? _accent : _textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStepChipsBarSection() {
     if (steps.isEmpty) return const SizedBox.shrink();
 
     // Stacked above the pins toggle (46-80) and, when selecting points,
     // above the instruction pill as well.
-    final bottom = selectionMode == 'done' ? 88.0 : 180.0;
+    // Clears the instruction pill, which grows with the open-step actions
+    // and the expressway chip.
+    final bottom = selectionMode == 'done' ? 88.0 : 236.0;
 
     return Positioned(
       bottom: bottom,

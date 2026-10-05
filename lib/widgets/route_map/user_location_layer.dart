@@ -34,7 +34,9 @@ class UserLocationLayer extends StatefulWidget {
 
 class _UserLocationLayerState extends State<UserLocationLayer>
     with SingleTickerProviderStateMixin {
-  static const _glide = Duration(milliseconds: 750);
+  /// About one GPS interval, linear: each glide ends as the next fix
+  /// arrives, so the dot moves continuously instead of hop-and-stop.
+  static const _glide = Duration(milliseconds: 900);
 
   /// Further than this is a real jump (e.g. resuming after a gap): no glide.
   static const _snapMeters = 150.0;
@@ -93,7 +95,7 @@ class _UserLocationLayerState extends State<UserLocationLayer>
     final from = _from;
     if (to == null) return null;
     if (from == null || !_controller.isAnimating) return to;
-    final t = Curves.easeOut.transform(_controller.value);
+    final t = _controller.value;
     return LatLng(
       from.latitude + (to.latitude - from.latitude) * t,
       from.longitude + (to.longitude - from.longitude) * t,

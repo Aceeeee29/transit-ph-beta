@@ -443,6 +443,19 @@ class RouteService {
         if (start != null && end != null) {
           routeTitle = '$start to $end';
         }
+
+        final correctionOf = (routeData?['correctionOf'] as String?)?.trim();
+        if (correctionOf != null &&
+            correctionOf.isNotEmpty &&
+            await _mergeCorrection(
+              correctionId: routeId,
+              originalId: correctionOf,
+              correction: routeData!,
+              contributorId: contributorId,
+              routeTitle: routeTitle,
+            )) {
+          return;
+        }
       }
 
       await _firestore.collection('routes').doc(routeId).update({
@@ -486,6 +499,73 @@ class RouteService {
     } catch (_) {
       rethrow;
     }
+  }
+
+  /// What an approved correction replaces in the route it corrects: the
+  /// line, its steps (with their stops and points) and the measures derived
+  /// from them. Everything else — votes, reports, contributor — stays.
+  static const _correctionKeys = [
+    'pathPoints',
+    'stepBoundaries',
+    'steps',
+    'startLat',
+    'startLng',
+    'endLat',
+    'endLng',
+    'distance',
+    'distanceMeters',
+    'eta',
+  ];
+
+  /// Merges an approved rider correction into the route it corrects, then
+  /// deletes the correction so it never shows as a duplicate route. Returns
+  /// false (and changes nothing) when the original route no longer exists,
+  /// in which case the correction is approved as a route of its own.
+  static Future<bool> _mergeCorrection({
+    required String correctionId,
+    required String originalId,
+    required Map<String, dynamic> correction,
+    required String? contributorId,
+    required String routeTitle,
+  }) async {
+    final originalRef = _firestore.collection('routes').doc(originalId);
+    if (!(await originalRef.get()).exists) return false;
+
+    await originalRef.update({
+      for (final key in _correctionKeys)
+        if (correction.containsKey(key)) key: correction[key],
+      'editCount': FieldValue.increment(1),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    final actorId = await _currentActorIdOrSystem();
+    await _writeRouteAuditLog(
+      routeId: originalId,
+      action: 'correction_merged',
+      actorId: actorId,
+      meta: {'correctionId': correctionId, 'correctedBy': contributorId},
+    );
+    await _firestore.collection('routes').doc(correctionId).delete();
+
+    final recipientId = await _resolveNotificationRecipientId(contributorId);
+    if (recipientId != null && recipientId.isNotEmpty) {
+      try {
+        await _incrementApprovedContributionStats(recipientId);
+      } catch (_) {}
+      try {
+        await NotificationsService.addNotification(
+          NotificationModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            userId: recipientId,
+            type: 'route_approved',
+            routeId: originalId,
+            timestamp: DateTime.now(),
+            message:
+                'Your correction to $routeTitle was approved and is now live.',
+          ),
+        );
+      } catch (_) {}
+    }
+    return true;
   }
 
   /// Reject a route — called by moderator

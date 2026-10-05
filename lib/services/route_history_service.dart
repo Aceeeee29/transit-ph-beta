@@ -36,18 +36,7 @@ class RouteHistoryService {
     // Create a deep copy of the current state, preserving all Step fields
     final pathPointsCopy = List<LatLng>.from(pathPoints);
     final stepsCopy = List<route_model.Step>.from(
-      steps.map(
-        (step) => route_model.Step(
-          mode: step.mode,
-          instruction: step.instruction,
-          details: step.details,
-          is24_7: step.is24_7,
-          startTime: step.startTime,
-          endTime: step.endTime,
-          actualFare: step.actualFare,
-          alternateRouteSuggestion: step.alternateRouteSuggestion,
-        ),
-      ),
+      steps.map((step) => step.copyWith()),
     );
     final stepBoundariesCopy = List<int>.from(stepBoundaries);
 

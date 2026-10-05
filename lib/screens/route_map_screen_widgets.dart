@@ -149,11 +149,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final isCompleted = _isStepCompleted(idx);
     final modeColor =
         isCompleted ? _textSecondary : (modeColors[step.mode] ?? _accent);
-    final scheduleView = ScheduleWindowService.findStepView(
-      _scheduleSnapshot,
-      idx,
-    );
-    final stepSchedule = scheduleView?.displayText ?? _stepScheduleText(step);
+    final stepSchedule = _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
     final estimatedFare = isTransport ? _estimateStepFare(idx, step) : 0.0;
@@ -250,6 +246,30 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                         ),
                       ),
                     ],
+                    if (_boardingLabel(step) case final boarding?) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            step.usesDesignatedStops
+                                ? Icons.place_rounded
+                                : Icons.front_hand_outlined,
+                            size: 13,
+                            color: _textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: TranslatedText(
+                              boarding,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (stepSchedule != null) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -258,29 +278,22 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: (scheduleView != null
-                                  ? _scheduleStateColor(scheduleView.state)
-                                  : const Color(0xFFE89A3C))
-                              .withValues(alpha: 0.12),
+                          color: const Color(
+                            0xFFE89A3C,
+                          ).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: (scheduleView != null
-                                    ? _scheduleStateColor(scheduleView.state)
-                                    : const Color(0xFFFFD9AE))
-                                .withValues(alpha: 0.35),
+                            color: const Color(
+                              0xFFFFD9AE,
+                            ).withValues(alpha: 0.35),
                           ),
                         ),
                         child: Text(
-                          scheduleView == null
-                              ? 'Schedule: $stepSchedule'
-                              : stepSchedule,
-                          style: TextStyle(
+                          'Schedule: $stepSchedule',
+                          style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color:
-                                scheduleView != null
-                                    ? _scheduleStateColor(scheduleView.state)
-                                    : const Color(0xFF9A5A17),
+                            color: Color(0xFF9A5A17),
                           ),
                         ),
                       ),
@@ -330,12 +343,12 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFFB9E4C6)),
                         ),
+                        // The regular fare is always shown; the discounted
+                        // one is added when the discount toggle is on.
                         child: Text(
-                          _isDiscountFareEnabled
-                              ? 'Fare ($fareProfileLabel): PHP ${fareValue.toStringAsFixed(0)} '
-                                  '(${step.actualFare != null ? 'actual' : 'estimated'})'
-                              : 'Fare: PHP ${fareValue.toStringAsFixed(0)} '
-                                  '(${step.actualFare != null ? 'actual' : 'estimated'})',
+                          'Fare: PHP ${baseFareValue.toStringAsFixed(0)} '
+                          '(${step.actualFare != null ? 'actual' : 'estimated'})'
+                          '${_isDiscountFareEnabled ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -698,10 +711,6 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               activeColor: _accent,
             ),
           ],
-          if (_scheduleSnapshot != null) ...[
-            const SizedBox(height: 10),
-            _buildScheduleSummaryChip(),
-          ],
           const SizedBox(height: 16),
           _buildSectionLabel('Route Steps (${widget.route.steps.length})'),
           ...widget.route.steps.asMap().entries.map(
@@ -713,37 +722,6 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             ..._routeReports.map(_buildReportTile),
           ],
           const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScheduleSummaryChipSection() {
-    final snapshot = _scheduleSnapshot;
-    if (snapshot == null) return const SizedBox.shrink();
-
-    final color = _scheduleStateColor(snapshot.state);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.timelapse_rounded, size: 14, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              snapshot.summaryText,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -769,7 +747,12 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         RouteMetricsService.calculateRouteDistance(_pathPoints),
       );
     }();
-    final etaValue = _routeEtaLabel();
+    // While following, both count down from where the traveler is.
+    final remaining = _remainingTrip();
+    final etaValue =
+        remaining != null
+            ? RouteMetricsService.formatEtaLabel('${math.max(1, remaining.minutes)}')
+            : _routeEtaLabel();
 
     final scheduleText = _routeScheduleText();
     final trustScore = _trustScore;
@@ -796,8 +779,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
           _metricCard(
             icon: Icons.straighten,
             iconColor: const Color(0xFF9B7FE8),
-            label: 'Distance',
-            value: distanceValue,
+            label: remaining != null ? 'Remaining' : 'Distance',
+            value:
+                remaining != null
+                    ? RouteMetricsService.formatDistance(remaining.meters / 1000)
+                    : distanceValue,
           ),
           if (etaValue != null) ...[
             const SizedBox(width: 10),
@@ -813,7 +799,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             _metricCard(
               icon: Icons.payments_outlined,
               iconColor: _green,
-              label: 'Fare',
+              label: _regularFareNote() ?? 'Fare',
               value: fareLabel,
             ),
           ],

@@ -3,6 +3,21 @@ import 'package:latlong2/latlong.dart';
 import '../data/camanava_places.dart';
 import 'route_follow_engine.dart';
 
+/// A designated stop on a followed step.
+class FollowStop {
+  final LatLng point;
+  final String name;
+  final bool pickup;
+  final bool dropoff;
+
+  const FollowStop({
+    required this.point,
+    required this.name,
+    this.pickup = true,
+    this.dropoff = true,
+  });
+}
+
 /// One step of a followed route, as a range of path indices.
 class FollowStep {
   /// Null when the route carries no step data.
@@ -10,18 +25,22 @@ class FollowStep {
   final int startIndex;
   final int endIndex;
 
+  /// Passengers board/get off only at [stops] (or, for a train step with
+  /// none listed, its two ends). Otherwise pickup is flexible anywhere
+  /// along the step's line.
+  final bool designatedStops;
+  final List<FollowStop> stops;
+
   const FollowStep({
     required this.mode,
     required this.startIndex,
     required this.endIndex,
-  });
+    bool? designatedStops,
+    this.stops = const [],
+  }) : designatedStops = designatedStops ?? mode == 'Train';
 
   bool get isWalk => mode == 'Walk';
-
-  /// Trains can only be boarded at stations. Until routes carry their own
-  /// stops, a train step's stations are its two ends; every other step is
-  /// treated as flexible pickup anywhere along its line.
-  bool get boardsOnlyAtStations => mode == 'Train';
+  bool get isTrain => mode == 'Train';
 }
 
 enum FollowGuidanceKind {
@@ -50,7 +69,13 @@ class FollowGuidance {
 
   /// Mode of the step at [target].
   final String? mode;
-  final bool boardsAtStation;
+
+  /// [target] is a designated stop (or station) rather than any point on
+  /// the line.
+  final bool atDesignatedStop;
+
+  /// The designated stop's name, when it has one.
+  final String? stopName;
   final bool isRouteStart;
 
   /// A recognisable place near [target], if any.
@@ -62,7 +87,8 @@ class FollowGuidance {
     this.targetAlongMeters = 0,
     this.distanceMeters = 0,
     this.mode,
-    this.boardsAtStation = false,
+    this.atDesignatedStop = false,
+    this.stopName,
     this.isRouteStart = false,
     this.placeName,
   });
@@ -118,40 +144,40 @@ class FollowGuidancePlanner {
     LatLng position,
     List<FollowStep> steps,
   ) {
-    RouteMatch? best;
-    FollowStep? bestStep;
     // Boarding this close to the end isn't worth suggesting.
     final latestJoin = engine.totalMeters - _minRideAfterJoinMeters;
+    _Target? best;
     for (final step in steps) {
-      final match = _boardingPoint(engine, position, step, latestJoin);
-      if (match == null) continue;
-      if (match.distance > approachRadiusMeters) continue;
-      if (best == null || match.distance < best.distance) {
-        best = match;
-        bestStep = step;
+      final target = _boardingPoint(engine, position, step, latestJoin);
+      if (target == null) continue;
+      if (target.match.distance > approachRadiusMeters) continue;
+      if (best == null || target.match.distance < best.match.distance) {
+        best = target;
       }
     }
 
-    if (best == null || bestStep == null) {
+    if (best == null) {
       final start = engine.path.first;
       return _guidance(
         FollowGuidanceKind.approach,
-        RouteMatch(
-          segment: 0,
-          distance: _distance.as(LengthUnit.Meter, position, start),
-          along: 0,
-          point: start,
+        _Target(
+          RouteMatch(
+            segment: 0,
+            distance: _distance.as(LengthUnit.Meter, position, start),
+            along: 0,
+            point: start,
+          ),
+          steps.first,
         ),
-        steps.first,
       );
     }
-    return _guidance(FollowGuidanceKind.approach, best, bestStep);
+    return _guidance(FollowGuidanceKind.approach, best);
   }
 
   /// Where [step] can be boarded closest to [position], no later than
-  /// [latestJoin] along the route: its start station for trains, otherwise
-  /// the nearest point on its line.
-  static RouteMatch? _boardingPoint(
+  /// [latestJoin] along the route: its nearest pickup stop when it has
+  /// designated stops, otherwise the nearest point on its line.
+  static _Target? _boardingPoint(
     RouteFollowEngine engine,
     LatLng position,
     FollowStep step,
@@ -159,26 +185,29 @@ class FollowGuidancePlanner {
   ) {
     final from = engine.alongAt(step.startIndex);
     if (from > latestJoin) return null;
-    if (step.boardsOnlyAtStations) {
-      final station = engine.path[step.startIndex];
-      return RouteMatch(
-        segment: step.startIndex,
-        distance: _distance.as(LengthUnit.Meter, position, station),
-        along: from,
-        point: station,
-      );
+    if (step.designatedStops) {
+      _Target? best;
+      for (final stop in _stopsOf(engine, step, pickup: true)) {
+        if (stop.match.along > latestJoin) continue;
+        final distance = _distance.as(LengthUnit.Meter, position, stop.point);
+        if (best == null || distance < best.match.distance) {
+          best = stop.withDistance(distance);
+        }
+      }
+      return best;
     }
     final to = engine.alongAt(step.endIndex);
-    return engine.nearestInRange(
+    final match = engine.nearestInRange(
       position,
       from,
       to < latestJoin ? to : latestJoin,
     );
+    return match == null ? null : _Target(match, step);
   }
 
-  /// Never behind current progress: the next station for trains, otherwise
-  /// the nearest point ahead on the current step, or anywhere ahead if that
-  /// step is out of reach.
+  /// Never behind current progress: the next stop ahead on a step with
+  /// designated stops, otherwise the nearest point ahead on the current
+  /// step, or anywhere ahead if that step is out of reach.
   static FollowGuidance _rejoin(
     RouteFollowEngine engine,
     RouteFollowSnapshot snapshot,
@@ -188,48 +217,109 @@ class FollowGuidancePlanner {
     final progress = snapshot.progressMeters;
     final current = _stepAtSegment(steps, snapshot.progressSegment);
 
-    RouteMatch? match;
-    if (current.boardsOnlyAtStations) {
-      final station = engine.path[current.endIndex];
-      match = RouteMatch(
-        segment: current.endIndex,
-        distance: _distance.as(LengthUnit.Meter, position, station),
-        along: engine.alongAt(current.endIndex),
-        point: station,
+    _Target? target;
+    if (current.designatedStops) {
+      // The vehicle only stops at its stops, so never send the traveler to
+      // an arbitrary point on the line: the next stop ahead, however far,
+      // else the step's end.
+      final ahead = _stopsOf(
+        engine,
+        current,
+        pickup: true,
+      ).where((stop) => stop.match.along > progress);
+      final stop =
+          ahead.isNotEmpty
+              ? ahead.first
+              : _Target(
+                RouteMatch(
+                  segment: current.endIndex,
+                  distance: 0,
+                  along: engine.alongAt(current.endIndex),
+                  point: engine.path[current.endIndex],
+                ),
+                current,
+                isStop: true,
+              );
+      return _guidance(
+        FollowGuidanceKind.rejoin,
+        stop.withDistance(_distance.as(LengthUnit.Meter, position, stop.point)),
       );
     } else {
-      match = engine.nearestInRange(
+      final match = engine.nearestInRange(
         position,
         progress,
         engine.alongAt(current.endIndex),
       );
+      if (match != null) target = _Target(match, current);
     }
-    if (match == null || match.distance > approachRadiusMeters) {
+    if (target == null || target.match.distance > approachRadiusMeters) {
       final ahead = engine.nearestInRange(position, progress, engine.totalMeters);
-      if (ahead != null && (match == null || ahead.distance < match.distance)) {
-        match = ahead;
+      if (ahead != null &&
+          (target == null || ahead.distance < target.match.distance)) {
+        target = _Target(ahead, _stepAtSegment(steps, ahead.segment));
       }
     }
-    if (match == null) return FollowGuidance.none;
-    return _guidance(
-      FollowGuidanceKind.rejoin,
-      match,
-      _stepAtSegment(steps, match.segment),
-    );
+    if (target == null) return FollowGuidance.none;
+    return _guidance(FollowGuidanceKind.rejoin, target);
   }
 
-  static FollowGuidance _guidance(
-    FollowGuidanceKind kind,
-    RouteMatch match,
-    FollowStep step,
-  ) {
+  /// The pickup (or drop-off) stops of a designated [step] in order along
+  /// the route; a train step without listed stations uses its two ends.
+  static List<_Target> _stopsOf(
+    RouteFollowEngine engine,
+    FollowStep step, {
+    required bool pickup,
+  }) {
+    final from = engine.alongAt(step.startIndex);
+    final to = engine.alongAt(step.endIndex);
+    if (step.stops.isEmpty) {
+      return [
+        for (final index in [step.startIndex, step.endIndex])
+          _Target(
+            RouteMatch(
+              segment: index,
+              distance: 0,
+              along: engine.alongAt(index),
+              point: engine.path[index],
+            ),
+            step,
+            isStop: true,
+          ),
+      ];
+    }
+    final stops = <_Target>[];
+    for (final stop in step.stops) {
+      if (pickup ? !stop.pickup : !stop.dropoff) continue;
+      final onLine = engine.nearestInRange(stop.point, from, to);
+      if (onLine == null) continue;
+      stops.add(
+        _Target(
+          RouteMatch(
+            segment: onLine.segment,
+            distance: 0,
+            along: onLine.along,
+            point: stop.point,
+          ),
+          step,
+          isStop: true,
+          stopName: stop.name,
+        ),
+      );
+    }
+    stops.sort((a, b) => a.match.along.compareTo(b.match.along));
+    return stops;
+  }
+
+  static FollowGuidance _guidance(FollowGuidanceKind kind, _Target target) {
+    final match = target.match;
     return FollowGuidance(
       kind: kind,
       target: match.point,
       targetAlongMeters: match.along,
       distanceMeters: match.distance,
-      mode: step.mode,
-      boardsAtStation: step.boardsOnlyAtStations,
+      mode: target.step.mode,
+      atDesignatedStop: target.isStop,
+      stopName: target.stopName,
       isRouteStart: match.along <= 1,
       placeName: nearestCamanavaPlaceName(match.point),
     );
@@ -255,4 +345,28 @@ class FollowGuidancePlanner {
         ? valid
         : [FollowStep(mode: null, startIndex: 0, endIndex: last)];
   }
+}
+
+/// A candidate boarding/rejoin point and the step it belongs to.
+class _Target {
+  final RouteMatch match;
+  final FollowStep step;
+  final bool isStop;
+  final String? stopName;
+
+  const _Target(this.match, this.step, {this.isStop = false, this.stopName});
+
+  LatLng get point => match.point;
+
+  _Target withDistance(double distance) => _Target(
+    RouteMatch(
+      segment: match.segment,
+      distance: distance,
+      along: match.along,
+      point: match.point,
+    ),
+    step,
+    isStop: isStop,
+    stopName: stopName,
+  );
 }

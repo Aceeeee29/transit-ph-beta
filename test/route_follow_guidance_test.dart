@@ -83,7 +83,7 @@ void main() {
       // station at 500 m, not the track right next to you.
       final g = _plan(engine, trainSteps, _at(200, 700));
 
-      expect(g.boardsAtStation, isTrue);
+      expect(g.atDesignatedStop, isTrue);
       expect(g.target, path[5]);
     });
 

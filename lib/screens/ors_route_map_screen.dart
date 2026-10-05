@@ -19,6 +19,7 @@ import '../widgets/location_permission_notice.dart';
 import '../widgets/route_map/follow_guidance_card.dart';
 import '../widgets/route_map/follow_route_layers.dart';
 import '../widgets/route_map/follow_simulator_sheet.dart';
+import '../widgets/route_map/ride_correction_flow.dart';
 import '../widgets/route_map/user_location_layer.dart';
 import '../widgets/translated_text.dart';
 
@@ -80,11 +81,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     // FIX: Initialise animation controller for buttery-smooth camera moves
     _cameraAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 550),
+      // About one GPS interval, linear, so back-to-back follow moves blend
+      // into continuous motion instead of stop-start hops.
+      duration: const Duration(milliseconds: 900),
     );
     _cameraAnim = CurvedAnimation(
       parent: _cameraAnimController,
-      curve: Curves.easeOutCubic,
+      curve: Curves.linear,
     );
     _cameraAnimController.addListener(_onCameraAnimTick);
 
@@ -323,6 +326,12 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
   static const _minHeadingSpeedMps = 1.0;
 
+  /// How close the camera follows: street level on foot, a little wider at
+  /// vehicle speed so more of the road ahead shows.
+  double get _followZoom =>
+      (_currentPosition?.speed ?? 0) > _vehicleZoomSpeedMps ? 16.5 : 17.5;
+  static const _vehicleZoomSpeedMps = 6.0;
+
   void _applyPosition(Position position, LatLng display) {
     _currentPosition = position;
     _displayPosition = display;
@@ -352,7 +361,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     _lastCameraTarget = target;
 
     final targetZoom =
-        _mapController.camera.zoom < 16 ? 16.0 : _mapController.camera.zoom;
+        _followZoom;
     // Negate heading: rotating the map -heading° puts travel direction at top
     final targetRotation = -heading;
 
@@ -395,7 +404,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     // FIX: Smooth move + apply current heading as bearing
     _smoothMoveCamera(
       _displayPosition!,
-      zoom: 16.0,
+      zoom: _followZoom,
       rotation: -_displayHeading,
     );
   }
@@ -447,7 +456,23 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
           ),
     );
     if (!mounted || shouldStop != true) return;
+    await _endNavigationAndOfferCorrection();
+  }
+
+  /// Ends the session, then — if the vehicle went a different way than this
+  /// route — offers to save the ride as a new route.
+  Future<void> _endNavigationAndOfferCorrection() async {
+    final deviations = ActiveNavigationService.instance.finishDeviations();
     _endNavigation();
+    if (!mounted) return;
+    await RideCorrectionFlow.offer(
+      context,
+      deviations: deviations,
+      followedPath: widget.result.polyline,
+      generated: widget.result,
+      originName: widget.originName,
+      destinationName: widget.destinationName,
+    );
   }
 
   void _endNavigation() {
@@ -498,10 +523,14 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
         outline: Colors.white,
         fillWidth: 5.5,
       ),
-      if (_isNavigationStarted)
+      if (_isNavigationStarted) ...[
         ...FollowRouteLayers.connectorLines(
           ActiveNavigationService.instance.connectorPath,
         ),
+        ...FollowRouteLayers.detourLines(
+          ActiveNavigationService.instance.detourPath,
+        ),
+      ],
     ];
   }
 
@@ -698,11 +727,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
             ),
           ),
 
+          // Same layout as a saved route's map: guidance above the controls,
+          // Start/Stop bottom-left, GPS bottom-right, legend top-right.
           if (_guidance.kind != FollowGuidanceKind.none)
             Positioned(
-              top: 60,
               left: 12,
-              right: 12,
+              right: 64,
+              bottom: 342,
               child: FollowGuidanceCard(
                 guidance: _guidance,
                 remainingMeters:
@@ -714,40 +745,24 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
           Positioned(
             left: 12,
-            right: 12,
             bottom: 290,
-            child: Center(child: _buildStartControl()),
+            child: _buildStartControl(),
           ),
 
           if (kDebugMode && _isNavigationStarted && !_hasArrived)
             Positioned(
               right: 12,
-              bottom: 290,
+              bottom: 342,
               child: FollowSimulatorButton(path: widget.result.polyline),
             ),
 
-          // ── My location FAB ──────────────────────────────────────────────────
+          // ── My location: re-centres, and resumes following ────────────────
+          Positioned(right: 12, bottom: 290, child: _buildCenterButton()),
+
+          // ── Mode legend (top-right) ──────────────────────────────────────────
           Positioned(
             right: 12,
-            bottom: 240,
-            child: FloatingActionButton.small(
-              heroTag: 'locate',
-              onPressed: _isLocating ? null : _centerOnMe,
-              backgroundColor: Colors.white,
-              child: _isLocating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(Icons.my_location, color: Colors.blue.shade700),
-            ),
-          ),
-
-          // ── Mode legend (bottom-left) ────────────────────────────────────────
-          Positioned(
-            left: 12,
-            bottom: 240,
+            top: 60,
             child: Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 8),
@@ -1069,45 +1084,76 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildFollowToggle(),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _stopNavigation,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.red.shade300),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+    // Re-centring and resuming follow is the GPS button on the right.
+    return GestureDetector(
+      onTap: _stopNavigation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade300),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.stop_rounded, size: 16, color: Colors.red.shade600),
-                const SizedBox(width: 6),
-                TranslatedText(
-                  'Stop',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.red.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.stop_rounded, size: 16, color: Colors.red.shade600),
+            const SizedBox(width: 6),
+            TranslatedText(
+              'Stop',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.red.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Re-centres on the traveler; while following it also resumes the
+  /// camera follow, and shows solid blue while the camera is following.
+  Widget _buildCenterButton() {
+    final following = _isNavigationStarted && _isAutoFollowEnabled;
+    final accent = Colors.blue.shade700;
+    return GestureDetector(
+      onTap: _isLocating ? null : _centerOnMe,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: following ? accent : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: following ? accent : Colors.grey.shade300),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child:
+            _isLocating
+                ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : Icon(
+                  following ? Icons.navigation_rounded : Icons.my_location,
+                  color: following ? Colors.white : accent,
+                  size: 20,
+                ),
+      ),
     );
   }
 
@@ -1153,7 +1199,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
           ),
           const SizedBox(width: 8),
           FilledButton(
-            onPressed: _endNavigation,
+            onPressed: _endNavigationAndOfferCorrection,
             style: FilledButton.styleFrom(
               backgroundColor: Colors.green.shade600,
               padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -1162,58 +1208,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
             child: const TranslatedText('Done'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFollowToggle() {
-    return GestureDetector(
-      onTap: () =>
-          setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isAutoFollowEnabled
-                ? Colors.blue.shade300
-                : Colors.grey.shade300,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _isAutoFollowEnabled
-                  ? Icons.gps_fixed_rounded
-                  : Icons.gps_not_fixed_rounded,
-              size: 16,
-              color: _isAutoFollowEnabled
-                  ? Colors.blue.shade700
-                  : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _isAutoFollowEnabled ? 'Following' : 'Follow paused',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _isAutoFollowEnabled
-                    ? Colors.blue.shade700
-                    : Colors.grey.shade700,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

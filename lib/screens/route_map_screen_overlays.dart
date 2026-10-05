@@ -28,83 +28,33 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: _toggleAutoFollowEnabled,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color:
-                    _isAutoFollowEnabled
-                        ? _accent.withValues(alpha: 0.45)
-                        : _border,
+    // Re-centring and resuming follow is the GPS button on the right.
+    return GestureDetector(
+      onTap: _stopNavigation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        // Solid background: a translucent one washed out over the map.
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _danger.withValues(alpha: 0.45)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.stop_rounded, color: _danger, size: 17),
+            SizedBox(width: 6),
+            TranslatedText(
+              'Stop',
+              style: TextStyle(
+                color: _danger,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _isAutoFollowEnabled
-                      ? Icons.gps_fixed_rounded
-                      : Icons.gps_not_fixed_rounded,
-                  color: _isAutoFollowEnabled ? _accent : _textSecondary,
-                  size: 17,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: TranslatedText(
-                    _isAutoFollowEnabled ? 'Following' : 'Follow paused',
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: _isAutoFollowEnabled ? _accent : _textSecondary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _stopNavigation,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            // Solid background: a translucent one washed out over the map.
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _danger.withValues(alpha: 0.45)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.stop_rounded, color: _danger, size: 17),
-                const SizedBox(width: 6),
-                const Flexible(
-                  child: TranslatedText(
-                    'Stop',
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: _danger,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -223,16 +173,19 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
     );
   }
 
+  /// Re-centres on the traveler; while following it also resumes the
+  /// camera follow, and shows solid blue while the camera is following.
   Widget _buildCenterButtonSection() {
+    final following = _isNavigationStarted && _isAutoFollowEnabled;
     return GestureDetector(
       onTap: _centerOnCurrentLocation,
       child: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: _surface,
+          color: following ? _accent : _surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
+          border: Border.all(color: following ? _accent : _border),
           boxShadow: [
             BoxShadow(
               color: _accent.withValues(alpha: 0.12),
@@ -241,7 +194,11 @@ extension _RouteMapScreenMapSections on _RouteMapScreenState {
             ),
           ],
         ),
-        child: const Icon(Icons.my_location_rounded, color: _accent, size: 20),
+        child: Icon(
+          following ? Icons.navigation_rounded : Icons.my_location_rounded,
+          color: following ? Colors.white : _accent,
+          size: 20,
+        ),
       ),
     );
   }

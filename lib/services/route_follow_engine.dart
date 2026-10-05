@@ -115,6 +115,10 @@ class RouteFollowEngine {
   /// position more than once, joining prefers the pass nearest this.
   double? expectedJoinMeters;
 
+  /// Index of the segment containing the point [meters] along the route.
+  int segmentAt(double meters) =>
+      _firstSegmentEndingAfter(meters.clamp(0, totalMeters).toDouble());
+
   /// Distance along the route of vertex [index].
   double alongAt(int index) => _cumulative[index.clamp(0, path.length - 1)];
 

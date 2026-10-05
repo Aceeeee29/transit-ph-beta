@@ -7,6 +7,7 @@ import '../services/moderation_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/route_preview.dart';
+import 'contribute_screen.dart';
 part 'moderator_screen_route_cards.dart';
 part 'moderator_screen_user_management.dart';
 
@@ -281,10 +282,35 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   void _openRoutePreview(route_model.Route route) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RoutePreview(
+        builder: (previewContext) => RoutePreview(
           route: route,
           readOnly: true,
+          onEdit: () => _openRouteEditor(previewContext, route),
         ),
+      ),
+    );
+  }
+
+  /// Lets a moderator correct a submitted route's line, steps and stops in
+  /// the same editor contributors use. The edit is saved as the original
+  /// contributor's route, stays pending, and is logged with the moderator
+  /// as the actor, so it is approved like any other review.
+  void _openRouteEditor(BuildContext previewContext, route_model.Route route) {
+    Navigator.of(previewContext).push(
+      MaterialPageRoute(
+        builder:
+            (editorContext) => ContributeScreen(
+              routeToEdit: route,
+              onRouteSubmitted: (updated) async {
+                await RouteService.updateRoute(updated);
+                if (!editorContext.mounted) return;
+                // Back to the review list, past the stale preview.
+                Navigator.of(editorContext)
+                  ..pop()
+                  ..pop();
+                widget.onRoutesModerated?.call();
+              },
+            ),
       ),
     );
   }

@@ -35,6 +35,10 @@ class Route {
   final DateTime? editedAt;
   final int editCount;
 
+  /// Set on a rider's suggested correction: the id of the route it
+  /// corrects. Approving it merges its line into that route.
+  final String? correctionOf;
+
   Route({
     required this.id,
     required this.startLocation,
@@ -65,6 +69,7 @@ class Route {
     this.isEdited = false,
     this.editedAt,
     this.editCount = 0,
+    this.correctionOf,
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
@@ -86,6 +91,14 @@ class Route {
               'endTime': s.endTime,
               'actualFare': s.actualFare,
               'alternateRouteSuggestion': s.alternateRouteSuggestion,
+              if (s.boarding != null) 'boarding': s.boarding!.name,
+              if (s.stops.isNotEmpty)
+                'stops': s.stops.map((stop) => stop.toJson()).toList(),
+              if (s.controlPoints.isNotEmpty)
+                'controlPoints':
+                    s.controlPoints
+                        .map((p) => {'lat': p.latitude, 'lng': p.longitude})
+                        .toList(),
             },
           )
           .toList(),
@@ -121,6 +134,7 @@ class Route {
       'isEdited': isEdited,
       'editedAt': editedAt != null ? Timestamp.fromDate(editedAt!) : null,
       'editCount': editCount,
+      if (correctionOf != null) 'correctionOf': correctionOf,
     };
   }
 
@@ -157,6 +171,16 @@ class Route {
                 actualFare: (s['actualFare'] as num?)?.toDouble(),
               alternateRouteSuggestion:
                   s['alternateRouteSuggestion'] as String?,
+              boarding: StepBoarding.parse(s['boarding']),
+              stops: RouteStop.listFromJson(s['stops']),
+              controlPoints: [
+                for (final p in (s['controlPoints'] as List? ?? const []))
+                  if (p is Map && p['lat'] is num && p['lng'] is num)
+                    LatLng(
+                      (p['lat'] as num).toDouble(),
+                      (p['lng'] as num).toDouble(),
+                    ),
+              ],
             ),
           )
           .toList(),
@@ -217,6 +241,7 @@ class Route {
       editCount: json['editCount'] is int
           ? json['editCount']
           : int.tryParse(json['editCount']?.toString() ?? '0') ?? 0,
+      correctionOf: json['correctionOf'] as String?,
     );
   }
 }
@@ -231,6 +256,20 @@ class Step {
   final double? actualFare;
   final String? alternateRouteSuggestion;
 
+  /// Where passengers can board and get off along this step. Null for
+  /// steps saved before this existed, treated as [StepBoarding.flexible].
+  final StepBoarding? boarding;
+
+  /// Recognised stops on this step; optional even when [boarding] is
+  /// designated.
+  final List<RouteStop> stops;
+
+  /// The points the contributor's line passes through, in order (start,
+  /// via points, end). Each piece between two of them was snapped or drawn
+  /// on its own, so editing one point re-routes only its neighbouring
+  /// pieces. Empty for steps saved before this existed.
+  final List<LatLng> controlPoints;
+
   Step({
     required this.mode,
     required this.instruction,
@@ -240,7 +279,124 @@ class Step {
     this.endTime,
     this.actualFare,
     this.alternateRouteSuggestion,
+    this.boarding,
+    this.stops = const [],
+    this.controlPoints = const [],
   });
+
+  /// Default pickup rule for a new step of [mode]: buses, trains and FX/vans
+  /// mostly stop at designated places; jeepneys and tricycles stop on
+  /// request almost anywhere.
+  static StepBoarding defaultBoardingFor(String mode) {
+    switch (mode) {
+      case 'Bus':
+      case 'Train':
+      case 'FX/Van':
+        return StepBoarding.designated;
+      default:
+        return StepBoarding.flexible;
+    }
+  }
+
+  /// Passengers can only board/get off at [stops] — or, when none are
+  /// mapped yet, only at the step's two ends (its terminals). Trains always
+  /// work this way. Steps saved before [boarding] existed stay flexible.
+  bool get usesDesignatedStops =>
+      mode == 'Train' || boarding == StepBoarding.designated;
+
+  Step copyWith({
+    String? instruction,
+    String? details,
+    StepBoarding? boarding,
+    List<RouteStop>? stops,
+    List<LatLng>? controlPoints,
+  }) {
+    return Step(
+      mode: mode,
+      instruction: instruction ?? this.instruction,
+      details: details ?? this.details,
+      is24_7: is24_7,
+      startTime: startTime,
+      endTime: endTime,
+      actualFare: actualFare,
+      alternateRouteSuggestion: alternateRouteSuggestion,
+      boarding: boarding ?? this.boarding,
+      stops: stops ?? this.stops,
+      controlPoints: controlPoints ?? this.controlPoints,
+    );
+  }
+}
+
+enum StepBoarding {
+  /// Board and get off anywhere along the line (flagging down a jeepney).
+  flexible,
+
+  /// Board and get off only at designated stops.
+  designated;
+
+  static StepBoarding? parse(dynamic value) {
+    for (final v in StepBoarding.values) {
+      if (v.name == value) return v;
+    }
+    return null;
+  }
+}
+
+/// A recognised stop on a step. Its place along the route is worked out
+/// from its coordinates, so editing the route's shape can't misplace it.
+class RouteStop {
+  final double lat;
+  final double lng;
+  final String name;
+  final bool pickup;
+  final bool dropoff;
+
+  const RouteStop({
+    required this.lat,
+    required this.lng,
+    required this.name,
+    this.pickup = true,
+    this.dropoff = true,
+  });
+
+  LatLng get point => LatLng(lat, lng);
+
+  RouteStop copyWith({String? name, bool? pickup, bool? dropoff}) => RouteStop(
+    lat: lat,
+    lng: lng,
+    name: name ?? this.name,
+    pickup: pickup ?? this.pickup,
+    dropoff: dropoff ?? this.dropoff,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'lat': lat,
+    'lng': lng,
+    'name': name,
+    'pickup': pickup,
+    'dropoff': dropoff,
+  };
+
+  static List<RouteStop> listFromJson(dynamic value) {
+    if (value is! List) return const [];
+    final stops = <RouteStop>[];
+    for (final raw in value) {
+      if (raw is! Map) continue;
+      final lat = (raw['lat'] as num?)?.toDouble();
+      final lng = (raw['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) continue;
+      stops.add(
+        RouteStop(
+          lat: lat,
+          lng: lng,
+          name: raw['name']?.toString() ?? '',
+          pickup: raw['pickup'] as bool? ?? true,
+          dropoff: raw['dropoff'] as bool? ?? true,
+        ),
+      );
+    }
+    return stops;
+  }
 }
 
 class Report {

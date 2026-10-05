@@ -112,6 +112,31 @@ class FollowRouteLayers {
     ];
   }
 
+  static const detourColor = Color(0xFFE8833A);
+
+  /// The path the vehicle is actually taking while off the route. Shown
+  /// as it goes; afterwards the rider can offer it as a correction.
+  static List<Polyline> detourLines(List<LatLng>? detour) {
+    if (detour == null || detour.length < 2) return const [];
+    return [
+      Polyline(
+        points: detour,
+        color: Colors.white,
+        strokeWidth: 7.0,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+      ),
+      Polyline(
+        points: detour,
+        color: detourColor,
+        strokeWidth: 4.5,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+        pattern: StrokePattern.dashed(segments: const [12, 8]),
+      ),
+    ];
+  }
+
   static Marker? targetMarker(FollowGuidance guidance) {
     final target = guidance.target;
     if (target == null) return null;

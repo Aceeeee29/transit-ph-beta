@@ -123,7 +123,7 @@ class RoutePreview extends StatelessWidget {
           ],
         ),
         actions: [
-          if (!readOnly && onEdit != null)
+          if (onEdit != null)
             GestureDetector(
               onTap: onEdit,
               child: Container(
@@ -775,6 +775,30 @@ class RoutePreview extends StatelessWidget {
           child: const Icon(Icons.flag, color: Colors.red, size: 40),
         ),
       );
+    }
+
+    // Designated stops, so reviewers can check them.
+    for (final step in route.steps) {
+      if (!step.usesDesignatedStops) continue;
+      for (final stop in step.stops) {
+        markers.add(
+          Marker(
+            point: stop.point,
+            width: 16,
+            height: 16,
+            child: Tooltip(
+              message: stop.name,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _accent, width: 3),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
     }
 
     // Step boundary markers

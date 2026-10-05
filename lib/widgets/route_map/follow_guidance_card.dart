@@ -84,6 +84,11 @@ class FollowGuidanceCard extends StatelessWidget {
             'resumes when you are back on the route.';
       case FollowGuidanceKind.rejoin:
         if (isRerouting) return 'Rerouting...';
+        final stopName = guidance.stopName;
+        if (guidance.atDesignatedStop && stopName != null) {
+          return 'Off route. Walk ${_distance()} to $stopName to rejoin '
+              'the route.';
+        }
         final place = guidance.placeName;
         return 'Off route. Walk ${_distance()} to rejoin the route'
             '${place != null ? ' near $place' : ''}.';
@@ -99,10 +104,20 @@ class FollowGuidanceCard extends StatelessWidget {
     }
     final place = guidance.placeName;
     final mode = guidance.mode;
-    if (guidance.boardsAtStation) {
-      return 'A train line passes near you. Walk $distance to '
-          '${place != null ? 'the station near $place' : 'the station'} '
-          'to board.';
+    if (guidance.atDesignatedStop) {
+      final isTrain = mode == 'Train';
+      final stop =
+          guidance.stopName ??
+          (place != null
+              ? 'the ${isTrain ? 'station' : 'stop'} near $place'
+              : 'the ${isTrain ? 'station' : 'stop'}');
+      final line =
+          isTrain
+              ? 'A train line'
+              : mode == null
+              ? 'This route'
+              : '${_article(mode)} ${_modeLabel(mode)} route';
+      return '$line passes near you. Walk $distance to $stop to board.';
     }
     if (mode == null || mode == 'Walk') {
       return 'This route passes near you. Walk $distance to join it'

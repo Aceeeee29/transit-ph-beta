@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/camanava_places.dart';
 import '../models/route.dart' as route_model;
+import 'route_follow_engine.dart';
 import 'transport_mode_inference.dart';
 
 /// A single vehicle ride between two stops.
@@ -105,6 +106,9 @@ class CommunityRoute {
           instruction: step.instruction,
           path: stepPath,
           actualFare: step.actualFare,
+          designatedStops: step.usesDesignatedStops,
+          stops:
+              step.usesDesignatedStops ? step.stops : const <route_model.RouteStop>[],
         ),
       );
     }
@@ -125,12 +129,21 @@ class CommunityRouteStep {
   final List<LatLng> path;
   final double? actualFare;
 
+  /// Riders board/get off only at [stops], or at the step's two ends when
+  /// none are mapped. False: anywhere along [path].
+  final bool designatedStops;
+
+  /// Designated stops (only meaningful when [designatedStops]).
+  final List<route_model.RouteStop> stops;
+
   const CommunityRouteStep({
     required this.mode,
     required this.instruction,
     required this.path,
     this.actualFare,
-  });
+    bool? designatedStops,
+    this.stops = const [],
+  }) : designatedStops = designatedStops ?? stops.length > 0;
 }
 
 /// 1 leg = direct, 2 legs = one transfer.
@@ -1087,8 +1100,14 @@ class SupabaseRouteService {
         final path = step.path;
         if (path.length < 2 || !_pathTouchesBounds(path, bounds)) continue;
 
+        // Designated stops (plus the step's two ends) when the contributor
+        // listed them; otherwise boardable every ~300 m, or station ends
+        // only for trains.
+        final stopNodes = _designatedStopNodes(step);
         final nodePathIndices =
-            step.mode == 'Train'
+            stopNodes != null
+                ? [for (final s in stopNodes) s.pathIndex]
+                : step.mode == 'Train'
                 ? [0, path.length - 1]
                 : _sampleIndicesAlongPath(path, _communityNodeSpacingKm);
         final alongKm = _cumulativeKm(path);
@@ -1103,6 +1122,8 @@ class SupabaseRouteService {
             name = route.startLocation;
           } else if (i == lastStepIndex && k == nodePathIndices.length - 1) {
             name = route.endLocation;
+          } else if (stopNodes?[k].name case final stopName?) {
+            name = stopName;
           } else {
             final landmark = _nearestLandmark(point, transitStops);
             if (landmark != null) name = 'the stop near $landmark';
@@ -1149,6 +1170,10 @@ class SupabaseRouteService {
         };
         final speedKmh = _fallbackSpeedForMode(step.mode);
 
+        bool canRide(int from, int to) =>
+            stopNodes == null ||
+            (stopNodes[from].pickup && stopNodes[to].dropoff);
+
         for (var a = 0; a < nodeIds.length - 1; a++) {
           for (var b = a + 1; b < nodeIds.length; b++) {
             final km =
@@ -1170,8 +1195,12 @@ class SupabaseRouteService {
                   weightFactor: f,
                 );
 
-            addEdge(ride(nodeIds[a], nodeIds[b], tripId, _communityWeightFactor));
-            if (allowReversedCommunityLegs) {
+            if (canRide(a, b)) {
+              addEdge(
+                ride(nodeIds[a], nodeIds[b], tripId, _communityWeightFactor),
+              );
+            }
+            if (allowReversedCommunityLegs && canRide(b, a)) {
               addEdge(
                 ride(
                   nodeIds[b],
@@ -1185,6 +1214,45 @@ class SupabaseRouteService {
         }
       }
     }
+  }
+
+  /// The boardable points of a step with designated stops, in order along
+  /// its path: the step's two ends plus each stop, at the nearest path
+  /// vertex — just the ends when no stops are mapped yet. Null for
+  /// flexible pickup.
+  static List<({int pathIndex, String? name, bool pickup, bool dropoff})>?
+  _designatedStopNodes(CommunityRouteStep step) {
+    if (!step.designatedStops) return null;
+    final path = step.path;
+    final line = RouteFollowEngine(path);
+    final byIndex =
+        <int, ({int pathIndex, String? name, bool pickup, bool dropoff})>{
+          0: (pathIndex: 0, name: null, pickup: true, dropoff: true),
+          path.length - 1: (
+            pathIndex: path.length - 1,
+            name: null,
+            pickup: true,
+            dropoff: true,
+          ),
+        };
+    for (final stop in step.stops) {
+      final match = line.nearestInRange(stop.point, 0, line.totalMeters);
+      if (match == null) continue;
+      final a = match.segment;
+      final b = math.min(a + 1, path.length - 1);
+      final index =
+          _haversineKm(path[a], match.point) <= _haversineKm(path[b], match.point)
+              ? a
+              : b;
+      byIndex[index] = (
+        pathIndex: index,
+        name: stop.name.isEmpty ? null : stop.name,
+        pickup: stop.pickup,
+        dropoff: stop.dropoff,
+      );
+    }
+    return byIndex.values.toList()
+      ..sort((x, y) => x.pathIndex.compareTo(y.pathIndex));
   }
 
   static const _landmarkRadiusKm = 0.35;
@@ -1869,6 +1937,63 @@ class SupabaseRouteService {
       default:
         return _fallbackTransitSpeedKmh;
     }
+  }
+
+  // ── Transit stops along a drawn path (stop suggestions) ───────────────────
+
+  /// GTFS stops within [maxMeters] of [path], in order along it, for
+  /// suggesting a contributed step's stops. Stops with the same name close
+  /// together (one per direction of the road) are merged.
+  static Future<List<({String name, LatLng point, double alongMeters})>>
+  findStopsAlongPath(List<LatLng> path, {double maxMeters = 40}) async {
+    if (path.length < 2) return const [];
+    final line = RouteFollowEngine(path);
+
+    var minLat = path.first.latitude, maxLat = minLat;
+    var minLng = path.first.longitude, maxLng = minLng;
+    for (final p in path) {
+      minLat = math.min(minLat, p.latitude);
+      maxLat = math.max(maxLat, p.latitude);
+      minLng = math.min(minLng, p.longitude);
+      maxLng = math.max(maxLng, p.longitude);
+    }
+    final latPad = maxMeters / 111000.0;
+    final lngPad = maxMeters / (111000.0 * math.cos(minLat * math.pi / 180));
+
+    final rows = <Map<String, dynamic>>[];
+    var from = 0;
+    while (rows.length < _dijkstraStopLimit * 2) {
+      final page = await _client
+          .schema('gtfs')
+          .from('stops')
+          .select('stop_name, stop_lat, stop_lon')
+          .gte('stop_lat', minLat - latPad)
+          .lte('stop_lat', maxLat + latPad)
+          .gte('stop_lon', minLng - lngPad)
+          .lte('stop_lon', maxLng + lngPad)
+          .range(from, from + _pageSize - 1);
+      rows.addAll(page.map((r) => Map<String, dynamic>.from(r)));
+      if (page.length < _pageSize) break;
+      from += _pageSize;
+    }
+
+    final found = <({String name, LatLng point, double alongMeters})>[];
+    for (final row in rows) {
+      final name = row['stop_name']?.toString().trim() ?? '';
+      if (name.isEmpty) continue;
+      final point = LatLng(_asDouble(row['stop_lat']), _asDouble(row['stop_lon']));
+      final match = line.nearestInRange(point, 0, line.totalMeters);
+      if (match == null || match.distance > maxMeters) continue;
+      final duplicate = found.any(
+        (f) =>
+            f.name.toLowerCase() == name.toLowerCase() &&
+            (f.alongMeters - match.along).abs() < 80,
+      );
+      if (duplicate) continue;
+      found.add((name: name, point: match.point, alongMeters: match.along));
+    }
+    found.sort((a, b) => a.alongMeters.compareTo(b.alongMeters));
+    return found;
   }
 
   // ── Find nearest stops to a LatLng (sorted by distance) ───────────────────

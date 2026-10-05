@@ -41,11 +41,13 @@ class _StepEditControls {
   final List<List<LatLng>> stepControlPoints;
   final List<LatLng> boundaryWaypoints;
   final List<DraggableStepBodyHandle> bodyHandles;
+  final List<DraggableStepBodyHandle> insertHandles;
 
   const _StepEditControls({
     required this.stepControlPoints,
     required this.boundaryWaypoints,
     required this.bodyHandles,
+    this.insertHandles = const [],
   });
 
   factory _StepEditControls.empty() {
@@ -66,9 +68,18 @@ class ContributeScreen extends StatefulWidget {
   final MapTabMode mapMode;
   final ValueChanged<MapTabMode>? onMapModeChanged;
 
+  /// A route to start from that is submitted as a new route (e.g. a ride
+  /// recorded while following), unlike [routeToEdit] which updates one.
+  final route_model.Route? draftRoute;
+
+  /// When set, the submitted route is a suggested correction of this route.
+  final String? correctionOf;
+
   const ContributeScreen({
     super.key,
     required this.onRouteSubmitted,
+    this.draftRoute,
+    this.correctionOf,
     this.routeToEdit,
     this.contributorId,
     this.quickRouteToken,
@@ -96,9 +107,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   List<int> stepBoundaries = [];
   List<double?> _stepOrsDistM = [];
   List<double?> _stepOrsDurS = [];
-  double? _pendingOrsDistM;
-  double? _pendingOrsDurS;
-  int? _pendingStepStartIndex;
   bool _isPlacingStep = false;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
@@ -107,6 +115,32 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool _showNotificationOverlay = false;
   bool _isFormExpanded = false;
   bool _snapToRoadEnabled = true;
+
+  /// The contributor's "Allow expressways" choice; null follows the mode's
+  /// default. Not saved with the route: the drawn line itself is what
+  /// records where the vehicle goes.
+  bool? _expresswayOverride;
+
+  bool get _allowExpressways =>
+      _expresswayOverride ??
+      RoutingService.defaultAllowsExpressways(currentMode);
+
+  /// The step being drawn: its start, then each tap, in order. Empty when
+  /// no step is open. An open step extends with every tap and can be
+  /// adjusted by dragging before "Save step" asks for its details.
+  List<LatLng> _openStepControls = [];
+  String _openStepMode = 'Jeepney';
+
+  bool get _hasOpenStep => _openStepControls.length >= 2;
+
+  /// Saved steps plus the open one, which acts as the last step.
+  int get _stepCount => steps.length + (_hasOpenStep ? 1 : 0);
+
+  List<LatLng> _controlsForStep(int index) =>
+      index < steps.length ? steps[index].controlPoints : _openStepControls;
+
+  String _modeForStep(int index) =>
+      index < steps.length ? steps[index].mode : _openStepMode;
   bool _showEditHandles = false;
   bool _showPins = true;
   bool _showTutorial = false;
@@ -267,8 +301,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
   bool get _isQuickCreateMode => _activeQuickRouteToken != null;
 
   void _loadRouteToEdit() {
-    if (widget.routeToEdit != null) {
-      final route = widget.routeToEdit!;
+    final route = widget.routeToEdit ?? widget.draftRoute;
+    if (route != null) {
       setState(() {
         pathPoints = List<LatLng>.from(route.pathPoints);
         steps = List<route_model.Step>.from(route.steps);
@@ -434,49 +468,132 @@ class _ContributeScreenState extends State<ContributeScreen> {
         }
       }
     } else if (selectionMode == 'step') {
-      if (pathPoints.isNotEmpty && !_isPlacingStep) {
-        _isPlacingStep = true;
-        final lastPoint = pathPoints.last;
-        _pendingStepStartIndex = pathPoints.length;
-
-        if (_snapToRoadEnabled) {
-          try {
-            final result = await RoutingService.snapToRoad(
-              origin: lastPoint,
-              destination: point,
-              mode: currentMode,
-            );
-            if (result != null && result.polyline.isNotEmpty) {
-              _pendingOrsDistM = result.distanceMeters;
-              _pendingOrsDurS = result.durationSeconds;
-              setState(() => pathPoints.addAll(result.polyline));
-              _isPlacingStep = false;
-              _showStepDialog();
-              return;
-            }
-          } catch (e) {
-            if (!mounted) {
-              _isPlacingStep = false;
-              return;
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: TranslatedText(
-                  'Snap-to-road failed, using straight line instead',
-                ),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        }
-
-        _pendingOrsDistM = null;
-        _pendingOrsDurS = null;
-        setState(() => pathPoints.add(point));
+      if (pathPoints.isEmpty || _isPlacingStep) return;
+      _isPlacingStep = true;
+      try {
+        await _extendOpenStep(point);
+      } finally {
         _isPlacingStep = false;
-        _showStepDialog();
       }
     }
+  }
+
+  /// Opens a step at the end of the route (in the current mode) or extends
+  /// the open one to [point]. Each tap is its own short piece, so a long
+  /// ride drawn tap by tap follows the vehicle's real roads instead of
+  /// whatever the router picks across one long jump.
+  Future<void> _extendOpenStep(LatLng point) async {
+    final opening = !_hasOpenStep;
+    final mode = opening ? currentMode : _openStepMode;
+    final from = opening ? pathPoints.last : _openStepControls.last;
+    final piece = await ContributeRouteEditService.pieceRouter(
+      mode: mode,
+      snapToRoadEnabled: _snapToRoadEnabled,
+      allowExpressways: _allowExpressways,
+    )(from, point);
+    if (!mounted) return;
+
+    setState(() {
+      if (opening) {
+        _openStepMode = mode;
+        _openStepControls = [from];
+      }
+      pathPoints.addAll(
+        pathPoints.isNotEmpty && piece.first == pathPoints.last
+            ? piece.skip(1)
+            : piece,
+      );
+      // Where the line actually ends: on the road for vehicles, even when
+      // the tap was off it.
+      _openStepControls = [..._openStepControls, piece.last];
+    });
+    if (_snapToRoadEnabled && piece.length <= 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TranslatedText(
+            'Could not follow the roads here, using a straight line.',
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Removes the open step's last tapped point (and its piece); discards
+  /// the step when only one piece is left.
+  void _undoOpenStepPoint() {
+    if (!_hasOpenStep) return;
+    if (_openStepControls.length <= 2) {
+      _discardOpenStep();
+      return;
+    }
+    final openStart = steps.isEmpty ? 0 : stepBoundaries.last;
+    final geometry = StepGeometry.fromPath(
+      _stepPath(steps.length),
+      _openStepControls,
+    );
+    final kept = geometry.pieces.sublist(0, geometry.pieces.length - 1);
+    final keptPath = <LatLng>[];
+    for (final piece in kept) {
+      keptPath.addAll(
+        keptPath.isNotEmpty && piece.first == keptPath.last
+            ? piece.skip(1)
+            : piece,
+      );
+    }
+    setState(() {
+      pathPoints = [...pathPoints.sublist(0, openStart), ...keptPath];
+      _openStepControls = _openStepControls.sublist(
+        0,
+        _openStepControls.length - 1,
+      );
+    });
+  }
+
+  void _discardOpenStep() {
+    setState(() {
+      // Back to where the last saved step ended (or the start point).
+      final keep = steps.isEmpty ? 1 : stepBoundaries.last + 1;
+      if (keep < pathPoints.length) pathPoints = pathPoints.sublist(0, keep);
+      _openStepControls = [];
+    });
+  }
+
+  /// Asks for the open step's details, then saves it with its points.
+  void _saveOpenStep() {
+    if (!_hasOpenStep) return;
+    showDialog(
+      context: context,
+      builder:
+          (_) => StepDialog(
+            mode: _openStepMode,
+            modeColors: modeColors,
+            getModeIcon: _getModeIcon,
+            stepPath: _stepPath(steps.length),
+            // Cancelling keeps the step open for more drawing.
+            onCancel: () {},
+            onSaved: (step) {
+              setState(() {
+                steps.add(step.copyWith(controlPoints: _openStepControls));
+                stepBoundaries.add(pathPoints.length - 1);
+                // Measured from the drawn line when the route is built.
+                _stepOrsDistM.add(null);
+                _stepOrsDurS.add(null);
+                _openStepControls = [];
+              });
+              _saveToHistory();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Step ${steps.length} saved. Tap the map to start the '
+                    'next step, or tap Finish Route.',
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+    );
   }
 
   /// POI/nearby-place pin scale for the current zoom: 0 (hidden) below
@@ -606,57 +723,31 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Dialog launchers ────────────────────────────────────────────────────────
 
-  void _showStepDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (_) => StepDialog(
-            mode: currentMode,
-            modeColors: modeColors,
-            getModeIcon: _getModeIcon,
-            onCancel: _cancelPendingStep,
-            onSaved: (step) {
-              setState(() {
-                steps.add(step);
-                stepBoundaries.add(pathPoints.length - 1);
-                _stepOrsDistM.add(_pendingOrsDistM);
-                _stepOrsDurS.add(_pendingOrsDurS);
-                _pendingStepStartIndex = null;
-                _pendingOrsDistM = null;
-                _pendingOrsDurS = null;
-              });
-              _saveToHistory();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Step ${steps.length} saved. Tap the map for the next point, '
-                    'pick a new mode, or tap Finish Route.',
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-    );
-  }
-
-  void _cancelPendingStep() {
-    setState(() {
-      final rollbackIndex = _pendingStepStartIndex;
-      if (rollbackIndex != null &&
-          rollbackIndex >= 0 &&
-          rollbackIndex < pathPoints.length) {
-        pathPoints = pathPoints.sublist(0, rollbackIndex);
-      } else if (pathPoints.isNotEmpty) {
-        pathPoints.removeLast();
-      }
-      _pendingStepStartIndex = null;
-      _pendingOrsDistM = null;
-      _pendingOrsDurS = null;
-    });
+  /// The drawn line of step [index] (or of the step being added, which runs
+  /// from the previous step's end to the end of the path).
+  List<LatLng> _stepPath(int index) {
+    if (pathPoints.length < 2) return const [];
+    final start = index == 0 ? 0 : stepBoundaries[index - 1];
+    final end =
+        index < stepBoundaries.length
+            ? stepBoundaries[index]
+            : pathPoints.length - 1;
+    if (start < 0 || end >= pathPoints.length || end <= start) return const [];
+    return pathPoints.sublist(start, end + 1);
   }
 
   Future<void> _onFinishRoutePressed() async {
+    if (_hasOpenStep) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TranslatedText(
+            'Save or discard the step you are drawing first.',
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     final shouldFinish = await _confirmFinishRoute();
     if (!mounted || !shouldFinish) return;
 
@@ -688,9 +779,16 @@ class _ContributeScreenState extends State<ContributeScreen> {
             modeColors: modeColors,
             getModeIcon: _getModeIcon,
             initialStep: step,
+            stepPath: _stepPath(index),
             onCancel: () {},
             onSaved: (updated) {
-              setState(() => steps[index] = updated);
+              // The dialog edits details only; keep the line's points.
+              setState(
+                () =>
+                    steps[index] = updated.copyWith(
+                      controlPoints: steps[index].controlPoints,
+                    ),
+              );
               _saveToHistory();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -733,24 +831,53 @@ class _ContributeScreenState extends State<ContributeScreen> {
       return;
     }
 
-    final controlPoints = _stepEditControls.stepControlPoints;
-    if (index >= controlPoints.length) return;
-    controlPoints.removeAt(index);
-
-    final rebuilt =
-        await ContributeRouteEditService.rebuildFromStepControlPoints(
-          steps: remaining,
-          stepControlPoints: controlPoints,
+    // Every other step keeps its exact line; only the gap is reconnected
+    // by re-routing the first piece of the step that followed.
+    final geometries = [
+      for (var i = 0; i < steps.length; i++) _stepGeometrySection(i),
+    ]..removeAt(index);
+    final distances = List<double?>.from(_stepOrsDistM);
+    final durations = List<double?>.from(_stepOrsDurS);
+    if (index < distances.length) distances.removeAt(index);
+    if (index < durations.length) durations.removeAt(index);
+    if (index > 0 && index < geometries.length) {
+      geometries[index] = await geometries[index].moveControl(
+        0,
+        geometries[index - 1].controls.last,
+        ContributeRouteEditService.pieceRouter(
+          mode: remaining[index].mode,
           snapToRoadEnabled: _snapToRoadEnabled,
-        );
+          allowExpressways: _expresswayOverride,
+        ),
+      );
+      if (index < distances.length) distances[index] = null;
+      if (index < durations.length) durations[index] = null;
+    }
     if (!mounted) return;
 
+    final newPath = <LatLng>[];
+    final newBoundaries = <int>[];
+    for (final geometry in geometries) {
+      final stepPath = geometry.path;
+      if (newPath.isNotEmpty &&
+          stepPath.isNotEmpty &&
+          newPath.last == stepPath.first) {
+        newPath.addAll(stepPath.skip(1));
+      } else {
+        newPath.addAll(stepPath);
+      }
+      newBoundaries.add(newPath.isEmpty ? 0 : newPath.length - 1);
+    }
+
     setState(() {
-      steps = remaining;
-      pathPoints = rebuilt.pathPoints;
-      stepBoundaries = rebuilt.stepBoundaries;
-      _stepOrsDistM = rebuilt.stepOrsDistM;
-      _stepOrsDurS = rebuilt.stepOrsDurS;
+      steps = [
+        for (var i = 0; i < remaining.length; i++)
+          remaining[i].copyWith(controlPoints: geometries[i].controls),
+      ];
+      pathPoints = newPath;
+      stepBoundaries = newBoundaries;
+      _stepOrsDistM = distances;
+      _stepOrsDurS = durations;
     });
     _saveToHistory();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -784,6 +911,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
           steps: reordered,
           stepControlPoints: controlPoints,
           snapToRoadEnabled: _snapToRoadEnabled,
+          allowExpressways: _expresswayOverride,
         );
     if (!mounted) return;
 
@@ -850,6 +978,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── History controls ────────────────────────────────────────────────────────
 
   void _onUndo() {
+    // While drawing a step, undo takes back its last point first.
+    if (_hasOpenStep) {
+      _undoOpenStepPoint();
+      return;
+    }
     final prev = _historyService.undo();
     if (prev != null) {
       setState(() {
@@ -866,6 +999,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   void _onRedo() {
+    if (_hasOpenStep) return;
     final next = _historyService.redo();
     if (next != null) {
       setState(() {
@@ -896,9 +1030,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _stepOrsDurS.add(null);
     }
 
-    _pendingStepStartIndex = null;
-    _pendingOrsDistM = null;
-    _pendingOrsDurS = null;
   }
 
   void _onReset() {
@@ -908,9 +1039,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       stepBoundaries = [];
       _stepOrsDistM.clear();
       _stepOrsDurS.clear();
-      _pendingStepStartIndex = null;
-      _pendingOrsDistM = null;
-      _pendingOrsDurS = null;
+      _openStepControls = [];
       selectionMode = 'start';
       _showEditHandles = false;
       _startLocationController.clear();
@@ -1170,6 +1299,15 @@ class _ContributeScreenState extends State<ContributeScreen> {
       updatedPoint,
     );
   }
+
+  Future<void> _onViaPointLongPress(int stepIndex, int controlIndex) =>
+      _onViaPointLongPressSection(stepIndex, controlIndex);
+
+  Future<void> _onInsertHandleDragEnd(
+    int stepIndex,
+    int pieceIndex,
+    LatLng point,
+  ) => _onInsertHandleDragEndSection(stepIndex, pieceIndex, point);
 
   route_model.Route _buildRoute({String? existingId}) {
     return this._buildRouteSection(existingId: existingId);

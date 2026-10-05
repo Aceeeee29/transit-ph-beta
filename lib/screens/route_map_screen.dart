@@ -13,7 +13,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import '../models/route.dart' as route_model;
 import '../services/gamification_service.dart';
-import '../services/schedule_window_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
@@ -24,6 +23,7 @@ import '../services/route_follow_guidance.dart';
 import '../widgets/route_map/follow_guidance_card.dart';
 import '../widgets/route_map/follow_route_layers.dart';
 import '../widgets/route_map/follow_simulator_sheet.dart';
+import '../widgets/route_map/ride_correction_flow.dart';
 import '../widgets/route_map/user_location_layer.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
@@ -72,7 +72,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   String? _currentUserId;
   bool _isApplyingVote = false;
   List<LatLng> _pathPoints = [];
-  RouteScheduleSnapshot? _scheduleSnapshot;
   Map<String, int> _feedbackSummary = const {
     'fareAccurateYes': 0,
     'fareAccurateNo': 0,
@@ -135,11 +134,13 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     // FIX: Initialise animation controller for buttery-smooth camera moves
     _cameraAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 550),
+      // About one GPS interval, linear, so back-to-back follow moves blend
+      // into continuous motion instead of stop-start hops.
+      duration: const Duration(milliseconds: 900),
     );
     _cameraAnim = CurvedAnimation(
       parent: _cameraAnimController,
-      curve: Curves.easeOutCubic,
+      curve: Curves.linear,
     );
     _cameraAnimController.addListener(_onCameraAnimTick);
 
@@ -156,7 +157,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _initLocation();
     _loadReports();
     _loadEngagementState();
-    _loadScheduleWindowSnapshot();
     if (widget.enableRouteIntegrity) {
       _loadRouteTrustState();
     }
@@ -261,14 +261,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       points.add(LatLng(widget.route.endLat!, widget.route.endLng!));
     }
     return points;
-  }
-
-  Future<void> _loadScheduleWindowSnapshot() async {
-    final snapshot = await ScheduleWindowService.getRouteScheduleSnapshot(
-      widget.route,
-    );
-    if (!mounted) return;
-    setState(() => _scheduleSnapshot = snapshot);
   }
 
   Future<void> _loadEngagementState() async {
@@ -475,9 +467,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     setState(() => _isAutoFollowEnabled = value);
   }
 
-  void _toggleAutoFollowEnabled() {
-    setState(() => _isAutoFollowEnabled = !_isAutoFollowEnabled);
-  }
 
   void _setRouteReports(
     List<route_model.Report> reports, {
@@ -602,6 +591,12 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
   static const _minHeadingSpeedMps = 1.0;
 
+  /// How close the camera follows: street level on foot, a little wider at
+  /// vehicle speed so more of the road ahead shows.
+  double get _followZoom =>
+      (_currentPosition?.speed ?? 0) > _vehicleZoomSpeedMps ? 16.5 : 17.5;
+  static const _vehicleZoomSpeedMps = 6.0;
+
   // FIX: Throttle 450 ms → 120 ms, dead zone 2.5 m → 1.0 m.
   // FIX: Accepts heading so the map rotates to keep travel direction up,
   //      matching Google Maps / Waze behaviour.
@@ -622,7 +617,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _lastCameraTarget = target;
 
     final targetZoom =
-        _mapController.camera.zoom < 16 ? 16.0 : _mapController.camera.zoom;
+        _followZoom;
     // Negate heading: rotating the map -heading° puts travel direction at top
     final targetRotation = -heading;
 
@@ -817,7 +812,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     // FIX: Smooth move + apply current heading as bearing
     _smoothMoveCamera(
       _displayPosition!,
-      zoom: 16.0,
+      zoom: _followZoom,
       rotation: -_displayHeading,
     );
   }
@@ -840,13 +835,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
         path: _pathPoints,
         steps: [
           for (var i = 0; i < ranges.length; i++)
-            FollowStep(
-              mode:
-                  i < widget.route.steps.length
-                      ? widget.route.steps[i].mode
-                      : null,
-              startIndex: ranges[i].start,
-              endIndex: ranges[i].end,
+            _followStep(
+              i < widget.route.steps.length ? widget.route.steps[i] : null,
+              ranges[i],
             ),
         ],
       ),
@@ -858,6 +849,29 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _centerOnCurrentLocation();
   }
 
+  FollowStep _followStep(
+    route_model.Step? step,
+    ({int start, int end, Color color}) range,
+  ) {
+    final designated = step?.usesDesignatedStops ?? false;
+    return FollowStep(
+      mode: step?.mode,
+      startIndex: range.start,
+      endIndex: range.end,
+      designatedStops: designated,
+      stops: [
+        if (designated)
+          for (final stop in step!.stops)
+            FollowStop(
+              point: stop.point,
+              name: stop.name,
+              pickup: stop.pickup,
+              dropoff: stop.dropoff,
+            ),
+      ],
+    );
+  }
+
   /// Ends a session that reached the end of the route.
   Future<void> _finishArrivedRoute() async {
     if (_isFinishingRoute) return;
@@ -865,10 +879,26 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     try {
       await _maybeShowTrustFeedbackPrompt();
       if (!mounted) return;
-      _endNavigation();
+      await _endNavigationAndOfferCorrection();
     } finally {
       _isFinishingRoute = false;
     }
+  }
+
+  /// Ends the session, then — if the vehicle went a different way than this
+  /// route — offers the ride as a correction or a new route.
+  Future<void> _endNavigationAndOfferCorrection() async {
+    final deviations = ActiveNavigationService.instance.finishDeviations();
+    final boundaries = [for (final range in _stepRanges()) range.end];
+    _endNavigation();
+    if (!mounted) return;
+    await RideCorrectionFlow.offer(
+      context,
+      deviations: deviations,
+      followedPath: _pathPoints,
+      route: widget.route,
+      stepBoundaries: boundaries,
+    );
   }
 
   void _endNavigation() {
@@ -907,7 +937,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
     await _maybeShowTrustFeedbackPrompt();
     if (!mounted) return;
-    _endNavigation();
+    await _endNavigationAndOfferCorrection();
   }
 
   void _onNotificationsDismissed() {
@@ -998,6 +1028,44 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     }
 
     return _applyFareDiscount(total);
+  }
+
+  RouteFollowEngine? _pathLineCache;
+
+  /// The drawn path measured the same way the follow session measures
+  /// progress along it.
+  RouteFollowEngine? get _pathLine {
+    if (_pathPoints.length < 2) return null;
+    return _pathLineCache ??= RouteFollowEngine(_pathPoints);
+  }
+
+  /// While following: the distance left and an ETA from each remaining
+  /// step's typical speed. Null when not following.
+  ({double meters, int minutes})? _remainingTrip() {
+    final snapshot = _followSnapshot;
+    final line = _pathLine;
+    if (snapshot == null || !snapshot.hasProgress || line == null) return null;
+    final ranges = _stepRanges();
+    var minutes = 0.0;
+    for (var i = 0; i < ranges.length; i++) {
+      final start = line.alongAt(ranges[i].start);
+      final end = line.alongAt(ranges[i].end);
+      final left = end - math.max(start, snapshot.progressMeters);
+      if (left <= 0) continue;
+      final mode =
+          i < widget.route.steps.length ? widget.route.steps[i].mode : 'Jeepney';
+      minutes += left / 1000 / RouteMetricsService.speedKmhForMode(mode) * 60;
+    }
+    return (meters: snapshot.remainingMeters, minutes: minutes.ceil());
+  }
+
+  /// With the discount on, the card shows the discounted total and this
+  /// label keeps the regular fare visible ("Fare · reg. PHP 33").
+  String? _regularFareNote() {
+    if (!_isDiscountFareEnabled) return null;
+    final regular = _calculateRouteFareTotal() / _fareDiscountMultiplier;
+    if (regular <= 0) return null;
+    return 'Fare · reg. PHP ${regular.round()}';
   }
 
   String? _routeFareLabel() {
@@ -1110,10 +1178,14 @@ class _RouteMapScreenState extends State<RouteMapScreen>
         snapshot: _followSnapshot,
         outline: Colors.black,
       ),
-      if (_isNavigationStarted)
+      if (_isNavigationStarted) ...[
         ...FollowRouteLayers.connectorLines(
           ActiveNavigationService.instance.connectorPath,
         ),
+        ...FollowRouteLayers.detourLines(
+          ActiveNavigationService.instance.detourPath,
+        ),
+      ],
     ];
   }
 
@@ -1155,9 +1227,45 @@ class _RouteMapScreenState extends State<RouteMapScreen>
         ),
       );
     }
+    for (final step in widget.route.steps) {
+      if (!step.usesDesignatedStops) continue;
+      final color = modeColors[step.mode] ?? Colors.blue;
+      for (final stop in step.stops) {
+        result.add(
+          Marker(
+            point: stop.point,
+            width: 16,
+            height: 16,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: 3),
+              ),
+            ),
+          ),
+        );
+      }
+    }
     final targetMarker = FollowRouteLayers.targetMarker(_guidance);
     if (targetMarker != null) result.add(targetMarker);
     return result;
+  }
+
+  /// How passengers board this step, for its tile.
+  String? _boardingLabel(route_model.Step step) {
+    if (step.mode == 'Walk') return null;
+    if (step.usesDesignatedStops) {
+      final count = step.stops.length;
+      if (count > 0) {
+        return 'Board and get off at $count designated '
+            '${count == 1 ? 'stop' : 'stops'}';
+      }
+      return step.mode == 'Train'
+          ? 'Board and get off at the stations'
+          : 'Board at the start, get off at the end (stops not yet mapped)';
+    }
+    return 'Board or get off anywhere along the route';
   }
 
   /// The traveler's dot, drawn above every other layer.
@@ -1287,25 +1395,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     if (start == null || start.isEmpty || end == null || end.isEmpty)
       return null;
     return '$start-$end';
-  }
-
-  Widget _buildScheduleSummaryChip() {
-    return _buildScheduleSummaryChipSection();
-  }
-
-  Color _scheduleStateColor(ScheduleWindowState state) {
-    switch (state) {
-      case ScheduleWindowState.live:
-        return const Color(0xFF2D9F63);
-      case ScheduleWindowState.stale:
-        return const Color(0xFFB8732F);
-      case ScheduleWindowState.scheduled:
-        return const Color(0xFF2E7CF6);
-      case ScheduleWindowState.estimated:
-        return const Color(0xFF9B7FE8);
-      case ScheduleWindowState.unavailable:
-        return _textSecondary;
-    }
   }
 
   Widget _buildMetricsRow() {
