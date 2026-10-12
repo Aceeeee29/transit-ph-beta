@@ -58,7 +58,8 @@ class FileScanService {
     }
 
     // Validate MIME type vs extension (basic check)
-    if (mimeType != null && !_isMimeTypeValidForExtension(mimeType, extension)) {
+    if (mimeType != null &&
+        !_isMimeTypeValidForExtension(mimeType, extension)) {
       isBlocked = true;
       reasons.add('MIME type does not match file extension');
     }

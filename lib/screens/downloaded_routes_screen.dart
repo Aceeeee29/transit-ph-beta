@@ -5,8 +5,7 @@ import '../repositories/followed_route_repository.dart';
 import '../repositories/offline_route_repository.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/offline_tile_service.dart';
-import 'ors_route_map_screen.dart';
-import 'route_map_screen.dart';
+import '../services/map_tab_controller.dart';
 
 class DownloadedRoutesScreen extends StatefulWidget {
   const DownloadedRoutesScreen({super.key});
@@ -19,7 +18,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -79,48 +78,39 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
       );
       if (!mounted) return;
       if (payload != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => OrsRouteMapScreen(
-              result: payload.result,
-              originName: payload.originName,
-              destinationName: payload.destinationName,
-              showDownloadButton: false,
-            ),
-          ),
+        MapTabController.openGenerated(
+          context,
+          payload.result,
+          originName: payload.originName,
+          destinationName: payload.destinationName,
+          showDownloadButton: false,
         );
         return;
       }
     }
 
     if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RouteMapScreen(
-          route: route,
-          enableRouteIntegrity: false,
-          showDownloadButton: false,
-        ),
-      ),
+    MapTabController.openRoute(
+      context,
+      route,
+      enableRouteIntegrity: false,
+      showDownloadButton: false,
     );
   }
 
   void _openFollowedRoute(FollowedRouteEntry entry) {
     final route = entry.route;
     final generated = entry.generatedRoute;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) =>
-                route != null
-                    ? RouteMapScreen(route: route, enableRouteIntegrity: false)
-                    : OrsRouteMapScreen(
-                      result: generated!,
-                      originName: entry.startLabel,
-                      destinationName: entry.endLabel,
-                    ),
-      ),
-    );
+    if (route != null) {
+      MapTabController.openRoute(context, route, enableRouteIntegrity: false);
+    } else {
+      MapTabController.openGenerated(
+        context,
+        generated!,
+        originName: entry.startLabel,
+        destinationName: entry.endLabel,
+      );
+    }
   }
 
   String _followedAgo(DateTime at) {
@@ -139,7 +129,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
         style: const TextStyle(
           color: _textSecondary,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w500,
           letterSpacing: 1.1,
         ),
       ),
@@ -174,7 +164,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
             '${entry.startLabel} to ${entry.endLabel}',
             style: const TextStyle(
               color: _textPrimary,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
           subtitle: Text(
@@ -312,7 +302,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
               style: TextStyle(
                 color: _textPrimary,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: -0.3,
               ),
             ),
@@ -414,7 +404,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                           'No downloaded routes yet',
                           style: TextStyle(
                             color: _textPrimary,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             fontSize: 16,
                           ),
                           textAlign: TextAlign.center,
@@ -526,7 +516,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                           '${route.startLocation} to ${route.endLocation}',
                           style: const TextStyle(
                             color: _textPrimary,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         subtitle: Text(

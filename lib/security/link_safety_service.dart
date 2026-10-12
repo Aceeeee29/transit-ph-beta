@@ -71,7 +71,8 @@ class LinkSafetyService {
 
     // Rule: too many subdomains (>3) = +1 risk
     List<String> parts = host.split('.');
-    if (parts.length > 4) { // e.g., a.b.c.d.com has 5 parts
+    if (parts.length > 4) {
+      // e.g., a.b.c.d.com has 5 parts
       riskScore += 1;
       reasons.add('Too many subdomains (>3)');
     }
@@ -93,7 +94,9 @@ class LinkSafetyService {
     List<String> allowlist = _prefs?.getStringList(_allowlistKey) ?? [];
     bool inAllowlist = allowlist.contains(host);
 
-    bool isBlocked = inBlocklist || (riskScore >= 5 && !inAllowlist); // Threshold for blocking
+    bool isBlocked =
+        inBlocklist ||
+        (riskScore >= 5 && !inAllowlist); // Threshold for blocking
 
     if (inBlocklist) {
       reasons.add('Host is in blocklist');
@@ -120,45 +123,54 @@ class LinkSafetyService {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('URL Blocked'),
-          content: Text('This URL is blocked for security reasons.\n\nReasons:\n${result.reasons.join('\n')}'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
+        builder:
+            (context) => AlertDialog(
+              title: const Text('URL Blocked'),
+              content: Text(
+                'This URL is blocked for security reasons.\n\nReasons:\n${result.reasons.join('\n')}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
             ),
-          ],
-        ),
       );
     } else if (result.riskScore > 0) {
       // Show warning interstitial
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('Risky URL Warning'),
-          content: Text('This URL may be risky.\n\nRisk Score: ${result.riskScore}\nReasons:\n${result.reasons.join('\n')}\n\nDo you want to continue?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Risky URL Warning'),
+              content: Text(
+                'This URL may be risky.\n\nRisk Score: ${result.riskScore}\nReasons:\n${result.reasons.join('\n')}\n\nDo you want to continue?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    try {
+                      await launchUrl(
+                        Uri.parse(result.normalizedUrl),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to open URL: $e')),
+                      );
+                    }
+                  },
+                  child: const Text('Continue Anyway'),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                try {
-                  await launchUrl(Uri.parse(result.normalizedUrl), mode: LaunchMode.externalApplication);
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to open URL: $e')),
-                  );
-                }
-              },
-              child: const Text('Continue Anyway'),
-            ),
-          ],
-        ),
       );
     } else {
       // Safe, open directly
@@ -172,9 +184,9 @@ class LinkSafetyService {
           );
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to open URL: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to open URL: $e')));
       }
     }
   }

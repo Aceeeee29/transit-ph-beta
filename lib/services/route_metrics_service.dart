@@ -39,13 +39,9 @@ class RouteMetricsService {
     for (int i = 0; i < points.length - 1; i++) {
       final point1 = points[i];
       final point2 = points[i + 1];
-      final dist = distanceCalculator.as(
-        LengthUnit.Kilometer,
-        point1,
-        point2,
-      );
+      final dist = distanceCalculator.as(LengthUnit.Kilometer, point1, point2);
       totalDistance += dist;
-        }
+    }
 
     return totalDistance;
   }
@@ -78,7 +74,7 @@ class RouteMetricsService {
             points[j],
             points[j + 1],
           );
-                }
+        }
 
         // Convert distance to time based on mode of transport
         final speedKmh = _getSpeedForMode(modes[i]);
@@ -122,7 +118,10 @@ class RouteMetricsService {
 
   /// Format distance for display
   static String formatDistance(double distanceKm) {
-    return formatDistanceForUnit(distanceKm, distanceUnit: _currentDistanceUnit);
+    return formatDistanceForUnit(
+      distanceKm,
+      distanceUnit: _currentDistanceUnit,
+    );
   }
 
   /// Format distance for display using a selected unit preference.
@@ -255,7 +254,7 @@ class RouteMetricsService {
             points[j],
             points[j + 1],
           );
-                }
+        }
 
         // Calculate fare based on mode and distance
         totalFare += _calculateFareForMode(modes[i], stepDistance);
@@ -306,7 +305,7 @@ class RouteMetricsService {
             points[j],
             points[j + 1],
           );
-                }
+        }
 
         // CO2 emissions per km for different modes (kg CO2 per km)
         // Average car emissions: ~0.2 kg CO2 per km

@@ -64,8 +64,10 @@ class RouteTrustService {
       }
     }
 
-    final total = (approvalPoints + confirmationPoints + freshnessPoints)
-      .clamp(0, 100);
+    final total = (approvalPoints + confirmationPoints + freshnessPoints).clamp(
+      0,
+      100,
+    );
 
     return RouteTrustScore(
       total: total,

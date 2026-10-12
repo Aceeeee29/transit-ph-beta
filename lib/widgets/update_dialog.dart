@@ -122,7 +122,9 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
           });
         }
         // Clean up the invalid file.
-        try { await file.delete(); } catch (_) {}
+        try {
+          await file.delete();
+        } catch (_) {}
         return;
       }
 

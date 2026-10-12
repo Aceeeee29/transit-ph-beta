@@ -69,7 +69,7 @@ class LocationService {
         final place = placemarks.first;
         // Build a readable address
         List<String> addressParts = [];
-        
+
         if (place.street != null && place.street!.isNotEmpty) {
           addressParts.add(place.street!);
         }
@@ -79,14 +79,12 @@ class LocationService {
         if (place.locality != null && place.locality!.isNotEmpty) {
           addressParts.add(place.locality!);
         }
-        if (place.administrativeArea != null && 
+        if (place.administrativeArea != null &&
             place.administrativeArea!.isNotEmpty) {
           addressParts.add(place.administrativeArea!);
         }
-        
-        return addressParts.isNotEmpty 
-            ? addressParts.join(', ') 
-            : null;
+
+        return addressParts.isNotEmpty ? addressParts.join(', ') : null;
       }
       return null;
     } catch (e) {
@@ -100,7 +98,10 @@ class LocationService {
     if (position == null) {
       return null;
     }
-    return await getAddressFromCoordinates(position.latitude, position.longitude);
+    return await getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
   }
 
   /// Forward geocode a location name into coordinates
@@ -134,7 +135,7 @@ class LocationService {
   static String getTimeOfDayDescription() {
     final now = DateTime.now();
     final hour = now.hour;
-    
+
     if (hour >= 5 && hour < 12) {
       return 'morning';
     } else if (hour >= 12 && hour < 14) {

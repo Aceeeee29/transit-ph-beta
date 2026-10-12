@@ -1,10 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
+import '../services/map_tab_controller.dart';
 import '../services/notifications_service.dart';
 import '../services/route_service.dart';
 import '../models/notification.dart';
 import 'post_detail_screen.dart';
-import 'route_map_screen.dart';
 import '../widgets/translated_text.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -28,8 +28,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -215,10 +215,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _showInfo(hint);
         return;
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)),
-      );
+      MapTabController.openRoute(context, route);
     } catch (_) {
       if (!mounted) return;
       Navigator.of(context).pop(); // dismiss loading
@@ -262,7 +259,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       style: const TextStyle(
                         fontSize: 14,
                         color: _textPrimary,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -324,7 +321,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 style: TextStyle(
                   color: _textPrimary,
                   fontSize: 17,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: -0.3,
                 ),
               ),
@@ -372,7 +369,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     'Something went wrong',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: _textPrimary,
                     ),
                   ),
@@ -411,7 +408,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     'No notifications yet',
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: _textPrimary,
                     ),
                   ),
@@ -451,7 +448,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                        colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
@@ -485,7 +482,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             '$unreadCount unread notification${unreadCount > 1 ? 's' : ''}',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                               fontSize: 14,
                             ),
                           ),
@@ -605,7 +602,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           maxLines: 1,
                                           style: TextStyle(
                                             fontSize: 10,
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w500,
                                             color: color,
                                           ),
                                         ),

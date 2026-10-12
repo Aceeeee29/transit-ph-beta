@@ -20,11 +20,12 @@ class RouteService {
     }
 
     try {
-      final userByEmail = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: raw)
-          .limit(1)
-          .get();
+      final userByEmail =
+          await _firestore
+              .collection('users')
+              .where('email', isEqualTo: raw)
+              .limit(1)
+              .get();
       if (userByEmail.docs.isNotEmpty) {
         final data = userByEmail.docs.first.data();
         final uidFromField = (data['uid'] as String?)?.trim();
@@ -33,8 +34,7 @@ class RouteService {
         }
         return userByEmail.docs.first.id;
       }
-    } catch (_) {
-    }
+    } catch (_) {}
 
     return null;
   }
@@ -106,8 +106,7 @@ class RouteService {
         'meta': meta ?? const <String, dynamic>{},
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> _incrementApprovedContributionStats(
@@ -133,7 +132,9 @@ class RouteService {
     final unlockedAchievements = List<String>.from(
       data['achievements'] ?? const <String>[],
     );
-    final unlockedBadges = List<String>.from(data['badges'] ?? const <String>[]);
+    final unlockedBadges = List<String>.from(
+      data['badges'] ?? const <String>[],
+    );
 
     final pioneerUnlocked = routesContributed >= 10;
     final heroUnlocked = routesContributed >= 50;
@@ -214,11 +215,13 @@ class RouteService {
       if (alreadyFlagged) continue;
 
       final hasFare = (data['price']?.toString().trim().isNotEmpty ?? false);
-      final hasSchedule = (data['schedule']?.toString().trim().isNotEmpty ?? false);
+      final hasSchedule =
+          (data['schedule']?.toString().trim().isNotEmpty ?? false);
 
       final patch = <String, dynamic>{
         'staleNeedsReview': true,
-        'staleReason': 'Auto-flagged: fare/schedule data older than $_staleReviewDays days.',
+        'staleReason':
+            'Auto-flagged: fare/schedule data older than $_staleReviewDays days.',
         'staleFlaggedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -249,15 +252,15 @@ class RouteService {
   /// by fromJson, rather than being excluded by Firestore's where clause.
   static Future<List<route_model.Route>> getAllRoutes() async {
     try {
-      final querySnapshot = await _firestore
-          .collection('routes')
-          .orderBy('createdAt', descending: true)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('routes')
+              .orderBy('createdAt', descending: true)
+              .get();
 
       try {
         await _markStaleRoutesForReviewIfNeeded(docs: querySnapshot.docs);
-      } catch (_) {
-      }
+      } catch (_) {}
 
       return querySnapshot.docs
           .map((doc) => route_model.Route.fromJson(doc.data()))
@@ -273,26 +276,31 @@ class RouteService {
         .collection('routes')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((querySnapshot) => querySnapshot.docs
-            .map((doc) => route_model.Route.fromJson(doc.data()))
-            .where((r) => r.isApproved)
-            .toList());
+        .map(
+          (querySnapshot) =>
+              querySnapshot.docs
+                  .map((doc) => route_model.Route.fromJson(doc.data()))
+                  .where((r) => r.isApproved)
+                  .toList(),
+        );
   }
 
   /// Get PENDING routes — for the moderator review tab
   static Future<List<route_model.Route>> getPendingRoutes() async {
     try {
-      final querySnapshot = await _firestore
-          .collection('routes')
-          .where(
-            'approvalStatus',
-            isEqualTo: route_model.RouteApprovalStatus.pending.name,
-          )
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('routes')
+              .where(
+                'approvalStatus',
+                isEqualTo: route_model.RouteApprovalStatus.pending.name,
+              )
+              .get();
 
-      final routes = querySnapshot.docs
-          .map((doc) => route_model.Route.fromJson(doc.data()))
-          .toList();
+      final routes =
+          querySnapshot.docs
+              .map((doc) => route_model.Route.fromJson(doc.data()))
+              .toList();
       // Sort newest first client-side
       routes.sort((a, b) {
         final aTime = a.createdAt ?? DateTime(2000);
@@ -326,10 +334,11 @@ class RouteService {
       final byRouteId = <String, route_model.Route>{};
 
       for (final contributorIdentifier in identifiers) {
-        final querySnapshot = await _firestore
-            .collection('routes')
-            .where('contributorId', isEqualTo: contributorIdentifier)
-            .get();
+        final querySnapshot =
+            await _firestore
+                .collection('routes')
+                .where('contributorId', isEqualTo: contributorIdentifier)
+                .get();
 
         for (final doc in querySnapshot.docs) {
           final route = route_model.Route.fromJson(doc.data());
@@ -337,12 +346,12 @@ class RouteService {
         }
       }
 
-      final routes = byRouteId.values.toList()
-        ..sort((a, b) {
-          final aTime = a.createdAt ?? DateTime(2000);
-          final bTime = b.createdAt ?? DateTime(2000);
-          return bTime.compareTo(aTime);
-        });
+      final routes =
+          byRouteId.values.toList()..sort((a, b) {
+            final aTime = a.createdAt ?? DateTime(2000);
+            final bTime = b.createdAt ?? DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
 
       return routes;
     } catch (_) {
@@ -416,7 +425,8 @@ class RouteService {
           'changedPrice': beforeData['price'] != data['price'],
           'changedSchedule': beforeData['schedule'] != data['schedule'],
           'markedAsEdited': true,
-          'nextEditCount': ((beforeData['editCount'] as num?)?.toInt() ?? 0) + 1,
+          'nextEditCount':
+              ((beforeData['editCount'] as num?)?.toInt() ?? 0) + 1,
         },
       );
     } catch (_) {
@@ -431,7 +441,8 @@ class RouteService {
       String routeTitle = 'your submitted route';
       bool wasAlreadyApproved = false;
 
-      final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
+      final routeSnapshot =
+          await _firestore.collection('routes').doc(routeId).get();
       if (routeSnapshot.exists) {
         final routeData = routeSnapshot.data();
         contributorId = _extractContributorIdentifier(routeData);
@@ -477,8 +488,7 @@ class RouteService {
         if (!wasAlreadyApproved) {
           try {
             await _incrementApprovedContributionStats(recipientId);
-          } catch (_) {
-          }
+          } catch (_) {}
         }
 
         try {
@@ -489,13 +499,12 @@ class RouteService {
               type: 'route_approved',
               routeId: routeId,
               timestamp: DateTime.now(),
-              message: 'Your submitted route ($routeTitle) was approved and is now live.',
+              message:
+                  'Your submitted route ($routeTitle) was approved and is now live.',
             ),
           );
-        } catch (_) {
-        }
+        } catch (_) {}
       }
-
     } catch (_) {
       rethrow;
     }
@@ -574,7 +583,8 @@ class RouteService {
       String? contributorId;
       String routeTitle = 'your submitted route';
 
-      final routeSnapshot = await _firestore.collection('routes').doc(routeId).get();
+      final routeSnapshot =
+          await _firestore.collection('routes').doc(routeId).get();
       if (routeSnapshot.exists) {
         final routeData = routeSnapshot.data();
         contributorId = _extractContributorIdentifier(routeData);
@@ -611,10 +621,8 @@ class RouteService {
                   'Your submitted route ($routeTitle) was rejected by moderators.',
             ),
           );
-        } catch (_) {
-        }
+        } catch (_) {}
       }
-
     } catch (_) {
       rethrow;
     }
@@ -643,7 +651,9 @@ class RouteService {
 
   /// Increment a route view once per user
   static Future<void> incrementViewForUser(
-      String routeId, String userId) async {
+    String routeId,
+    String userId,
+  ) async {
     final routeRef = _routeDoc(routeId);
     final viewRef = _routeViewDoc(routeId, userId);
 
@@ -750,7 +760,9 @@ class RouteService {
 
   /// Add a report to a route
   static Future<void> addReport(
-      String routeId, route_model.Report report) async {
+    String routeId,
+    route_model.Report report,
+  ) async {
     try {
       await _firestore.collection('routes').doc(routeId).update({
         'reports': FieldValue.arrayUnion([
@@ -773,11 +785,12 @@ class RouteService {
     String endLocation,
   ) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('routes')
-          .where('startLocation', isEqualTo: startLocation)
-          .where('endLocation', isEqualTo: endLocation)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('routes')
+              .where('startLocation', isEqualTo: startLocation)
+              .where('endLocation', isEqualTo: endLocation)
+              .get();
 
       return querySnapshot.docs
           .map((doc) => route_model.Route.fromJson(doc.data()))
@@ -788,17 +801,23 @@ class RouteService {
     }
   }
 
-  static Future<Map<String, int>> getRouteFeedbackSummary(String routeId) async {
+  static Future<Map<String, int>> getRouteFeedbackSummary(
+    String routeId,
+  ) async {
     try {
       final doc = await _routeDoc(routeId).get();
-      final summary = doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
+      final summary =
+          doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
           const <String, dynamic>{};
       return {
         'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
         'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateYes': (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateNo': (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
-        'stillOperatingYes': (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateYes':
+            (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateNo':
+            (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
+        'stillOperatingYes':
+            (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
         'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
       };
     } catch (_) {
@@ -815,14 +834,18 @@ class RouteService {
 
   static Stream<Map<String, int>> watchRouteFeedbackSummary(String routeId) {
     return _routeDoc(routeId).snapshots().map((doc) {
-      final summary = doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
+      final summary =
+          doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
           const <String, dynamic>{};
       return {
         'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
         'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateYes': (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateNo': (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
-        'stillOperatingYes': (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateYes':
+            (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
+        'scheduleAccurateNo':
+            (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
+        'stillOperatingYes':
+            (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
         'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
       };
     });
@@ -850,9 +873,9 @@ class RouteService {
             (prevData['createdAt'] as Timestamp?);
 
         if (lastFeedbackAt != null) {
-          final nextAllowedAt = lastFeedbackAt
-              .toDate()
-              .add(const Duration(days: _routeFeedbackCooldownDays));
+          final nextAllowedAt = lastFeedbackAt.toDate().add(
+            const Duration(days: _routeFeedbackCooldownDays),
+          );
           if (DateTime.now().isBefore(nextAllowedAt)) {
             throw StateError(
               'feedback_cooldown:${nextAllowedAt.toUtc().toIso8601String()}',
@@ -864,12 +887,24 @@ class RouteService {
       final updates = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
         'feedbackSummary.lastFeedbackAt': FieldValue.serverTimestamp(),
-        'feedbackSummary.fareAccurateYes': FieldValue.increment(fareAccurate ? 1 : 0),
-        'feedbackSummary.fareAccurateNo': FieldValue.increment(fareAccurate ? 0 : 1),
-        'feedbackSummary.scheduleAccurateYes': FieldValue.increment(scheduleAccurate ? 1 : 0),
-        'feedbackSummary.scheduleAccurateNo': FieldValue.increment(scheduleAccurate ? 0 : 1),
-        'feedbackSummary.stillOperatingYes': FieldValue.increment(stillOperating ? 1 : 0),
-        'feedbackSummary.stillOperatingNo': FieldValue.increment(stillOperating ? 0 : 1),
+        'feedbackSummary.fareAccurateYes': FieldValue.increment(
+          fareAccurate ? 1 : 0,
+        ),
+        'feedbackSummary.fareAccurateNo': FieldValue.increment(
+          fareAccurate ? 0 : 1,
+        ),
+        'feedbackSummary.scheduleAccurateYes': FieldValue.increment(
+          scheduleAccurate ? 1 : 0,
+        ),
+        'feedbackSummary.scheduleAccurateNo': FieldValue.increment(
+          scheduleAccurate ? 0 : 1,
+        ),
+        'feedbackSummary.stillOperatingYes': FieldValue.increment(
+          stillOperating ? 1 : 0,
+        ),
+        'feedbackSummary.stillOperatingNo': FieldValue.increment(
+          stillOperating ? 0 : 1,
+        ),
       };
 
       transaction.set(feedbackRef, {
@@ -925,12 +960,13 @@ class RouteService {
 
       final data = doc.data() ?? const <String, dynamic>{};
       final lastFeedbackAt =
-          (data['updatedAt'] as Timestamp?) ?? (data['createdAt'] as Timestamp?);
+          (data['updatedAt'] as Timestamp?) ??
+          (data['createdAt'] as Timestamp?);
       if (lastFeedbackAt == null) return null;
 
-      return lastFeedbackAt
-          .toDate()
-          .add(const Duration(days: _routeFeedbackCooldownDays));
+      return lastFeedbackAt.toDate().add(
+        const Duration(days: _routeFeedbackCooldownDays),
+      );
     } catch (_) {
       return null;
     }

@@ -39,9 +39,10 @@ class _BadgeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUnlocked = badge.isUnlocked;
     final earnedDate = badge.earnedAt?.toDate();
-    final formattedDate = earnedDate != null
-        ? '${earnedDate.month}/${earnedDate.day}/${earnedDate.year}'
-        : null;
+    final formattedDate =
+        earnedDate != null
+            ? '${earnedDate.month}/${earnedDate.day}/${earnedDate.year}'
+            : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -49,9 +50,10 @@ class _BadgeCard extends StatelessWidget {
         color: ProfileColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isUnlocked
-              ? ProfileColors.accent.withOpacity(0.3)
-              : ProfileColors.border,
+          color:
+              isUnlocked
+                  ? ProfileColors.accent.withOpacity(0.3)
+                  : ProfileColors.border,
           width: isUnlocked ? 1.5 : 1,
         ),
         boxShadow: [
@@ -84,9 +86,10 @@ class _BadgeCard extends StatelessWidget {
         color: isUnlocked ? ProfileColors.accentSoft : ProfileColors.surfaceAlt,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: isUnlocked
-              ? ProfileColors.accent.withOpacity(0.25)
-              : ProfileColors.border,
+          color:
+              isUnlocked
+                  ? ProfileColors.accent.withOpacity(0.25)
+                  : ProfileColors.border,
         ),
       ),
       child: Center(
@@ -102,11 +105,12 @@ class _BadgeCard extends StatelessWidget {
         Text(
           badge.name,
           style: TextStyle(
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             fontSize: 14,
-            color: isUnlocked
-                ? ProfileColors.textPrimary
-                : ProfileColors.textSecondary,
+            color:
+                isUnlocked
+                    ? ProfileColors.textPrimary
+                    : ProfileColors.textSecondary,
           ),
         ),
         const SizedBox(height: 2),
@@ -132,7 +136,7 @@ class _BadgeCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   color: ProfileColors.accent,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

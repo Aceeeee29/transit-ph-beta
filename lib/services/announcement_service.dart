@@ -12,7 +12,8 @@ class AnnouncementService {
 
   static String _dismissedKey(String uid) => 'dismissed_announcements_$uid';
 
-  static Future<Announcement?> getLatestVisibleAnnouncementForCurrentUser() async {
+  static Future<Announcement?>
+  getLatestVisibleAnnouncementForCurrentUser() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return null;
 
@@ -21,19 +22,29 @@ class AnnouncementService {
       final dismissedIds = await _loadDismissedAnnouncementIds(currentUser.uid);
 
       // Avoid composite-index dependency by fetching recent docs, then filtering client-side.
-      final snapshot = await _firestore.collection('announcements').limit(50).get();
-      final allAnnouncements = snapshot.docs.map(Announcement.fromDoc).toList()
-        ..sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
-            .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
+      final snapshot =
+          await _firestore.collection('announcements').limit(50).get();
+      final allAnnouncements =
+          snapshot.docs.map(Announcement.fromDoc).toList()..sort(
+            (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+                .compareTo(
+                  a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                ),
+          );
 
       final now = DateTime.now();
       for (final announcement in allAnnouncements) {
         if (!announcement.isActive) continue;
         if (dismissedIds.contains(announcement.id)) continue;
         if (!_isAudienceMatch(announcement.targetAudience, audience)) continue;
-        if (announcement.scheduledAt != null && announcement.scheduledAt!.isAfter(now)) continue;
-        if (announcement.expiresAt != null && announcement.expiresAt!.isBefore(now)) continue;
-        if (announcement.title.isEmpty || announcement.message.isEmpty) continue;
+        if (announcement.scheduledAt != null &&
+            announcement.scheduledAt!.isAfter(now))
+          continue;
+        if (announcement.expiresAt != null &&
+            announcement.expiresAt!.isBefore(now))
+          continue;
+        if (announcement.title.isEmpty || announcement.message.isEmpty)
+          continue;
         return announcement;
       }
 
@@ -62,7 +73,8 @@ class AnnouncementService {
   static Future<String> _loadCurrentUserAudience(String uid) async {
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final data = userDoc.data();
-    final category = (data?['userCategory'] as String?)?.toLowerCase().trim() ?? '';
+    final category =
+        (data?['userCategory'] as String?)?.toLowerCase().trim() ?? '';
 
     if (category.isEmpty) return 'all';
 

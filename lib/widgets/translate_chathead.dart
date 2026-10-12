@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/translation_service.dart';
 
 const _bg = Color(0xFFF4F8FF);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceAlt = Color(0xFFEAF2FF);
-const _accent = Color(0xFF2E7CF6);
-const _accentSoft = Color(0x1A2E7CF6);
+const _accent = Color(0xFF0B8FD6);
+const _accentSoft = Color(0x1A0B8FD6);
 const _textPrimary = Color(0xFF0F1D35);
 const _textSecondary = Color(0xFF7A92B2);
 const _border = Color(0xFFD4E4F7);
@@ -14,6 +15,25 @@ const _danger = Color(0xFFE05C6A);
 
 class TranslateChatHead extends StatefulWidget {
   const TranslateChatHead({super.key});
+
+  /// Whether the bubble shows (Settings > Preferences). Device-only.
+  static final ValueNotifier<bool> enabled = ValueNotifier(true);
+  static const _enabledKey = 'translate_bubble_enabled';
+  static bool _loaded = false;
+
+  /// Reads the saved choice once per app run.
+  static Future<void> loadEnabled() async {
+    if (_loaded) return;
+    _loaded = true;
+    final prefs = await SharedPreferences.getInstance();
+    enabled.value = prefs.getBool(_enabledKey) ?? true;
+  }
+
+  static Future<void> setEnabled(bool value) async {
+    enabled.value = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_enabledKey, value);
+  }
 
   @override
   State<TranslateChatHead> createState() => _TranslateChatHeadState();
@@ -106,7 +126,7 @@ class _TranslateBubble extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
-            colors: [Color(0xFF2E7CF6), Color(0xFF5AA9FF)],
+            colors: [Color(0xFF0B8FD6), Color(0xFF5AA9FF)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),

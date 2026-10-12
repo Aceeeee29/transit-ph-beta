@@ -17,7 +17,8 @@ class ContributionsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid ?? userEmail;
+    final uid =
+        firebase_auth.FirebaseAuth.instance.currentUser?.uid ?? userEmail;
 
     return FutureBuilder<List<route_model.Route>>(
       future: RouteService.getRoutesByUser(uid, userEmail: userEmail),
@@ -40,11 +41,12 @@ class ContributionsTab extends StatelessWidget {
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: routes.length,
-          itemBuilder: (context, index) => RouteContributionCard(
-            route: routes[index],
-            userEmail: userEmail,
-            distanceUnit: distanceUnit,
-          ),
+          itemBuilder:
+              (context, index) => RouteContributionCard(
+                route: routes[index],
+                userEmail: userEmail,
+                distanceUnit: distanceUnit,
+              ),
         );
       },
     );
@@ -79,13 +81,16 @@ class _ErrorState extends StatelessWidget {
             'Error loading contributions',
             style: TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
             ),
           ),
           Text(
             '$error',
-            style: const TextStyle(fontSize: 12, color: ProfileColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12,
+              color: ProfileColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -122,7 +127,7 @@ class _EmptyState extends StatelessWidget {
             'No contributions yet',
             style: TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
             ),
           ),

@@ -50,8 +50,7 @@ class GamificationService {
 
           return newUser;
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
 
     // Fallback to SharedPreferences if Firebase Auth is not available
@@ -84,8 +83,7 @@ class GamificationService {
               .set(user.toJson());
 
           return;
-        } catch (_) {
-        }
+        } catch (_) {}
       }
     }
 
@@ -104,7 +102,8 @@ class GamificationService {
             achievement.maxProgress,
           );
           final shouldBeUnlocked =
-              achievement.isUnlocked || cappedProgress >= achievement.maxProgress;
+              achievement.isUnlocked ||
+              cappedProgress >= achievement.maxProgress;
           final normalizedProgress =
               shouldBeUnlocked ? achievement.maxProgress : cappedProgress;
 
@@ -121,9 +120,10 @@ class GamificationService {
           return achievement.copyWith(
             progress: normalizedProgress,
             isUnlocked: shouldBeUnlocked,
-            unlockedAt: shouldBeUnlocked
-                ? (achievement.unlockedAt ?? Timestamp.now())
-                : achievement.unlockedAt,
+            unlockedAt:
+                shouldBeUnlocked
+                    ? (achievement.unlockedAt ?? Timestamp.now())
+                    : achievement.unlockedAt,
           );
         }).toList();
 
@@ -141,9 +141,10 @@ class GamificationService {
                 .collection('achievements')
                 .get();
         if (querySnapshot.docs.isNotEmpty) {
-          final loaded = querySnapshot.docs
-              .map((doc) => Achievement.fromJson(doc.data()))
-              .toList();
+          final loaded =
+              querySnapshot.docs
+                  .map((doc) => Achievement.fromJson(doc.data()))
+                  .toList();
           final normalized = _normalizeAchievements(loaded);
           if (normalized.changed) {
             await saveAchievements(normalized.achievements);
@@ -155,8 +156,7 @@ class GamificationService {
           await saveAchievements(predefined);
           return predefined;
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
     // Fallback to SharedPreferences if not logged in or error
     final prefs = await SharedPreferences.getInstance();
@@ -190,8 +190,7 @@ class GamificationService {
           batch.set(docRef, achievement.toJson());
         }
         await batch.commit();
-      } catch (_) {
-      }
+      } catch (_) {}
     }
   }
 
@@ -210,8 +209,7 @@ class GamificationService {
               .map((doc) => Badge.fromJson(doc.data()))
               .toList();
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
     // Fallback to SharedPreferences if not logged in or error
     final prefs = await SharedPreferences.getInstance();
@@ -237,8 +235,7 @@ class GamificationService {
           batch.set(docRef, badge.toJson());
         }
         await batch.commit();
-      } catch (_) {
-      }
+      } catch (_) {}
     }
   }
 
@@ -320,8 +317,7 @@ class GamificationService {
       user.mostActiveRegion = mostActiveRegion;
 
       await saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Extract region from location string (simplified implementation)
@@ -437,8 +433,7 @@ class GamificationService {
 
         await saveAchievements(achievements);
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   // Favorites functionality removed
@@ -536,7 +531,9 @@ class GamificationService {
       final achievement = achievements[i];
       if (achievement.isUnlocked) {
         if (achievement.progress != achievement.maxProgress) {
-          achievements[i] = achievement.copyWith(progress: achievement.maxProgress);
+          achievements[i] = achievement.copyWith(
+            progress: achievement.maxProgress,
+          );
           achievementsUpdated = true;
         }
         if (!user.achievements.contains(achievement.id)) {

@@ -1,12 +1,6 @@
 import '../models/route.dart' as route_model;
 
-enum ScheduleWindowState {
-  live,
-  stale,
-  scheduled,
-  estimated,
-  unavailable,
-}
+enum ScheduleWindowState { live, stale, scheduled, estimated, unavailable }
 
 class StepScheduleView {
   final int stepIndex;
@@ -140,10 +134,13 @@ class ScheduleWindowService {
 
     if (hasAnyWindowActive) {
       final freshness =
-          updatedAt == null ? 'unknown route timestamp' : _ageText(updatedAt, now);
-      final summary = isRouteFresh
-          ? 'Live now by schedule window (route updated $freshness)'
-          : 'Live now by timetable window (route data is older: $freshness)';
+          updatedAt == null
+              ? 'unknown route timestamp'
+              : _ageText(updatedAt, now);
+      final summary =
+          isRouteFresh
+              ? 'Live now by schedule window (route updated $freshness)'
+              : 'Live now by timetable window (route data is older: $freshness)';
       return RouteScheduleSnapshot(
         state: ScheduleWindowState.live,
         lastUpdated: updatedAt,
@@ -153,9 +150,10 @@ class ScheduleWindowService {
     }
 
     if (hasAnyWindowEnded) {
-      final summary = hasAnyAlternate
-          ? 'Outside operating hours. Alternate route suggestions are available.'
-          : 'Outside operating hours for this route.';
+      final summary =
+          hasAnyAlternate
+              ? 'Outside operating hours. Alternate route suggestions are available.'
+              : 'Outside operating hours for this route.';
       return RouteScheduleSnapshot(
         state: ScheduleWindowState.stale,
         lastUpdated: updatedAt,
@@ -182,9 +180,10 @@ class ScheduleWindowService {
 
     return RouteScheduleSnapshot(
       state: ScheduleWindowState.unavailable,
-      summaryText: hasAnyAlternate
-          ? 'No schedule data. Alternate route notes are available.'
-          : 'No schedule data available yet.',
+      summaryText:
+          hasAnyAlternate
+              ? 'No schedule data. Alternate route notes are available.'
+              : 'No schedule data available yet.',
       steps: stepViews,
     );
   }
@@ -210,7 +209,10 @@ class ScheduleWindowService {
     return '$start-$end';
   }
 
-  static _WindowStatus _windowStatusForStep(route_model.Step step, DateTime now) {
+  static _WindowStatus _windowStatusForStep(
+    route_model.Step step,
+    DateTime now,
+  ) {
     if (step.is24_7) return _WindowStatus.active;
 
     final start = _parseMinuteOfDay(step.startTime);
@@ -259,9 +261,4 @@ class ScheduleWindowService {
   }
 }
 
-enum _WindowStatus {
-  active,
-  beforeStart,
-  ended,
-  unknown,
-}
+enum _WindowStatus { active, beforeStart, ended, unknown }

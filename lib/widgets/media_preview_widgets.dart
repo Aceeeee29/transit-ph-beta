@@ -40,17 +40,13 @@ class ImagePreviewWidget extends StatelessWidget {
                 onPressed: onReplace,
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Replace'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.blue),
               ),
               TextButton.icon(
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete, size: 16),
                 label: const Text('Delete'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.red,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
               ),
             ],
           ),
@@ -110,17 +106,13 @@ class AudioPreviewWidget extends StatelessWidget {
                 onPressed: onReplace,
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Replace'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.blue),
               ),
               TextButton.icon(
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete, size: 16),
                 label: const Text('Delete'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.red,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
               ),
             ],
           ),

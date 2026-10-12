@@ -26,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -168,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   height: 72,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                      colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -351,8 +351,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? null
                                     : const LinearGradient(
                                       colors: [
-                                        Color(0xFF4A7CE0),
-                                        Color(0xFF6A9EFF),
+                                        Color(0xFF0B8FD6),
+                                        Color(0xFF2BB5F0),
                                       ],
                                       begin: Alignment.centerLeft,
                                       end: Alignment.centerRight,

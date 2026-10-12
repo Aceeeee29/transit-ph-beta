@@ -23,10 +23,7 @@ class NotificationsService {
     return const <String, dynamic>{};
   }
 
-  static bool _isTypeAllowed(
-    String type,
-    Map<String, dynamic> preferences,
-  ) {
+  static bool _isTypeAllowed(String type, Map<String, dynamic> preferences) {
     if (_routeApprovalNotificationTypes.contains(type)) {
       return preferences['routeApprovalUpdates'] as bool? ?? true;
     }
@@ -38,7 +35,9 @@ class NotificationsService {
     return true;
   }
 
-  static Future<bool> _shouldDeliverNotification(NotificationModel notification) async {
+  static Future<bool> _shouldDeliverNotification(
+    NotificationModel notification,
+  ) async {
     final preferences = await _getUserPreferences(notification.userId);
     return _isTypeAllowed(notification.type, preferences);
   }

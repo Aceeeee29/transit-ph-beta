@@ -79,9 +79,10 @@ class _AchievementCard extends StatelessWidget {
         color: ProfileColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isUnlocked
-              ? ProfileColors.green.withOpacity(0.3)
-              : ProfileColors.border,
+          color:
+              isUnlocked
+                  ? ProfileColors.green.withOpacity(0.3)
+                  : ProfileColors.border,
           width: isUnlocked ? 1.5 : 1,
         ),
         boxShadow: [
@@ -113,8 +114,11 @@ class _AchievementCard extends StatelessWidget {
                 '$progress / ${achievement.maxProgress}',
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isUnlocked ? ProfileColors.green : ProfileColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                  color:
+                      isUnlocked
+                          ? ProfileColors.green
+                          : ProfileColors.textSecondary,
                 ),
               ),
             ],
@@ -129,14 +133,16 @@ class _AchievementCard extends StatelessWidget {
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: isUnlocked
-            ? ProfileColors.green.withOpacity(0.1)
-            : ProfileColors.surfaceAlt,
+        color:
+            isUnlocked
+                ? ProfileColors.green.withOpacity(0.1)
+                : ProfileColors.surfaceAlt,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: isUnlocked
-              ? ProfileColors.green.withOpacity(0.3)
-              : ProfileColors.border,
+          color:
+              isUnlocked
+                  ? ProfileColors.green.withOpacity(0.3)
+                  : ProfileColors.border,
         ),
       ),
       child: Center(
@@ -157,11 +163,12 @@ class _AchievementCard extends StatelessWidget {
             Text(
               achievement.name,
               style: TextStyle(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 fontSize: 14,
-                color: isUnlocked
-                    ? ProfileColors.textPrimary
-                    : ProfileColors.textSecondary,
+                color:
+                    isUnlocked
+                        ? ProfileColors.textPrimary
+                        : ProfileColors.textSecondary,
               ),
             ),
             const SizedBox(width: 6),
@@ -176,7 +183,7 @@ class _AchievementCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   color: rarityColor,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -185,7 +192,10 @@ class _AchievementCard extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           achievement.description,
-          style: const TextStyle(color: ProfileColors.textSecondary, fontSize: 12),
+          style: const TextStyle(
+            color: ProfileColors.textSecondary,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -196,15 +206,14 @@ class _AchievementCard extends StatelessWidget {
       width: 28,
       height: 28,
       decoration: BoxDecoration(
-        color: isUnlocked
-            ? ProfileColors.green.withOpacity(0.1)
-            : ProfileColors.surfaceAlt,
+        color:
+            isUnlocked
+                ? ProfileColors.green.withOpacity(0.1)
+                : ProfileColors.surfaceAlt,
         shape: BoxShape.circle,
       ),
       child: Icon(
-        isUnlocked
-            ? Icons.check_circle_rounded
-            : Icons.lock_outline_rounded,
+        isUnlocked ? Icons.check_circle_rounded : Icons.lock_outline_rounded,
         color: isUnlocked ? ProfileColors.green : ProfileColors.textSecondary,
         size: 16,
       ),

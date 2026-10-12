@@ -6,23 +6,21 @@ class UserProfileBootstrapService {
     required User user,
     required String email,
   }) async {
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-          _buildDefaultUserProfile(
-            user: user,
-            email: email,
-          ),
-        );
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .set(_buildDefaultUserProfile(user: user, email: email));
   }
 
   static Future<void> ensureUserProfileExists(User user) async {
     final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
     if (userDoc.exists) return;
 
-    await createUserProfile(
-      user: user,
-      email: user.email ?? '',
-    );
+    await createUserProfile(user: user, email: user.email ?? '');
   }
 
   static Map<String, dynamic> _buildDefaultUserProfile({

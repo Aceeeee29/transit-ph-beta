@@ -42,7 +42,8 @@ class _NotificationOverlayState extends State<NotificationOverlay> {
 
     final screenHeight = MediaQuery.of(context).size.height;
     final maxNotifications = ((screenHeight - 100) / 120).floor();
-    final notificationsToShow = _currentNotifications.take(maxNotifications).toList();
+    final notificationsToShow =
+        _currentNotifications.take(maxNotifications).toList();
 
     return Stack(
       children: [

@@ -18,7 +18,7 @@ class AuthGate extends StatelessWidget {
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -89,8 +89,7 @@ class AuthGate extends StatelessWidget {
     final explicitUntil = _parseFirestoreDate(data['restrictedUntil']);
     if (explicitUntil != null) return explicitUntil.toUtc();
 
-    final status =
-        ((data['status'] as String?) ?? '').trim().toLowerCase();
+    final status = ((data['status'] as String?) ?? '').trim().toLowerCase();
     if (status != 'restricted') return null;
 
     final restrictedAt = _parseFirestoreDate(data['restrictedAt']);
@@ -107,8 +106,7 @@ class AuthGate extends StatelessWidget {
       return restrictionEndsAt.isAfter(DateTime.now().toUtc());
     }
 
-    final status =
-        ((data['status'] as String?) ?? '').trim().toLowerCase();
+    final status = ((data['status'] as String?) ?? '').trim().toLowerCase();
     return (data['isBanned'] as bool? ?? false) || status == 'banned';
   }
 
@@ -138,9 +136,7 @@ class AuthGate extends StatelessWidget {
     final hasAcceptedLegal = _hasAcceptedLatestLegalDocuments(data);
 
     if (isRestricted) {
-      return _RestrictedAccountHandler(
-        restrictedUntil: restrictionEndsAt,
-      );
+      return _RestrictedAccountHandler(restrictedUntil: restrictionEndsAt);
     }
 
     if (!hasAcceptedLegal) {
@@ -165,10 +161,7 @@ class AuthGate extends StatelessWidget {
     }
 
     return hasSeenTutorial
-        ? MainScreen(
-            isAdmin: false,
-            quickRouteToken: quickRouteToken,
-          )
+        ? MainScreen(isAdmin: false, quickRouteToken: quickRouteToken)
         : OnboardingScreen(user: user);
   }
 
@@ -186,10 +179,11 @@ class AuthGate extends StatelessWidget {
 
           // ── Keep user role/restriction state live so moderation applies immediately ─
           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .snapshots(),
+            stream:
+                FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .snapshots(),
             builder: (context, userSnapshot) {
               if (userSnapshot.connectionState == ConnectionState.waiting &&
                   !userSnapshot.hasData) {
@@ -209,16 +203,16 @@ class AuthGate extends StatelessWidget {
                   quickRouteToken: quickRouteToken,
                   enforceEmailVerification: true,
                 );
-
               } else {
                 // Document may not exist yet — race between auth event and
                 // Firestore write completing. Wait 2 s then retry once.
                 return FutureBuilder<DocumentSnapshot>(
                   future: Future.delayed(const Duration(seconds: 2)).then(
-                    (_) => FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .get(),
+                    (_) =>
+                        FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user.uid)
+                            .get(),
                   ),
                   builder: (context, retrySnapshot) {
                     if (retrySnapshot.connectionState ==
@@ -226,10 +220,9 @@ class AuthGate extends StatelessWidget {
                       return _loadingScaffold();
                     }
 
-                    if (retrySnapshot.hasData &&
-                        retrySnapshot.data!.exists) {
-                      final data = retrySnapshot.data!.data()
-                          as Map<String, dynamic>;
+                    if (retrySnapshot.hasData && retrySnapshot.data!.exists) {
+                      final data =
+                          retrySnapshot.data!.data() as Map<String, dynamic>;
                       return _buildAuthedDestination(
                         user: user,
                         data: data,
@@ -298,92 +291,93 @@ class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-            decoration: BoxDecoration(
-              color: AuthGate._surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AuthGate._border),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x1A2E7CF6),
-                  blurRadius: 24,
-                  offset: Offset(0, 10),
+        builder:
+            (ctx) => Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                decoration: BoxDecoration(
+                  color: AuthGate._surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AuthGate._border),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1A0B8FD6),
+                      blurRadius: 24,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AuthGate._danger.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.gpp_bad_rounded,
-                        color: AuthGate._danger,
-                        size: 22,
+                    Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: AuthGate._danger.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.gpp_bad_rounded,
+                            color: AuthGate._danger,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Account Restricted',
+                            style: TextStyle(
+                              color: AuthGate._textPrimary,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _buildRestrictionMessage(),
+                      style: TextStyle(
+                        color: AuthGate._textSecondary,
+                        fontSize: 14,
+                        height: 1.35,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Account Restricted',
-                        style: TextStyle(
-                          color: AuthGate._textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                          letterSpacing: -0.2,
+                    const SizedBox(height: 18),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AuthGate._accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                        },
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _buildRestrictionMessage(),
-                  style: TextStyle(
-                    color: AuthGate._textSecondary,
-                    fontSize: 14,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AuthGate._accent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                    },
-                    child: const Text(
-                      'OK',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
       );
 
       if (!mounted) return;

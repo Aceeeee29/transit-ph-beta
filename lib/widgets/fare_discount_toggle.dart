@@ -32,12 +32,7 @@ class FareDiscountToggle extends StatelessWidget {
       children: [
         Icon(Icons.badge_outlined, size: iconSize, color: iconColor),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: labelStyle,
-          ),
-        ),
+        Expanded(child: Text(label, style: labelStyle)),
         Switch.adaptive(
           value: value,
           onChanged: onChanged,
@@ -47,16 +42,9 @@ class FareDiscountToggle extends StatelessWidget {
     );
 
     if (decoration != null) {
-      return Container(
-        padding: padding,
-        decoration: decoration,
-        child: row,
-      );
+      return Container(padding: padding, decoration: decoration, child: row);
     }
 
-    return Padding(
-      padding: padding,
-      child: row,
-    );
+    return Padding(padding: padding, child: row);
   }
 }

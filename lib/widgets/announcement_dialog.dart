@@ -7,7 +7,8 @@ class AnnouncementDialog {
   AnnouncementDialog._();
 
   static Future<void> checkAndShow(BuildContext context) async {
-    final announcement = await AnnouncementService.getLatestVisibleAnnouncementForCurrentUser();
+    final announcement =
+        await AnnouncementService.getLatestVisibleAnnouncementForCurrentUser();
     if (announcement == null) return;
     if (!context.mounted) return;
 
@@ -111,7 +112,7 @@ class _AnnouncementAlertDialog extends StatelessWidget {
       case AnnouncementType.warning:
         return const Color(0xFFFFB547);
       case AnnouncementType.info:
-        return const Color(0xFF2E7CF6);
+        return const Color(0xFF0B8FD6);
     }
   }
 

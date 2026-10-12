@@ -82,16 +82,20 @@ class UpdateChecker {
 
   static Future<Map<String, Object?>?> _readFromFirestore() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection(_configCollection)
-          .doc(_configDoc)
-          .get();
+      final snap =
+          await FirebaseFirestore.instance
+              .collection(_configCollection)
+              .doc(_configDoc)
+              .get();
 
       if (!snap.exists) return null;
 
       final data = snap.data() ?? <String, dynamic>{};
       return {
-        _keyLatestVersion: _asString(data[_keyLatestVersion], fallback: '1.0.0'),
+        _keyLatestVersion: _asString(
+          data[_keyLatestVersion],
+          fallback: '1.0.0',
+        ),
         _keyUpdateUrl: _asString(data[_keyUpdateUrl]),
         _keyForceUpdate: _asBool(data[_keyForceUpdate]),
         _keyUpdateMessage: _asString(data[_keyUpdateMessage]),

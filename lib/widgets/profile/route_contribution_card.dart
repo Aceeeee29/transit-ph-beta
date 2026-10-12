@@ -20,7 +20,9 @@ class RouteContributionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final distance = RouteMetricsService.calculateRouteDistance(route.pathPoints);
+    final distance = RouteMetricsService.calculateRouteDistance(
+      route.pathPoints,
+    );
     final distanceLabel = RouteMetricsService.formatDistanceForUnit(
       distance,
       distanceUnit: distanceUnit,
@@ -53,10 +55,7 @@ class RouteContributionCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                _infoPill(
-                  icon: Icons.straighten,
-                  label: distanceLabel,
-                ),
+                _infoPill(icon: Icons.straighten, label: distanceLabel),
                 const SizedBox(width: 8),
                 _infoPill(
                   icon: Icons.schedule_outlined,
@@ -88,7 +87,7 @@ class RouteContributionCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               color: ProfileColors.textPrimary,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -115,7 +114,11 @@ class _CardHeader extends StatelessWidget {
             color: ProfileColors.accentSoft,
             borderRadius: BorderRadius.circular(11),
           ),
-          child: const Icon(Icons.alt_route, color: ProfileColors.accent, size: 20),
+          child: const Icon(
+            Icons.alt_route,
+            color: ProfileColors.accent,
+            size: 20,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -126,7 +129,7 @@ class _CardHeader extends StatelessWidget {
                 route.shortDescription,
                 style: const TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: ProfileColors.textPrimary,
                 ),
               ),
@@ -150,7 +153,10 @@ class _CardHeader extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 12, color: ProfileColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12,
+              color: ProfileColors.textSecondary,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -160,28 +166,30 @@ class _CardHeader extends StatelessWidget {
 
   Widget _editButton(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ContributeScreen(
-            onRouteSubmitted: (updatedRoute) async {
-              try {
-                await RouteService.updateRoute(updatedRoute);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Route updated!')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update route: $e')),
-                );
-              }
-            },
-            routeToEdit: route,
-            contributorId: userEmail,
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ContributeScreen(
+                    onRouteSubmitted: (updatedRoute) async {
+                      try {
+                        await RouteService.updateRoute(updatedRoute);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Route updated!')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to update route: $e')),
+                        );
+                      }
+                    },
+                    routeToEdit: route,
+                    contributorId: userEmail,
+                  ),
+            ),
           ),
-        ),
-      ),
       child: Container(
         width: 34,
         height: 34,
@@ -238,13 +246,16 @@ class _MetricsGrid extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
             ),
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 10, color: ProfileColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 10,
+              color: ProfileColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -256,7 +267,8 @@ class _MetricsGrid extends StatelessWidget {
       child: StreamBuilder<Map<String, int>>(
         stream: RouteService.watchRouteFeedbackSummary(route.id),
         builder: (context, snapshot) {
-          final summary = snapshot.data ??
+          final summary =
+              snapshot.data ??
               const {
                 'fareAccurateYes': 0,
                 'fareAccurateNo': 0,
@@ -279,13 +291,16 @@ class _MetricsGrid extends StatelessWidget {
                 '${trust.total}/100',
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   color: ProfileColors.textPrimary,
                 ),
               ),
               const Text(
                 'Integrity',
-                style: TextStyle(fontSize: 10, color: ProfileColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: ProfileColors.textSecondary,
+                ),
               ),
             ],
           );

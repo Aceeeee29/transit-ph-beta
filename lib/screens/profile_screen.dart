@@ -136,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               color: ProfileColors.textPrimary,
               fontSize: 17,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.3,
             ),
           ),
@@ -195,7 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         unselectedLabelColor: ProfileColors.textSecondary,
         indicatorColor: ProfileColors.accent,
         indicatorWeight: 2.5,
-        labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        labelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
         unselectedLabelStyle: TextStyle(
           fontWeight: FontWeight.w500,
           fontSize: 13,
@@ -268,7 +268,7 @@ class _ProfileHeaderCard extends StatelessWidget {
             user.name,
             style: const TextStyle(
               fontSize: 22,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: ProfileColors.textPrimary,
               letterSpacing: -0.4,
             ),
@@ -303,7 +303,7 @@ class _ProfileHeaderCard extends StatelessWidget {
       height: 80,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+          colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -337,7 +337,7 @@ class _ProfileHeaderCard extends StatelessWidget {
         initials,
         style: const TextStyle(
           fontSize: 32,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
           color: Colors.white,
         ),
       ),
@@ -427,7 +427,7 @@ class _ProfileHeaderCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               color: color,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -458,7 +458,7 @@ class _ProfileHeaderCard extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
             ),
           ),
