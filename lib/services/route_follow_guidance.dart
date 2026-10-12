@@ -253,7 +253,11 @@ class FollowGuidancePlanner {
       if (match != null) target = _Target(match, current);
     }
     if (target == null || target.match.distance > approachRadiusMeters) {
-      final ahead = engine.nearestInRange(position, progress, engine.totalMeters);
+      final ahead = engine.nearestInRange(
+        position,
+        progress,
+        engine.totalMeters,
+      );
       if (ahead != null &&
           (target == null || ahead.distance < target.match.distance)) {
         target = _Target(ahead, _stepAtSegment(steps, ahead.segment));
@@ -338,7 +342,9 @@ class FollowGuidancePlanner {
     final last = length - 1;
     final valid = [
       for (final s in steps)
-        if (s.startIndex >= 0 && s.endIndex <= last && s.endIndex > s.startIndex)
+        if (s.startIndex >= 0 &&
+            s.endIndex <= last &&
+            s.endIndex > s.startIndex)
           s,
     ];
     return valid.isNotEmpty

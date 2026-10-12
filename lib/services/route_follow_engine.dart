@@ -141,7 +141,11 @@ class RouteFollowEngine {
   RouteMatch? nearestInRange(LatLng p, double fromMeters, double toMeters) {
     if (toMeters < fromMeters) return null;
     RouteMatch? best;
-    for (var i = _firstSegmentEndingAfter(fromMeters); i < path.length - 1; i++) {
+    for (
+      var i = _firstSegmentEndingAfter(fromMeters);
+      i < path.length - 1;
+      i++
+    ) {
       if (_cumulative[i] > toMeters) break;
       var m = _project(p, i);
       if (m.along < fromMeters || m.along > toMeters) {
@@ -336,7 +340,8 @@ class RouteFollowEngine {
     final cosLat = math.cos(p.latitude * math.pi / 180);
     double x(LatLng q) =>
         (q.longitude - p.longitude) * math.pi / 180 * _earthRadius * cosLat;
-    double y(LatLng q) => (q.latitude - p.latitude) * math.pi / 180 * _earthRadius;
+    double y(LatLng q) =>
+        (q.latitude - p.latitude) * math.pi / 180 * _earthRadius;
 
     final ax = x(a), ay = y(a);
     final abx = x(b) - ax, aby = y(b) - ay;

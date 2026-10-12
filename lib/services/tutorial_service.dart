@@ -20,8 +20,7 @@ class TutorialService {
       final user = await GamificationService.loadUser();
       user.hasSeenTutorial = true;
       await GamificationService.saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Reset tutorial status (for testing)
@@ -30,8 +29,7 @@ class TutorialService {
       final user = await GamificationService.loadUser();
       user.hasSeenTutorial = false;
       await GamificationService.saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Get tutorial steps for contribute screen

@@ -24,11 +24,8 @@ class DraggableStepMarkersLayer extends StatelessWidget {
   /// drag one to add a via point there.
   final List<DraggableStepBodyHandle> insertHandles;
   final void Function(int index, LatLng nextPoint) onBoundaryDragEnd;
-  final void Function(
-    int stepIndex,
-    int controlIndex,
-    LatLng nextPoint,
-  ) onBodyDragEnd;
+  final void Function(int stepIndex, int controlIndex, LatLng nextPoint)
+  onBodyDragEnd;
   final void Function(int stepIndex, int controlIndex)? onBodyLongPress;
   final void Function(int stepIndex, int pieceIndex, LatLng point)?
   onInsertDragEnd;
@@ -100,9 +97,8 @@ class DraggableStepMarkersLayer extends StatelessWidget {
             onLongDragEnd: (details, latLng) => onBoundaryDragEnd(i, latLng),
             builder: (ctx, pos, isDragging) {
               final isEndpoint = i == 0 || i == boundaryWaypoints.length - 1;
-              final fillColor = isEndpoint
-                  ? (i == 0 ? Colors.green : Colors.red)
-                  : accent;
+              final fillColor =
+                  isEndpoint ? (i == 0 ? Colors.green : Colors.red) : accent;
 
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
@@ -126,7 +122,7 @@ class DraggableStepMarkersLayer extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -143,10 +139,18 @@ class DraggableStepMarkersLayer extends StatelessWidget {
             useLongPress: false,
             // Absorb taps so tapping a handle doesn't also tap the map.
             onTap: (_) {},
-            onDragEnd: (details, latLng) =>
-                onBodyDragEnd(handle.stepIndex, handle.controlIndex, latLng),
-            onLongDragEnd: (details, latLng) =>
-                onBodyDragEnd(handle.stepIndex, handle.controlIndex, latLng),
+            onDragEnd:
+                (details, latLng) => onBodyDragEnd(
+                  handle.stepIndex,
+                  handle.controlIndex,
+                  latLng,
+                ),
+            onLongDragEnd:
+                (details, latLng) => onBodyDragEnd(
+                  handle.stepIndex,
+                  handle.controlIndex,
+                  latLng,
+                ),
             onLongPress:
                 onBodyLongPress == null
                     ? null

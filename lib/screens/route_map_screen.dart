@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
+import '../widgets/map/app_base_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
@@ -31,20 +32,32 @@ import '../widgets/fare_discount_toggle.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 import '../widgets/translated_text.dart';
 import '../widgets/location_permission_notice.dart';
+import '../data/camanava_places.dart';
+import '../models/place.dart';
+import '../services/map_tab_controller.dart';
+import '../widgets/map_tab/map_drawer.dart';
+import '../widgets/map_tab/map_side_button.dart';
+import '../widgets/map_tab/place_category_chips.dart';
+import '../widgets/map_tab/place_widgets.dart';
+import '../widgets/map_tab/route_view_widgets.dart';
 part 'route_map_screen_widgets.dart';
-part 'route_map_screen_overlays.dart';
 part 'route_map_screen_data.dart';
+part 'route_map_screen_chrome.dart';
 
 class RouteMapScreen extends StatefulWidget {
   final route_model.Route route;
   final bool enableRouteIntegrity;
   final bool showDownloadButton;
 
+  /// Back to the map. Without it, back pops this page.
+  final VoidCallback? onClose;
+
   const RouteMapScreen({
     super.key,
     required this.route,
     this.enableRouteIntegrity = true,
     this.showDownloadButton = true,
+    this.onClose,
   });
 
   @override
@@ -94,6 +107,13 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   bool _isDiscountFareEnabled = false;
   bool _hasManualFareDiscountOverride = false;
 
+  // ─── Map chrome (drawer, place pins) ──────────────────────────────────────
+  final DraggableScrollableController _drawerController =
+      DraggableScrollableController();
+  Place? _selectedPlace;
+  double _pinScale = 0;
+  static const double _drawerPeekHeight = 80.0;
+
   // FIX: Smooth camera animation fields
   late final AnimationController _cameraAnimController;
   late final CurvedAnimation _cameraAnim;
@@ -108,7 +128,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -152,6 +172,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       // Reopening a session that paused itself for being idle resumes it.
       navigation.resumeTracking();
     }
+    MapTabController.instance.placeCategories.addListener(_onSharedMapState);
+    MapTabController.instance.showPins.addListener(_onSharedMapState);
 
     _generatePathPoints();
     _initLocation();
@@ -467,7 +489,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     setState(() => _isAutoFollowEnabled = value);
   }
 
-
   void _setRouteReports(
     List<route_model.Report> reports, {
     bool sortByLatest = false,
@@ -552,8 +573,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
 
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    if (position.accuracy >
-        ActiveNavigationService.maxAcceptedAccuracyMeters) {
+    if (position.accuracy > ActiveNavigationService.maxAcceptedAccuracyMeters) {
       return;
     }
     setState(() => _applyPosition(position, _rawLatLng(position)));
@@ -563,8 +583,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     if (!mounted || !_isNavigationStarted) return;
     final position = ActiveNavigationService.instance.lastPosition;
     if (position == null) return;
-    final display =
-        _followSnapshot?.displayPosition ?? _rawLatLng(position);
+    final display = _followSnapshot?.displayPosition ?? _rawLatLng(position);
     setState(() => _applyPosition(position, display));
     if (_isAutoFollowEnabled && !_hasArrived) {
       _maybeMoveCamera(display, heading: _displayHeading);
@@ -616,8 +635,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _lastCameraMoveAt = now;
     _lastCameraTarget = target;
 
-    final targetZoom =
-        _followZoom;
+    final targetZoom = _followZoom;
     // Negate heading: rotating the map -heading° puts travel direction at top
     final targetRotation = -heading;
 
@@ -952,10 +970,57 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     final navigation = ActiveNavigationService.instance;
     navigation.removeListener(_onNavigationSessionChanged);
     navigation.followUpdates.removeListener(_onNavigationPosition);
+    MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
+    MapTabController.instance.showPins.removeListener(_onSharedMapState);
+    _drawerController.dispose();
     _cameraAnim.dispose();
     _cameraAnimController.dispose();
     _positionSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Pin filter or visibility changed (here or elsewhere on the Map tab).
+  void _onSharedMapState() {
+    if (mounted) setState(() {});
+  }
+
+  List<Place> get _visiblePlaces {
+    final categories = MapTabController.instance.placeCategories.value;
+    if (categories.isEmpty) return camanavaPlaces;
+    return camanavaPlaces
+        .where((p) => p.categories.any(categories.contains))
+        .toList();
+  }
+
+  /// Rebuilds only when the pins' size visibly changes, not on every
+  /// camera frame while following.
+  void _updatePinScale(double zoom) {
+    final scale = placePinScaleForZoom(zoom);
+    if ((scale - _pinScale).abs() < 0.05 && (scale == 0) == (_pinScale == 0)) {
+      return;
+    }
+    setState(() => _pinScale = scale);
+  }
+
+  void _onPlaceTapped(Place place) {
+    setState(() => _selectedPlace = place);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MapDrawer.open(_drawerController);
+    });
+  }
+
+  void _clearSelectedPlace() {
+    if (_selectedPlace != null) setState(() => _selectedPlace = null);
+  }
+
+  /// Back to the map (or out of this page when opened on its own).
+  void _closeView() {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose();
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   bool get _hasFareSteps =>
@@ -1053,7 +1118,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       final left = end - math.max(start, snapshot.progressMeters);
       if (left <= 0) continue;
       final mode =
-          i < widget.route.steps.length ? widget.route.steps[i].mode : 'Jeepney';
+          i < widget.route.steps.length
+              ? widget.route.steps[i].mode
+              : 'Jeepney';
       minutes += left / 1000 / RouteMetricsService.speedKmhForMode(mode) * 60;
     }
     return (meters: snapshot.remainingMeters, minutes: minutes.ceil());
@@ -1091,7 +1158,9 @@ class _RouteMapScreenState extends State<RouteMapScreen>
           ? widget.route.stepBoundaries
           : _computeEvenBoundaries(),
     );
-    return estimated > 0 ? RouteMetricsService.formatEtaLabel('$estimated') : null;
+    return estimated > 0
+        ? RouteMetricsService.formatEtaLabel('$estimated')
+        : null;
   }
 
   IconData _getModeIcon(String mode) {
@@ -1291,12 +1360,21 @@ class _RouteMapScreenState extends State<RouteMapScreen>
       children: [
         Scaffold(
           backgroundColor: _bg,
-          appBar: _buildAppBar(),
-          body: Column(
-            children: [
-              Expanded(flex: 2, child: _buildMapSection(center)),
-              Expanded(flex: 1, child: _buildInfoPanel()),
-            ],
+          body: SafeArea(
+            child: Stack(
+              children: [
+                _buildMapSection(center),
+                _buildTopOverlaySection(),
+                if (kDebugMode && _isNavigationStarted && !_hasArrived)
+                  Positioned(
+                    left: 12,
+                    bottom: _drawerPeekHeight + 12,
+                    child: FollowSimulatorButton(path: _pathPoints),
+                  ),
+                _buildSideButtonsSection(),
+                _buildRouteDrawerSection(),
+              ],
+            ),
           ),
         ),
         if (_showNotificationOverlay)
@@ -1312,28 +1390,8 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     return _buildEmptyStateSection();
   }
 
-  AppBar _buildAppBar() {
-    return _buildAppBarSection();
-  }
-
   Widget _buildMapSection(LatLng center) {
     return _buildMapSectionSection(center);
-  }
-
-  Widget _buildStartControl() {
-    return _buildStartControlSection();
-  }
-
-  Widget _buildMapLegend() {
-    return _buildMapLegendSection();
-  }
-
-  Widget _buildCenterButton() {
-    return _buildCenterButtonSection();
-  }
-
-  Widget _buildInfoPanel() {
-    return _buildInfoPanelSection();
   }
 
   String? _routeScheduleText() {
@@ -1424,59 +1482,4 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   }
 
   Widget _buildSectionLabel(String label) => _buildSectionLabelSection(label);
-}
-
-// ─── Vote button widget ────────────────────────────────────────────────────────
-
-class _VoteButton extends StatelessWidget {
-  final IconData icon;
-  final int count;
-  final bool active;
-  final Color activeColor;
-  final VoidCallback? onTap;
-
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _border = Color(0xFFD4E4F7);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-
-  const _VoteButton({
-    required this.icon,
-    required this.count,
-    required this.active,
-    required this.activeColor,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.12) : _surfaceAlt,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: active ? activeColor.withValues(alpha: 0.4) : _border,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 15, color: active ? activeColor : _textSecondary),
-            const SizedBox(width: 4),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: active ? activeColor : _textPrimary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

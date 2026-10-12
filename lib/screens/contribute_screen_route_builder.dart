@@ -245,235 +245,6 @@ extension _ContributeScreenSections on _ContributeScreenState {
     );
   }
 
-  AppBar _buildAppBarSection() {
-    final isNearby = _mapMode == MapTabMode.nearby;
-    return AppBar(
-      backgroundColor: _surface,
-      foregroundColor: _textPrimary,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      title: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _accentSoft,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(
-              isNearby ? Icons.near_me_rounded : Icons.add_road_rounded,
-              color: _accent,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TranslatedText(
-                  isNearby
-                      ? 'Nearby Places'
-                      : (widget.routeToEdit != null
-                          ? 'Edit Route'
-                          : 'Contribute a Route'),
-                  style: const TextStyle(
-                    color: _textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                if (isNearby)
-                  const TranslatedText(
-                    'Places across CAMANAVA',
-                    style: TextStyle(
-                      color: _textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        GestureDetector(
-          onTap:
-              () => _switchMapMode(
-                isNearby ? MapTabMode.contribute : MapTabMode.nearby,
-              ),
-          child: Tooltip(
-            message:
-                isNearby ? 'Back to route contribution' : 'Show Nearby Places',
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: _accentSoft,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _accent.withOpacity(0.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isNearby ? Icons.add_road_outlined : Icons.near_me_outlined,
-                    color: _accent,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  TranslatedText(
-                    isNearby ? 'Contribute' : 'Show Nearby Places',
-                    style: const TextStyle(
-                      color: _accent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Pin visibility has its own toggle floating on the map itself
-        // (_buildPinsToggleSection) — no duplicate control here.
-        // Secondary actions live in an overflow menu so the AppBar can
-        // never overflow, no matter how many become visible at once
-        // (e.g. after Load Example sets selectionMode to done with steps,
-        // which previously added edit-handles + preview buttons and broke
-        // the layout on narrow screens).
-        if (!isNearby)
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: PopupMenuButton<String>(
-              tooltip: 'More actions',
-              offset: const Offset(0, 44),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              icon: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _border),
-                ),
-                child: const Icon(
-                  Icons.more_vert_rounded,
-                  color: _textSecondary,
-                  size: 18,
-                ),
-              ),
-              onSelected: (value) {
-                switch (value) {
-                  case 'handles':
-                    _toggleEditHandles();
-                  case 'preview':
-                    _onPreviewRoute();
-                  case 'tutorial':
-                    _showTutorialOverlay();
-                }
-              },
-              itemBuilder:
-                  (_) => [
-                    if (selectionMode == 'done' && steps.isNotEmpty)
-                      PopupMenuItem(
-                        value: 'handles',
-                        child: Row(
-                          children: [
-                            Icon(
-                              _showEditHandles
-                                  ? Icons.edit_location_alt_rounded
-                                  : Icons.edit_location_alt_outlined,
-                              color: _accent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TranslatedText(
-                                _showEditHandles
-                                    ? 'Hide edit handles'
-                                    : 'Show edit handles',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: _textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (selectionMode == 'done')
-                      const PopupMenuItem(
-                        value: 'preview',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.preview_rounded,
-                              color: _accent,
-                              size: 18,
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: TranslatedText(
-                                'Preview route',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: _textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    const PopupMenuItem(
-                      value: 'tutorial',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.help_outline_rounded,
-                            color: _textSecondary,
-                            size: 18,
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: TranslatedText(
-                              'Tutorial',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: _textPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-            ),
-          ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: _border),
-      ),
-    );
-  }
-
   Widget _buildMapLayerSection() {
     final editControls = _stepEditControls;
     final isNearby = _mapMode == MapTabMode.nearby;
@@ -483,9 +254,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
       options: MapOptions(
         initialCenter: CamanavaBounds.center,
         initialZoom: CamanavaBounds.initialZoom,
-        minZoom: 9.0,
+        minZoom: 10.0,
         maxZoom: 18.0,
-        cameraConstraint: CameraConstraint.contain(
+        // Only the center is kept in the area: holding the whole screen
+        // inside it blocked zooming out far enough to show all of Metro
+        // Manila.
+        cameraConstraint: CameraConstraint.containCenter(
           bounds: LatLngBounds(
             const LatLng(14.38, 120.82),
             const LatLng(14.95, 121.20),
@@ -500,34 +274,36 @@ extension _ContributeScreenSections on _ContributeScreenState {
         },
       ),
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.app.transitph_beta',
-        ),
+        const AppBaseMap(),
+        // Place pins in every mode, under the route so its handles win
+        // taps. Small, so drawing near one rarely hits it by accident.
+        if (_showPins)
+          MarkerLayer(
+            markers: placeMarkers(
+              places: _visibleNearbyPlaces,
+              scale: placePinScaleForZoom(_currentZoom),
+              selectedId: _nearbySelectedPlace?.id,
+              onTap: _onNearbyPlaceTapped,
+            ),
+          ),
+        // A place found with the search bar.
+        if (isNearby && _foundPlace != null)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: LatLng(_foundPlace!.latitude, _foundPlace!.longitude),
+                width: 44,
+                height: 44,
+                alignment: Alignment.topCenter,
+                child: const Icon(Icons.place, color: Colors.red, size: 44),
+              ),
+            ],
+          ),
         if (!isNearby) ...[
           // PolygonLayer(polygons: _regionBoundaryPolygons), // TODO: re-enable once real boundary data is added
           PolylineLayer(polylines: polylines),
           MarkerLayer(
             markers: [
-              // POI reference pins (schools, attractions, parks, …) — shown
-              // in contribute mode too so users can draw routes relative to
-              // them. Deliberately non-interactive (IgnorePointer) so taps
-              // always fall through to route-point drawing; full details
-              // stay in Nearby Places mode. Hidden via the pins toggle.
-              if (_showPins && _poiPinScale > 0.02)
-                for (final place in camanavaPlaces)
-                  Marker(
-                    point: LatLng(place.lat, place.lng),
-                    width: 34 * _poiPinScale,
-                    height: 34 * _poiPinScale,
-                    child: IgnorePointer(
-                      child: _NearbyPlacePin(
-                        place: place,
-                        selected: false,
-                        scale: _poiPinScale,
-                      ),
-                    ),
-                  ),
               if (_showPins && pathPoints.isNotEmpty)
                 Marker(
                   point: pathPoints.first,
@@ -553,9 +329,9 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 ),
             ],
           ),
-          // While drawing, handles are always on so turns can be fixed as
-          // you go; after Finish they follow the "Drag handles" toggle.
-          if ((selectionMode == 'done' && steps.isNotEmpty && _showEditHandles) ||
+          // Handles are always on, while drawing and after Finish, so any
+          // step's line can be fixed at any time.
+          if ((selectionMode == 'done' && steps.isNotEmpty) ||
               (selectionMode == 'step' && _stepCount > 0))
             DraggableStepMarkersLayer(
               boundaryWaypoints: editControls.boundaryWaypoints,
@@ -567,267 +343,389 @@ extension _ContributeScreenSections on _ContributeScreenState {
               onInsertDragEnd: _onInsertHandleDragEnd,
               accent: _accent,
             ),
-        ] else
-          MarkerLayer(
-            markers: [
-              if (_showPins)
-                for (final marker
-                    in _visibleNearbyPlaces
-                        .map(_buildNearbyPlaceMarker)
-                        .whereType<Marker>())
-                  marker,
-              if (_showPins && _nearbyPosition != null)
-                Marker(
-                  point: LatLng(
-                    _nearbyPosition!.latitude,
-                    _nearbyPosition!.longitude,
-                  ),
-                  child: const _NearbyUserPin(),
+        ],
+        MarkerLayer(
+          markers: [
+            if (_nearbyPosition != null)
+              Marker(
+                point: LatLng(
+                  _nearbyPosition!.latitude,
+                  _nearbyPosition!.longitude,
                 ),
-              if (_debugCoord != null)
-                Marker(
-                  point: _debugCoord!,
-                  child: const Icon(Icons.add, color: _accent, size: 40),
-                ),
-            ],
-          ),
+                width: 24,
+                height: 24,
+                child: const IgnorePointer(child: _NearbyUserPin()),
+              ),
+            if (isNearby && _debugCoord != null)
+              Marker(
+                point: _debugCoord!,
+                child: const Icon(Icons.add, color: _accent, size: 40),
+              ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildMapControlsOverlaySection() {
-    double? totalOrsDistKm;
-    int? totalOrsDurMinutes;
-
-    if (_stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null)) {
-      totalOrsDistKm =
-          _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000;
-    }
-    if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
-      double totalSeconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
-      if (steps.length > 1) totalSeconds += ((steps.length - 1) * 120);
-      totalOrsDurMinutes = (totalSeconds / 60).ceil();
-    }
-
-    return Positioned(
-      top: 70,
-      left: 20,
-      child: MapControls(
-        historyService: _historyService,
-        pathPoints: pathPoints,
-        steps: steps,
-        stepBoundaries: stepBoundaries,
-        selectionMode: selectionMode,
-        currentMode: currentMode,
-        onUndo: _onUndo,
-        onRedo: _onRedo,
-        onReset: _onReset,
-        onPreview: _onPreviewRoute,
-        showPreview: false,
-        onSnapToRoadToggled: _onSnapToRoadToggled,
-        snapToRoadEnabled: _snapToRoadEnabled,
-        allowExpressways: _allowExpressways,
-        onAllowExpresswaysToggled:
-            (value) => _setUiState(() => _expresswayOverride = value),
-        orsDistanceKm: totalOrsDistKm,
-        orsDurationMinutes: totalOrsDurMinutes,
-      ),
+  /// Distance · time · fare of what's drawn so far, e.g. "1.2 km · 14 min ·
+  /// ₱14". Road-measured numbers once every step has them.
+  String _routeMetricsLine() {
+    final modes = steps.map((s) => s.mode).toList();
+    final hasMeasuredDistance =
+        _stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null);
+    final distance = RouteMetricsService.formatDistance(
+      hasMeasuredDistance
+          ? _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000
+          : RouteMetricsService.calculateRouteDistance(pathPoints),
     );
+    int minutes;
+    if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
+      var seconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
+      // About two minutes per transfer.
+      if (steps.length > 1) seconds += (steps.length - 1) * 120;
+      minutes = (seconds / 60).ceil();
+    } else {
+      minutes = RouteMetricsService.calculateEta(
+        pathPoints,
+        modes,
+        stepBoundaries,
+      );
+    }
+    final fare = RouteMetricsService.calculateFareEstimate(
+      pathPoints,
+      modes,
+      stepBoundaries,
+    ).replaceFirst('PHP ', '₱');
+    return [
+      distance,
+      RouteMetricsService.formatEta(minutes),
+      if (steps.isNotEmpty) fare,
+    ].join(' · ');
   }
 
-  Widget _buildInstructionPillSection() {
-    if (selectionMode == 'done') return const SizedBox.shrink();
-
+  /// The one drawing card above the drawer: what to do next, Finish, the
+  /// route so far, undo/redo/clear, the snapping options and the modes.
+  /// (Steps are listed and edited in the drawer.)
+  Widget _buildDrawCardSection() {
+    final drawing = selectionMode == 'step';
+    final hasPoints = pathPoints.isNotEmpty;
     final String text =
         selectionMode == 'start'
             ? 'Tap on the map to select the starting point'
+            : selectionMode == 'done'
+            ? 'Route finished. Drag the dots to fix a line.'
             : _hasOpenStep
             ? 'Drawing a $_openStepMode step: tap to extend it, drag points '
                 'or + to fix turns'
             : 'Tap to start the next $currentMode step';
+    final canUndo = _hasOpenStep || _historyService.canUndo;
+    final lineMode = _hasOpenStep ? _openStepMode : currentMode;
 
-    // NOTE: sits above the bottom-left pins toggle (drawer 0-40,
-    // pins 46-80), so bottom is 88 to avoid overlap.
+    // Above the drawer, and clear of the right-side buttons.
     return Positioned(
-      bottom: 88,
+      bottom: _ContributeScreenState._drawerPeekHeight + 12,
       left: 12,
-      right: 12,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: _surface.withOpacity(0.97),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: _accent.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+      right: _ContributeScreenState._sideButtonsInset,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: _surface.withValues(alpha: 0.97),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _border),
+          boxShadow: [
+            BoxShadow(
+              color: _accent.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TranslatedText(
+                    text,
+                    style: const TextStyle(
+                      color: _textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (drawing && steps.isNotEmpty && !_hasOpenStep) ...[
+                  const SizedBox(width: 8),
+                  _pillAction(
+                    icon: Icons.check_rounded,
+                    label: 'Finish (${steps.length})',
+                    onTap: _onFinishRoutePressed,
+                    primary: true,
+                  ),
+                ],
+              ],
+            ),
+            if (hasPoints) ...[
+              const SizedBox(height: 4),
+              Text(
+                _routeMetricsLine(),
+                style: const TextStyle(color: _textSecondary, fontSize: 12),
               ),
             ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+            if (_hasOpenStep) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(
-                      color: _accentSoft,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.touch_app_rounded,
-                      size: 13,
-                      color: _accent,
-                    ),
+                  _pillAction(
+                    icon: Icons.close_rounded,
+                    label: 'Discard',
+                    onTap: _discardOpenStep,
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      text,
-                      style: const TextStyle(
-                        color: _textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  _pillAction(
+                    icon: Icons.check_rounded,
+                    label: 'Save step',
+                    onTap: _saveOpenStep,
+                    primary: true,
                   ),
-                  if (selectionMode == 'step' &&
-                      steps.isNotEmpty &&
-                      !_hasOpenStep) ...[
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: _onFinishRoutePressed,
-                      child: Container(
+                ],
+              ),
+            ],
+            if (hasPoints) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _cardIconButton(
+                    icon: Icons.undo_rounded,
+                    tooltip: _hasOpenStep ? 'Undo point' : 'Undo',
+                    onTap:
+                        canUndo
+                            ? (_hasOpenStep ? _undoOpenStepPoint : _onUndo)
+                            : null,
+                  ),
+                  _cardIconButton(
+                    icon: Icons.redo_rounded,
+                    tooltip: 'Redo',
+                    onTap:
+                        !_hasOpenStep && _historyService.canRedo
+                            ? _onRedo
+                            : null,
+                  ),
+                  _cardIconButton(
+                    icon: Icons.delete_outline_rounded,
+                    tooltip: 'Clear route',
+                    onTap: _confirmClearRoute,
+                    danger: true,
+                  ),
+                  _toggleChip(
+                    icon: Icons.route_rounded,
+                    label: 'Snap to road',
+                    on: _snapToRoadEnabled,
+                    onTap: () => _onSnapToRoadToggled(!_snapToRoadEnabled),
+                    help:
+                        'The line between the points you tap follows the '
+                        'roads instead of going straight, also when you '
+                        'drag the dots. Turn it off for off-road points '
+                        '(ferry terminals, footpaths).',
+                  ),
+                  if (_snapToRoadEnabled && lineMode != 'Walk')
+                    _toggleChip(
+                      icon: Icons.add_road_rounded,
+                      label: 'Expressways',
+                      on: _allowExpressways,
+                      onTap:
+                          () => _setUiState(
+                            () => _expresswayOverride = !_allowExpressways,
+                          ),
+                      help:
+                          'Lets the road line use expressways (NLEX, '
+                          'Skyway…). On by default for buses and FX/vans, '
+                          'off for jeepneys and tricycles. Only affects how '
+                          'new or dragged lines are snapped.',
+                    ),
+                ],
+              ),
+            ],
+            if (drawing && !_hasOpenStep) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 32,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _ContributeScreenState.modes.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                  itemBuilder: (context, i) {
+                    final mode = _ContributeScreenState.modes[i];
+                    final selected = currentMode == mode;
+                    final color = modeColors[mode] ?? _accent;
+                    return GestureDetector(
+                      // A new mode starts from its own expressway default.
+                      onTap:
+                          () => _setUiState(() {
+                            currentMode = mode;
+                            _expresswayOverride = null;
+                          }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
+                          horizontal: 10,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF3EC97A),
-                          borderRadius: BorderRadius.circular(20),
+                          color: selected ? color : _surfaceAlt,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: selected ? color : _border,
+                            width: 1.2,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 14,
+                            Icon(
+                              _getModeIcon(mode),
+                              size: 13,
+                              color: selected ? Colors.white : color,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'Finish (${steps.length})',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              mode,
+                              style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w500,
+                                color: selected ? Colors.white : _textPrimary,
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
-                ],
+                    );
+                  },
+                ),
               ),
-              if (_hasOpenStep) ...[
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _pillAction(
-                      icon: Icons.undo_rounded,
-                      label: 'Undo point',
-                      onTap: _undoOpenStepPoint,
-                    ),
-                    const SizedBox(width: 6),
-                    _pillAction(
-                      icon: Icons.close_rounded,
-                      label: 'Discard',
-                      onTap: _discardOpenStep,
-                    ),
-                    const SizedBox(width: 6),
-                    _pillAction(
-                      icon: Icons.check_rounded,
-                      label: 'Save step',
-                      onTap: _saveOpenStep,
-                      primary: true,
-                    ),
-                  ],
-                ),
-              ],
-              if (selectionMode == 'step' &&
-                  _snapToRoadEnabled &&
-                  (_hasOpenStep ? _openStepMode : currentMode) != 'Walk') ...[
-                const SizedBox(height: 8),
-                _expresswayChip(),
-              ],
-              if (selectionMode == 'step' && !_hasOpenStep) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 32,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _ContributeScreenState.modes.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 6),
-                    itemBuilder: (context, i) {
-                      final mode = _ContributeScreenState.modes[i];
-                      final selected = currentMode == mode;
-                      final color = modeColors[mode] ?? _accent;
-                      return GestureDetector(
-                        // A new mode starts from its own expressway default.
-                        onTap:
-                            () => _setUiState(() {
-                              currentMode = mode;
-                              _expresswayOverride = null;
-                            }),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selected ? color : _surfaceAlt,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: selected ? color : _border,
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _getModeIcon(mode),
-                                size: 13,
-                                color: selected ? Colors.white : color,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                mode,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: selected ? Colors.white : _textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmClearRoute() async {
+    final clear = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const TranslatedText('Clear this route?'),
+            content: const TranslatedText(
+              'All points and steps you drew will be removed.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const TranslatedText('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const TranslatedText('Clear'),
+              ),
             ],
           ),
+    );
+    if (clear == true && mounted) _onReset();
+  }
+
+  Widget _cardIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onTap,
+    bool danger = false,
+  }) {
+    final enabled = onTap != null;
+    final color =
+        !enabled
+            ? _border
+            : danger
+            ? const Color(0xFFE05C6A)
+            : _textPrimary;
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _surfaceAlt,
+            shape: BoxShape.circle,
+            border: Border.all(color: _border),
+          ),
+          child: Icon(icon, size: 17, color: color),
+        ),
+      ),
+    );
+  }
+
+  /// An on/off option as a chip: filled when on. Long-press explains it.
+  Widget _toggleChip({
+    required IconData icon,
+    required String label,
+    required bool on,
+    required VoidCallback onTap,
+    required String help,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress:
+          () => showDialog<void>(
+            context: context,
+            builder:
+                (ctx) => AlertDialog(
+                  title: TranslatedText(label),
+                  content: TranslatedText(help),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const TranslatedText('Got it'),
+                    ),
+                  ],
+                ),
+          ),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: on ? _accentSoft : _surfaceAlt,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: on ? _accent.withValues(alpha: 0.5) : _border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              on ? Icons.check_rounded : icon,
+              size: 14,
+              color: on ? _accent : _textSecondary,
+            ),
+            const SizedBox(width: 4),
+            TranslatedText(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: on ? _accent : _textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -859,375 +757,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 color: primary ? Colors.white : _textPrimary,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// "Expressways: On/Off" for how new and dragged lines are snapped. It
-  /// starts from the mode's default and isn't saved with the route.
-  Widget _expresswayChip() {
-    final on = _allowExpressways;
-    return GestureDetector(
-      onTap: () => _setUiState(() => _expresswayOverride = !on),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: on ? _accentSoft : _surfaceAlt,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: on ? _accent.withValues(alpha: 0.5) : _border,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.add_road_rounded,
-              size: 14,
-              color: on ? _accent : _textSecondary,
-            ),
-            const SizedBox(width: 4),
-            TranslatedText(
-              on ? 'Expressways: On' : 'Expressways: Off',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: on ? _accent : _textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStepChipsBarSection() {
-    if (steps.isEmpty) return const SizedBox.shrink();
-
-    // Stacked above the pins toggle (46-80) and, when selecting points,
-    // above the instruction pill as well.
-    // Clears the instruction pill, which grows with the open-step actions
-    // and the expressway chip.
-    final bottom = selectionMode == 'done' ? 88.0 : 236.0;
-
-    return Positioned(
-      bottom: bottom,
-      left: 12,
-      right: 12,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (int i = 0; i < steps.length; i++) ...[
-              GestureDetector(
-                onTap: () => _showEditStepDialog(i),
-                onLongPress: () => _deleteStep(i),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _surface.withOpacity(0.96),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accent.withOpacity(0.08),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _getModeIcon(steps[i].mode),
-                        size: 12,
-                        color: modeColors[steps[i].mode] ?? _accent,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${i + 1}. ${_stepChipLabel(steps[i])}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _stepChipLabel(route_model.Step step) {
-    final text = step.instruction.trim();
-    if (text.isEmpty) return step.mode;
-    final space = text.indexOf(' ');
-    final first = space > 0 ? text.substring(0, space) : text;
-    return first.length > 14 ? first.substring(0, 14) : first;
-  }
-
-  Widget _buildRegionSelectorSection() {
-    return Positioned(
-      top: 10,
-      right: 16,
-      child: Container(
-        width: 155,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        decoration: BoxDecoration(
-          color: _surface.withOpacity(0.97),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: DropdownButtonFormField<String>(
-          initialValue: selectedRegion,
-          hint: const TranslatedText(
-            'Select Area',
-            style: TextStyle(fontSize: 11, color: _textSecondary),
-          ),
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: _accent,
-            size: 18,
-          ),
-          dropdownColor: _surface,
-          style: const TextStyle(color: _textPrimary, fontSize: 11),
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-            isDense: true,
-          ),
-          items:
-              philippineRegions.keys.map((region) {
-                return DropdownMenuItem<String>(
-                  value: region,
-                  child: Text(
-                    region,
-                    style: const TextStyle(fontSize: 11),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-          onChanged: _onRegionChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocationSearchBarSection() {
-    return Positioned(
-      top: 10,
-      left: 16,
-      right: 180,
-      child: ContributeLocationSearchBar(
-        onSearch: _onLocationSearched,
-        onTapSearch: _openLocationSearchScreen,
-        displayText: _lastLocationSearchQuery,
-        surface: _surface,
-        border: _border,
-        accent: _accent,
-        textPrimary: _textPrimary,
-        textSecondary: _textSecondary,
-      ),
-    );
-  }
-
-  Widget _buildPinsToggleSection() {
-    // Bottom-left, just above the route details drawer (contribute mode)
-    // or above the bottom nav (nearby mode). Kept clear of the MapControls
-    // box (top-left), the instruction pill, and the step chips — see the
-    // bottom offsets on those overlays.
-    final isNearby = _mapMode == MapTabMode.nearby;
-    return Positioned(
-      bottom: isNearby ? 16 : 46,
-      left: 12,
-      child: GestureDetector(
-        onTap: _togglePins,
-        child: Tooltip(
-          message: _showPins ? 'Hide pins' : 'Show pins',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: _showPins ? _accentSoft : _surface.withOpacity(0.97),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _showPins ? _accent.withOpacity(0.35) : _border,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: _accent.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _showPins
-                      ? Icons.location_on_rounded
-                      : Icons.location_off_rounded,
-                  color: _showPins ? _accent : _textSecondary,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                TranslatedText(
-                  _showPins ? 'Hide Pins' : 'Show Pins',
-                  style: TextStyle(
-                    color: _showPins ? _accent : _textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFormDrawerSection(BuildContext context, double availableHeight) {
-    // The drawer must always fit inside the body area (above the app bar,
-    // bottom nav and keyboard) — otherwise its lower half sits off-screen and
-    // scrolled content becomes unreachable.
-    final expandedHeight =
-        (availableHeight * 0.6).clamp(200.0, availableHeight - 8.0).toDouble();
-    // The top border sits inside the container's height, so the collapsed
-    // drawer must be the handle plus the border or the handle overflows.
-    const borderWidth = 1.5;
-    const collapsedHeight = 40.0 + borderWidth;
-
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: _isFormExpanded ? expandedHeight : collapsedHeight,
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(
-            top: BorderSide(color: _border, width: borderWidth),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          child: Column(
-            children: [
-              _buildDrawerHandle(),
-              if (_isFormExpanded)
-                Expanded(
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    child: Column(
-                      children: [
-                        if (steps.isNotEmpty) ...[
-                          _buildStepsEditorSection(),
-                          const SizedBox(height: 12),
-                        ],
-                        _buildFormContentSection(),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerHandleSection() {
-    return InkWell(
-      onTap: _toggleFormExpanded,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      child: SizedBox(
-        height: 40,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: _border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: TranslatedText(
-                _isFormExpanded ? 'Hide Form' : 'Route Details',
-                style: const TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              _isFormExpanded
-                  ? Icons.keyboard_arrow_down_rounded
-                  : Icons.keyboard_arrow_up_rounded,
-              size: 18,
-              color: _accent,
-            ),
-            if (!_isFormExpanded && steps.isNotEmpty) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accentSoft,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _accent.withOpacity(0.2)),
-                ),
-                child: Text(
-                  '${steps.length} step${steps.length > 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    color: _accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -1274,7 +807,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               'Route Steps',
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 color: _textPrimary,
               ),
             ),
@@ -1289,25 +822,18 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 '${steps.length}',
                 style: const TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   color: _accent,
                 ),
               ),
             ),
             const Spacer(),
-            Flexible(
-              child: GestureDetector(
-                onTap: _toggleEditHandles,
-                child: TranslatedText(
-                  _showEditHandles ? 'Drag handles ON' : 'Drag handles',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: _accent,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            const Flexible(
+              child: TranslatedText(
+                'Drag the dots on the map to fix a line',
+                style: TextStyle(fontSize: 11, color: _textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -1347,7 +873,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               style: TextStyle(
                 color: color,
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -1364,7 +890,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: _textPrimary,
                   ),
                 ),
@@ -1462,13 +988,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
   }
 
   void _toggleNearbyCategory(PlaceCategory category) {
-    _setUiState(() {
-      if (_nearbySelected.contains(category)) {
-        _nearbySelected.remove(category);
-      } else {
-        _nearbySelected.add(category);
-      }
-    });
+    MapTabController.instance.toggleCategory(category);
   }
 
   double? _nearbyDistanceTo(Place place) {
@@ -1482,158 +1002,40 @@ extension _ContributeScreenSections on _ContributeScreenState {
 
   void _onNearbyPlaceTapped(Place place) {
     _setUiState(() => _nearbySelectedPlace = place);
+    // Details live in the drawer, so bring it up to show them.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      MapDrawer.open(_drawerController);
+    });
   }
 
-  /// Builds a nearby-place marker, or null when it should be auto-hidden
-  /// (zoomed out too far and not the currently-selected place).
-  Marker? _buildNearbyPlaceMarker(Place place) {
-    final selected = place.id == _nearbySelectedPlace?.id;
-    final scale = selected ? 1.0 : _poiPinScale;
-    if (scale <= 0.02) return null;
-    final size = (selected ? 48.0 : 34.0) * scale;
-    return Marker(
-      point: LatLng(place.lat, place.lng),
-      width: size,
-      height: size,
-      child: GestureDetector(
-        onTap: () => _onNearbyPlaceTapped(place),
-        child: _NearbyPlacePin(place: place, selected: selected, scale: scale),
-      ),
-    );
+  void _clearSelectedPlace() {
+    _setUiState(() => _nearbySelectedPlace = null);
   }
 
   void _centerOnNearbyPlace(Place place) {
-    _setUiState(() {
-      _nearbySelectedPlace = place;
-      _nearbySelected.clear();
-      _nearbySelected.addAll(place.categories);
-    });
-    _mapController.move(
-      LatLng(place.lat, place.lng),
-      CamanavaBounds.initialZoom,
-    );
+    _onNearbyPlaceTapped(place);
+    final zoom = _currentZoom < 15 ? 15.0 : _currentZoom;
+    _mapController.move(LatLng(place.lat, place.lng), zoom);
+    _setUiState(() => _currentZoom = zoom);
   }
 
-  Future<void> _openNearbyListSheet() async {
-    final sorted = List<Place>.from(_visibleNearbyPlaces);
-    final from = _nearbyPosition;
-    if (from != null) {
-      sorted.sort((a, b) {
-        final da = kmBetween(
-          LatLng(from.latitude, from.longitude),
-          LatLng(a.lat, a.lng),
-        );
-        final db = kmBetween(
-          LatLng(from.latitude, from.longitude),
-          LatLng(b.lat, b.lng),
-        );
-        return da.compareTo(db);
-      });
-    }
-    final place = await showModalBottomSheet<Place>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder:
-          (_) => _NearbyPlacesListSheet(
-            places: sorted,
-            currentPosition: from,
-            onLocate: () => Navigator.pop(context),
-          ),
-    );
-    if (place != null && mounted) {
-      _centerOnNearbyPlace(place);
-    }
-  }
-
-  void _centerOnNearbyUser() {
-    if (_nearbyPosition == null) {
-      _tryGetNearbyLocation();
-      return;
-    }
-    _mapController.move(
-      LatLng(_nearbyPosition!.latitude, _nearbyPosition!.longitude),
-      CamanavaBounds.initialZoom,
-    );
-  }
-
-  Widget _buildNearbyFilterChips() {
-    Widget chip({
-      required String label,
-      required IconData icon,
-      required Color color,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? color : _surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: selected ? color : _border, width: 1.2),
-            boxShadow:
-                selected
-                    ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8)]
-                    : const [],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: selected ? Colors.white : color),
-              const SizedBox(width: 5),
-              TranslatedText(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : _textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Positioned(
-      top: 12,
-      left: 12,
-      right: 12,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            chip(
-              label: 'All',
-              icon: Icons.apps,
-              color: _accent,
-              selected: _nearbySelected.isEmpty,
-              onTap: () => _setUiState(() => _nearbySelected.clear()),
-            ),
-            for (final category in PlaceCategory.values) ...[
-              const SizedBox(width: 8),
-              chip(
-                label: category.label,
-                icon: category.icon,
-                color: category.color,
-                selected: _nearbySelected.contains(category),
-                onTap: () => _toggleNearbyCategory(category),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+  /// The GPS button: get a fresh fix, then center on it.
+  Future<void> _centerOnNearbyUser() async {
+    if (_nearbyIsLocating) return;
+    await _tryGetNearbyLocation();
+    final position = _nearbyPosition;
+    if (!mounted || position == null) return;
+    const zoom = 16.0;
+    _mapController.move(LatLng(position.latitude, position.longitude), zoom);
+    _setUiState(() => _currentZoom = zoom);
   }
 
   Widget _buildNearbyDebugCoordChip() {
     final coord = _debugCoord;
     if (coord == null) return const SizedBox.shrink();
     return Positioned(
-      bottom: 98,
+      bottom: _ContributeScreenState._drawerPeekHeight + 12,
       left: 12,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1655,7 +1057,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               style: const TextStyle(
                 color: _textPrimary,
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -1696,494 +1098,22 @@ extension _ContributeScreenSections on _ContributeScreenState {
       ),
     );
   }
-
-  Widget _buildNearbyInfoCard(Place place) {
-    final distanceKm = _nearbyDistanceTo(place);
-    final typeLabel = place.categories.map((c) => c.singularLabel).join(', ');
-    final locationParts = [
-      place.city,
-      if (place.address != null) place.address!,
-    ];
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: 84,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.12),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: place.categories.first.color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                place.categories.first.icon,
-                color: place.categories.first.color,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          place.name,
-                          style: const TextStyle(
-                            color: _textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap:
-                            () =>
-                                _setUiState(() => _nearbySelectedPlace = null),
-                        child: const Icon(
-                          Icons.close_rounded,
-                          color: _textSecondary,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  TranslatedText(
-                    typeLabel,
-                    style: const TextStyle(
-                      color: _accent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (locationParts.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.place_outlined,
-                          color: _textSecondary,
-                          size: 13,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            locationParts.join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  _buildNearbyDistanceLabel(distanceKm),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNearbyDistanceLabel(double? distanceKm) {
-    if (distanceKm != null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEAF6FF),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.near_me, color: _accent, size: 13),
-            const SizedBox(width: 4),
-            Text(
-              '${RouteMetricsService.formatDistance(distanceKm)} from your location',
-              style: const TextStyle(
-                color: _accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return GestureDetector(
-      onTap: _tryGetNearbyLocation,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: _surfaceAlt,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.location_on, color: _textSecondary, size: 13),
-            const SizedBox(width: 4),
-            const TranslatedText(
-              'Enable location to see distance',
-              style: TextStyle(
-                color: _textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNearbyFabs() {
-    return Positioned(
-      right: 14,
-      bottom: 14,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          GestureDetector(
-            onTap: _openNearbyListSheet,
-            child: Tooltip(
-              message: 'Show Nearby Places list',
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _border),
-                  boxShadow: [
-                    BoxShadow(color: _accent.withOpacity(0.12), blurRadius: 12),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.format_list_bulleted_rounded,
-                      color: _accent,
-                      size: 20,
-                    ),
-                    SizedBox(width: 6),
-                    TranslatedText(
-                      'Show Nearby Places',
-                      style: TextStyle(
-                        color: _accent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: _centerOnNearbyUser,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: _accent,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(color: _accent.withOpacity(0.4), blurRadius: 14),
-                ],
-              ),
-              child:
-                  _nearbyIsLocating
-                      ? const Padding(
-                        padding: EdgeInsets.all(13),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Icon(
-                        Icons.my_location,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-class _NearbyPlacePin extends StatelessWidget {
-  final Place place;
-  final bool selected;
-  final double scale;
-
-  const _NearbyPlacePin({
-    required this.place,
-    required this.selected,
-    this.scale = 1.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = place.categories.first.color;
-    final baseSize = selected ? 48.0 : 34.0;
-    final size = baseSize * scale;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white,
-          width: (selected ? 3 : 2) * scale,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(selected ? 0.6 : 0.45),
-            blurRadius: selected ? 12 : 8,
-          ),
-        ],
-      ),
-      child: Icon(
-        place.categories.first.icon,
-        color: Colors.white,
-        size: (selected ? 22 : 17) * scale,
-      ),
-    );
-  }
-}
-
+/// Where you are, as the familiar blue dot.
 class _NearbyUserPin extends StatelessWidget {
   const _NearbyUserPin();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 36,
-      height: 36,
+      width: 20,
+      height: 20,
       decoration: BoxDecoration(
-        color: _ContributeScreenState._accent,
+        color: const Color(0xFF1A73E8),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
-        boxShadow: [
-          BoxShadow(
-            color: _ContributeScreenState._accent.withOpacity(0.4),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: const Icon(Icons.my_location, color: Colors.white, size: 20),
-    );
-  }
-}
-
-class _NearbyPlacesListSheet extends StatelessWidget {
-  final List<Place> places;
-  final Position? currentPosition;
-  final VoidCallback onLocate;
-
-  const _NearbyPlacesListSheet({
-    required this.places,
-    required this.currentPosition,
-    required this.onLocate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.74,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF4F8FF),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Nearby places',
-                    style: TextStyle(
-                      color: Color(0xFF0F1D35),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                if (currentPosition == null)
-                  GestureDetector(
-                    onTap: onLocate,
-                    child: const Text(
-                      'Use my location',
-                      style: TextStyle(
-                        color: Color(0xFF2E7CF6),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (currentPosition != null)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
-              child: Text(
-                'Sorted nearest to farthest from you',
-                style: TextStyle(color: Color(0xFF7A92B2), fontSize: 11),
-              ),
-            ),
-          const Divider(height: 1, color: Color(0xFFD4E4F7)),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: places.length,
-              itemBuilder: (context, index) {
-                final place = places[index];
-                final distanceKm =
-                    currentPosition == null
-                        ? null
-                        : kmBetween(
-                          LatLng(
-                            currentPosition!.latitude,
-                            currentPosition!.longitude,
-                          ),
-                          LatLng(place.lat, place.lng),
-                        );
-                return _NearbyPlaceListTile(
-                  place: place,
-                  distanceKm: distanceKm,
-                  onTap: () => Navigator.of(context).pop(place),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NearbyPlaceListTile extends StatelessWidget {
-  final Place place;
-  final double? distanceKm;
-  final VoidCallback onTap;
-
-  const _NearbyPlaceListTile({
-    required this.place,
-    required this.distanceKm,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = place.categories.first.color;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(place.categories.first.icon, color: color, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    place.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F1D35),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    '${place.city} · ${place.categories.map((c) => c.label).join(', ')}',
-                    style: const TextStyle(
-                      color: Color(0xFF7A92B2),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (distanceKm != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  RouteMetricsService.formatDistance(distanceKm!),
-                  style: const TextStyle(
-                    color: Color(0xFF2E7CF6),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFF7A92B2),
-              size: 18,
-            ),
-          ],
-        ),
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 6)],
       ),
     );
   }

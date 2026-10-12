@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
+import '../widgets/map/app_base_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
@@ -10,6 +11,7 @@ import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/active_navigation_service.dart';
 import '../services/offline_tile_service.dart';
+import '../services/route_guide.dart';
 import '../services/route_follow_engine.dart';
 import '../services/route_follow_guidance.dart';
 import '../services/route_metrics_service.dart';
@@ -22,6 +24,14 @@ import '../widgets/route_map/follow_simulator_sheet.dart';
 import '../widgets/route_map/ride_correction_flow.dart';
 import '../widgets/route_map/user_location_layer.dart';
 import '../widgets/translated_text.dart';
+import '../data/camanava_places.dart';
+import '../models/place.dart';
+import '../services/map_tab_controller.dart';
+import '../widgets/map_tab/map_drawer.dart';
+import '../widgets/map_tab/map_side_button.dart';
+import '../widgets/map_tab/place_category_chips.dart';
+import '../widgets/map_tab/place_widgets.dart';
+import '../widgets/map_tab/route_view_widgets.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -32,12 +42,16 @@ class OrsRouteMapScreen extends StatefulWidget {
   final String destinationName;
   final bool showDownloadButton;
 
+  /// Back to the map. Without it, back pops this page.
+  final VoidCallback? onClose;
+
   const OrsRouteMapScreen({
     super.key,
     required this.result,
     required this.originName,
     required this.destinationName,
     this.showDownloadButton = true,
+    this.onClose,
   });
 
   @override
@@ -61,6 +75,14 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   String? _offlineTileTemplate;
   bool _isDiscountFareEnabled = false;
   bool _hasManualFareDiscountOverride = false;
+
+  // ─── Map chrome (drawer, place pins) ──────────────────────────────────────
+  final DraggableScrollableController _drawerController =
+      DraggableScrollableController();
+  Place? _selectedPlace;
+  double _pinScale = 0;
+  // Taller than other route views: the header also credits the guide.
+  static const double _drawerPeekHeight = 100.0;
 
   // FIX: Smooth camera animation fields
   late final AnimationController _cameraAnimController;
@@ -99,6 +121,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       // Reopening a session that paused itself for being idle resumes it.
       navigation.resumeTracking();
     }
+    MapTabController.instance.placeCategories.addListener(_onSharedMapState);
+    MapTabController.instance.showPins.addListener(_onSharedMapState);
 
     _initLocation();
     _loadFareProfile();
@@ -143,9 +167,15 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     final t = _cameraAnim.value;
 
     final lat = _lerpDouble(
-        _animStartCenter!.latitude, _animTargetCenter!.latitude, t);
+      _animStartCenter!.latitude,
+      _animTargetCenter!.latitude,
+      t,
+    );
     final lng = _lerpDouble(
-        _animStartCenter!.longitude, _animTargetCenter!.longitude, t);
+      _animStartCenter!.longitude,
+      _animTargetCenter!.longitude,
+      t,
+    );
     final zoom = _lerpDouble(_animStartZoom, _animTargetZoom, t);
     final rotation = _lerpRotation(_animStartRotation, _animTargetRotation, t);
 
@@ -218,9 +248,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to download route: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to download route: $e')));
     } finally {
       if (mounted) {
         setState(() => _isDownloading = false);
@@ -295,8 +325,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
   void _handleLocationUpdate(Position position) {
     if (!mounted) return;
-    if (position.accuracy >
-        ActiveNavigationService.maxAcceptedAccuracyMeters) {
+    if (position.accuracy > ActiveNavigationService.maxAcceptedAccuracyMeters) {
       return;
     }
     setState(() => _applyPosition(position, _rawLatLng(position)));
@@ -360,8 +389,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     _lastCameraMoveAt = now;
     _lastCameraTarget = target;
 
-    final targetZoom =
-        _followZoom;
+    final targetZoom = _followZoom;
     // Negate heading: rotating the map -heading° puts travel direction at top
     final targetRotation = -heading;
 
@@ -379,6 +407,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     final navigation = ActiveNavigationService.instance;
     navigation.removeListener(_onNavigationSessionChanged);
     navigation.followUpdates.removeListener(_onNavigationPosition);
+    MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
+    MapTabController.instance.showPins.removeListener(_onSharedMapState);
+    _drawerController.dispose();
     _cameraAnim.dispose();
     _cameraAnimController.dispose();
     _positionSubscription?.cancel();
@@ -602,138 +633,140 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     speedMps: _currentPosition?.speed ?? 0,
   );
 
+  // ─── Map-tab chrome ────────────────────────────────────────────────────────
+
+  List<Place> get _visiblePlaces {
+    final categories = MapTabController.instance.placeCategories.value;
+    if (categories.isEmpty) return camanavaPlaces;
+    return camanavaPlaces
+        .where((p) => p.categories.any(categories.contains))
+        .toList();
+  }
+
+  /// Rebuilds only when the pins' size visibly changes, not on every
+  /// camera frame while following.
+  void _updatePinScale(double zoom) {
+    final scale = placePinScaleForZoom(zoom);
+    if ((scale - _pinScale).abs() < 0.05 && (scale == 0) == (_pinScale == 0)) {
+      return;
+    }
+    setState(() => _pinScale = scale);
+  }
+
+  void _onPlaceTapped(Place place) {
+    setState(() => _selectedPlace = place);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MapDrawer.open(_drawerController);
+    });
+  }
+
+  void _clearSelectedPlace() {
+    if (_selectedPlace != null) setState(() => _selectedPlace = null);
+  }
+
+  void _onSharedMapState() {
+    if (mounted) setState(() {});
+  }
+
+  /// Back to the map (or out of this page when opened on its own).
+  void _closeView() {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  double? _distanceToPlace(Place place) {
+    final here = _displayPosition;
+    if (here == null) return null;
+    return const Distance().as(
+      LengthUnit.Kilometer,
+      here,
+      LatLng(place.lat, place.lng),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.destinationName,
-          overflow: TextOverflow.ellipsis,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            _buildMap(),
+            _buildTopOverlay(),
+            if (kDebugMode && _isNavigationStarted && !_hasArrived)
+              Positioned(
+                left: 12,
+                bottom: _drawerPeekHeight + 12,
+                child: FollowSimulatorButton(path: widget.result.polyline),
+              ),
+            _buildSideButtons(),
+            _buildDrawer(),
+          ],
         ),
-        backgroundColor: Colors.blue.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          if (widget.showDownloadButton)
-            IconButton(
-              icon: _isDownloading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(
-                      _isDownloaded
-                          ? Icons.download_done_rounded
-                          : Icons.download_rounded,
-                    ),
-              tooltip:
-                  _isDownloaded ? 'Downloaded' : 'Download for offline',
-              onPressed: (_isDownloading || _isDownloaded)
-                  ? null
-                  : _downloadGeneratedRoute,
-            ),
-          IconButton(
-            icon: const Icon(Icons.fit_screen),
-            tooltip: 'Fit route',
-            onPressed: _centerOnRoute,
-          ),
-        ],
       ),
-      body: Stack(
-        children: [
-          // ── Map ──────────────────────────────────────────────────────────────
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _mapCenter,
-              initialZoom: 12.0,
-              minZoom: 5.0,
-              maxZoom: 18.0,
-              onPositionChanged: (_, hasGesture) {
-                if (hasGesture && _isAutoFollowEnabled) {
-                  setState(() => _isAutoFollowEnabled = false);
-                }
-              },
-              cameraConstraint: CameraConstraint.contain(
-                bounds: LatLngBounds(
-                  const LatLng(4.5, 116.0),
-                  const LatLng(21.5, 127.0),
-                ),
-              ),
-            ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName:
-                    'com.example.app.transitph_beta',
-              ),
-              if (_offlineTileTemplate != null)
-                TileLayer(
-                  urlTemplate: _offlineTileTemplate!,
-                  tileProvider: FileTileProvider(),
-                ),
-              PolylineLayer(polylines: _polylines),
-              MarkerLayer(markers: _markers),
-              _userLocationLayer,
-            ],
-          ),
+    );
+  }
 
-          // ── Summary chips (top overlay) ──────────────────────────────────────
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              children: [
-                _summaryChip(
-                  Icons.straighten,
-                  RouteMetricsService.formatDistanceMeters(
-                    widget.result.distanceMeters,
-                  ),
-                  Colors.green.shade700,
-                ),
-                const SizedBox(width: 8),
-                _summaryChip(
-                  Icons.timer_outlined,
-                  widget.result.durationLabel,
-                  Colors.orange.shade700,
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.92),
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    '© OSRM\n© OpenStreetMap',
-                    style: TextStyle(
-                        fontSize: 9, color: Colors.grey.shade700),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              ],
+  Widget _buildMap() {
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _mapCenter,
+        initialZoom: 12.0,
+        minZoom: 5.0,
+        maxZoom: 18.0,
+        onTap: (_, _) => _clearSelectedPlace(),
+        onPositionChanged: (camera, hasGesture) {
+          if (hasGesture && _isAutoFollowEnabled) {
+            setState(() => _isAutoFollowEnabled = false);
+          }
+          _updatePinScale(camera.zoom);
+        },
+        cameraConstraint: CameraConstraint.contain(
+          bounds: LatLngBounds(
+            const LatLng(4.5, 116.0),
+            const LatLng(21.5, 127.0),
+          ),
+        ),
+      ),
+      children: [
+        // Saved tiles first: they show only where live ones can't load.
+        if (_offlineTileTemplate != null)
+          offlineTileLayer(_offlineTileTemplate!),
+        const AppBaseMap(),
+        // Place pins under the route, so its markers stay on top.
+        if (MapTabController.instance.showPins.value)
+          MarkerLayer(
+            markers: placeMarkers(
+              places: _visiblePlaces,
+              scale: _pinScale,
+              selectedId: _selectedPlace?.id,
+              onTap: _onPlaceTapped,
             ),
           ),
+        PolylineLayer(polylines: _polylines),
+        MarkerLayer(markers: _markers),
+        _userLocationLayer,
+      ],
+    );
+  }
 
-          // Same layout as a saved route's map: guidance above the controls,
-          // Start/Stop bottom-left, GPS bottom-right, legend top-right.
-          if (_guidance.kind != FollowGuidanceKind.none)
-            Positioned(
-              left: 12,
-              right: 64,
-              bottom: 342,
+  Widget _buildTopOverlay() {
+    if (_guidance.kind != FollowGuidanceKind.none) {
+      // Following: the next instruction takes the search bar's place.
+      return Positioned(
+        top: 8,
+        left: 12,
+        right: 12,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RouteBackButton(onBack: _closeView),
+            const SizedBox(width: 8),
+            Expanded(
               child: FollowGuidanceCard(
                 guidance: _guidance,
                 remainingMeters:
@@ -742,471 +775,306 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
                 routeStartLabel: widget.originName,
               ),
             ),
-
-          Positioned(
-            left: 12,
-            bottom: 290,
-            child: _buildStartControl(),
-          ),
-
-          if (kDebugMode && _isNavigationStarted && !_hasArrived)
-            Positioned(
-              right: 12,
-              bottom: 342,
-              child: FollowSimulatorButton(path: widget.result.polyline),
-            ),
-
-          // ── My location: re-centres, and resumes following ────────────────
-          Positioned(right: 12, bottom: 290, child: _buildCenterButton()),
-
-          // ── Mode legend (top-right) ──────────────────────────────────────────
-          Positioned(
-            right: 12,
-            top: 60,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.93),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: _activeModes().map((mode) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 18,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: _modeColor(mode),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Icon(_modeIcon(mode),
-                            size: 13, color: _modeColor(mode)),
-                        const SizedBox(width: 4),
-                        Text(
-                          mode,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _modeColor(mode),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-
-          // ── Draggable bottom sheet: turn-by-turn steps ───────────────────────
-          DraggableScrollableSheet(
-            initialChildSize: 0.28,
-            minChildSize: 0.12,
-            maxChildSize: 0.65,
-            snap: true,
-            snapSizes: const [0.12, 0.28, 0.65],
-            builder: (context, scrollController) => Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 10,
-                    offset: const Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Row(
-                      children: [
-                        Icon(Icons.turn_right_outlined,
-                            color: Colors.blue.shade700, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Turn-by-turn  •  ${widget.result.steps.length} steps',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: Colors.green.shade300),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.payments_outlined,
-                                  size: 13,
-                                  color: Colors.green.shade700),
-                              const SizedBox(width: 4),
-                              Text(
-                                _totalFareLabel(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_hasFareSteps) ...[
-                    const SizedBox(height: 8),
-                    FareDiscountToggle(
-                      value: _isDiscountFareEnabled,
-                      onChanged: _setDiscountEnabled,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      labelStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                      iconColor: Colors.grey,
-                      iconSize: 15,
-                      activeColor: Colors.blue.shade700,
-                    ),
-                  ],
-                  const Divider(height: 1),
-                  Expanded(
-                    child: widget.result.steps.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No step data available',
-                              style: TextStyle(
-                                  color: Colors.grey.shade500),
-                            ),
-                          )
-                        : ListView.separated(
-                            controller: scrollController,
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 8),
-                            itemCount: widget.result.steps.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1, indent: 56),
-                            itemBuilder: (context, index) {
-                              final step =
-                                  widget.result.steps[index];
-                              final modeColor =
-                                  _modeColor(step.suggestedMode);
-                              return ListTile(
-                                dense: true,
-                                leading: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 30,
-                                      height: 30,
-                                      decoration: BoxDecoration(
-                                        color: modeColor
-                                            .withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: modeColor,
-                                            width: 1.5),
-                                      ),
-                                      child: Icon(
-                                        _modeIcon(step.suggestedMode),
-                                        size: 16,
-                                        color: modeColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                title: Row(
-                                  children: [
-                                    Container(
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: modeColor,
-                                        borderRadius:
-                                            BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        step.suggestedMode,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            step.instruction,
-                                            style: const TextStyle(
-                                                fontSize: 13),
-                                          ),
-                                          if (step.isCommunity) ...[
-                                            const SizedBox(height: 3),
-                                            const CommunityRouteBadge(),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.end,
-                                  children: [
-                                    if (step.distanceMeters > 0)
-                                      Text(
-                                        _formatStepDistance(
-                                            step.distanceMeters),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade500,
-                                        ),
-                                      ),
-                                    if (step.estimatedFare > 0)
-                                      Text(
-                                        '₱${_applyFareDiscount(step.estimatedFare).toStringAsFixed(0)}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green.shade600,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryChip(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStartControl() {
-    if (_hasArrived) return _buildArrivalCard();
-    if (!_isNavigationStarted) {
-      return ElevatedButton.icon(
-        onPressed: _startNavigation,
-        icon: const Icon(Icons.play_arrow_rounded, size: 18),
-        label: const Text('Start'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue.shade700,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ],
         ),
       );
     }
-
-    // Re-centring and resuming follow is the GPS button on the right.
-    return GestureDetector(
-      onTap: _stopNavigation,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade300),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+    return Positioned(
+      top: 8,
+      left: 0,
+      right: 0,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: RouteTopBar(
+              from: widget.originName,
+              to: widget.destinationName,
+              onBack: _closeView,
+            ),
+          ),
+          if (!_isNavigationStarted) ...[
+            const SizedBox(height: 8),
+            PlaceCategoryChips(
+              selected: MapTabController.instance.placeCategories.value,
+              onSelectAll: MapTabController.instance.clearCategories,
+              onToggle: MapTabController.instance.toggleCategory,
             ),
           ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.stop_rounded, size: 16, color: Colors.red.shade600),
-            const SizedBox(width: 6),
-            TranslatedText(
-              'Stop',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Colors.red.shade600,
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  /// Re-centres on the traveler; while following it also resumes the
-  /// camera follow, and shows solid blue while the camera is following.
-  Widget _buildCenterButton() {
+  Widget _buildSideButtons() {
+    final pins = MapTabController.instance.showPins;
     final following = _isNavigationStarted && _isAutoFollowEnabled;
-    final accent = Colors.blue.shade700;
-    return GestureDetector(
-      onTap: _isLocating ? null : _centerOnMe,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: following ? accent : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: following ? accent : Colors.grey.shade300),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child:
-            _isLocating
-                ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                : Icon(
-                  following ? Icons.navigation_rounded : Icons.my_location,
-                  color: following ? Colors.white : accent,
-                  size: 20,
-                ),
-      ),
-    );
-  }
-
-  /// Shown in place of the follow controls once the end is reached.
-  Widget _buildArrivalCard() {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 300),
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+    const accent = Color(0xFF0B8FD6);
+    return Positioned(
+      right: 12,
+      bottom: _drawerPeekHeight + 12,
+      child: MapSideButtons(
+        children: [
+          MapSideButton(
+            icon:
+                pins.value
+                    ? Icons.location_on_rounded
+                    : Icons.location_off_rounded,
+            tooltip: pins.value ? 'Hide pins' : 'Show pins',
+            iconColor: pins.value ? accent : null,
+            onTap: () => pins.value = !pins.value,
+          ),
+          MapSideButton(
+            icon:
+                following
+                    ? Icons.navigation_rounded
+                    : Icons.my_location_rounded,
+            tooltip:
+                following ? 'Following your location' : 'Center on my location',
+            iconColor: accent,
+            active: following,
+            busy: _isLocating,
+            onTap: _isLocating ? null : _centerOnMe,
           ),
         ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    );
+  }
+
+  Widget _buildDrawer() {
+    final place = _selectedPlace;
+    final snapshot = _followSnapshot;
+    final String primary;
+    final String secondary;
+    if (snapshot != null && snapshot.hasProgress) {
+      // Time left scales the route's estimate by the distance left.
+      final total = widget.result.distanceMeters;
+      final share = total > 0 ? snapshot.remainingMeters / total : 1.0;
+      final minutesLeft = (widget.result.durationSeconds * share / 60)
+          .ceil()
+          .clamp(1, 1 << 20);
+      primary = '$minutesLeft min left';
+      secondary =
+          '${RouteMetricsService.formatDistanceMeters(snapshot.remainingMeters)} left'
+          ' · ${_totalFareLabel()}';
+    } else {
+      primary = widget.result.durationLabel;
+      secondary =
+          '${RouteMetricsService.formatDistanceMeters(widget.result.distanceMeters)}'
+          ' · ${_totalFareLabel()}';
+    }
+
+    return MapDrawer(
+      controller: _drawerController,
+      peekHeight: _drawerPeekHeight,
+      header: RouteDrawerHeader(
+        primary: primary,
+        secondary: secondary,
+        byline:
+            'Suggested by ${RouteGuide.nameFor('${widget.destinationName}|'
+            '${widget.result.distanceMeters.round()}|'
+            '${widget.result.durationSeconds.round()}')}',
+        trailing: RouteFollowButton(
+          isFollowing: _isNavigationStarted,
+          hasArrived: _hasArrived,
+          onStart: _startNavigation,
+          onStop: _stopNavigation,
+          onDone: _endNavigationAndOfferCorrection,
+        ),
+      ),
+      children: [
+        if (place != null) ...[
+          PlaceDetailsSection(
+            place: place,
+            distanceKm: _distanceToPlace(place),
+            onClose: _clearSelectedPlace,
+          ),
+          const Divider(height: 1),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (widget.showDownloadButton)
+                RouteActionChip(
+                  icon:
+                      _isDownloaded
+                          ? Icons.download_done_rounded
+                          : Icons.download_rounded,
+                  label: _isDownloaded ? 'Downloaded' : 'Download',
+                  active: _isDownloaded,
+                  activeColor: Colors.green.shade700,
+                  busy: _isDownloading,
+                  onTap:
+                      (_isDownloading || _isDownloaded)
+                          ? null
+                          : _downloadGeneratedRoute,
+                ),
+              RouteActionChip(
+                icon: Icons.fit_screen_rounded,
+                label: 'Whole route',
+                onTap: _centerOnRoute,
+              ),
+            ],
+          ),
+        ),
+        _buildModeLegendRow(),
+        if (_hasFareSteps)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: FareDiscountToggle(
+              value: _isDiscountFareEnabled,
+              onChanged: _setDiscountEnabled,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              labelStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+              iconColor: Colors.grey,
+              iconSize: 15,
+              activeColor: Colors.blue.shade700,
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            'Steps (${widget.result.steps.length})',
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+          ),
+        ),
+        if (widget.result.steps.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Text(
+                'No step data available',
+                style: TextStyle(color: Colors.grey.shade500),
+              ),
+            ),
+          )
+        else
+          for (var i = 0; i < widget.result.steps.length; i++) ...[
+            if (i > 0) const Divider(height: 1, indent: 56),
+            _buildStepTile(widget.result.steps[i]),
+          ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Text(
+            '© OSRM · © OpenStreetMap contributors',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Which color is which mode on the map.
+  Widget _buildModeLegendRow() {
+    final modes = _activeModes();
+    if (modes.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
         children: [
-          Icon(Icons.check_circle_rounded, color: Colors.green.shade600),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          for (final mode in modes)
+            Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const TranslatedText(
-                  "You've arrived",
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                Container(
+                  width: 14,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: _modeColor(mode),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
+                const SizedBox(width: 5),
+                Icon(_modeIcon(mode), size: 13, color: _modeColor(mode)),
+                const SizedBox(width: 3),
                 Text(
-                  widget.destinationName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  mode,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _modeColor(mode),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: _endNavigationAndOfferCorrection,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              minimumSize: const Size(0, 36),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepTile(OrsStep step) {
+    final modeColor = _modeColor(step.suggestedMode);
+    return ListTile(
+      dense: true,
+      leading: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: modeColor.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+          border: Border.all(color: modeColor, width: 1.5),
+        ),
+        child: Icon(_modeIcon(step.suggestedMode), size: 16, color: modeColor),
+      ),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: modeColor,
+              borderRadius: BorderRadius.circular(4),
             ),
-            child: const TranslatedText('Done'),
+            child: Text(
+              step.suggestedMode,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(step.instruction, style: const TextStyle(fontSize: 13)),
+                if (step.isCommunity) ...[
+                  const SizedBox(height: 3),
+                  const CommunityRouteBadge(),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (step.distanceMeters > 0)
+            Text(
+              _formatStepDistance(step.distanceMeters),
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+          if (step.estimatedFare > 0)
+            Text(
+              '₱${_applyFareDiscount(step.estimatedFare).toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.green.shade600,
+              ),
+            ),
         ],
       ),
     );
@@ -1217,8 +1085,10 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   }
 
   String _totalFareLabel() {
-    final baseTotal =
-        widget.result.steps.fold(0.0, (sum, s) => sum + s.estimatedFare);
+    final baseTotal = widget.result.steps.fold(
+      0.0,
+      (sum, s) => sum + s.estimatedFare,
+    );
     if (baseTotal == 0) return 'Free';
     final total = _applyFareDiscount(baseTotal);
     final low = (total * 0.9).round();
@@ -1226,8 +1096,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     return '₱$low–$high est.';
   }
 
-  bool get _hasFareSteps => widget.result.steps
-      .any((step) => step.estimatedFare > 0 && step.suggestedMode != 'Walk');
+  bool get _hasFareSteps => widget.result.steps.any(
+    (step) => step.estimatedFare > 0 && step.suggestedMode != 'Walk',
+  );
 
   List<String> _activeModes() {
     final seen = <String>{};

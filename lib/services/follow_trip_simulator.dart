@@ -94,8 +94,10 @@ class FollowTripSimulator {
 
     if (startAway) {
       legs.add(
-        _Leg([_offset(route, joinAt, _startAwayMeters), route.pointAt(joinAt)],
-            walkSpeedKmh / 3.6),
+        _Leg([
+          _offset(route, joinAt, _startAwayMeters),
+          route.pointAt(joinAt),
+        ], walkSpeedKmh / 3.6),
       );
     }
 
@@ -134,7 +136,11 @@ class FollowTripSimulator {
     final a = route.pointAt(math.max(0, along - 5));
     final b = route.pointAt(math.min(route.totalMeters, along + 5));
     final bearing = const Distance().bearing(a, b);
-    return const Distance().offset(route.pointAt(along), sideMeters, bearing + 90);
+    return const Distance().offset(
+      route.pointAt(along),
+      sideMeters,
+      bearing + 90,
+    );
   }
 
   LatLng _jitter(LatLng point, double meters) {

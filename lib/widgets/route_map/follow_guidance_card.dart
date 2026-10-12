@@ -23,13 +23,14 @@ class FollowGuidanceCard extends StatelessWidget {
     required this.routeStartLabel,
   });
 
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _warning = Color(0xFFB8732F);
   static const _textPrimary = Color(0xFF0F1D35);
 
   @override
   Widget build(BuildContext context) {
-    if (guidance.kind == FollowGuidanceKind.none) return const SizedBox.shrink();
+    if (guidance.kind == FollowGuidanceKind.none)
+      return const SizedBox.shrink();
 
     final isDetour = guidance.kind == FollowGuidanceKind.vehicleDetour;
     final isRejoin = guidance.kind == FollowGuidanceKind.rejoin;
@@ -64,7 +65,7 @@ class FollowGuidanceCard extends StatelessWidget {
               _message(),
               style: const TextStyle(
                 color: _textPrimary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 fontSize: 12.5,
                 height: 1.3,
               ),
@@ -138,6 +139,5 @@ class FollowGuidanceCard extends StatelessWidget {
   static String _modeLabel(String mode) =>
       mode == 'FX/Van' ? 'FX/van' : mode.toLowerCase();
 
-  static String _article(String mode) =>
-      mode == 'FX/Van' ? 'An' : 'A';
+  static String _article(String mode) => mode == 'FX/Van' ? 'An' : 'A';
 }

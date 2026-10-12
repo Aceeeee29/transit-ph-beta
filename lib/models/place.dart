@@ -56,7 +56,7 @@ extension PlaceCategoryX on PlaceCategory {
       case PlaceCategory.tourist:
         return const Color(0xFF9C27B0);
       case PlaceCategory.school:
-        return const Color(0xFF2E7CF6);
+        return const Color(0xFF0B8FD6);
       case PlaceCategory.hospital:
         return const Color(0xFFE05C6A);
       case PlaceCategory.mall:

@@ -300,7 +300,10 @@ class ActiveNavigationService extends ChangeNotifier {
     _idleAnchor = null;
     _lastMovedAt = DateTime.now();
     _idleTimer?.cancel();
-    _idleTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkIdle());
+    _idleTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _checkIdle(),
+    );
   }
 
   void _stopTracking() {
@@ -451,7 +454,11 @@ class ActiveNavigationService extends ChangeNotifier {
 
   /// Records the path taken while off the route; when the vehicle rejoins
   /// (or arrives), keeps it as a [RideDeviation] if it was a real ride.
-  void _trackDeviation(RouteFollowSnapshot snapshot, LatLng here, double speed) {
+  void _trackDeviation(
+    RouteFollowSnapshot snapshot,
+    LatLng here,
+    double speed,
+  ) {
     if (!snapshot.hasProgress) return;
     if (snapshot.status == RouteFollowStatus.awayFromRoute) {
       final trace = _detourTrace ??= [snapshot.progressPoint];

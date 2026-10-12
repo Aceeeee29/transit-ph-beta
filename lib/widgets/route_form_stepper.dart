@@ -46,8 +46,8 @@ class RouteFormStepper extends StatefulWidget {
 class _RouteFormStepperState extends State<RouteFormStepper> {
   int _activeStep = 0;
 
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _surfaceAlt = Color(0xFFEAF2FF);
   static const _border = Color(0xFFD4E4F7);
   static const _warning = Color(0xFFFFB547);
@@ -118,12 +118,16 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           const SizedBox(height: 10),
           ElevatedButton.icon(
             onPressed: widget.onFinishRoute,
-            icon: const Icon(Icons.check_rounded, size: 18, color: Colors.white),
+            icon: const Icon(
+              Icons.check_rounded,
+              size: 18,
+              color: Colors.white,
+            ),
             label: const Text(
               'Finish Route',
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),
             ),
@@ -159,9 +163,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   color: i == _activeStep ? _accentSoft : _surfaceAlt,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: i == _activeStep
-                        ? _accent.withOpacity(0.45)
-                        : _border,
+                    color:
+                        i == _activeStep ? _accent.withOpacity(0.45) : _border,
                   ),
                 ),
                 child: Row(
@@ -175,19 +178,24 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                         color: i <= _activeStep ? _accent : _border,
                         shape: BoxShape.circle,
                       ),
-                      child: i < _activeStep
-                          ? const Icon(Icons.check_rounded,
-                              size: 12, color: Colors.white)
-                          : Text(
-                              '${i + 1}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: i == _activeStep
-                                    ? Colors.white
-                                    : _textSecondary,
+                      child:
+                          i < _activeStep
+                              ? const Icon(
+                                Icons.check_rounded,
+                                size: 12,
+                                color: Colors.white,
+                              )
+                              : Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      i == _activeStep
+                                          ? Colors.white
+                                          : _textSecondary,
+                                ),
                               ),
-                            ),
                     ),
                     const SizedBox(width: 6),
                     Flexible(
@@ -197,10 +205,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: i == _activeStep
-                              ? _accent
-                              : _textPrimary,
+                          fontWeight: FontWeight.w500,
+                          color: i == _activeStep ? _accent : _textPrimary,
                         ),
                       ),
                     ),
@@ -259,47 +265,48 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           child: Text(
             'User Tags (Onboarding)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF67758D),
-                  fontWeight: FontWeight.w600,
-                ),
+              color: const Color(0xFF67758D),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: widget.userTagOptions.map((tag) {
-            final isSelected = widget.selectedRouteTags.contains(tag);
-            return FilterChip(
-              label: Text(tag),
-              selected: isSelected,
-              selectedColor: _accentSoft,
-              showCheckmark: false,
-              checkmarkColor: _accent,
-              labelStyle: TextStyle(
-                color: isSelected ? _accent : const Color(0xFF0F1D35),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-              backgroundColor: const Color(0xFFEAF2FF),
-              visualDensity: VisualDensity.compact,
-              side: BorderSide(
-                color: isSelected ? _accent.withOpacity(0.35) : _border,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              onSelected: (selected) {
-                final next = List<String>.from(widget.selectedRouteTags);
-                if (selected) {
-                  if (!next.contains(tag)) next.add(tag);
-                } else {
-                  next.remove(tag);
-                }
-                widget.onRouteTagsChanged(next);
-              },
-            );
-          }).toList(),
+          children:
+              widget.userTagOptions.map((tag) {
+                final isSelected = widget.selectedRouteTags.contains(tag);
+                return FilterChip(
+                  label: Text(tag),
+                  selected: isSelected,
+                  selectedColor: _accentSoft,
+                  showCheckmark: false,
+                  checkmarkColor: _accent,
+                  labelStyle: TextStyle(
+                    color: isSelected ? _accent : const Color(0xFF0F1D35),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                  backgroundColor: const Color(0xFFEAF2FF),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(
+                    color: isSelected ? _accent.withOpacity(0.35) : _border,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onSelected: (selected) {
+                    final next = List<String>.from(widget.selectedRouteTags);
+                    if (selected) {
+                      if (!next.contains(tag)) next.add(tag);
+                    } else {
+                      next.remove(tag);
+                    }
+                    widget.onRouteTagsChanged(next);
+                  },
+                );
+              }).toList(),
         ),
         const SizedBox(height: 12),
         Align(
@@ -307,47 +314,48 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           child: Text(
             'Other Tags (pick one)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF67758D),
-                  fontWeight: FontWeight.w600,
-                ),
+              color: const Color(0xFF67758D),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: widget.otherTagOptions.map((tag) {
-            final isSelected = widget.selectedRouteTags.contains(tag);
-            return FilterChip(
-              label: Text(tag),
-              selected: isSelected,
-              selectedColor: _accentSoft,
-              showCheckmark: false,
-              checkmarkColor: _accent,
-              labelStyle: TextStyle(
-                color: isSelected ? _accent : const Color(0xFF0F1D35),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-              backgroundColor: const Color(0xFFEAF2FF),
-              visualDensity: VisualDensity.compact,
-              side: BorderSide(
-                color: isSelected ? _accent.withOpacity(0.35) : _border,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              onSelected: (selected) {
-                // Single-select within Other Tags; User Tags are untouched.
-                final next =
-                    widget.selectedRouteTags
-                        .where((t) => !widget.otherTagOptions.contains(t))
-                        .toList();
-                if (selected) next.add(tag);
-                widget.onRouteTagsChanged(next);
-              },
-            );
-          }).toList(),
+          children:
+              widget.otherTagOptions.map((tag) {
+                final isSelected = widget.selectedRouteTags.contains(tag);
+                return FilterChip(
+                  label: Text(tag),
+                  selected: isSelected,
+                  selectedColor: _accentSoft,
+                  showCheckmark: false,
+                  checkmarkColor: _accent,
+                  labelStyle: TextStyle(
+                    color: isSelected ? _accent : const Color(0xFF0F1D35),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                  backgroundColor: const Color(0xFFEAF2FF),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(
+                    color: isSelected ? _accent.withOpacity(0.35) : _border,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onSelected: (selected) {
+                    // Single-select within Other Tags; User Tags are untouched.
+                    final next =
+                        widget.selectedRouteTags
+                            .where((t) => !widget.otherTagOptions.contains(t))
+                            .toList();
+                    if (selected) next.add(tag);
+                    widget.onRouteTagsChanged(next);
+                  },
+                );
+              }).toList(),
         ),
       ],
     );
@@ -423,8 +431,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline_rounded,
-                  size: 15, color: _warning),
+              const Icon(Icons.info_outline_rounded, size: 15, color: _warning),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -443,17 +450,21 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         ),
         const SizedBox(height: 10),
         ElevatedButton.icon(
-          onPressed: (widget.quickCreateMode &&
-                  widget.onSubmitForReviewInstead != null)
-              ? widget.onSubmitForReviewInstead
-              : widget.onSubmit,
-          icon: const Icon(Icons.pending_actions_rounded,
-              size: 18, color: Colors.white),
+          onPressed:
+              (widget.quickCreateMode &&
+                      widget.onSubmitForReviewInstead != null)
+                  ? widget.onSubmitForReviewInstead
+                  : widget.onSubmit,
+          icon: const Icon(
+            Icons.pending_actions_rounded,
+            size: 18,
+            color: Colors.white,
+          ),
           label: const Text(
             'Submit for Review',
             style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: Colors.white,
             ),
           ),
@@ -467,7 +478,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
             elevation: 0,
           ),
         ),
-        if (widget.quickCreateMode && widget.onSubmitForReviewInstead != null) ...[
+        if (widget.quickCreateMode &&
+            widget.onSubmitForReviewInstead != null) ...[
           const SizedBox(height: 12),
           const Align(
             alignment: Alignment.centerLeft,
@@ -504,7 +516,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                     fontSize: 10,
                     letterSpacing: 0.8,
                     color: Color(0xFF7A92B2),
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -518,7 +530,10 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               'Create a 24-hour link without moderator review. '
               'Recipients open it as a temporary quick route.',
               style: TextStyle(
-                  fontSize: 11, height: 1.4, color: Color(0xFF7A92B2)),
+                fontSize: 11,
+                height: 1.4,
+                color: Color(0xFF7A92B2),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -562,7 +577,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
       floatingLabelStyle: const TextStyle(
         color: _accent,
         fontSize: 12,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       ),
       filled: true,
       fillColor: _surfaceAlt,

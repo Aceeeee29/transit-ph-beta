@@ -1,17 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../data/camanava_places.dart';
 import '../models/location_search_result.dart';
+import '../services/place_search_service.dart';
 
 class ContributeLocationSearchScreen extends StatefulWidget {
   final String initialQuery;
 
-  const ContributeLocationSearchScreen({
-    super.key,
-    this.initialQuery = '',
-  });
+  const ContributeLocationSearchScreen({super.key, this.initialQuery = ''});
 
   @override
   State<ContributeLocationSearchScreen> createState() =>
@@ -29,7 +24,7 @@ class _ContributeLocationSearchScreenState
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -72,77 +67,12 @@ class _ContributeLocationSearchScreenState
 
   Future<void> _fetchSuggestions(String query) async {
     setState(() => _isLoadingSuggestions = true);
-    try {
-      final lower = query.toLowerCase();
-      final local = camanavaPlaces
-          .where(
-            (p) =>
-                p.name.toLowerCase().contains(lower) ||
-                p.city.toLowerCase().contains(lower) ||
-                (p.address ?? '').toLowerCase().contains(lower),
-          )
-          .take(4)
-          .map(
-            (p) => LocationSearchResult(
-              name: '${p.name}, ${p.city}',
-              latitude: p.lat,
-              longitude: p.lng,
-            ),
-          )
-          .toList();
-
-      final remote = await _fetchNominatimSuggestions(query);
-      final seen = local.map((e) => e.name.toLowerCase()).toSet();
-      final merged = List<LocationSearchResult>.from(local);
-      for (final r in remote) {
-        if (!seen.contains(r.name.toLowerCase())) merged.add(r);
-        if (merged.length >= 7) break;
-      }
-      if (!mounted) return;
-      setState(() {
-        _suggestions = merged;
-        _isLoadingSuggestions = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoadingSuggestions = false);
-    }
-  }
-
-  Future<List<LocationSearchResult>> _fetchNominatimSuggestions(
-    String query,
-  ) async {
-    try {
-      final encoded = Uri.encodeComponent(query);
-      final uri = Uri.parse(
-        'https://nominatim.openstreetmap.org/search?format=jsonv2'
-        '&q=$encoded&countrycodes=ph&limit=5&addressdetails=1',
-      );
-      final response = await http
-          .get(uri, headers: {'User-Agent': 'transitph-beta/1.0'})
-          .timeout(const Duration(seconds: 6));
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
-      if (data is! List) return [];
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map((item) {
-            final lat = double.tryParse('${item['lat']}');
-            final lng = double.tryParse('${item['lon']}');
-            final name = '${item['display_name'] ?? query}';
-            if (lat == null || lng == null) return null;
-            final short = name.split(',').take(3).join(',').trim();
-            return LocationSearchResult(
-              name: short.isEmpty ? name : short,
-              latitude: lat,
-              longitude: lng,
-            );
-          })
-          .whereType<LocationSearchResult>()
-          .toList();
-    } catch (_) {
-      return [];
-    }
+    final suggestions = await PlaceSearchService.suggest(query);
+    if (!mounted) return;
+    setState(() {
+      _suggestions = suggestions;
+      _isLoadingSuggestions = false;
+    });
   }
 
   @override
@@ -220,30 +150,31 @@ class _ContributeLocationSearchScreenState
                       color: _accent,
                       size: 20,
                     ),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () {
-                              _debounce?.cancel();
-                              _searchController.clear();
-                              setState(() {
-                                _suggestions = [];
-                                _isLoadingSuggestions = false;
-                              });
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: _border,
-                                borderRadius: BorderRadius.circular(6),
+                    suffixIcon:
+                        _searchController.text.isNotEmpty
+                            ? GestureDetector(
+                              onTap: () {
+                                _debounce?.cancel();
+                                _searchController.clear();
+                                setState(() {
+                                  _suggestions = [];
+                                  _isLoadingSuggestions = false;
+                                });
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: _border,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: _textSecondary,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 14,
-                                color: _textSecondary,
-                              ),
-                            ),
-                          )
-                        : null,
+                            )
+                            : null,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       vertical: 14,
@@ -272,10 +203,7 @@ class _ContributeLocationSearchScreenState
                       SizedBox(width: 8),
                       Text(
                         'Finding suggestions…',
-                        style: TextStyle(
-                          color: _textSecondary,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: _textSecondary, fontSize: 12),
                       ),
                     ],
                   ),
@@ -293,16 +221,16 @@ class _ContributeLocationSearchScreenState
                       shrinkWrap: true,
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       itemCount: _suggestions.length,
-                      separatorBuilder: (_, __) => const Divider(
-                        height: 1,
-                        indent: 48,
-                        color: _border,
-                      ),
+                      separatorBuilder:
+                          (_, __) => const Divider(
+                            height: 1,
+                            indent: 48,
+                            color: _border,
+                          ),
                       itemBuilder: (_, index) {
                         final suggestion = _suggestions[index];
                         return InkWell(
-                          onTap: () =>
-                              Navigator.of(context).pop(suggestion),
+                          onTap: () => Navigator.of(context).pop(suggestion),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -354,8 +282,10 @@ class _ContributeLocationSearchScreenState
                 onTap: _submitQuery,
                 child: Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
                   decoration: BoxDecoration(
                     color: _accent,
                     borderRadius: BorderRadius.circular(12),
@@ -363,7 +293,11 @@ class _ContributeLocationSearchScreenState
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.my_location_rounded, size: 18, color: _surface),
+                      Icon(
+                        Icons.my_location_rounded,
+                        size: 18,
+                        color: _surface,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'Search on Map',
@@ -380,8 +314,10 @@ class _ContributeLocationSearchScreenState
               const SizedBox(height: 14),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: _surface,
                   borderRadius: BorderRadius.circular(12),
@@ -389,8 +325,11 @@ class _ContributeLocationSearchScreenState
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.info_outline_rounded,
-                        color: _textSecondary, size: 16),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: _textSecondary,
+                      size: 16,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(

@@ -42,15 +42,11 @@ class OfflineRouteRepository {
   static Future<void> saveRoute(route_model.Route route) async {
     final db = await _database();
     await _ensureSchema(db);
-    await db.insert(
-      _table,
-      {
-        'id': route.id,
-        'route_json': RouteStorageCodec.encode(route),
-        'downloaded_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(_table, {
+      'id': route.id,
+      'route_json': RouteStorageCodec.encode(route),
+      'downloaded_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<bool> isRouteDownloaded(String routeId) async {

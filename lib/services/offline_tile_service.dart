@@ -42,11 +42,14 @@ class OfflineTileService {
             if (await tileFile.exists()) continue;
 
             await tileFile.parent.create(recursive: true);
-            final uri = Uri.parse('https://tile.openstreetmap.org/$z/$x/$y.png');
+            final uri = Uri.parse(
+              'https://tile.openstreetmap.org/$z/$x/$y.png',
+            );
             try {
-              final response = await client.get(uri, headers: {
-                HttpHeaders.userAgentHeader: _userAgent,
-              });
+              final response = await client.get(
+                uri,
+                headers: {HttpHeaders.userAgentHeader: _userAgent},
+              );
               if (response.statusCode == 200) {
                 await tileFile.writeAsBytes(response.bodyBytes, flush: true);
               }
@@ -81,7 +84,7 @@ class OfflineTileService {
   }
 
   static ({double minLat, double maxLat, double minLng, double maxLng})
-      _boundsForPoints(List<LatLng> points) {
+  _boundsForPoints(List<LatLng> points) {
     var minLat = points.first.latitude;
     var maxLat = points.first.latitude;
     var minLng = points.first.longitude;

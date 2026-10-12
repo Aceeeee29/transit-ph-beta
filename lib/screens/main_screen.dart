@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'home_screen.dart';
@@ -11,7 +12,9 @@ import 'moderator_screen.dart';
 import 'offline_mode_prompt_screen.dart';
 import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
+import 'search_screen.dart';
 import 'ors_route_map_screen.dart';
+import '../theme/app_colors.dart';
 import '../models/post.dart';
 import '../models/route.dart' as route_model;
 import '../services/moderation_service.dart';
@@ -19,6 +22,7 @@ import '../services/gamification_service.dart';
 import '../services/post_service.dart';
 import '../services/route_service.dart';
 import '../services/active_navigation_service.dart';
+import '../services/map_tab_controller.dart';
 import '../widgets/announcement_dialog.dart';
 import '../widgets/translate_chathead.dart';
 import '../widgets/translated_text.dart';
@@ -35,7 +39,12 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-  MapTabMode _mapTabMode = MapTabMode.contribute;
+  MapTabMode _mapTabMode = MapTabMode.nearby;
+
+  // "Press back again to exit": armed by the first back on Home.
+  static const _exitWindow = Duration(seconds: 2);
+  bool _exitArmed = false;
+  Timer? _exitTimer;
   bool _isLoading = false;
   bool _didCheckAnnouncements = false;
   bool _isOfflinePromptVisible = false;
@@ -43,14 +52,15 @@ class _MainScreenState extends State<MainScreen> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   StreamSubscription<User?>? _userSubscription;
   String? _pendingQuickRouteToken;
+  Route<dynamic>? _ownRoute;
 
   List<Post> posts = [];
   List<route_model.Route> routes = [];
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _surface = Color(0xFFFFFFFF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
 
@@ -86,12 +96,27 @@ class _MainScreenState extends State<MainScreen> {
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAnnouncements());
+    MapTabController.instance.addListener(_onMapTabChanged);
+    TranslateChatHead.loadEnabled();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Opening a route from a pushed page (search, notifications) pops back
+    // to this page so the Map tab shows it.
+    _ownRoute = ModalRoute.of(context);
+    MapTabController.instance.hostRoute = _ownRoute;
   }
 
   @override
   void dispose() {
+    final mapTab = MapTabController.instance;
+    mapTab.removeListener(_onMapTabChanged);
+    if (mapTab.hostRoute == _ownRoute) mapTab.hostRoute = null;
     _connectivitySubscription?.cancel();
     _userSubscription?.cancel();
+    _exitTimer?.cancel();
     super.dispose();
   }
 
@@ -182,18 +207,47 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  void _openNearbyPlaces() {
-    setState(() {
-      _mapTabMode = MapTabMode.nearby;
-      _selectedIndex = 2;
-    });
+  /// The system back gesture: an open route closes, Contribute returns to
+  /// the normal map (the drawing is kept), other tabs go Home, and on Home
+  /// the first back only arms "press back again to exit".
+  void _onBack() {
+    final mapTab = MapTabController.instance;
+    if (_selectedIndex == 2 && mapTab.current != null) {
+      mapTab.close();
+    } else if (_selectedIndex == 2 && _mapTabMode == MapTabMode.contribute) {
+      setState(() => _mapTabMode = MapTabMode.nearby);
+    } else if (_selectedIndex != 0) {
+      setState(() => _selectedIndex = 0);
+    } else {
+      setState(() => _exitArmed = true);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: TranslatedText('Press back again to exit'),
+            duration: _exitWindow,
+          ),
+        );
+      _exitTimer?.cancel();
+      _exitTimer = Timer(_exitWindow, () {
+        if (mounted) setState(() => _exitArmed = false);
+      });
+    }
   }
 
-  void _openContributeRoute() {
-    setState(() {
-      _mapTabMode = MapTabMode.contribute;
-      _selectedIndex = 2;
-    });
+  /// Route search, optionally already planning a trip to [destination].
+  void _openSearch([String? destination, LatLng? point]) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => SearchScreen(
+              routes: routes,
+              onRefresh: _loadData,
+              initialDestination: destination,
+              initialDestinationPoint: point,
+            ),
+      ),
+    );
   }
 
   @override
@@ -202,8 +256,7 @@ class _MainScreenState extends State<MainScreen> {
       HomeScreen(
         routes: routes,
         onRefresh: _loadData,
-        onOpenNearbyPlaces: _openNearbyPlaces,
-        onOpenContributeRoute: _openContributeRoute,
+        onOpenSearch: _openSearch,
       ),
       FeedScreen(
         key: ValueKey(posts.length),
@@ -229,21 +282,25 @@ class _MainScreenState extends State<MainScreen> {
         currentUserName: currentUserName,
         currentUserId: currentUserId,
       ),
-      ContributeScreen(
-        onRouteSubmitted: (route) async {
-          await RouteService.saveRoute(route);
-          await _loadData();
-        },
-        mapMode: _mapTabMode,
-        onMapModeChanged: (mode) {
-          if (_mapTabMode == mode) return;
-          setState(() => _mapTabMode = mode);
-        },
-        quickRouteToken: _pendingQuickRouteToken,
-        onQuickRouteTokenConsumed: () {
-          if (!mounted || _pendingQuickRouteToken == null) return;
-          setState(() => _pendingQuickRouteToken = null);
-        },
+      _buildMapTab(
+        ContributeScreen(
+          onRouteSubmitted: (route) async {
+            await RouteService.saveRoute(route);
+            await _loadData();
+          },
+          mapMode: _mapTabMode,
+          searchableRoutes: routes,
+          onOpenDirections: (name, point) => _openSearch(name, point),
+          onMapModeChanged: (mode) {
+            if (_mapTabMode == mode) return;
+            setState(() => _mapTabMode = mode);
+          },
+          quickRouteToken: _pendingQuickRouteToken,
+          onQuickRouteTokenConsumed: () {
+            if (!mounted || _pendingQuickRouteToken == null) return;
+            setState(() => _pendingQuickRouteToken = null);
+          },
+        ),
       ),
       ProfileScreen(key: ValueKey('profile_tab_${_selectedIndex == 3}')),
       if (widget.isAdmin) ModeratorScreen(onRoutesModerated: _loadData),
@@ -280,42 +337,117 @@ class _MainScreenState extends State<MainScreen> {
         ),
     ];
 
-    return Scaffold(
-      body: ListenableBuilder(
-        listenable: ActiveNavigationService.instance,
-        builder: (context, _) {
-          final activeTarget = ActiveNavigationService.instance.activeTarget;
-          final content = Stack(
-            children: [
-              Positioned.fill(
-                child: IndexedStack(index: _selectedIndex, children: screens),
-              ),
-              const TranslateChatHead(),
-            ],
-          );
-
-          if (activeTarget == null) return content;
-
-          // The banner already consumes the top status-bar inset via its own
-          // SafeArea, so strip it before the tab content below — otherwise
-          // each tab's own AppBar reserves that space a second time, leaving
-          // a dead gap under the banner.
-          return Column(
-            children: [
-              _buildActiveNavigationBanner(activeTarget),
-              Expanded(
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: true,
-                  child: content,
+    final mapTab = MapTabController.instance;
+    return PopScope(
+      // Back steps out one level at a time; only a second back on Home
+      // leaves the app.
+      canPop: _selectedIndex == 0 && _exitArmed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
+        body: ListenableBuilder(
+          listenable: Listenable.merge([
+            ActiveNavigationService.instance,
+            mapTab,
+          ]),
+          builder: (context, _) {
+            // The route view on the Map tab already shows the session, so the
+            // "tap to return" banner would point where you already are.
+            final viewingRoute = _selectedIndex == 2 && mapTab.current != null;
+            final activeTarget =
+                viewingRoute
+                    ? null
+                    : ActiveNavigationService.instance.activeTarget;
+            // Expand: the tabs are positioned, so without it the stack would
+            // size itself to the bubble, and to nothing once it is turned off.
+            final content = Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(
+                  child: IndexedStack(index: _selectedIndex, children: screens),
                 ),
-              ),
-            ],
-          );
-        },
+                ValueListenableBuilder<bool>(
+                  valueListenable: TranslateChatHead.enabled,
+                  builder:
+                      (context, enabled, _) =>
+                          enabled
+                              ? const TranslateChatHead()
+                              : const SizedBox.shrink(),
+                ),
+              ],
+            );
+
+            if (activeTarget == null) return content;
+
+            // The banner already consumes the top status-bar inset via its own
+            // SafeArea, so strip it before the tab content below — otherwise
+            // each tab's own AppBar reserves that space a second time, leaving
+            // a dead gap under the banner.
+            return Column(
+              children: [
+                _buildActiveNavigationBanner(activeTarget),
+                Expanded(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: content,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        bottomNavigationBar: _buildNavBar(navItems),
       ),
-      bottomNavigationBar: _buildNavBar(navItems),
     );
+  }
+
+  /// The Map tab: browsing/contributing, with a route view on top while one
+  /// is open. Contribute stays alive underneath so a draft isn't lost.
+  Widget _buildMapTab(Widget browse) {
+    return ListenableBuilder(
+      listenable: MapTabController.instance,
+      builder: (context, _) {
+        final current = MapTabController.instance.current;
+        return IndexedStack(
+          index: current == null ? 0 : 1,
+          children: [
+            browse,
+            if (current == null)
+              const SizedBox.shrink()
+            else if (current.route != null)
+              RouteMapScreen(
+                key: ValueKey('map_route_${current.serial}'),
+                route: current.route!,
+                enableRouteIntegrity: current.enableRouteIntegrity,
+                showDownloadButton: current.showDownloadButton,
+                onClose: MapTabController.instance.close,
+              )
+            else
+              OrsRouteMapScreen(
+                key: ValueKey('map_route_${current.serial}'),
+                result: current.generated!,
+                originName: current.originName,
+                destinationName: current.destinationName,
+                showDownloadButton: current.showDownloadButton,
+                onClose: MapTabController.instance.close,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A route was opened somewhere in the app: show the Map tab.
+  void _onMapTabChanged() {
+    if (!mounted) return;
+    if (MapTabController.instance.current != null && _selectedIndex != 2) {
+      setState(() => _selectedIndex = 2);
+    } else {
+      // canPop depends on whether a route is open.
+      setState(() {});
+    }
   }
 
   Widget _buildActiveNavigationBanner(FollowTarget target) {
@@ -334,25 +466,21 @@ class _MainScreenState extends State<MainScreen> {
       bottom: false,
       child: GestureDetector(
         onTap:
-            () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder:
-                    (_) =>
-                        route != null
-                            ? RouteMapScreen(
-                              route: route,
-                              enableRouteIntegrity:
-                                  navigation.enableRouteIntegrity,
-                              showDownloadButton: navigation.showDownloadButton,
-                            )
-                            : OrsRouteMapScreen(
-                              result: generated!,
-                              originName: target.startLabel,
-                              destinationName: target.endLabel,
-                              showDownloadButton: navigation.showDownloadButton,
-                            ),
-              ),
-            ),
+            () =>
+                route != null
+                    ? MapTabController.openRoute(
+                      context,
+                      route,
+                      enableRouteIntegrity: navigation.enableRouteIntegrity,
+                      showDownloadButton: navigation.showDownloadButton,
+                    )
+                    : MapTabController.openGenerated(
+                      context,
+                      generated!,
+                      originName: target.startLabel,
+                      destinationName: target.endLabel,
+                      showDownloadButton: navigation.showDownloadButton,
+                    ),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -408,10 +536,10 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       decoration: BoxDecoration(
         color: _surface,
-        border: Border(top: BorderSide(color: _border, width: 1.5)),
+        border: const Border(top: BorderSide(color: _border, width: 1.5)),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.06),
+            color: _accent.withValues(alpha: 0.06),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -445,13 +573,10 @@ class _MainScreenState extends State<MainScreen> {
                                 gradient: LinearGradient(
                                   colors:
                                       isSelected
-                                          ? [
-                                            const Color(0xFF4A7CE0),
-                                            const Color(0xFF6A9EFF),
-                                          ]
-                                          : [
-                                            const Color(0xFFD4E4F7),
-                                            const Color(0xFFEAF2FF),
+                                          ? AppColors.buttonGradient
+                                          : const [
+                                            Color(0xFFD4E4F7),
+                                            Color(0xFFEAF2FF),
                                           ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
@@ -480,7 +605,7 @@ class _MainScreenState extends State<MainScreen> {
                               item.label,
                               style: TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 color: isSelected ? _accent : _textSecondary,
                               ),
                             ),
@@ -520,7 +645,7 @@ class _MainScreenState extends State<MainScreen> {
                               fontSize: 10,
                               fontWeight:
                                   isSelected
-                                      ? FontWeight.w700
+                                      ? FontWeight.w600
                                       : FontWeight.w500,
                               color: isSelected ? _accent : _textSecondary,
                             ),

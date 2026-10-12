@@ -64,7 +64,8 @@ class RideCorrection {
           }(),
       ];
     }
-    if (boundaries.isNotEmpty) boundaries[boundaries.length - 1] = newPath.length - 1;
+    if (boundaries.isNotEmpty)
+      boundaries[boundaries.length - 1] = newPath.length - 1;
     return (path: newPath, boundaries: boundaries, changed: changed);
   }
 
@@ -80,9 +81,7 @@ class RideCorrection {
     final steps =
         route.steps.isNotEmpty
             ? route.steps
-            : [
-              route_model.Step(mode: 'Jeepney', instruction: '', details: ''),
-            ];
+            : [route_model.Step(mode: 'Jeepney', instruction: '', details: '')];
     final result = await splice(
       path: followedPath,
       stepBoundaries: stepBoundaries,

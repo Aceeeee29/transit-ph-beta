@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
+import '../widgets/map/app_base_map.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -14,23 +15,32 @@ import '../services/gamification_service.dart';
 import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';
 import '../services/contribute_route_edit_service.dart';
+import '../services/map_tab_controller.dart';
 import '../data/camanava_places.dart';
 import '../widgets/notification_overlay.dart';
-import '../widgets/map_controls.dart';
 import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../services/location_service.dart';
 import '../utils/map_distance.dart';
 import 'contribute_location_search_screen.dart';
+import 'map_search_screen.dart';
+import '../services/place_search_service.dart';
 import '../widgets/contribute/contribute_dialogs.dart';
 import '../widgets/contribute/draggable_step_markers_layer.dart';
-import '../widgets/contribute/location_search_bar.dart';
+import '../widgets/map_tab/map_drawer.dart';
+import '../widgets/map_tab/map_search_bar.dart';
+import '../widgets/map_tab/map_side_button.dart';
+import '../widgets/map_tab/place_category_chips.dart';
+import '../widgets/map_tab/place_widgets.dart';
+import '../widgets/map_tab/region_weather_row.dart';
 import '../widgets/translated_text.dart';
 import '../widgets/location_permission_notice.dart';
 import 'dart:async';
 part 'contribute_screen_dialogs.dart';
+part 'contribute_screen_map_chrome.dart';
 part 'contribute_screen_map_editor.dart';
+part 'contribute_screen_map_search.dart';
 part 'contribute_screen_route_builder.dart';
 
 /// What the Map tab is currently showing. The map itself is shared — only the
@@ -68,6 +78,12 @@ class ContributeScreen extends StatefulWidget {
   final MapTabMode mapMode;
   final ValueChanged<MapTabMode>? onMapModeChanged;
 
+  /// Community routes the browse search bar can find alongside places.
+  final List<route_model.Route> searchableRoutes;
+
+  /// "Directions" to a place found on the map: plan a trip there.
+  final void Function(String name, LatLng? point)? onOpenDirections;
+
   /// A route to start from that is submitted as a new route (e.g. a ride
   /// recorded while following), unlike [routeToEdit] which updates one.
   final route_model.Route? draftRoute;
@@ -86,6 +102,8 @@ class ContributeScreen extends StatefulWidget {
     this.onQuickRouteTokenConsumed,
     this.mapMode = MapTabMode.contribute,
     this.onMapModeChanged,
+    this.searchableRoutes = const [],
+    this.onOpenDirections,
   });
 
   @override
@@ -113,7 +131,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String? selectedRegion = 'CAMANAVA';
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
-  bool _isFormExpanded = false;
+  final DraggableScrollableController _drawerController =
+      DraggableScrollableController();
   bool _snapToRoadEnabled = true;
 
   /// The contributor's "Allow expressways" choice; null follows the mode's
@@ -141,11 +160,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   String _modeForStep(int index) =>
       index < steps.length ? steps[index].mode : _openStepMode;
-  bool _showEditHandles = false;
-  bool _showPins = true;
+  bool get _showPins => MapTabController.instance.showPins.value;
   bool _showTutorial = false;
   late MapTabMode _mapMode;
   LatLng? _searchedLocation;
+
+  /// A place found with the browse search bar that isn't one of our
+  /// landmarks: shown as a pin with its own drawer card.
+  LocationSearchResult? _foundPlace;
   String _lastLocationSearchQuery = '';
   String? _activeQuickRouteToken;
 
@@ -153,7 +175,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Position? _nearbyPosition;
   bool _nearbyIsLocating = false;
   Place? _nearbySelectedPlace;
-  final Set<PlaceCategory> _nearbySelected = {PlaceCategory.tourist};
+  Set<PlaceCategory> get _nearbySelected =>
+      MapTabController.instance.placeCategories.value;
   LatLng? _debugCoord;
 
   // ─── Zoom slider state ───────────────────────────────────────────────────────
@@ -165,11 +188,21 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
+
+  // ─── Map chrome layout ──────────────────────────────────────────────────────
+  /// The drawer at rest: its handle plus the area/weather row.
+  static const double _drawerPeekHeight = 80.0;
+
+  /// Below the search bar (8 + 54) and the category chips (8 + 38).
+  static const double _overlayTop = 116.0;
+
+  /// Keeps bottom overlays clear of the right-side buttons.
+  static const double _sideButtonsInset = 12 + MapSideButton.size + 12;
 
   // ─── CAMANAVA and Metro Manila boundaries ───────────────────────────────────
   // NOTE: these are hand-tuned approximate rectangles, not survey-grade
@@ -180,9 +213,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // Valenzuela's northernmost tip — a known tradeoff of using rectangles
   // instead of true polygon boundaries.
   final Map<String, LatLngBounds> philippineRegions = {
+    // Muntinlupa to North Caloocan, Navotas to Marikina.
     'Metro Manila': LatLngBounds(
-      const LatLng(14.38, 120.82),
-      const LatLng(14.95, 121.20),
+      const LatLng(14.35, 120.92),
+      const LatLng(14.78, 121.13),
     ),
     'CAMANAVA': LatLngBounds(
       const LatLng(
@@ -255,7 +289,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void initState() {
     super.initState();
     _mapMode = widget.mapMode;
-    _checkTutorialStatus();
+    MapTabController.instance.placeCategories.addListener(_onSharedMapState);
+    MapTabController.instance.showPins.addListener(_onSharedMapState);
+    if (_mapMode == MapTabMode.contribute) _checkTutorialStatus();
+    _loadPositionIfAllowed();
     if (widget.quickRouteToken != null &&
         widget.quickRouteToken!.trim().isNotEmpty) {
       _loadQuickRouteLink(widget.quickRouteToken!.trim());
@@ -278,16 +315,25 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   /// Camera + housekeeping when the mode actually flips.
   void _onMapModeApplied(MapTabMode mode) {
-    if (mode == MapTabMode.nearby) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _mapController.move(
-            CamanavaBounds.center,
-            CamanavaBounds.initialZoom,
-          );
-        }
-      });
+    // The drawer swaps content (places list vs. route form), so start it
+    // back at rest.
+    if (_drawerController.isAttached) _drawerController.reset();
+    if (mode == MapTabMode.contribute) _checkTutorialStatus();
+  }
+
+  /// Shows the blue dot and distances without asking: only when location
+  /// is already allowed. The GPS button asks.
+  Future<void> _loadPositionIfAllowed() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always &&
+        permission != LocationPermission.whileInUse) {
+      return;
     }
+    final position =
+        await Geolocator.getLastKnownPosition() ??
+        await LocationService.getCurrentPosition();
+    if (!mounted || position == null || _nearbyPosition != null) return;
+    setState(() => _nearbyPosition = position);
   }
 
   /// Programmatic mode flip — used by the in-screen toggle.
@@ -405,17 +451,17 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   Future<void> _checkTutorialStatus() async {
     final hasSeenTutorial = await TutorialService.hasSeenContributeTutorial();
-    if (!hasSeenTutorial && mounted) {
-      setState(() {
-        _isFormExpanded = true;
-        _showTutorial = true;
-      });
-    }
+    if (!hasSeenTutorial && mounted) _showTutorialOverlay();
   }
 
-  void _onTutorialComplete() async {
-    await TutorialService.markContributeTutorialAsSeen();
-    if (mounted) setState(() => _showTutorial = false);
+  void _onTutorialComplete() {
+    // Hide first: the save is a Firestore write that only completes once the
+    // server answers (never while offline), and until the overlay is gone its
+    // faded-out backdrop swallows every tap on the map.
+    setState(() => _showTutorial = false);
+    // Leave the map tappable: an open drawer covers most of it.
+    if (_drawerController.isAttached) _drawerController.reset();
+    unawaited(TutorialService.markContributeTutorialAsSeen());
   }
 
   void _loadExampleRoute() {
@@ -433,9 +479,17 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _saveToHistory();
   }
 
+  /// Pin filter or visibility changed (here or in a route view).
+  void _onSharedMapState() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
+    MapTabController.instance.showPins.removeListener(_onSharedMapState);
     _zoomVisibilityTimer?.cancel();
+    _drawerController.dispose();
     _startLocationController.dispose();
     _endLocationController.dispose();
     _shortDescriptionController.dispose();
@@ -446,7 +500,12 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   void _onMapTap(TapPosition tapPosition, LatLng point) async {
     if (_mapMode == MapTabMode.nearby) {
-      setState(() => _debugCoord = point);
+      // Tapping empty map closes an open place, like Google Maps.
+      setState(() {
+        _debugCoord = point;
+        _nearbySelectedPlace = null;
+        _foundPlace = null;
+      });
       return;
     }
 
@@ -596,20 +655,29 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  /// POI/nearby-place pin scale for the current zoom: 0 (hidden) below
-  /// [_pinHideZoom] so a wide-out view isn't swamped with markers, ramping
-  /// up to full size by [_pinFullSizeZoom].
-  static const double _pinHideZoom = 10.5;
-  static const double _pinFullSizeZoom = 13.5;
-
-  double get _poiPinScale {
-    final t = (_currentZoom - _pinHideZoom) / (_pinFullSizeZoom - _pinHideZoom);
-    return t.clamp(0.0, 1.0);
-  }
-
   void _onRegionChanged(String? region) {
     if (region != null && philippineRegions.containsKey(region)) {
       final bounds = philippineRegions[region]!;
+      if (region == 'Metro Manila') {
+        // The whole city, between the search bar and the drawer, whatever
+        // the screen's shape.
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              120,
+              16,
+              _drawerPeekHeight + 16,
+            ),
+          ),
+        );
+        setState(() {
+          selectedRegion = region;
+          _currentZoom = _mapController.camera.zoom;
+        });
+        return;
+      }
       final center = LatLng(
         (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
         (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
@@ -617,9 +685,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
       double zoom;
       switch (region) {
-        case 'Metro Manila':
-          zoom = 9.7;
-          break;
         case 'CAMANAVA':
           zoom = 13.0;
           break;
@@ -990,9 +1055,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         steps = prev.steps;
         stepBoundaries = prev.stepBoundaries;
         selectionMode = prev.selectionMode;
-        if (selectionMode != 'done') {
-          _showEditHandles = false;
-        }
+        if (selectionMode != 'done') {}
         _syncStepMetricsWithSteps();
       });
     }
@@ -1007,9 +1070,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         steps = next.steps;
         stepBoundaries = next.stepBoundaries;
         selectionMode = next.selectionMode;
-        if (selectionMode != 'done') {
-          _showEditHandles = false;
-        }
+        if (selectionMode != 'done') {}
         _syncStepMetricsWithSteps();
       });
     }
@@ -1029,7 +1090,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     while (_stepOrsDurS.length < steps.length) {
       _stepOrsDurS.add(null);
     }
-
   }
 
   void _onReset() {
@@ -1041,7 +1101,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _stepOrsDurS.clear();
       _openStepControls = [];
       selectionMode = 'start';
-      _showEditHandles = false;
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
@@ -1082,34 +1141,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  void _toggleEditHandles() {
-    if (selectionMode != 'done' || steps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: TranslatedText(
-            'Finish adding steps first to edit route handles.',
-          ),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _showEditHandles = !_showEditHandles);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: TranslatedText(
-          _showEditHandles
-              ? 'Edit handles enabled. Drag markers to adjust route.'
-              : 'Edit handles disabled.',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   void _togglePins() {
-    setState(() => _showPins = !_showPins);
+    final pins = MapTabController.instance.showPins;
+    pins.value = !pins.value;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: TranslatedText(
@@ -1323,7 +1357,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       steps = [];
       stepBoundaries = [];
       selectionMode = 'start';
-      _showEditHandles = false;
       _startLocationController.clear();
       _endLocationController.clear();
       _shortDescriptionController.clear();
@@ -1332,11 +1365,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   void _showTutorialOverlay() {
+    // The map stays clear: the first steps are about tapping it.
     setState(() => _showTutorial = true);
-  }
-
-  void _toggleFormExpanded() {
-    setState(() => _isFormExpanded = !_isFormExpanded);
   }
 
   void _setSelectedRouteTags(List<String> tags) {
@@ -1372,8 +1402,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Widget _buildVerticalZoomSlider() {
     return Positioned(
       right: 12,
-      top: 140,
-      bottom: 160,
+      top: _overlayTop + 8,
+      // Above the right-side buttons (hide pins, GPS).
+      bottom: _drawerPeekHeight + 12 + MapSideButtons.heightFor(2) + 16,
       child: IgnorePointer(
         ignoring: !_zoomControlsVisible,
         child: AnimatedOpacity(
@@ -1467,33 +1498,19 @@ class _ContributeScreenState extends State<ContributeScreen> {
           },
           child: Scaffold(
             backgroundColor: _bg,
-            appBar: _buildAppBar(),
             body: SafeArea(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  return Stack(
-                    children: [
-                      _buildMapLayer(),
-                      if (isNearby) ...[
-                        _buildNearbyFilterChips(),
-                        _buildNearbyDebugCoordChip(),
-                        _buildPinsToggle(),
-                        if (_nearbySelectedPlace != null)
-                          _buildNearbyInfoCard(_nearbySelectedPlace!),
-                        _buildNearbyFabs(),
-                      ] else ...[
-                        _buildMapControlsOverlay(),
-                        if (selectionMode != 'done') _buildInstructionPill(),
-                        _buildStepChipsBar(),
-                        _buildLocationSearchBar(),
-                        _buildRegionSelector(),
-                        _buildPinsToggle(),
-                        _buildVerticalZoomSlider(),
-                        _buildFormDrawer(context, constraints.maxHeight),
-                      ],
-                    ],
-                  );
-                },
+              child: Stack(
+                children: [
+                  _buildMapLayer(),
+                  if (isNearby)
+                    _buildNearbyDebugCoordChip()
+                  else
+                    _buildDrawCardSection(),
+                  _buildTopBar(),
+                  _buildVerticalZoomSlider(),
+                  _buildSideButtons(),
+                  _buildDrawer(),
+                ],
               ),
             ),
           ),
@@ -1513,47 +1530,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return this._buildAppBarSection();
-  }
-
   Widget _buildMapLayer() {
     return this._buildMapLayerSection();
   }
 
-  Widget _buildMapControlsOverlay() {
-    return this._buildMapControlsOverlaySection();
-  }
+  Widget _buildTopBar() => _buildTopBarSection();
 
-  Widget _buildInstructionPill() {
-    return this._buildInstructionPillSection();
-  }
+  Widget _buildSideButtons() => _buildSideButtonsSection();
 
-  Widget _buildStepChipsBar() {
-    return this._buildStepChipsBarSection();
-  }
-
-  Widget _buildRegionSelector() {
-    return this._buildRegionSelectorSection();
-  }
-
-  Widget _buildLocationSearchBar() {
-    return this._buildLocationSearchBarSection();
-  }
-
-  Widget _buildPinsToggle() {
-    return this._buildPinsToggleSection();
-  }
-
-  Widget _buildFormDrawer(BuildContext context, double availableHeight) {
-    return this._buildFormDrawerSection(context, availableHeight);
-  }
-
-  Widget _buildDrawerHandle() {
-    return this._buildDrawerHandleSection();
-  }
-
-  Widget _buildFormContent() {
-    return this._buildFormContentSection();
-  }
+  Widget _buildDrawer() => _buildDrawerSection();
 }

@@ -11,140 +11,6 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   static const _danger = _RouteMapScreenState._danger;
   static const _green = _RouteMapScreenState._green;
 
-  AppBar _buildAppBarSection() {
-    return AppBar(
-      backgroundColor: _surface,
-      foregroundColor: _textPrimary,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      leading: GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
-        child: Container(
-          margin: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: _surfaceAlt,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: _border),
-          ),
-          child: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 15,
-            color: _textSecondary,
-          ),
-        ),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.route.startLocation,
-            style: const TextStyle(
-              color: _textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          Row(
-            children: [
-              const Icon(Icons.arrow_forward, size: 11, color: _textSecondary),
-              const SizedBox(width: 3),
-              Flexible(
-                child: Text(
-                  widget.route.endLocation,
-                  style: const TextStyle(
-                    color: _textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        if (widget.showDownloadButton)
-          GestureDetector(
-            onTap:
-                (_isDownloadingRoute || _isRouteDownloaded)
-                    ? null
-                    : _downloadRouteForOffline,
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color:
-                    _isRouteDownloaded
-                        ? _green.withValues(alpha: 0.12)
-                        : _accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color:
-                      _isRouteDownloaded
-                          ? _green.withValues(alpha: 0.35)
-                          : _accent.withValues(alpha: 0.3),
-                ),
-              ),
-              child:
-                  _isDownloadingRoute
-                      ? const Padding(
-                        padding: EdgeInsets.all(8.5),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                      : Icon(
-                        _isRouteDownloaded
-                            ? Icons.download_done_rounded
-                            : Icons.download_rounded,
-                        color: _isRouteDownloaded ? _green : _accent,
-                        size: 18,
-                      ),
-            ),
-          ),
-        _VoteButton(
-          icon: Icons.arrow_upward_rounded,
-          count: widget.route.upvotes,
-          active: _userVote == true,
-          activeColor: _green,
-          onTap: _isApplyingVote ? null : () => _vote(true),
-        ),
-        _VoteButton(
-          icon: Icons.arrow_downward_rounded,
-          count: widget.route.downvotes,
-          active: _userVote == false,
-          activeColor: _danger,
-          onTap: _isApplyingVote ? null : () => _vote(false),
-        ),
-        GestureDetector(
-          onTap: _showReportDialog,
-          child: Container(
-            margin: const EdgeInsets.only(right: 12),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: _danger.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _danger.withValues(alpha: 0.25)),
-            ),
-            child: const Icon(
-              Icons.report_problem_outlined,
-              color: _danger,
-              size: 17,
-            ),
-          ),
-        ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: _border),
-      ),
-    );
-  }
-
   Widget _buildStepTileSection(int idx, route_model.Step step) {
     final isCompleted = _isStepCompleted(idx);
     final modeColor =
@@ -205,7 +71,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                         '${idx + 1}',
                         style: const TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           color: _textSecondary,
                         ),
                       ),
@@ -222,7 +88,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       step.mode,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         color: modeColor,
                       ),
                     ),
@@ -292,7 +158,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           'Schedule: $stepSchedule',
                           style: const TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             color: Color(0xFF9A5A17),
                           ),
                         ),
@@ -322,7 +188,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                                 style: const TextStyle(
                                   fontSize: 11,
                                   height: 1.35,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color: Color(0xFF7A5800),
                                 ),
                               ),
@@ -351,7 +217,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           '${_isDiscountFareEnabled ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}',
                           style: const TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: Color(0xFF2D9F63),
                           ),
                         ),
@@ -401,7 +267,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: selected ? _accent : _textSecondary,
               ),
             ),
@@ -453,7 +319,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: _textPrimary,
                       ),
                     ),
@@ -492,7 +358,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                               color: trustColor,
                             ),
                           ),
@@ -575,11 +441,16 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
+        leading: IconButton(
+          onPressed: _closeView,
+          tooltip: 'Back to map',
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
         title: const Text(
           'Route Map',
           style: TextStyle(
             color: _textPrimary,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             fontSize: 17,
           ),
         ),
@@ -606,7 +477,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               'No route data available',
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: _textPrimary,
               ),
             ),
@@ -617,141 +488,118 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   }
 
   Widget _buildMapSectionSection(LatLng center) {
-    return Stack(
-      children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: center,
-            initialZoom: 10.0,
-            minZoom: 5.0,
-            maxZoom: 18.0,
-            onPositionChanged: (_, hasGesture) {
-              if (hasGesture && _isAutoFollowEnabled) {
-                _setAutoFollowEnabled(false);
-              }
-            },
-            cameraConstraint: CameraConstraint.contain(
-              bounds: LatLngBounds(
-                const LatLng(4.5, 116.0),
-                const LatLng(21.5, 127.0),
-              ),
-            ),
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: center,
+        initialZoom: 10.0,
+        minZoom: 5.0,
+        maxZoom: 18.0,
+        onTap: (_, _) => _clearSelectedPlace(),
+        onPositionChanged: (camera, hasGesture) {
+          if (hasGesture && _isAutoFollowEnabled) {
+            _setAutoFollowEnabled(false);
+          }
+          _updatePinScale(camera.zoom);
+        },
+        cameraConstraint: CameraConstraint.contain(
+          bounds: LatLngBounds(
+            const LatLng(4.5, 116.0),
+            const LatLng(21.5, 127.0),
           ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.app.transitph_beta',
-            ),
-            if (_offlineTileTemplate != null)
-              TileLayer(
-                urlTemplate: _offlineTileTemplate!,
-                tileProvider: FileTileProvider(),
-              ),
-            // Markers after the route so the user's arrow sits on top of it.
-            PolylineLayer(polylines: polylines),
-            MarkerLayer(markers: markers),
-            _userLocationLayer,
-          ],
         ),
-        Positioned(top: 12, right: 12, child: _buildMapLegend()),
-        if (_guidance.kind != FollowGuidanceKind.none)
-          Positioned(
-            left: 12,
-            right: 64,
-            bottom: 64,
-            child: FollowGuidanceCard(
-              guidance: _guidance,
-              remainingMeters:
-                  ActiveNavigationService.instance.connectorRemainingMeters,
-              isRerouting: ActiveNavigationService.instance.isRerouting,
-              routeStartLabel: widget.route.startLocation,
+      ),
+      children: [
+        // Saved tiles first: they show only where live ones can't load.
+        if (_offlineTileTemplate != null)
+          offlineTileLayer(_offlineTileTemplate!),
+        const AppBaseMap(),
+        // Place pins under the route, so its stops and markers stay on top.
+        if (MapTabController.instance.showPins.value)
+          MarkerLayer(
+            markers: placeMarkers(
+              places: _visiblePlaces,
+              scale: _pinScale,
+              selectedId: _selectedPlace?.id,
+              onTap: _onPlaceTapped,
             ),
           ),
-        Positioned(bottom: 12, left: 12, child: _buildStartControl()),
-        if (kDebugMode && _isNavigationStarted && !_hasArrived)
-          Positioned(
-            bottom: 64,
-            right: 12,
-            child: FollowSimulatorButton(path: _pathPoints),
-          ),
-        Positioned(bottom: 12, right: 12, child: _buildCenterButton()),
+        // Markers after the route so the user's arrow sits on top of it.
+        PolylineLayer(polylines: polylines),
+        MarkerLayer(markers: markers),
+        _userLocationLayer,
       ],
     );
   }
 
-  Widget _buildInfoPanelSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _bg,
-        border: Border(top: BorderSide(color: _border, width: 1.5)),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildMetricsRow(),
-          if (_hasFareSteps) ...[
-            const SizedBox(height: 10),
-            FareDiscountToggle(
-              value: _isDiscountFareEnabled,
-              onChanged: _setDiscountEnabled,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _border),
-              ),
-              labelStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
-              ),
-              iconColor: _textSecondary,
-              iconSize: 16,
-              activeColor: _accent,
-            ),
-          ],
-          const SizedBox(height: 16),
-          _buildSectionLabel('Route Steps (${widget.route.steps.length})'),
-          ...widget.route.steps.asMap().entries.map(
-            (e) => _buildStepTile(e.key, e.value),
+  /// The old bottom info panel, now the drawer's content.
+  List<Widget> _infoPanelChildren() {
+    return [
+      _buildMetricsRow(),
+      if (_hasFareSteps) ...[
+        const SizedBox(height: 10),
+        FareDiscountToggle(
+          value: _isDiscountFareEnabled,
+          onChanged: _setDiscountEnabled,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _border),
           ),
-          if (_routeReports.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            _buildSectionLabel('Recent Reports'),
-            ..._routeReports.map(_buildReportTile),
-          ],
-          const SizedBox(height: 16),
-        ],
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: _textPrimary,
+          ),
+          iconColor: _textSecondary,
+          iconSize: 16,
+          activeColor: _accent,
+        ),
+      ],
+      const SizedBox(height: 16),
+      _buildSectionLabel('Route Steps (${widget.route.steps.length})'),
+      ...widget.route.steps.asMap().entries.map(
+        (e) => _buildStepTile(e.key, e.value),
       ),
+      if (_routeReports.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        _buildSectionLabel('Recent Reports'),
+        ..._routeReports.map(_buildReportTile),
+      ],
+      const SizedBox(height: 16),
+    ];
+  }
+
+  /// The route's length. Saved values of 0 (some routes were stored as
+  /// "0 m" / "0") fall back to measuring the drawn path.
+  String _routeDistanceLabel() {
+    if (widget.route.distanceMeters != null &&
+        widget.route.distanceMeters! > 0) {
+      return RouteMetricsService.formatDistance(
+        widget.route.distanceMeters! / 1000,
+      );
+    }
+    final saved = widget.route.distance?.trim() ?? '';
+    if (saved.isNotEmpty) {
+      final parsedKm = RouteMetricsService.parseDistanceToKm(saved);
+      if (parsedKm == null) return saved;
+      if (parsedKm > 0) return RouteMetricsService.formatDistance(parsedKm);
+    }
+    return RouteMetricsService.formatDistance(
+      RouteMetricsService.calculateRouteDistance(_pathPoints),
     );
   }
 
   Widget _buildMetricsRowSection() {
-    // Saved values of 0 (some routes were stored as "0 m" / "0") fall back
-    // to measuring the drawn path.
-    final distanceValue = () {
-      if (widget.route.distanceMeters != null &&
-          widget.route.distanceMeters! > 0) {
-        return RouteMetricsService.formatDistance(
-          widget.route.distanceMeters! / 1000,
-        );
-      }
-      final saved = widget.route.distance?.trim() ?? '';
-      if (saved.isNotEmpty) {
-        final parsedKm = RouteMetricsService.parseDistanceToKm(saved);
-        if (parsedKm == null) return saved;
-        if (parsedKm > 0) return RouteMetricsService.formatDistance(parsedKm);
-      }
-      return RouteMetricsService.formatDistance(
-        RouteMetricsService.calculateRouteDistance(_pathPoints),
-      );
-    }();
+    final distanceValue = _routeDistanceLabel();
     // While following, both count down from where the traveler is.
     final remaining = _remainingTrip();
     final etaValue =
         remaining != null
-            ? RouteMetricsService.formatEtaLabel('${math.max(1, remaining.minutes)}')
+            ? RouteMetricsService.formatEtaLabel(
+              '${math.max(1, remaining.minutes)}',
+            )
             : _routeEtaLabel();
 
     final scheduleText = _routeScheduleText();
@@ -782,7 +630,9 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             label: remaining != null ? 'Remaining' : 'Distance',
             value:
                 remaining != null
-                    ? RouteMetricsService.formatDistance(remaining.meters / 1000)
+                    ? RouteMetricsService.formatDistance(
+                      remaining.meters / 1000,
+                    )
                     : distanceValue,
           ),
           if (etaValue != null) ...[
@@ -861,7 +711,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                     report.type,
                     style: const TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: _textPrimary,
                     ),
                   ),
@@ -950,7 +800,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 value,
                 style: const TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: _textPrimary,
                 ),
               ),
@@ -969,7 +819,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         style: const TextStyle(
           color: _textSecondary,
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
           letterSpacing: 1.2,
         ),
       ),

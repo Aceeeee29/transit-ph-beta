@@ -69,13 +69,16 @@ extension _RouteMapScreenDataSections on _RouteMapScreenState {
       if (await file.exists()) {
         allReports = jsonDecode(await file.readAsString());
       }
-      allReports[widget.route.id] = _routeReports
-          .map((r) => {
-                'type': r.type,
-                'description': r.description,
-                'timestamp': r.timestamp.millisecondsSinceEpoch,
-              })
-          .toList();
+      allReports[widget.route.id] =
+          _routeReports
+              .map(
+                (r) => {
+                  'type': r.type,
+                  'description': r.description,
+                  'timestamp': r.timestamp.millisecondsSinceEpoch,
+                },
+              )
+              .toList();
       await file.writeAsString(jsonEncode(allReports));
     } catch (e) {
       debugPrint('RouteMapScreen: failed to save reports locally: $e');

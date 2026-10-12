@@ -9,7 +9,7 @@ import '../../services/route_follow_guidance.dart';
 class FollowRouteLayers {
   static final travelledFill = Colors.grey.shade400;
   static final travelledOutline = Colors.grey.shade600;
-  static const connectorColor = Color(0xFF2E7CF6);
+  static const connectorColor = Color(0xFF0B8FD6);
 
   /// The route, one polyline pair per step range. While following, the part
   /// already travelled is grey and the rest keeps its colour, split exactly
@@ -54,9 +54,7 @@ class FollowRouteLayers {
       final end = range.end.clamp(0, last);
       if (end <= start) continue;
       final pts = path.sublist(start, end + 1);
-      if (snapshot == null ||
-          !snapshot.hasProgress ||
-          splitSegment < start) {
+      if (snapshot == null || !snapshot.hasProgress || splitSegment < start) {
         remaining.addAll(line(pts, range.color, outline));
       } else if (snapshot.hasArrived || splitSegment >= end) {
         travelled.addAll(line(pts, travelledFill, travelledOutline));
@@ -150,7 +148,11 @@ class FollowRouteLayers {
           shape: BoxShape.circle,
           border: Border.all(color: connectorColor, width: 4),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
           ],
         ),
       ),

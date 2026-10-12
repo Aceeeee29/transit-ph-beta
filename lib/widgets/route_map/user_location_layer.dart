@@ -41,7 +41,7 @@ class _UserLocationLayerState extends State<UserLocationLayer>
   /// Further than this is a real jump (e.g. resuming after a gap): no glide.
   static const _snapMeters = 150.0;
   static const _distance = Distance();
-  static const _blue = Color(0xFF2E7CF6);
+  static const _blue = Color(0xFF0B8FD6);
 
   late final AnimationController _controller;
   LatLng? _from;

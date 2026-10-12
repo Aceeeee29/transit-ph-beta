@@ -23,14 +23,17 @@ class TutorialOverlay extends StatefulWidget {
 class _TutorialOverlayState extends State<TutorialOverlay>
     with SingleTickerProviderStateMixin {
   int _currentStep = 0;
+  // Set once the overlay starts fading out for good, so the fade doesn't take
+  // taps meant for the map underneath.
+  bool _closing = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -63,16 +66,16 @@ class _TutorialOverlayState extends State<TutorialOverlay>
         _animationController.forward();
       });
     } else {
-      _animationController.reverse().then((_) {
-        widget.onComplete();
-      });
+      _close();
     }
   }
 
-  void _skipTutorial() {
-    _animationController.reverse().then((_) {
-      widget.onComplete();
-    });
+  void _skipTutorial() => _close();
+
+  void _close() {
+    if (_closing) return;
+    setState(() => _closing = true);
+    _animationController.reverse().then((_) => widget.onComplete());
   }
 
   void _loadExampleRoute() {
@@ -154,255 +157,266 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     final isFirst = _currentStep == 0;
 
     return Positioned.fill(
-      child: AnimatedBuilder(
-        animation: _fadeAnimation,
-        builder: (context, child) {
-          return Opacity(opacity: _fadeAnimation.value, child: child);
-        },
-        child: Stack(
-          children: [
-            // Semi-transparent background
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _nextStep,
-                child: Container(color: Colors.black.withOpacity(0.7)),
+      child: IgnorePointer(
+        ignoring: _closing,
+        child: AnimatedBuilder(
+          animation: _fadeAnimation,
+          builder: (context, child) {
+            return Opacity(opacity: _fadeAnimation.value, child: child);
+          },
+          child: Stack(
+            children: [
+              // Semi-transparent background
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _nextStep,
+                  child: Container(color: Colors.black.withOpacity(0.7)),
+                ),
               ),
-            ),
 
-            // Tooltip card
-            Positioned(
-              left: 20,
-              right: 20,
-              top: 100, // Fixed position in center-ish
-              child: Container(
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _border),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _accent.withOpacity(0.12),
-                          blurRadius: 32,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // ── Header ─────────────────────────────────────────
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 16, 14),
-                          decoration: BoxDecoration(
-                            color: _surfaceAlt,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(20),
-                            ),
-                            border: Border(
-                              bottom: BorderSide(color: _border),
-                            ),
+              // Tooltip card
+              Positioned(
+                left: 20,
+                right: 20,
+                top: 100, // Fixed position in center-ish
+                child: Container(
+                      decoration: BoxDecoration(
+                        color: _surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accent.withOpacity(0.12),
+                            blurRadius: 32,
+                            offset: const Offset(0, 12),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _accentSoft,
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                                child: const Icon(
-                                  Icons.school_outlined,
-                                  color: _accent,
-                                  size: 16,
-                                ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // ── Header ─────────────────────────────────────────
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(18, 16, 16, 14),
+                            decoration: BoxDecoration(
+                              color: _surfaceAlt,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  currentStep.title,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: _textPrimary,
-                                    letterSpacing: -0.2,
+                              border: Border(
+                                bottom: BorderSide(color: _border),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: _accentSoft,
+                                    borderRadius: BorderRadius.circular(9),
                                   ),
-                                ),
-                              ),
-                              // Step counter pill
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _accentSoft,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  '${_currentStep + 1}/${widget.steps.length}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
+                                  child: const Icon(
+                                    Icons.school_outlined,
                                     color: _accent,
+                                    size: 16,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // ── Body ───────────────────────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Text(
-                                currentStep.description,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: _textSecondary,
-                                  height: 1.6,
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    currentStep.title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textPrimary,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-
-                              // Animation preview (if available)
-                              if (currentStep.animationAsset != null) ...[
-                                const SizedBox(height: 12),
-                                _buildAnimationPreview(
-                                    currentStep.animationAsset),
+                                // Step counter pill
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _accentSoft,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '${_currentStep + 1}/${widget.steps.length}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: _accent,
+                                    ),
+                                  ),
+                                ),
                               ],
+                            ),
+                          ),
 
-                              const SizedBox(height: 16),
+                          // ── Body ───────────────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                Text(
+                                  currentStep.description,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: _textSecondary,
+                                    height: 1.6,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
 
-                              // Step indicator dots
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(
-                                  widget.steps.length,
-                                  (index) => AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 250),
-                                    width: index == _currentStep ? 20 : 6,
-                                    height: 6,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(3),
-                                      color: index == _currentStep
-                                          ? _accent
-                                          : _border,
+                                // Animation preview (if available)
+                                if (currentStep.animationAsset != null) ...[
+                                  const SizedBox(height: 12),
+                                  _buildAnimationPreview(
+                                    currentStep.animationAsset,
+                                  ),
+                                ],
+
+                                const SizedBox(height: 16),
+
+                                // Step indicator dots
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: List.generate(
+                                    widget.steps.length,
+                                    (index) => AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      width: index == _currentStep ? 20 : 6,
+                                      height: 6,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(3),
+                                        color:
+                                            index == _currentStep
+                                                ? _accent
+                                                : _border,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
 
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 16),
 
-                              // ── Buttons ───────────────────────────────────
-                              if (isFirst)
-                                Row(
-                                  children: [
-                                    if (widget.onExampleRouteRequested != null) ...[
-                                      Expanded(
-                                        child: GestureDetector(
-                                          onTap: _loadExampleRoute,
-                                          child: Container(
-                                            height: 42,
-                                            decoration: BoxDecoration(
-                                              color: _surface,
-                                              borderRadius:
-                                                  BorderRadius.circular(11),
-                                              border: Border.all(
-                                                  color: _border),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: const Text(
-                                              'Load Example',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: _textSecondary,
+                                // ── Buttons ───────────────────────────────────
+                                if (isFirst)
+                                  Row(
+                                    children: [
+                                      if (widget.onExampleRouteRequested !=
+                                          null) ...[
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: _loadExampleRoute,
+                                            child: Container(
+                                              height: 42,
+                                              decoration: BoxDecoration(
+                                                color: _surface,
+                                                borderRadius:
+                                                    BorderRadius.circular(11),
+                                                border: Border.all(
+                                                  color: _border,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: const Text(
+                                                'Load Example',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: _textSecondary,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                    ],
-                                    Expanded(
-                                      flex: widget.onExampleRouteRequested !=
-                                              null
-                                          ? 1
-                                          : 0,
-                                      child: _primaryButton(
-                                        label: 'Next',
-                                        icon: Icons.arrow_forward_rounded,
-                                        onTap: _nextStep,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                Row(
-                                  children: [
-                                    if (widget.showSkipButton) ...[
+                                        const SizedBox(width: 10),
+                                      ],
                                       Expanded(
-                                        child: GestureDetector(
-                                          onTap: _skipTutorial,
-                                          child: Container(
-                                            height: 42,
-                                            decoration: BoxDecoration(
-                                              color: _surface,
-                                              borderRadius:
-                                                  BorderRadius.circular(11),
-                                              border: Border.all(
-                                                  color: _border),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: const Text(
-                                              'Skip',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: _textSecondary,
+                                        flex:
+                                            widget.onExampleRouteRequested !=
+                                                    null
+                                                ? 1
+                                                : 0,
+                                        child: _primaryButton(
+                                          label: 'Next',
+                                          icon: Icons.arrow_forward_rounded,
+                                          onTap: _nextStep,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Row(
+                                    children: [
+                                      if (widget.showSkipButton) ...[
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: _skipTutorial,
+                                            child: Container(
+                                              height: 42,
+                                              decoration: BoxDecoration(
+                                                color: _surface,
+                                                borderRadius:
+                                                    BorderRadius.circular(11),
+                                                border: Border.all(
+                                                  color: _border,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: const Text(
+                                                'Skip',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: _textSecondary,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
+                                        const SizedBox(width: 10),
+                                      ],
+                                      Expanded(
+                                        flex: 2,
+                                        child: _primaryButton(
+                                          label: isLast ? 'Got it!' : 'Next',
+                                          icon:
+                                              isLast
+                                                  ? Icons.check_rounded
+                                                  : Icons.arrow_forward_rounded,
+                                          onTap: _nextStep,
+                                        ),
                                       ),
-                                      const SizedBox(width: 10),
                                     ],
-                                    Expanded(
-                                      flex: 2,
-                                      child: _primaryButton(
-                                        label: isLast ? 'Got it!' : 'Next',
-                                        icon: isLast
-                                            ? Icons.check_rounded
-                                            : Icons.arrow_forward_rounded,
-                                        onTap: _nextStep,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .moveY(
+                      begin: 20,
+                      end: 0,
+                      duration: 300.ms,
+                      curve: Curves.easeOutQuad,
                     ),
-                  )
-                  .animate()
-                  .fadeIn(duration: 300.ms)
-                  .moveY(
-                    begin: 20,
-                    end: 0,
-                    duration: 300.ms,
-                    curve: Curves.easeOutQuad,
-                  ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -419,7 +433,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
         height: 42,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+            colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),

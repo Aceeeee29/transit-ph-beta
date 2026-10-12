@@ -55,7 +55,8 @@ class QuickRouteLinkService {
     final trimmed = token.trim();
     if (trimmed.isEmpty) return null;
 
-    final doc = await _firestore.collection(_linksCollection).doc(trimmed).get();
+    final doc =
+        await _firestore.collection(_linksCollection).doc(trimmed).get();
     if (!doc.exists) return null;
 
     final data = doc.data();
@@ -88,7 +89,9 @@ class QuickRouteLinkService {
       throw StateError('Missing quick link token.');
     }
 
-    final linkRef = _firestore.collection(_linksCollection).doc(normalizedToken);
+    final linkRef = _firestore
+        .collection(_linksCollection)
+        .doc(normalizedToken);
     final quickRouteRef = _firestore.collection(_quickRoutesCollection).doc();
 
     await _firestore.runTransaction((tx) async {
@@ -99,7 +102,8 @@ class QuickRouteLinkService {
 
       final data = linkSnap.data() ?? <String, dynamic>{};
       final expiresAtRaw = data['expiresAt'];
-      final expiresAt = expiresAtRaw is Timestamp ? expiresAtRaw.toDate() : null;
+      final expiresAt =
+          expiresAtRaw is Timestamp ? expiresAtRaw.toDate() : null;
       if (expiresAt == null || expiresAt.isBefore(DateTime.now().toUtc())) {
         throw StateError('This quick link has expired.');
       }

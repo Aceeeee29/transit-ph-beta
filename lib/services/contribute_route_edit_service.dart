@@ -109,11 +109,7 @@ class StepGeometry {
   /// Moves control [k] to [to]; re-routes the (up to two) touching pieces.
   /// The point lands where the routed line actually reaches (on the road,
   /// for vehicles), so both pieces meet there.
-  Future<StepGeometry> moveControl(
-    int k,
-    LatLng to,
-    PieceRouter route,
-  ) async {
+  Future<StepGeometry> moveControl(int k, LatLng to, PieceRouter route) async {
     final controls = List.of(this.controls);
     final pieces = List.of(this.pieces);
     var point = to;
@@ -140,7 +136,8 @@ class StepGeometry {
     final point = first.last;
     final second = await route(point, this.controls[k + 1]);
     final controls = List.of(this.controls)..insert(k + 1, point);
-    final pieces = List.of(this.pieces)..replaceRange(k, k + 1, [first, second]);
+    final pieces = List.of(this.pieces)
+      ..replaceRange(k, k + 1, [first, second]);
     return StepGeometry._(controls, pieces);
   }
 
@@ -150,9 +147,7 @@ class StepGeometry {
     if (k <= 0 || k >= this.controls.length - 1) return this;
     final controls = List.of(this.controls)..removeAt(k);
     final pieces = List.of(this.pieces)
-      ..replaceRange(k - 1, k + 1, [
-        await route(controls[k - 1], controls[k]),
-      ]);
+      ..replaceRange(k - 1, k + 1, [await route(controls[k - 1], controls[k])]);
     return StepGeometry._(controls, pieces);
   }
 
@@ -266,7 +261,9 @@ class ContributeRouteEditService {
     }
 
     final usableStepCount =
-        steps.length < (waypoints.length - 1) ? steps.length : (waypoints.length - 1);
+        steps.length < (waypoints.length - 1)
+            ? steps.length
+            : (waypoints.length - 1);
 
     final rebuiltPathPoints = <LatLng>[];
     final rebuiltStepBoundaries = <int>[];
@@ -336,7 +333,9 @@ class ContributeRouteEditService {
     }
 
     final usableStepCount =
-        steps.length < stepControlPoints.length ? steps.length : stepControlPoints.length;
+        steps.length < stepControlPoints.length
+            ? steps.length
+            : stepControlPoints.length;
 
     final rebuiltPathPoints = <LatLng>[];
     final rebuiltStepBoundaries = <int>[];

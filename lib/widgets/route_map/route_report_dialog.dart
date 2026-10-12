@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 const _bg = Color(0xFFF4F8FF);
 const _surface = Color(0xFFFFFFFF);
 const _surfaceAlt = Color(0xFFEAF2FF);
-const _accent = Color(0xFF2E7CF6);
-const _accentSoft = Color(0x1A2E7CF6);
+const _accent = Color(0xFF0B8FD6);
+const _accentSoft = Color(0x1A0B8FD6);
 const _textPrimary = Color(0xFF0F1D35);
 const _textSecondary = Color(0xFF7A92B2);
 const _border = Color(0xFFD4E4F7);
@@ -68,22 +68,21 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
       initialChildSize: 0.75,
       minChildSize: 0.5,
       maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: _bg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            _buildHandle(),
-            _buildHeader(),
-            const Divider(color: _border, height: 1),
-            Expanded(
-              child: _buildContent(scrollController),
+      builder:
+          (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: _bg,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-          ],
-        ),
-      ),
+            child: Column(
+              children: [
+                _buildHandle(),
+                _buildHeader(),
+                const Divider(color: _border, height: 1),
+                Expanded(child: _buildContent(scrollController)),
+              ],
+            ),
+          ),
     );
   }
 
@@ -200,8 +199,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
                 style: TextStyle(
                   fontSize: 13,
                   color: selected ? _textPrimary : _textSecondary,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ),
@@ -225,11 +223,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
         decoration: const InputDecoration(
           hintText: 'Additional description (optional)',
           hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
-          prefixIcon: Icon(
-            Icons.edit_note_outlined,
-            color: _accent,
-            size: 20,
-          ),
+          prefixIcon: Icon(Icons.edit_note_outlined, color: _accent, size: 20),
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(vertical: 13, horizontal: 4),
         ),
@@ -267,34 +261,37 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
         Expanded(
           flex: 2,
           child: GestureDetector(
-            onTap: canSubmit
-                ? () {
-                    widget.onSubmit(_selectedType!, _description);
-                    Navigator.pop(context);
-                  }
-                : null,
+            onTap:
+                canSubmit
+                    ? () {
+                      widget.onSubmit(_selectedType!, _description);
+                      Navigator.pop(context);
+                    }
+                    : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               height: 46,
               decoration: BoxDecoration(
-                gradient: canSubmit
-                    ? const LinearGradient(
-                        colors: [Color(0xFFE05C6A), Color(0xFFEA8A94)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      )
-                    : null,
+                gradient:
+                    canSubmit
+                        ? const LinearGradient(
+                          colors: [Color(0xFFE05C6A), Color(0xFFEA8A94)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        )
+                        : null,
                 color: canSubmit ? null : _border,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: canSubmit
-                    ? [
-                        BoxShadow(
-                          color: _danger.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ]
-                    : null,
+                boxShadow:
+                    canSubmit
+                        ? [
+                          BoxShadow(
+                            color: _danger.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                        : null,
               ),
               alignment: Alignment.center,
               child: Row(
@@ -335,15 +332,13 @@ class _RadioCircle extends StatelessWidget {
       height: 16,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: selected ? _accent : _border,
-          width: 2,
-        ),
+        border: Border.all(color: selected ? _accent : _border, width: 2),
         color: selected ? _accent : Colors.transparent,
       ),
-      child: selected
-          ? const Icon(Icons.check, size: 10, color: Colors.white)
-          : null,
+      child:
+          selected
+              ? const Icon(Icons.check, size: 10, color: Colors.white)
+              : null,
     );
   }
 }

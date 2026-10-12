@@ -33,10 +33,7 @@ class FollowSimulatorButton extends StatelessWidget {
   }
 }
 
-Future<void> showFollowSimulatorSheet(
-  BuildContext context,
-  List<LatLng> path,
-) {
+Future<void> showFollowSimulatorSheet(BuildContext context, List<LatLng> path) {
   return showModalBottomSheet<void>(
     context: context,
     builder: (_) => _SimulatorSheet(path: path),

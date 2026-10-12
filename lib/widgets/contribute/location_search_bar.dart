@@ -96,9 +96,10 @@ class _ContributeLocationSearchBarState
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      color: hasDisplayText
-                          ? widget.textPrimary
-                          : widget.textSecondary,
+                      color:
+                          hasDisplayText
+                              ? widget.textPrimary
+                              : widget.textSecondary,
                       fontWeight:
                           hasDisplayText ? FontWeight.w500 : FontWeight.w400,
                     ),
@@ -147,10 +148,7 @@ class _ContributeLocationSearchBarState
               ),
               decoration: InputDecoration(
                 hintText: 'Search location',
-                hintStyle: TextStyle(
-                  color: widget.textSecondary,
-                  fontSize: 12,
-                ),
+                hintStyle: TextStyle(color: widget.textSecondary, fontSize: 12),
                 isDense: true,
                 border: InputBorder.none,
               ),
@@ -173,18 +171,19 @@ class _ContributeLocationSearchBarState
             ),
           SizedBox(
             width: 38,
-            child: _isSearching
-                ? const Padding(
-                    padding: EdgeInsets.all(9),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    onPressed: _search,
-                    icon: const Icon(Icons.my_location_rounded, size: 18),
-                    color: widget.accent,
-                    splashRadius: 18,
-                    tooltip: 'Search',
-                  ),
+            child:
+                _isSearching
+                    ? const Padding(
+                      padding: EdgeInsets.all(9),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : IconButton(
+                      onPressed: _search,
+                      icon: const Icon(Icons.my_location_rounded, size: 18),
+                      color: widget.accent,
+                      splashRadius: 18,
+                      tooltip: 'Search',
+                    ),
           ),
           const SizedBox(width: 6),
         ],

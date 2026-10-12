@@ -80,35 +80,37 @@ class Route {
       'startLocation': startLocation,
       'endLocation': endLocation,
       'shortDescription': shortDescription,
-      'steps': steps
-          .map(
-            (s) => {
-              'mode': s.mode,
-              'instruction': s.instruction,
-              'details': s.details,
-              'is24_7': s.is24_7,
-              'startTime': s.startTime,
-              'endTime': s.endTime,
-              'actualFare': s.actualFare,
-              'alternateRouteSuggestion': s.alternateRouteSuggestion,
-              if (s.boarding != null) 'boarding': s.boarding!.name,
-              if (s.stops.isNotEmpty)
-                'stops': s.stops.map((stop) => stop.toJson()).toList(),
-              if (s.controlPoints.isNotEmpty)
-                'controlPoints':
-                    s.controlPoints
-                        .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-                        .toList(),
-            },
-          )
-          .toList(),
+      'steps':
+          steps
+              .map(
+                (s) => {
+                  'mode': s.mode,
+                  'instruction': s.instruction,
+                  'details': s.details,
+                  'is24_7': s.is24_7,
+                  'startTime': s.startTime,
+                  'endTime': s.endTime,
+                  'actualFare': s.actualFare,
+                  'alternateRouteSuggestion': s.alternateRouteSuggestion,
+                  if (s.boarding != null) 'boarding': s.boarding!.name,
+                  if (s.stops.isNotEmpty)
+                    'stops': s.stops.map((stop) => stop.toJson()).toList(),
+                  if (s.controlPoints.isNotEmpty)
+                    'controlPoints':
+                        s.controlPoints
+                            .map((p) => {'lat': p.latitude, 'lng': p.longitude})
+                            .toList(),
+                },
+              )
+              .toList(),
       'startLat': startLat,
       'startLng': startLng,
       'endLat': endLat,
       'endLng': endLng,
-      'pathPoints': pathPoints
-          .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-          .toList(),
+      'pathPoints':
+          pathPoints
+              .map((p) => {'lat': p.latitude, 'lng': p.longitude})
+              .toList(),
       'stepBoundaries': stepBoundaries,
       'eta': eta,
       'price': price,
@@ -117,15 +119,16 @@ class Route {
       'imageUrl': imageUrl,
       'audienceTags': audienceTags,
       'distanceMeters': distanceMeters,
-      'reports': reports
-          .map(
-            (r) => {
-              'type': r.type,
-              'description': r.description,
-              'timestamp': r.timestamp.millisecondsSinceEpoch,
-            },
-          )
-          .toList(),
+      'reports':
+          reports
+              .map(
+                (r) => {
+                  'type': r.type,
+                  'description': r.description,
+                  'timestamp': r.timestamp.millisecondsSinceEpoch,
+                },
+              )
+              .toList(),
       'contributorId': contributorId,
       'views': views,
       'upvotes': upvotes,
@@ -159,43 +162,45 @@ class Route {
       startLocation: json['startLocation'],
       endLocation: json['endLocation'],
       shortDescription: json['shortDescription'],
-      steps: (json['steps'] as List)
-          .map(
-            (s) => Step(
-              mode: s['mode'],
-              instruction: s['instruction'],
-              details: s['details'],
-              is24_7: s['is24_7'] as bool? ?? true,
-              startTime: s['startTime'] as String?,
-              endTime: s['endTime'] as String?,
-                actualFare: (s['actualFare'] as num?)?.toDouble(),
-              alternateRouteSuggestion:
-                  s['alternateRouteSuggestion'] as String?,
-              boarding: StepBoarding.parse(s['boarding']),
-              stops: RouteStop.listFromJson(s['stops']),
-              controlPoints: [
-                for (final p in (s['controlPoints'] as List? ?? const []))
-                  if (p is Map && p['lat'] is num && p['lng'] is num)
-                    LatLng(
-                      (p['lat'] as num).toDouble(),
-                      (p['lng'] as num).toDouble(),
-                    ),
-              ],
-            ),
-          )
-          .toList(),
+      steps:
+          (json['steps'] as List)
+              .map(
+                (s) => Step(
+                  mode: s['mode'],
+                  instruction: s['instruction'],
+                  details: s['details'],
+                  is24_7: s['is24_7'] as bool? ?? true,
+                  startTime: s['startTime'] as String?,
+                  endTime: s['endTime'] as String?,
+                  actualFare: (s['actualFare'] as num?)?.toDouble(),
+                  alternateRouteSuggestion:
+                      s['alternateRouteSuggestion'] as String?,
+                  boarding: StepBoarding.parse(s['boarding']),
+                  stops: RouteStop.listFromJson(s['stops']),
+                  controlPoints: [
+                    for (final p in (s['controlPoints'] as List? ?? const []))
+                      if (p is Map && p['lat'] is num && p['lng'] is num)
+                        LatLng(
+                          (p['lat'] as num).toDouble(),
+                          (p['lng'] as num).toDouble(),
+                        ),
+                  ],
+                ),
+              )
+              .toList(),
       startLat: asNullableDouble(json['startLat']),
       startLng: asNullableDouble(json['startLng']),
       endLat: asNullableDouble(json['endLat']),
       endLng: asNullableDouble(json['endLng']),
-      pathPoints: (json['pathPoints'] as List)
-          .map(
-            (p) => LatLng(
-              asNullableDouble(p['lat']) ?? 0.0,
-              asNullableDouble(p['lng']) ?? 0.0,
-            ),
-          )
-          .toList(),
+      pathPoints:
+          (json['pathPoints'] as List)
+              .map(
+                (p) => LatLng(
+                  asNullableDouble(p['lat']) ?? 0.0,
+                  asNullableDouble(p['lng']) ?? 0.0,
+                ),
+              )
+              .toList(),
       stepBoundaries:
           (json['stepBoundaries'] as List?)?.map((b) => b as int).toList() ??
           [],
@@ -205,42 +210,53 @@ class Route {
       schedule: json['schedule'],
       imageUrl: json['imageUrl'],
       audienceTags: List<String>.from(json['audienceTags'] ?? const []),
-      distanceMeters: json['distanceMeters'] != null
-          ? (json['distanceMeters'] as num).toDouble()
-          : null,
-      reports: (json['reports'] as List)
-          .map(
-            (r) => Report(
-              type: r['type'],
-              description: r['description'],
-              timestamp: DateTime.fromMillisecondsSinceEpoch(r['timestamp']),
-            ),
-          )
-          .toList(),
+      distanceMeters:
+          json['distanceMeters'] != null
+              ? (json['distanceMeters'] as num).toDouble()
+              : null,
+      reports:
+          (json['reports'] as List)
+              .map(
+                (r) => Report(
+                  type: r['type'],
+                  description: r['description'],
+                  timestamp: DateTime.fromMillisecondsSinceEpoch(
+                    r['timestamp'],
+                  ),
+                ),
+              )
+              .toList(),
       contributorId: json['contributorId'],
-      views: json['views'] is int
-          ? json['views']
-          : int.tryParse(json['views']?.toString() ?? '0') ?? 0,
-      upvotes: json['upvotes'] is int
-          ? json['upvotes']
-          : int.tryParse(json['upvotes']?.toString() ?? '0') ?? 0,
-      downvotes: json['downvotes'] is int
-          ? json['downvotes']
-          : int.tryParse(json['downvotes']?.toString() ?? '0') ?? 0,
-      createdAt: json['createdAt'] != null
-          ? (json['createdAt'] as Timestamp).toDate()
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? (json['updatedAt'] as Timestamp).toDate()
-          : null,
+      views:
+          json['views'] is int
+              ? json['views']
+              : int.tryParse(json['views']?.toString() ?? '0') ?? 0,
+      upvotes:
+          json['upvotes'] is int
+              ? json['upvotes']
+              : int.tryParse(json['upvotes']?.toString() ?? '0') ?? 0,
+      downvotes:
+          json['downvotes'] is int
+              ? json['downvotes']
+              : int.tryParse(json['downvotes']?.toString() ?? '0') ?? 0,
+      createdAt:
+          json['createdAt'] != null
+              ? (json['createdAt'] as Timestamp).toDate()
+              : null,
+      updatedAt:
+          json['updatedAt'] != null
+              ? (json['updatedAt'] as Timestamp).toDate()
+              : null,
       approvalStatus: parsedStatus,
       isEdited: json['isEdited'] as bool? ?? false,
-      editedAt: json['editedAt'] != null
-          ? (json['editedAt'] as Timestamp).toDate()
-          : null,
-      editCount: json['editCount'] is int
-          ? json['editCount']
-          : int.tryParse(json['editCount']?.toString() ?? '0') ?? 0,
+      editedAt:
+          json['editedAt'] != null
+              ? (json['editedAt'] as Timestamp).toDate()
+              : null,
+      editCount:
+          json['editCount'] is int
+              ? json['editCount']
+              : int.tryParse(json['editCount']?.toString() ?? '0') ?? 0,
       correctionOf: json['correctionOf'] as String?,
     );
   }
