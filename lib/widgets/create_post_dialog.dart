@@ -47,8 +47,8 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -395,7 +395,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
               border: Border.all(color: _border, width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2E7CF6).withOpacity(0.10),
+                  color: const Color(0xFF0B8FD6).withOpacity(0.10),
                   blurRadius: 40,
                   offset: const Offset(0, 16),
                 ),
@@ -1029,7 +1029,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                     _isPublishing
                         ? null
                         : const LinearGradient(
-                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                          colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
@@ -1126,8 +1126,8 @@ class _RoutePickerSheet extends StatefulWidget {
 }
 
 class _RoutePickerSheetState extends State<_RoutePickerSheet> {
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);

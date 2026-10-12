@@ -248,7 +248,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
             style: const TextStyle(
               color: FeedColors.textPrimary,
               fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.2,
             ),
           ),
@@ -300,7 +300,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               style: TextStyle(
                 color: FeedColors.textPrimary,
                 fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 4),
@@ -342,7 +342,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               style: const TextStyle(
                 fontSize: 12,
                 color: FeedColors.accent,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -417,7 +417,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     _isSubmitting
                         ? null
                         : const LinearGradient(
-                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                          colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),

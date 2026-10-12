@@ -67,7 +67,7 @@ class _CommentItemState extends State<CommentItem> {
               style: const TextStyle(
                 color: FeedColors.textPrimary,
                 fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
             content: Text(
@@ -93,7 +93,7 @@ class _CommentItemState extends State<CommentItem> {
                   'Delete',
                   style: TextStyle(
                     color: Colors.redAccent,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -132,7 +132,7 @@ class _CommentItemState extends State<CommentItem> {
                     style: const TextStyle(
                       color: FeedColors.accent,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -145,7 +145,7 @@ class _CommentItemState extends State<CommentItem> {
                         comment.userName,
                         style: const TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w500,
                           color: FeedColors.textPrimary,
                         ),
                       ),
@@ -180,7 +180,7 @@ class _CommentItemState extends State<CommentItem> {
                                         : 'Translate to ${AppLanguageService.currentLanguageLabel}',
                                     style: const TextStyle(
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w500,
                                       color: FeedColors.accent,
                                     ),
                                   ),

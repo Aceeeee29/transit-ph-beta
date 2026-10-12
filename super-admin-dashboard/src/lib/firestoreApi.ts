@@ -792,6 +792,11 @@ export async function updatePostStatus(postId: string, status: 'approved' | 'rej
     isFlagged: status === 'flagged',
     moderatedBy: moderatorUid,
     moderatedAt: serverTimestamp(),
+    // An approved post gets its standard 3 days in the feed from now (the
+    // app's PostLifetime.standard), so time spent under review doesn't count.
+    ...(status === 'approved'
+      ? { expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000) }
+      : {}),
   })
 }
 

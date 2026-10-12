@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../services/post_actions_service.dart';
+import '../services/moderation_service.dart';
 import '../services/post_service.dart';
 import '../widgets/create_post_dialog.dart';
 import '../models/notification.dart';
@@ -47,11 +48,74 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   void initState() {
     super.initState();
+    ModerationService.isStaffNotifier.addListener(_onStaffChanged);
   }
 
   @override
   void dispose() {
+    ModerationService.isStaffNotifier.removeListener(_onStaffChanged);
     super.dispose();
+  }
+
+  // Staff get a "Keep in feed for…" action on every post.
+  void _onStaffChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Moderators: choose how long [post] stays in the feed, from now.
+  Future<void> _choosePostLifetime(Post post) async {
+    final expiresAt = post.expiresAt;
+    final choice = await showDialog<PostLifetime>(
+      context: context,
+      builder:
+          (ctx) => SimpleDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const TranslatedText('Keep in feed for'),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  expiresAt == null
+                      ? 'Now: stays until deleted'
+                      : 'Now: until ${expiresAt.month}/${expiresAt.day} '
+                          '${expiresAt.hour}:${expiresAt.minute.toString().padLeft(2, '0')}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: FeedColors.textSecondary,
+                  ),
+                ),
+              ),
+              for (final lifetime in PostLifetime.values)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(ctx).pop(lifetime),
+                  child: TranslatedText(lifetime.label),
+                ),
+            ],
+          ),
+    );
+    if (choice == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await PostService.setLifetime(post.id, choice);
+      messenger.showSnackBar(
+        SnackBar(
+          content: TranslatedText(
+            choice.duration == null
+                ? 'Post will stay until deleted.'
+                : 'Post will stay for ${choice.label} from now.',
+          ),
+        ),
+      );
+      await widget.onRefresh?.call();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: TranslatedText('Could not update the post. Try again.'),
+        ),
+      );
+    }
   }
 
   Future<void> _loadComments(String postId) async {
@@ -279,6 +343,10 @@ class _FeedScreenState extends State<FeedScreen> {
       onReportTapped: () => _showReportDialog(post),
       onDeleteTapped:
           post.userId == widget.currentUserId ? () => _deletePost(post) : null,
+      onLifetimeTapped:
+          ModerationService.isStaffNotifier.value
+              ? () => _choosePostLifetime(post)
+              : null,
     );
   }
 
@@ -306,7 +374,7 @@ class _FeedScreenState extends State<FeedScreen> {
                 maxLines: 1,
                 style: TextStyle(
                   color: FeedColors.textPrimary,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   fontSize: 16,
                 ),
               ),
@@ -398,7 +466,7 @@ class _FeedScreenState extends State<FeedScreen> {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       );
@@ -417,41 +485,48 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
+  // The pill itself is the button: wrapped in FloatingActionButton.extended
+  // it sat inside invisible padding and looked shifted left of the posts.
   Widget _buildFab() {
-    return FloatingActionButton.extended(
-      onPressed: _showCreatePostDialog,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      label: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: FeedColors.accent.withOpacity(0.3),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: const Row(
-          children: [
-            Icon(Icons.edit_rounded, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            TranslatedText(
-              'New Post',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: FeedColors.accent.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: _showCreatePostDialog,
+          borderRadius: BorderRadius.circular(16),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                TranslatedText(
+                  'New Post',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -481,7 +556,7 @@ class _FeedScreenState extends State<FeedScreen> {
             'No posts yet',
             style: TextStyle(
               color: FeedColors.textPrimary,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontSize: 17,
             ),
           ),

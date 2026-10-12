@@ -6,8 +6,8 @@ class HomeFareMatrixDialog extends StatelessWidget {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -125,7 +125,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
               style: TextStyle(
                 color: _textPrimary,
                 fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: -0.2,
               ),
             ),
@@ -184,7 +184,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
                   maxLines: 1,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     color: _textPrimary,
                   ),
                 ),
@@ -193,10 +193,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     detail,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: _textSecondary,
-                    ),
+                    style: const TextStyle(fontSize: 11, color: _textSecondary),
                   ),
               ],
             ),
@@ -209,7 +206,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: color,
               ),
             ),

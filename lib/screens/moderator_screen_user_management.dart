@@ -13,21 +13,25 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
   static const _warning = _ModeratorScreenState._warning;
 
   Widget _buildUsersTabSection() {
-    final users = ModerationService.getUsers()
-      .where((u) => u.role == UserRole.user)
-      .toList()
-      ..sort((a, b) {
-        final aName = (a.name.trim().isNotEmpty ? a.name : a.email).toLowerCase();
-        final bName = (b.name.trim().isNotEmpty ? b.name : b.email).toLowerCase();
-        return aName.compareTo(bName);
-      });
+    final users =
+        ModerationService.getUsers()
+            .where((u) => u.role == UserRole.user)
+            .toList()
+          ..sort((a, b) {
+            final aName =
+                (a.name.trim().isNotEmpty ? a.name : a.email).toLowerCase();
+            final bName =
+                (b.name.trim().isNotEmpty ? b.name : b.email).toLowerCase();
+            return aName.compareTo(bName);
+          });
 
     final query = _userSearchQuery.trim().toLowerCase();
-    final filteredUsers = users.where((u) {
-      if (query.isEmpty) return true;
-      return u.name.toLowerCase().contains(query) ||
-          u.email.toLowerCase().contains(query);
-    }).toList();
+    final filteredUsers =
+        users.where((u) {
+          if (query.isEmpty) return true;
+          return u.name.toLowerCase().contains(query) ||
+              u.email.toLowerCase().contains(query);
+        }).toList();
 
     return RefreshIndicator(
       color: _accent,
@@ -119,7 +123,8 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         radius: 16,
                         backgroundColor: _accentSoft,
                         child: Text(
-                          (user.name.isNotEmpty ? user.name[0] : '?').toUpperCase(),
+                          (user.name.isNotEmpty ? user.name[0] : '?')
+                              .toUpperCase(),
                           style: const TextStyle(
                             color: _accent,
                             fontWeight: FontWeight.w700,
@@ -171,7 +176,10 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                   Row(
                     children: [
                       _actionButton(
-                        label: user.hasActiveRestriction ? 'Lift Restriction' : 'Restrict',
+                        label:
+                            user.hasActiveRestriction
+                                ? 'Lift Restriction'
+                                : 'Restrict',
                         color: user.hasActiveRestriction ? _success : _danger,
                         filled: user.hasActiveRestriction,
                         onTap: () async {
@@ -180,15 +188,21 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Moderator accounts cannot be restricted.'),
+                                content: Text(
+                                  'Moderator accounts cannot be restricted.',
+                                ),
                               ),
                             );
                             return;
                           }
                           if (user.hasActiveRestriction) {
-                            await ModerationService.liftUserRestriction(user.uid!);
+                            await ModerationService.liftUserRestriction(
+                              user.uid!,
+                            );
                           } else {
-                            final restrictionDays = await _confirmRestrictUser(user);
+                            final restrictionDays = await _confirmRestrictUser(
+                              user,
+                            );
                             if (restrictionDays == null) return;
                             await ModerationService.restrictUser(
                               user.uid!,
@@ -210,9 +224,10 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
   }
 
   Widget _buildFeedbacksTabSection() {
-    final feedbacks = ModerationService.getFeedbacks()
-        .where((f) => f.type == feedback_model.FeedbackType.feedback)
-        .toList();
+    final feedbacks =
+        ModerationService.getFeedbacks()
+            .where((f) => f.type == feedback_model.FeedbackType.feedback)
+            .toList();
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
@@ -271,7 +286,9 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: statusColor.withOpacity(0.3)),
+                          border: Border.all(
+                            color: statusColor.withOpacity(0.3),
+                          ),
                         ),
                         child: Text(
                           feedback.status.name,
@@ -321,7 +338,8 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         ),
                     ],
                   ),
-                  if (feedback.status == feedback_model.FeedbackStatus.pending) ...[
+                  if (feedback.status ==
+                      feedback_model.FeedbackStatus.pending) ...[
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -351,7 +369,8 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                       ],
                     ),
                   ],
-                  if (feedback.status == feedback_model.FeedbackStatus.resolved) ...[
+                  if (feedback.status ==
+                      feedback_model.FeedbackStatus.resolved) ...[
                     const SizedBox(height: 12),
                     Row(
                       children: [

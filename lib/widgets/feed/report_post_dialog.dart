@@ -152,9 +152,7 @@ class _ReasonOption extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(
                   color:
-                      isSelected
-                          ? FeedColors.accent
-                          : FeedColors.textSecondary,
+                      isSelected ? FeedColors.accent : FeedColors.textSecondary,
                   width: 2,
                 ),
                 color: isSelected ? FeedColors.accent : Colors.transparent,
@@ -169,9 +167,10 @@ class _ReasonOption extends StatelessWidget {
               reason,
               style: TextStyle(
                 color:
-                    isSelected ? FeedColors.textPrimary : FeedColors.textSecondary,
-                fontWeight:
-                    isSelected ? FontWeight.w600 : FontWeight.w400,
+                    isSelected
+                        ? FeedColors.textPrimary
+                        : FeedColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 fontSize: 14,
               ),
             ),

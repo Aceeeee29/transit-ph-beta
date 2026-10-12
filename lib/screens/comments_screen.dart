@@ -395,7 +395,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                     _isSubmitting
                         ? null
                         : const LinearGradient(
-                          colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                          colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),

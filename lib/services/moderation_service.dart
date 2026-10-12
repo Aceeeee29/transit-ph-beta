@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/notifications_service.dart';
+import '../services/post_service.dart' show PostLifetime;
 import '../services/route_service.dart';
 
 class ModerationService {
@@ -27,14 +28,13 @@ class ModerationService {
           .doc(routeId)
           .collection('auditLogs')
           .add({
-        'routeId': routeId,
-        'action': action,
-        'actorId': actorId,
-        'meta': meta ?? const <String, dynamic>{},
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-    }
+            'routeId': routeId,
+            'action': action,
+            'actorId': actorId,
+            'meta': meta ?? const <String, dynamic>{},
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+    } catch (_) {}
   }
 
   static Future<String?> _resolveNotificationRecipientId(
@@ -56,11 +56,12 @@ class ModerationService {
 
     // Fall back to Firestore lookup for other contributors stored by email
     try {
-      final snap = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: raw)
-          .limit(1)
-          .get();
+      final snap =
+          await _firestore
+              .collection('users')
+              .where('email', isEqualTo: raw)
+              .limit(1)
+              .get();
       if (snap.docs.isNotEmpty) {
         final data = snap.docs.first.data();
         final uidFromField = (data['uid'] as String?)?.trim();
@@ -69,8 +70,7 @@ class ModerationService {
         }
         return snap.docs.first.id;
       }
-    } catch (_) {
-    }
+    } catch (_) {}
 
     return null;
   }
@@ -89,11 +89,15 @@ class ModerationService {
   static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
   static StreamSubscription<QuerySnapshot>? _routesSubscription;
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-      _roleSubscription;
+  _roleSubscription;
   static String? _roleWatchUid;
   static bool _dataListenersRunning = false;
   static bool _initialized = false;
   static const int maxRestrictionDays = 7;
+
+  /// Whether the signed-in user is a moderator or admin; drives staff-only
+  /// actions outside the moderator screen (e.g. on feed posts).
+  static final ValueNotifier<bool> isStaffNotifier = ValueNotifier(false);
 
   /// Initialize all real-time listeners
   static void init() {
@@ -116,12 +120,14 @@ class ModerationService {
       _roleSubscription?.cancel();
       _roleSubscription = null;
       _roleWatchUid = null;
+      isStaffNotifier.value = false;
       _stopDataListeners(clearData: true);
       return;
     }
     if (user.uid == _roleWatchUid) return;
 
     _roleSubscription?.cancel();
+    isStaffNotifier.value = false;
     _stopDataListeners(clearData: true);
     _roleWatchUid = user.uid;
     _roleSubscription = _firestore
@@ -129,18 +135,19 @@ class ModerationService {
         .doc(user.uid)
         .snapshots()
         .listen(
-      (doc) {
-        final isStaff = _isStaffRole(doc.data()?['role']);
-        if (isStaff && !_dataListenersRunning) {
-          _startDataListeners();
-        } else if (!isStaff && _dataListenersRunning) {
-          _stopDataListeners(clearData: true);
-        }
-      },
-      onError: (error) {
-        debugPrint('[ModerationService] Role watch failed: $error');
-      },
-    );
+          (doc) {
+            final isStaff = _isStaffRole(doc.data()?['role']);
+            isStaffNotifier.value = isStaff;
+            if (isStaff && !_dataListenersRunning) {
+              _startDataListeners();
+            } else if (!isStaff && _dataListenersRunning) {
+              _stopDataListeners(clearData: true);
+            }
+          },
+          onError: (error) {
+            debugPrint('[ModerationService] Role watch failed: $error');
+          },
+        );
   }
 
   static bool _isStaffRole(Object? rawRole) {
@@ -159,27 +166,32 @@ class ModerationService {
     _stopDataListeners(clearData: false);
     _dataListenersRunning = true;
 
-    _postsSubscription =
-        _firestore.collection('posts').snapshots().listen((snapshot) {
+    _postsSubscription = _firestore.collection('posts').snapshots().listen((
+      snapshot,
+    ) {
       final posts =
           snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
       postsNotifier.value = posts;
     });
 
-    _usersSubscription =
-        _firestore.collection('users').snapshots().listen((snapshot) {
+    _usersSubscription = _firestore.collection('users').snapshots().listen((
+      snapshot,
+    ) {
       final users =
           snapshot.docs.map((doc) => User.fromJson(doc.data())).toList();
       usersNotifier.value = users;
     });
 
-    _feedbacksSubscription =
-        _firestore.collection('feedbacks').snapshots().listen((snapshot) {
-      final feedbacks = snapshot.docs
-          .map((doc) => feedback_model.Feedback.fromJson(doc.data()))
-          .toList();
-      feedbacksNotifier.value = feedbacks;
-    });
+    _feedbacksSubscription = _firestore
+        .collection('feedbacks')
+        .snapshots()
+        .listen((snapshot) {
+          final feedbacks =
+              snapshot.docs
+                  .map((doc) => feedback_model.Feedback.fromJson(doc.data()))
+                  .toList();
+          feedbacksNotifier.value = feedbacks;
+        });
 
     // ── Listen only to pending routes ──────────────────────────────────────
     // Note: no orderBy here — combining where() + orderBy() on different
@@ -193,22 +205,23 @@ class ModerationService {
         )
         .snapshots()
         .listen(
-      (snapshot) {
-        final routes = snapshot.docs
-            .map((doc) => route_model.Route.fromJson(doc.data()))
-            .toList();
-        // Sort newest first client-side
-        routes.sort((a, b) {
-          final aTime = a.createdAt ?? DateTime(2000);
-          final bTime = b.createdAt ?? DateTime(2000);
-          return bTime.compareTo(aTime);
-        });
-        pendingRoutesNotifier.value = routes;
-      },
-      onError: (error) {
-        // Ignore listener errors; notifier will receive updates on next valid snapshot.
-      },
-    );
+          (snapshot) {
+            final routes =
+                snapshot.docs
+                    .map((doc) => route_model.Route.fromJson(doc.data()))
+                    .toList();
+            // Sort newest first client-side
+            routes.sort((a, b) {
+              final aTime = a.createdAt ?? DateTime(2000);
+              final bTime = b.createdAt ?? DateTime(2000);
+              return bTime.compareTo(aTime);
+            });
+            pendingRoutesNotifier.value = routes;
+          },
+          onError: (error) {
+            // Ignore listener errors; notifier will receive updates on next valid snapshot.
+          },
+        );
   }
 
   static void _stopDataListeners({required bool clearData}) {
@@ -237,11 +250,9 @@ class ModerationService {
       await RouteService.approveRoute(routeId);
 
       // Remove from local pending list immediately
-      pendingRoutesNotifier.value = pendingRoutesNotifier.value
-          .where((r) => r.id != routeId)
-          .toList();
-    } catch (_) {
-    }
+      pendingRoutesNotifier.value =
+          pendingRoutesNotifier.value.where((r) => r.id != routeId).toList();
+    } catch (_) {}
   }
 
   static Future<void> rejectRoute(String routeId) async {
@@ -275,8 +286,7 @@ class ModerationService {
                   'Your submitted route ($routeTitle) was rejected by moderators.',
             ),
           );
-        } catch (_) {
-        }
+        } catch (_) {}
       }
 
       await _firestore.collection('routes').doc(routeId).delete();
@@ -287,11 +297,9 @@ class ModerationService {
       );
 
       // Remove from local pending list immediately
-      pendingRoutesNotifier.value = pendingRoutesNotifier.value
-          .where((r) => r.id != routeId)
-          .toList();
-    } catch (_) {
-    }
+      pendingRoutesNotifier.value =
+          pendingRoutesNotifier.value.where((r) => r.id != routeId).toList();
+    } catch (_) {}
   }
 
   // ── Post moderation ────────────────────────────────────────────────────────
@@ -300,9 +308,10 @@ class ModerationService {
     try {
       await _firestore.collection('posts').doc(postId).update({
         'moderationStatus': ModerationStatus.approved.name,
+        // Its time in the feed starts once it's approved.
+        'expiresAt': PostLifetime.standard.expiresAtFromNow(),
       });
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> rejectPost(String postId) async {
@@ -310,8 +319,7 @@ class ModerationService {
       await _firestore.collection('posts').doc(postId).update({
         'moderationStatus': ModerationStatus.rejected.name,
       });
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> dismissReportedPost(String postId) async {
@@ -320,10 +328,11 @@ class ModerationService {
         'moderationStatus': ModerationStatus.approved.name,
       });
 
-      final reportsSnap = await _firestore
-          .collection('feedbacks')
-          .where('targetId', isEqualTo: postId)
-          .get();
+      final reportsSnap =
+          await _firestore
+              .collection('feedbacks')
+              .where('targetId', isEqualTo: postId)
+              .get();
 
       final batch = _firestore.batch();
       for (final doc in reportsSnap.docs) {
@@ -335,26 +344,29 @@ class ModerationService {
       }
       await batch.commit();
 
-      postsNotifier.value = List.from(postsNotifier.value)
-        ..removeWhere((p) => p.id == postId &&
-            p.moderationStatus == ModerationStatus.pending);
-      feedbacksNotifier.value = feedbacksNotifier.value
-          .where((f) =>
-              !(f.type == feedback_model.FeedbackType.report &&
-                  f.targetType == feedback_model.FeedbackTargetType.post &&
-                  f.targetId == postId))
-          .toList();
-
-    } catch (_) {
-    }
+      postsNotifier.value = List.from(postsNotifier.value)..removeWhere(
+        (p) => p.id == postId && p.moderationStatus == ModerationStatus.pending,
+      );
+      feedbacksNotifier.value =
+          feedbacksNotifier.value
+              .where(
+                (f) =>
+                    !(f.type == feedback_model.FeedbackType.report &&
+                        f.targetType ==
+                            feedback_model.FeedbackTargetType.post &&
+                        f.targetId == postId),
+              )
+              .toList();
+    } catch (_) {}
   }
 
   static Future<void> removePostPermanently(String postId) async {
     try {
-      final reportsSnap = await _firestore
-          .collection('feedbacks')
-          .where('targetId', isEqualTo: postId)
-          .get();
+      final reportsSnap =
+          await _firestore
+              .collection('feedbacks')
+              .where('targetId', isEqualTo: postId)
+              .get();
 
       final batch = _firestore.batch();
       batch.delete(_firestore.collection('posts').doc(postId));
@@ -369,23 +381,22 @@ class ModerationService {
 
       postsNotifier.value =
           postsNotifier.value.where((p) => p.id != postId).toList();
-      feedbacksNotifier.value = feedbacksNotifier.value
-          .where((f) =>
-              !(f.type == feedback_model.FeedbackType.report &&
-                  f.targetType == feedback_model.FeedbackTargetType.post &&
-                  f.targetId == postId))
-          .toList();
-
-    } catch (_) {
-    }
+      feedbacksNotifier.value =
+          feedbacksNotifier.value
+              .where(
+                (f) =>
+                    !(f.type == feedback_model.FeedbackType.report &&
+                        f.targetType ==
+                            feedback_model.FeedbackTargetType.post &&
+                        f.targetId == postId),
+              )
+              .toList();
+    } catch (_) {}
   }
 
   // ── User moderation ────────────────────────────────────────────────────────
 
-  static Future<void> restrictUser(
-    String uid, {
-    required int days,
-  }) async {
+  static Future<void> restrictUser(String uid, {required int days}) async {
     final sanitizedDays = days.clamp(1, maxRestrictionDays) as int;
     final restrictedUntil = DateTime.now().toUtc().add(
       Duration(days: sanitizedDays),
@@ -405,16 +416,12 @@ class ModerationService {
         user.restrictedUntil = restrictedUntil.toLocal();
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> liftUserRestriction(String uid) async {
     try {
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .update({
+      await _firestore.collection('users').doc(uid).update({
         'isBanned': false,
         'status': 'active',
         'restrictedAt': FieldValue.delete(),
@@ -427,8 +434,7 @@ class ModerationService {
         user.restrictedUntil = null;
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   // Backward-compatible wrappers for older call sites.
@@ -452,8 +458,7 @@ class ModerationService {
           .collection('feedbacks')
           .doc(feedback.id)
           .set(feedback.toJson());
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> saveFeedback(feedback_model.Feedback feedback) async {
@@ -475,16 +480,17 @@ class ModerationService {
       await _firestore.collection('feedbacks').doc(feedbackId).update({
         'status': status.name,
       });
-      final index =
-          feedbacksNotifier.value.indexWhere((f) => f.id == feedbackId);
+      final index = feedbacksNotifier.value.indexWhere(
+        (f) => f.id == feedbackId,
+      );
       if (index != -1) {
-        final updatedFeedback =
-            feedbacksNotifier.value[index].copyWith(status: status);
+        final updatedFeedback = feedbacksNotifier.value[index].copyWith(
+          status: status,
+        );
         feedbacksNotifier.value = List.from(feedbacksNotifier.value)
           ..[index] = updatedFeedback;
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static Future<void> deleteFeedback(String feedbackId) async {
@@ -492,8 +498,7 @@ class ModerationService {
       await _firestore.collection('feedbacks').doc(feedbackId).delete();
       feedbacksNotifier.value =
           feedbacksNotifier.value.where((f) => f.id != feedbackId).toList();
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   // ── Getters ────────────────────────────────────────────────────────────────

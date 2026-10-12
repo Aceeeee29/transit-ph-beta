@@ -30,6 +30,9 @@ class FeedPostCard extends StatefulWidget {
   final VoidCallback onReportTapped;
   final VoidCallback? onDeleteTapped;
 
+  /// Staff only: choose how long the post stays in the feed.
+  final VoidCallback? onLifetimeTapped;
+
   const FeedPostCard({
     super.key,
     required this.post,
@@ -44,6 +47,7 @@ class FeedPostCard extends StatefulWidget {
     required this.onCommentTapped,
     required this.onReportTapped,
     this.onDeleteTapped,
+    this.onLifetimeTapped,
   });
 
   @override
@@ -152,6 +156,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
                   widget.currentUserId.isNotEmpty &&
                   widget.currentUserId == post.userId,
               onDeleteTapped: widget.onDeleteTapped,
+              onLifetimeTapped: widget.onLifetimeTapped,
             ),
             const SizedBox(height: 12),
             _PostContent(
@@ -218,6 +223,7 @@ class _PostHeader extends StatelessWidget {
   final Color catColor;
   final bool isOwnPost;
   final VoidCallback? onDeleteTapped;
+  final VoidCallback? onLifetimeTapped;
 
   const _PostHeader({
     required this.post,
@@ -226,11 +232,13 @@ class _PostHeader extends StatelessWidget {
     required this.catColor,
     required this.isOwnPost,
     this.onDeleteTapped,
+    this.onLifetimeTapped,
   });
 
   @override
   Widget build(BuildContext context) {
     final photoUrl = post.anonymous ? null : post.userPhotoUrl;
+    final canDelete = isOwnPost && onDeleteTapped != null;
     return Row(
       children: [
         CircleAvatar(
@@ -248,7 +256,7 @@ class _PostHeader extends StatelessWidget {
                     initials,
                     style: const TextStyle(
                       color: FeedColors.accent,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w500,
                       fontSize: 14,
                     ),
                   ),
@@ -261,7 +269,7 @@ class _PostHeader extends StatelessWidget {
               Text(
                 displayName,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   fontSize: 14,
                   color: FeedColors.textPrimary,
                 ),
@@ -288,7 +296,7 @@ class _PostHeader extends StatelessWidget {
           ),
         ),
         _CategoryBadge(catColor: catColor, category: post.category),
-        if (isOwnPost && onDeleteTapped != null) ...[
+        if (canDelete || onLifetimeTapped != null) ...[
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             icon: const Icon(
@@ -301,22 +309,39 @@ class _PostHeader extends StatelessWidget {
             ),
             onSelected: (value) {
               if (value == 'delete') onDeleteTapped!();
+              if (value == 'lifetime') onLifetimeTapped!();
             },
             itemBuilder:
                 (_) => [
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          'Delete Post',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ],
+                  if (onLifetimeTapped != null)
+                    const PopupMenuItem(
+                      value: 'lifetime',
+                      child: Row(
+                        children: [
+                          Icon(Icons.timer_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Keep in feed for…'),
+                        ],
+                      ),
                     ),
-                  ),
+                  if (canDelete)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete Post',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
           ),
         ],
@@ -423,7 +448,7 @@ class _CategoryBadge extends StatelessWidget {
             postCategoryLabel(category),
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: catColor,
             ),
           ),
@@ -773,7 +798,7 @@ class _LocationBadge extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               color: FeedColors.accent,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

@@ -42,7 +42,7 @@ class FeedDialogHeader extends StatelessWidget {
             style: const TextStyle(
               color: FeedColors.textPrimary,
               fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.2,
             ),
           ),
@@ -74,7 +74,7 @@ class FeedDialogCancelButton extends StatelessWidget {
           'Cancel',
           style: TextStyle(
             color: FeedColors.textSecondary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w500,
             fontSize: 14,
           ),
         ),
@@ -102,7 +102,7 @@ class FeedDialogPrimaryButton extends StatelessWidget {
         height: 44,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+            colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -120,7 +120,7 @@ class FeedDialogPrimaryButton extends StatelessWidget {
           label,
           style: const TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
         ),
@@ -134,11 +134,7 @@ class FeedDialogDangerButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
 
-  const FeedDialogDangerButton({
-    super.key,
-    required this.label,
-    this.onTap,
-  });
+  const FeedDialogDangerButton({super.key, required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -153,12 +149,12 @@ class FeedDialogDangerButton extends StatelessWidget {
           boxShadow:
               active
                   ? [
-                      BoxShadow(
-                        color: FeedColors.danger.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
+                    BoxShadow(
+                      color: FeedColors.danger.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
                   : null,
         ),
         alignment: Alignment.center,
@@ -166,7 +162,7 @@ class FeedDialogDangerButton extends StatelessWidget {
           label,
           style: const TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
         ),

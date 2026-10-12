@@ -33,13 +33,20 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: _warning.withOpacity(0.08),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              border: Border(bottom: BorderSide(color: _warning.withOpacity(0.2))),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              border: Border(
+                bottom: BorderSide(color: _warning.withOpacity(0.2)),
+              ),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _warning.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -84,7 +91,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.alt_route_rounded, size: 12, color: _accent),
+                          Icon(
+                            Icons.alt_route_rounded,
+                            size: 12,
+                            color: _accent,
+                          ),
                           SizedBox(width: 4),
                           Text(
                             'CORRECTION',
@@ -103,7 +114,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 if (route.isEdited) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(6),
@@ -168,7 +182,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_rounded, size: 14, color: _danger),
+                    const Icon(
+                      Icons.location_on_rounded,
+                      size: 14,
+                      color: _danger,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -199,10 +217,22 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     if (route.eta != null)
                       _metaChip(Icons.timer_outlined, route.eta!, _accent),
                     if (route.price != null)
-                      _metaChip(Icons.payments_outlined, route.price!, _success),
+                      _metaChip(
+                        Icons.payments_outlined,
+                        route.price!,
+                        _success,
+                      ),
                     if (route.distance != null)
-                      _metaChip(Icons.straighten_rounded, route.distance!, _textSecondary),
-                    _metaChip(Icons.directions_rounded, '${route.steps.length} steps', _textSecondary),
+                      _metaChip(
+                        Icons.straighten_rounded,
+                        route.distance!,
+                        _textSecondary,
+                      ),
+                    _metaChip(
+                      Icons.directions_rounded,
+                      '${route.steps.length} steps',
+                      _textSecondary,
+                    ),
                   ],
                 ),
                 if (route.audienceTags.isNotEmpty) ...[
@@ -220,9 +250,13 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: route.audienceTags
-                        .map((tag) => _metaChip(Icons.sell_outlined, tag, _accent))
-                        .toList(),
+                    children:
+                        route.audienceTags
+                            .map(
+                              (tag) =>
+                                  _metaChip(Icons.sell_outlined, tag, _accent),
+                            )
+                            .toList(),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -237,14 +271,19 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...route.steps.take(3).map(
+                  ...route.steps
+                      .take(3)
+                      .map(
                         (step) => Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: _accentFor(step.mode),
                                   borderRadius: BorderRadius.circular(4),
@@ -262,7 +301,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                               Expanded(
                                 child: Text(
                                   step.instruction,
-                                  style: const TextStyle(fontSize: 12, color: _textPrimary),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _textPrimary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -272,7 +314,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   if (route.steps.length > 3)
                     Text(
                       '+ ${route.steps.length - 3} more steps',
-                      style: const TextStyle(fontSize: 11, color: _textSecondary),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _textSecondary,
+                      ),
                     ),
                 ],
               ],
@@ -282,7 +327,9 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: _surfaceAlt,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(16),
+              ),
               border: Border(top: BorderSide(color: _border)),
             ),
             child: Column(
@@ -334,7 +381,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Icon(Icons.close_rounded, size: 16, color: _danger),
+                              Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: _danger,
+                              ),
                               SizedBox(width: 6),
                               Text(
                                 'Reject',
@@ -375,7 +426,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Icon(Icons.verified_rounded, size: 16, color: Colors.white),
+                              Icon(
+                                Icons.verified_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                               SizedBox(width: 6),
                               Text(
                                 'Approve',
@@ -405,133 +460,135 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
     required bool fromDismiss,
   }) async {
     final title = fromDismiss ? 'Dismiss Feedback' : 'Delete Feedback';
-    final message = fromDismiss
-        ? 'This will dismiss and permanently delete this feedback. Continue?'
-        : 'This will permanently delete this resolved feedback. Continue?';
+    final message =
+        fromDismiss
+            ? 'This will dismiss and permanently delete this feedback. Continue?'
+            : 'This will permanently delete this resolved feedback. Continue?';
 
     final confirmed = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.35),
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        backgroundColor: Colors.transparent,
-        child: Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: _accent.withOpacity(0.12),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: _danger.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: _danger,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: _textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _textSecondary,
-                    height: 1.4,
+      builder:
+          (context) => Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _border),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Row(
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context).pop(false),
-                        child: Container(
-                          height: 40,
+                    Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
-                            color: _surfaceAlt,
+                            color: _danger.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _border),
                           ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: _textSecondary,
-                              fontSize: 13,
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: _danger,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
                               fontWeight: FontWeight.w700,
+                              color: _textPrimary,
                             ),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _textSecondary,
+                        height: 1.4,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context).pop(true),
-                        child: Container(
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _danger,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _danger.withOpacity(0.28),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(context).pop(false),
+                            child: Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _surfaceAlt,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: _border),
                               ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(context).pop(true),
+                            child: Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _danger,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _danger.withOpacity(0.28),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
     );
 
     if (confirmed != true) return;
@@ -541,9 +598,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          fromDismiss
-              ? 'Feedback dismissed and deleted'
-              : 'Feedback deleted',
+          fromDismiss ? 'Feedback dismissed and deleted' : 'Feedback deleted',
         ),
       ),
     );
@@ -640,16 +695,18 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
-                            items: List.generate(
-                              ModerationService.maxRestrictionDays,
-                              (index) => index + 1,
-                            ).map((days) {
-                              final label = days == 1 ? '1 day' : '$days days';
-                              return DropdownMenuItem<int>(
-                                value: days,
-                                child: Text(label),
-                              );
-                            }).toList(),
+                            items:
+                                List.generate(
+                                  ModerationService.maxRestrictionDays,
+                                  (index) => index + 1,
+                                ).map((days) {
+                                  final label =
+                                      days == 1 ? '1 day' : '$days days';
+                                  return DropdownMenuItem<int>(
+                                    value: days,
+                                    child: Text(label),
+                                  );
+                                }).toList(),
                             onChanged: (value) {
                               if (value == null) return;
                               selectedDays = value;
@@ -717,25 +774,30 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                           const SizedBox(width: 8),
                           Expanded(
                             child: GestureDetector(
-                              onTap: canRestrict
-                                  ? () => Navigator.of(context).pop(selectedDays)
-                                  : null,
+                              onTap:
+                                  canRestrict
+                                      ? () => Navigator.of(
+                                        context,
+                                      ).pop(selectedDays)
+                                      : null,
                               child: Container(
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: canRestrict
-                                      ? _danger
-                                      : _danger.withOpacity(0.35),
+                                  color:
+                                      canRestrict
+                                          ? _danger
+                                          : _danger.withOpacity(0.35),
                                   borderRadius: BorderRadius.circular(10),
-                                  boxShadow: canRestrict
-                                      ? [
-                                          BoxShadow(
-                                            color: _danger.withOpacity(0.28),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ]
-                                      : null,
+                                  boxShadow:
+                                      canRestrict
+                                          ? [
+                                            BoxShadow(
+                                              color: _danger.withOpacity(0.28),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ]
+                                          : null,
                                 ),
                                 alignment: Alignment.center,
                                 child: const Text(
@@ -775,20 +837,29 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(18)),
-              child: const Icon(Icons.check_circle_outline_rounded,
-                  size: 32, color: _textSecondary),
+                color: _surfaceAlt,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 32,
+                color: _textSecondary,
+              ),
             ),
             const SizedBox(height: 14),
-            const Text('No reported posts',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _textPrimary)),
+            const Text(
+              'No reported posts',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+            ),
             const SizedBox(height: 6),
-            const Text('All clear!',
-                style: TextStyle(fontSize: 13, color: _textSecondary)),
+            const Text(
+              'All clear!',
+              style: TextStyle(fontSize: 13, color: _textSecondary),
+            ),
           ],
         ),
       );
@@ -802,20 +873,24 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
         itemCount: pendingPosts.length,
         itemBuilder: (context, index) {
           final post = pendingPosts[index];
-          final reportReasons = ModerationService.getFeedbacks()
-              .where((f) =>
-                  f.type == feedback_model.FeedbackType.report &&
-                f.status == feedback_model.FeedbackStatus.pending &&
-                  f.targetId == post.id)
-              .map((f) => f.content)
-              .toList();
+          final reportReasons =
+              ModerationService.getFeedbacks()
+                  .where(
+                    (f) =>
+                        f.type == feedback_model.FeedbackType.report &&
+                        f.status == feedback_model.FeedbackStatus.pending &&
+                        f.targetId == post.id,
+                  )
+                  .map((f) => f.content)
+                  .toList();
           final authorName = post.userName?.trim();
           final authorEmail = post.userEmail?.trim();
-          final displayAuthor = (authorName != null && authorName.isNotEmpty)
-              ? authorName
-              : ((authorEmail != null && authorEmail.isNotEmpty)
-                  ? authorEmail
-                  : 'Anonymous');
+          final displayAuthor =
+              (authorName != null && authorName.isNotEmpty)
+                  ? authorName
+                  : ((authorEmail != null && authorEmail.isNotEmpty)
+                      ? authorEmail
+                      : 'Anonymous');
           return _panelCard(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -831,8 +906,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                           color: _danger.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.report_problem_outlined,
-                            size: 16, color: _danger),
+                        child: const Icon(
+                          Icons.report_problem_outlined,
+                          size: 16,
+                          color: _danger,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       const Text(
@@ -861,22 +939,25 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: post.imageUrls.length,
-                        itemBuilder: (context, index) => Container(
-                          width: 90,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _border),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Image.network(
-                            post.imageUrls[index],
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image,
-                                    color: _textSecondary),
-                          ),
-                        ),
+                        itemBuilder:
+                            (context, index) => Container(
+                              width: 90,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: _border),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Image.network(
+                                post.imageUrls[index],
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (context, error, stackTrace) => const Icon(
+                                      Icons.broken_image,
+                                      color: _textSecondary,
+                                    ),
+                              ),
+                            ),
                       ),
                     ),
                   ],
@@ -885,11 +966,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _metaChip(
-                        Icons.person_outline,
-                        displayAuthor,
-                        _accent,
-                      ),
+                      _metaChip(Icons.person_outline, displayAuthor, _accent),
                       if (post.taggedLocation != null)
                         _metaChip(
                           Icons.location_on_outlined,
@@ -925,7 +1002,9 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         label: 'Remove',
                         color: _danger,
                         onTap: () async {
-                          await ModerationService.removePostPermanently(post.id);
+                          await ModerationService.removePostPermanently(
+                            post.id,
+                          );
                           _refreshModeratorState();
                         },
                       ),
@@ -949,5 +1028,4 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
       ),
     );
   }
-
 }

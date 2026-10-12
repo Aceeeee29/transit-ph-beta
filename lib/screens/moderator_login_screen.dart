@@ -50,10 +50,11 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
           );
 
       // 2. Verify the user has moderator or admin role in Firestore
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .get();
 
       if (!userDoc.exists) {
         await FirebaseAuth.instance.signOut();
@@ -61,22 +62,26 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
         return;
       }
 
-        final role = ((userDoc.data()?['role'] as String?) ?? '')
+      final role = ((userDoc.data()?['role'] as String?) ?? '')
           .trim()
           .toLowerCase()
           .replaceAll('-', '_')
           .replaceAll(' ', '_');
 
-        final isPrivilegedRole = role == 'moderator' ||
+      final isPrivilegedRole =
+          role == 'moderator' ||
           role == 'admin' ||
           role == 'superadmin' ||
           role == 'super_admin';
 
-        if (!isPrivilegedRole) {
+      if (!isPrivilegedRole) {
         // Not a moderator — sign them out immediately
         await FirebaseAuth.instance.signOut();
-        setState(() =>
-            _errorMessage = 'Access denied. This portal is for moderators only.');
+        setState(
+          () =>
+              _errorMessage =
+                  'Access denied. This portal is for moderators only.',
+        );
         return;
       }
 
@@ -87,7 +92,6 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
           (route) => false,
         );
       }
-
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
@@ -177,8 +181,11 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: _textSecondary, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: _textSecondary,
+            size: 18,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -262,8 +269,10 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                         prefixIcon: Icons.lock_outline_rounded,
                         obscure: !_isPasswordVisible,
                         suffix: GestureDetector(
-                          onTap: () => setState(
-                              () => _isPasswordVisible = !_isPasswordVisible),
+                          onTap:
+                              () => setState(
+                                () => _isPasswordVisible = !_isPasswordVisible,
+                              ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Icon(
@@ -289,14 +298,16 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                           decoration: BoxDecoration(
                             color: _danger.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: _danger.withOpacity(0.3)),
+                            border: Border.all(color: _danger.withOpacity(0.3)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.error_outline_rounded,
-                                  size: 15, color: _danger),
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 15,
+                                color: _danger,
+                              ),
                               const SizedBox(width: 7),
                               Expanded(
                                 child: Text(
@@ -323,54 +334,60 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
-                            gradient: _isLoading
-                                ? null
-                                : const LinearGradient(
-                                    colors: [
-                                      Color(0xFF2563C4),
-                                      Color(0xFF4A9EF5),
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
+                            gradient:
+                                _isLoading
+                                    ? null
+                                    : const LinearGradient(
+                                      colors: [
+                                        Color(0xFF2563C4),
+                                        Color(0xFF4A9EF5),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
                             color: _isLoading ? _border : null,
                             borderRadius: BorderRadius.circular(13),
-                            boxShadow: _isLoading
-                                ? null
-                                : [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.25),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                            boxShadow:
+                                _isLoading
+                                    ? null
+                                    : [
+                                      BoxShadow(
+                                        color: _accent.withOpacity(0.25),
+                                        blurRadius: 14,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                           ),
                           alignment: Alignment.center,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Icon(Icons.shield_rounded,
-                                        color: Colors.white, size: 16),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Access Dashboard',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.5,
                                     ),
-                                  ],
-                                ),
+                                  )
+                                  : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(
+                                        Icons.shield_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Access Dashboard',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                         ),
                       ),
                     ],

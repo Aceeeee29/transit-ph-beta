@@ -42,7 +42,7 @@ class FeedActionButton extends StatelessWidget {
                 style: TextStyle(
                   color: color,
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

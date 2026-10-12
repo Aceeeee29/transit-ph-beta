@@ -25,11 +25,11 @@ class PostActionsService {
     // Single write for the report entry.
     final firestore = FirebaseFirestore.instance;
     try {
-      await firestore.collection('feedbacks').doc(feedbackId).set(
-        feedback.toJson(),
-      );
-    } catch (_) {
-    }
+      await firestore
+          .collection('feedbacks')
+          .doc(feedbackId)
+          .set(feedback.toJson());
+    } catch (_) {}
   }
 
   static Future<bool?> votePost(

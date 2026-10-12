@@ -23,8 +23,8 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);

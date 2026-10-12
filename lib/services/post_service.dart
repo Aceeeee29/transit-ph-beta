@@ -2,6 +2,30 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 
+/// How long a post stays in the feed. New posts get [standard]; moderators
+/// can change it per post, counted from when they set it.
+enum PostLifetime {
+  days3('3 days', Duration(days: 3)),
+  days7('7 days', Duration(days: 7)),
+  days30('30 days', Duration(days: 30)),
+  forever('Keep forever', null);
+
+  const PostLifetime(this.label, this.duration);
+
+  final String label;
+
+  /// Null means the post stays until someone deletes it.
+  final Duration? duration;
+
+  static const standard = days3;
+
+  /// The `expiresAt` value to store, starting now.
+  Timestamp? expiresAtFromNow() {
+    final keep = duration;
+    return keep == null ? null : Timestamp.fromDate(DateTime.now().add(keep));
+  }
+}
+
 class PostService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -17,8 +41,9 @@ class PostService {
       final now = DateTime.now();
       return querySnapshot.docs
           .map((doc) => Post.fromJson(doc.data()))
-          .where((post) =>
-              post.expiresAt == null || post.expiresAt!.isAfter(now))
+          .where(
+            (post) => post.expiresAt == null || post.expiresAt!.isAfter(now),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -60,9 +85,8 @@ class PostService {
     try {
       final data = post.toJson()..remove('timestamp');
       data['timestamp'] = FieldValue.serverTimestamp();
-      data['expiresAt'] = Timestamp.fromDate(
-        DateTime.now().add(const Duration(days: 3)),
-      );
+      // New posts are live right away, so their time starts now.
+      data['expiresAt'] = PostLifetime.standard.expiresAtFromNow();
       await _firestore.collection('posts').doc(post.id).set(data);
     } catch (_) {
       rethrow;
@@ -72,21 +96,35 @@ class PostService {
   /// Update an existing post
   static Future<void> updatePost(Post post) async {
     try {
-      final data = post.toJson()..remove('timestamp'); // preserve server Timestamp
+      // Keep the server Timestamp and the lifetime a moderator may have set
+      // (toJson would write expiresAt back as a string the cleanup can't
+      // compare).
+      final data =
+          post.toJson()
+            ..remove('timestamp')
+            ..remove('expiresAt');
       await _firestore.collection('posts').doc(post.id).update(data);
     } catch (_) {
       rethrow;
     }
   }
 
+  /// Moderators: keep [postId] in the feed for [lifetime], from now.
+  static Future<void> setLifetime(String postId, PostLifetime lifetime) {
+    return _firestore.collection('posts').doc(postId).update({
+      'expiresAt': lifetime.expiresAtFromNow(),
+    });
+  }
+
   /// Delete a post and all its sub-collection comments
   static Future<void> deletePost(String postId) async {
     try {
-      final commentsSnapshot = await _firestore
-          .collection('posts')
-          .doc(postId)
-          .collection('comments')
-          .get();
+      final commentsSnapshot =
+          await _firestore
+              .collection('posts')
+              .doc(postId)
+              .collection('comments')
+              .get();
       final batch = _firestore.batch();
       for (final doc in commentsSnapshot.docs) {
         batch.delete(doc.reference);
@@ -98,19 +136,23 @@ class PostService {
     }
   }
 
-  /// Delete all posts whose expiresAt has passed
+  /// Delete all posts whose expiresAt has passed, except ones still under
+  /// review: approving those restarts their time.
   static Future<void> deleteExpiredPosts() async {
     try {
       final now = Timestamp.now();
-      final expired = await _firestore
-          .collection('posts')
-          .where('expiresAt', isLessThan: now)
-          .get();
+      final expired =
+          await _firestore
+              .collection('posts')
+              .where('expiresAt', isLessThan: now)
+              .get();
       for (final doc in expired.docs) {
+        if (doc.data()['moderationStatus'] == ModerationStatus.pending.name) {
+          continue;
+        }
         await deletePost(doc.id);
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Toggle an upvote/downvote on a post.
@@ -144,8 +186,7 @@ class PostService {
 
         if (isUpvote) {
           if (hasUpvoted) {
-            updates['upvotedBy'] = List<String>.from(upvotedBy)
-              ..remove(userId);
+            updates['upvotedBy'] = List<String>.from(upvotedBy)..remove(userId);
             updates['upvoteCount'] = (updates['upvoteCount'] as int) - 1;
             transaction.update(postRef, updates);
             return null;
@@ -190,7 +231,6 @@ class PostService {
     }
   }
 
-
   /// Add a comment to a post
   static Future<void> addComment(Comment comment) async {
     try {
@@ -208,7 +248,11 @@ class PostService {
   }
 
   /// Delete a comment by ID, and if it's a top-level comment also delete its replies
-  static Future<void> deleteComment(String postId, String commentId, {bool isTopLevel = true}) async {
+  static Future<void> deleteComment(
+    String postId,
+    String commentId, {
+    bool isTopLevel = true,
+  }) async {
     try {
       final commentsRef = _firestore
           .collection('posts')
@@ -217,9 +261,8 @@ class PostService {
 
       if (isTopLevel) {
         // Delete all replies first
-        final replies = await commentsRef
-            .where('parentId', isEqualTo: commentId)
-            .get();
+        final replies =
+            await commentsRef.where('parentId', isEqualTo: commentId).get();
         final batch = _firestore.batch();
         for (final doc in replies.docs) {
           batch.delete(doc.reference);
@@ -273,5 +316,4 @@ class PostService {
       return [];
     }
   }
-
 }
