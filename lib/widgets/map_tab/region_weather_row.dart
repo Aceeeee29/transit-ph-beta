@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/location_service.dart';
 import '../../services/weather_service.dart';
 import '../translated_text.dart';
 
@@ -100,16 +101,35 @@ class WeatherChip extends StatefulWidget {
   static Future<WeatherData?>? _pending;
   static DateTime? _fetchedAt;
 
-  /// The current weather, fetched at most every 15 minutes app-wide.
-  static Future<WeatherData?> load() {
+  /// The latest weather, shared by every chip (Home and the Map tab).
+  static final current = ValueNotifier<WeatherData?>(null);
+
+  /// The current weather, fetched at most every 15 minutes app-wide;
+  /// [force] fetches now (e.g. right after location was allowed). A failed
+  /// fetch isn't kept, so the next call tries again.
+  static Future<WeatherData?> load({bool force = false}) {
     final fresh =
         _fetchedAt != null &&
         DateTime.now().difference(_fetchedAt!) < const Duration(minutes: 15);
-    if (_pending != null && fresh) return _pending!;
+    if (!force && _pending != null && fresh) return _pending!;
     _fetchedAt = DateTime.now();
-    return _pending = WeatherService.getCurrentWeatherAndLocation().catchError(
-      (_) => null,
-    );
+    return _pending = _fetch();
+  }
+
+  static Future<WeatherData?> _fetch() async {
+    // Don't race the launch permission prompt (see LocationService).
+    await LocationService.startupPermissionSettled;
+    WeatherData? weather;
+    try {
+      weather = await WeatherService.getCurrentWeatherAndLocation();
+    } catch (_) {}
+    if (weather == null) {
+      _pending = null;
+      _fetchedAt = null;
+    } else {
+      current.value = weather;
+    }
+    return weather;
   }
 
   @override
@@ -117,14 +137,18 @@ class WeatherChip extends StatefulWidget {
 }
 
 class _WeatherChipState extends State<WeatherChip> {
-  WeatherData? _weather;
-
   @override
   void initState() {
     super.initState();
-    WeatherChip.load().then((weather) {
-      if (mounted) setState(() => _weather = weather);
-    });
+    WeatherChip.load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<WeatherData?>(
+      valueListenable: WeatherChip.current,
+      builder: (context, weather, _) => _chip(weather),
+    );
   }
 
   IconData _iconFor(WeatherData weather) {
@@ -147,9 +171,7 @@ class _WeatherChipState extends State<WeatherChip> {
     return Icons.cloud_rounded;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final weather = _weather;
+  Widget _chip(WeatherData? weather) {
     if (weather == null) return const SizedBox.shrink();
     final degrees = double.tryParse(
       weather.temp.replaceAll(RegExp(r'[^0-9.\-]'), ''),

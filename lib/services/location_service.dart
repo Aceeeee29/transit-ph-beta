@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
@@ -24,6 +27,16 @@ class LocationService {
     return true;
   }
 
+  static final _startupAsk = Completer<void>();
+
+  /// Done once the launch-time prompt below has been answered (or wasn't
+  /// needed). Things that load on their own at startup, like the weather,
+  /// wait for it instead of asking too: Android allows one permission
+  /// request at a time and fails the other, so two at once can mean no
+  /// prompt and no weather.
+  static Future<void> get startupPermissionSettled =>
+      kIsWeb ? Future.value() : _startupAsk.future;
+
   /// Shows the OS location prompt if the user hasn't answered it yet.
   /// Deliberately silent after a permanent denial so the app doesn't nag on
   /// every launch; features explain how to re-enable it when they need it.
@@ -33,7 +46,10 @@ class LocationService {
       if (permission == LocationPermission.denied) {
         await Geolocator.requestPermission();
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      if (!_startupAsk.isCompleted) _startupAsk.complete();
+    }
   }
 
   /// Get the current GPS position

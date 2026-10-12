@@ -33,13 +33,12 @@ class WeatherService {
         throw Exception('Location services are disabled');
       }
 
-      // Request location permission
-      LocationPermission permission = await Geolocator.checkPermission();
+      // Only checks: asking is left to the launch prompt and to features
+      // that explain why (ensureLocationAccess). Asking here too collided
+      // with the launch prompt, and Android fails one of two requests.
+      final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw Exception('Location permission denied');
-        }
+        throw Exception('Location permission denied');
       }
 
       if (permission == LocationPermission.deniedForever) {

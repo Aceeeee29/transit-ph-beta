@@ -82,7 +82,10 @@ extension _HomeScreenSections on _HomeScreenState {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const WeatherChip(),
+                if (_weatherData != null)
+                  const WeatherChip()
+                else if (!_isLoadingWeather)
+                  _weatherButton(),
               ],
             ),
             const SizedBox(height: 18),
@@ -112,8 +115,75 @@ extension _HomeScreenSections on _HomeScreenState {
                 ),
               ),
             ),
+            if (_totalUsers != null) ...[
+              const SizedBox(height: 12),
+              _activeUsersLine(_totalUsers!),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// Shown when the weather couldn't load (usually no location access).
+  Widget _weatherButton() {
+    return Tooltip(
+      message: 'Turn on location to see the weather',
+      child: ActionChip(
+        onPressed: _enableWeather,
+        avatar: const Icon(
+          Icons.location_on_outlined,
+          size: 16,
+          color: _accent,
+        ),
+        label: const TranslatedText(
+          'Weather',
+          style: TextStyle(fontSize: 12, color: _accent),
+        ),
+        backgroundColor: _accentSoft,
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  /// "1,234 commuters on TransitPH · Live".
+  Widget _activeUsersLine(int count) {
+    final digits = count.toString();
+    final grouped = digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.people_outline_rounded, size: 16, color: _accent),
+          const SizedBox(width: 6),
+          Flexible(
+            child: TranslatedText(
+              '$grouped commuters on TransitPH',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: _textSecondary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Color(0xFF3EC97A),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const TranslatedText(
+            'Live',
+            style: TextStyle(fontSize: 12, color: Color(0xFF2D9F63)),
+          ),
+        ],
       ),
     );
   }

@@ -11,6 +11,7 @@ import '../services/route_trust_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/home/fare_matrix_dialog.dart';
 import '../widgets/map_tab/region_weather_row.dart';
+import '../widgets/location_permission_notice.dart';
 import '../widgets/translated_text.dart';
 
 part 'home_screen_widgets.dart';
@@ -36,6 +37,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   WeatherData? _weatherData;
+
+  /// False once a weather load has finished without data (usually no
+  /// location access), which shows the "Weather" button to ask for it.
+  bool _isLoadingWeather = true;
+  int? _totalUsers;
   Map<String, List<route_model.Route>> _recommendations = {};
   bool _isLoadingRecommendations = true;
   List<String> _userTags = [];
@@ -65,6 +71,30 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadWeather();
     _loadUserTags();
     _loadRecommendations();
+    _loadTotalUsers();
+    WeatherChip.current.addListener(_onSharedWeather);
+  }
+
+  @override
+  void dispose() {
+    WeatherChip.current.removeListener(_onSharedWeather);
+    super.dispose();
+  }
+
+  /// Weather loaded elsewhere (e.g. the Map tab after location was allowed).
+  void _onSharedWeather() {
+    final weather = WeatherChip.current.value;
+    if (weather != null && mounted) setState(() => _weatherData = weather);
+  }
+
+  Future<void> _loadTotalUsers() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('users').count().get();
+      if (mounted) setState(() => _totalUsers = snap.count);
+    } catch (_) {
+      // The line just stays hidden.
+    }
   }
 
   Future<void> _loadUserTags() async {
@@ -118,9 +148,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Shared with the map's weather chip, so it's fetched once.
-  Future<void> _loadWeather() async {
-    final weather = await WeatherChip.load();
-    if (mounted) setState(() => _weatherData = weather);
+  Future<void> _loadWeather({bool force = false}) async {
+    setState(() => _isLoadingWeather = true);
+    final weather = await WeatherChip.load(force: force);
+    if (!mounted) return;
+    setState(() {
+      _weatherData = weather;
+      _isLoadingWeather = false;
+    });
+  }
+
+  /// The "Weather" button: asks for location the proper way (or points to
+  /// Settings once the phone stops asking), then loads the weather.
+  Future<void> _enableWeather() async {
+    final allowed = await ensureLocationAccess(
+      context,
+      reason: 'show the weather where you are',
+    );
+    if (allowed && mounted) await _loadWeather(force: true);
   }
 
   // New routes re-rank through didUpdateWidget.
