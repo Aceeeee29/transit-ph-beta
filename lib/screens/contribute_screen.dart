@@ -1484,13 +1484,16 @@ class _ContributeScreenState extends State<ContributeScreen> {
   Widget build(BuildContext context) {
     final isNearby = _mapMode == MapTabMode.nearby;
     final hasRouteProgress = pathPoints.isNotEmpty || steps.isNotEmpty;
-    final guardPop = !isNearby && Navigator.canPop(context) && hasRouteProgress;
+    // Only as its own screen (editing a route or a correction). In the Map
+    // tab MainScreen handles back; this callback still fires when it blocks
+    // the pop, and popping here would close MainScreen (a black screen).
+    final guardPop = _isStandaloneEditor && hasRouteProgress;
     return Stack(
       children: [
         PopScope(
           canPop: !guardPop,
           onPopInvokedWithResult: (didPop, _) async {
-            if (didPop) return;
+            if (didPop || !guardPop) return;
             final navigator = Navigator.of(context);
             final discard = await _confirmDiscardRouteProgress();
             if (!mounted || !discard) return;
