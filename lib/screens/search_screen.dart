@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
@@ -6,6 +7,7 @@ import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
+import '../services/map_tab_controller.dart';
 import '../services/search_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
@@ -14,15 +16,11 @@ import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
 
-import '../widgets/community_route_badge.dart';
 import '../widgets/location_permission_notice.dart';
 import '../widgets/notification_overlay.dart';
-import '../widgets/search/route_generation_notice_dialog.dart';
+import '../widgets/search/route_option_card.dart';
 import '../widgets/search/search_help_sheet.dart';
-import '../widgets/search/search_route_card.dart';
 import 'downloaded_routes_screen.dart';
-import 'route_map_screen.dart';
-import 'ors_route_map_screen.dart';
 part 'search_screen_widgets.dart';
 part 'search_screen_routing_logic.dart';
 part 'search_screen_suggestions.dart';
@@ -33,7 +31,17 @@ class SearchScreen extends StatefulWidget {
   final List<route_model.Route> routes;
   final Future<void> Function()? onRefresh;
 
-  const SearchScreen({super.key, required this.routes, this.onRefresh});
+  /// Opens already searching for routes to this place (from "Directions").
+  final String? initialDestination;
+  final LatLng? initialDestinationPoint;
+
+  const SearchScreen({
+    super.key,
+    required this.routes,
+    this.onRefresh,
+    this.initialDestination,
+    this.initialDestinationPoint,
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -42,6 +50,8 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+
+  /// Where routes start; empty means "Your location".
   final TextEditingController _originController = TextEditingController();
 
   List<String> _recentSearches = [];
@@ -65,12 +75,9 @@ class _SearchScreenState extends State<SearchScreen> {
   // ─── Color tokens ─────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
 
   // ─── Route state ──────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
@@ -87,9 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _lastGeneratedOriginName;
   String? _lastGeneratedDestinationName;
 
-  // ─── Origin state ─────────────────────────────────────────────────────────
-  bool _useCurrentLocation = true;
-  bool _isDetectingLocation = false;
+  int? _pendingAlternativeIndex;
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -99,6 +104,16 @@ class _SearchScreenState extends State<SearchScreen> {
     _routes = List<route_model.Route>.from(widget.routes);
     _loadRecentSearches();
     _refreshRoutes();
+    final destination = widget.initialDestination?.trim() ?? '';
+    if (destination.isNotEmpty) {
+      _searchController.text = destination;
+      // Picked on the map, so its spot is known: no need to look it up.
+      final point = widget.initialDestinationPoint;
+      if (point != null) _geocodeCache[destination.toLowerCase()] = point;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onSearchSubmitted(destination);
+      });
+    }
   }
 
   Future<void> _refreshRoutes() async {
@@ -128,7 +143,20 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ─── Philippines-biased geocoding ─────────────────────────────────────────
 
+  /// Places found this session. Searching again (another option, a retry,
+  /// swapping ends) skips Nominatim, which allows one request per second.
+  static final Map<String, LatLng> _geocodeCache = {};
+
   Future<LatLng?> _geocodePhilippines(String query) async {
+    final key = query.trim().toLowerCase();
+    final cached = _geocodeCache[key];
+    if (cached != null) return cached;
+    final found = await _geocodePhilippinesUncached(query);
+    if (found != null) _geocodeCache[key] = found;
+    return found;
+  }
+
+  Future<LatLng?> _geocodePhilippinesUncached(String query) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
         'q': query,
@@ -314,6 +342,8 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
     _onSearch(query);
+    // Routes from where you are come up on their own; no extra button.
+    if (query.trim().isNotEmpty) _fetchOrsRoute();
   }
 
   void _onNotificationsDismissed() {
@@ -328,6 +358,7 @@ class _SearchScreenState extends State<SearchScreen> {
     await SearchService.addRecentSearch(query);
     await _loadRecentSearches();
     _onSearch(query);
+    _fetchOrsRoute();
   }
 
   Future<void> _onClearRecentSearches() async {
@@ -341,9 +372,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onRouteTap(route_model.Route route) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => RouteMapScreen(route: route)));
+    MapTabController.openRoute(context, route);
   }
 
   List<route_model.Route> get _topSearches {
@@ -477,7 +506,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   String _alternativeRouteSignature(DijkstraRouteAlternative alt) {
     return alt.result.plan.legs
-        .map((leg) => '${leg.routeId}:${leg.tripId}:${leg.boardStopId}:${leg.alightStopId}')
+        .map(
+          (leg) =>
+              '${leg.routeId}:${leg.tripId}:${leg.boardStopId}:${leg.alightStopId}',
+        )
         .join('>');
   }
 
@@ -521,7 +553,9 @@ class _SearchScreenState extends State<SearchScreen> {
           ((routeType ?? -1) >= 900 && (routeType ?? -1) <= 906);
       if (isTrainType) return true;
 
-      final name = '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'.toLowerCase();
+      final name =
+          '${leg.routeShortName ?? ''} ${leg.routeLongName ?? ''}'
+              .toLowerCase();
       if (name.contains('mrt') ||
           name.contains('lrt') ||
           name.contains('pnr') ||
@@ -549,49 +583,10 @@ class _SearchScreenState extends State<SearchScreen> {
     return false;
   }
 
-  List<route_model.Route> _topThreeModePicks(List<route_model.Route> routes) {
-    if (routes.isEmpty) return const <route_model.Route>[];
-
-    final budgetTop =
-        _sortContributedRoutes(routes, ContributedRouteSortMode.budget).first;
-    final fastestTop =
-        _sortContributedRoutes(routes, ContributedRouteSortMode.fastest).first;
-    final balancedTop =
-        _sortContributedRoutes(routes, ContributedRouteSortMode.balanced).first;
-
-    final picks = <route_model.Route>[];
-    final seen = <String>{};
-    for (final r in [balancedTop, budgetTop, fastestTop]) {
-      if (seen.add(r.id)) picks.add(r);
-    }
-
-    if (picks.length < 3) {
-      final byBalanced = _sortContributedRoutes(
-        routes,
-        ContributedRouteSortMode.balanced,
-      );
-      for (final r in byBalanced) {
-        if (seen.add(r.id)) picks.add(r);
-        if (picks.length == 3) break;
-      }
-    }
-
-    return picks;
-  }
-
   // ─── Route generation ─────────────────────────────────────────────────────
 
   Future<void> _fetchOrsRoute() async {
     await this._fetchOrsRouteSection();
-  }
-
-  Future<void> _onGenerateRoutePressed() async {
-    if (_isLoadingOrs) return;
-
-    final proceed = await RouteGenerationNoticeDialog.shouldProceed(context);
-    if (!mounted || !proceed) return;
-
-    await _fetchOrsRoute();
   }
 
   Future<void> _selectAlternative(int index) async {
@@ -653,36 +648,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  Future<void> _detectAndFillOrigin() async {
-    setState(() => _isDetectingLocation = true);
-    final hasAccess = await ensureLocationAccess(
-      context,
-      reason: 'fill in your starting point',
-    );
-    if (!mounted) return;
-    final position =
-        hasAccess ? await LocationService.getCurrentPosition() : null;
-    if (!mounted) return;
-    if (position != null) {
-      final address =
-          await LocationService.getAddressFromCoordinates(
-            position.latitude,
-            position.longitude,
-          ) ??
-          'Current Location';
-      if (!mounted) return;
-      _originController.text = address;
-    } else if (hasAccess) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not get a GPS fix. Try again in a moment.'),
-        ),
-      );
-    }
-    if (!mounted) return;
-    setState(() => _isDetectingLocation = false);
-  }
-
   void _showSearchHelpSheet() {
     showModalBottomSheet(
       context: context,
@@ -693,108 +658,81 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _openDownloadedRoutes() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()));
+  }
+
+  // ─── Generated options ────────────────────────────────────────────────────
+
+  /// Builds option [index] if it isn't the one already built, then opens it
+  /// on the map.
+  Future<void> _openAlternative(int index) async {
+    if (_isLoadingOrs) return;
+    if (_orsResult == null || index != _selectedAlternativeIndex) {
+      setState(() => _pendingAlternativeIndex = index);
+      await _selectAlternative(index);
+      if (!mounted) return;
+      setState(() => _pendingAlternativeIndex = null);
+      if (index != _selectedAlternativeIndex) return;
+    }
+    _openResultOnMap();
+  }
+
+  void _openResultOnMap() {
+    final result = _orsResult;
+    if (result == null) return;
+    MapTabController.openGenerated(
+      context,
+      result,
+      originName:
+          _lastGeneratedOriginName ??
+          (_originController.text.trim().isEmpty
+              ? 'Current Location'
+              : _originController.text.trim()),
+      destinationName:
+          _lastGeneratedDestinationName ?? _searchController.text.trim(),
     );
   }
 
-  // ─── ORS helpers ──────────────────────────────────────────────────────────
-
-  String _totalFareRange() {
-    if (_orsResult == null) return '₱0';
-    final total = _orsResult!.steps.fold(
-      0.0,
-      (sum, s) => sum + s.estimatedFare,
-    );
-    if (total == 0) return 'Free';
-    return '₱${(total * 0.9).round()}–${(total * 1.15).round()}';
-  }
-
-  Widget _infoChip(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepModeIcon(String mode) {
-    final color = _stepModeColor(mode);
-    return Container(
-      width: 26,
-      height: 26,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        shape: BoxShape.circle,
-        border: Border.all(color: color, width: 1.2),
-      ),
-      child: Icon(_stepModeIconData(mode), size: 14, color: color),
-    );
-  }
-
-  IconData _stepModeIconData(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Icons.directions_walk;
-      case 'Jeepney':
-        return Icons.directions_bus;
-      case 'Bus':
-        return Icons.directions_bus_filled;
-      case 'Train':
-        return Icons.train;
-      case 'Tricycle':
-        return Icons.two_wheeler;
-      case 'FX/Van':
-        return Icons.airport_shuttle;
-      case 'Ferry':
-        return Icons.directions_boat;
-      default:
-        return Icons.directions_bus;
+  /// The start changed: search again so the options match it, or move on to
+  /// the destination when there isn't one yet.
+  void _onOriginChanged() {
+    if (_isSearching && _searchController.text.trim().isNotEmpty) {
+      _fetchOrsRoute();
+    } else {
+      _searchFocusNode.requestFocus();
     }
   }
 
-  Color _stepModeColor(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Colors.green.shade600;
-      case 'Jeepney':
-        return Colors.blue.shade600;
-      case 'Bus':
-        return Colors.red.shade600;
-      case 'Train':
-        return Colors.purple.shade600;
-      case 'Tricycle':
-        return Colors.orange.shade600;
-      case 'FX/Van':
-        return Colors.amber.shade700;
-      case 'Ferry':
-        return Colors.lightBlue.shade600;
-      default:
-        return Colors.blue.shade600;
-    }
+  // These round, which throws on infinity/NaN and would blank the screen,
+  // so an unusable number shows as a dash instead.
+
+  static String _minutesLabel(double minutes) {
+    if (!minutes.isFinite) return '— min';
+    final total = math.max(1, minutes.round());
+    if (total < 60) return '$total min';
+    final rest = total % 60;
+    return rest == 0 ? '${total ~/ 60} hr' : '${total ~/ 60} hr $rest min';
   }
 
-  /// Builds a SearchRouteCard with inline verified check in the card header.
-  Widget _routeCardWithBadge(route_model.Route route) {
-    return this._routeCardWithBadgeSection(route);
+  static String _transfersLabel(int rides) =>
+      rides <= 1
+          ? 'No transfers'
+          : rides == 2
+          ? '1 transfer'
+          : '${rides - 1} transfers';
+
+  static String _walkLabel(double km) {
+    if (!km.isFinite) return 'Some walking';
+    return km < 1
+        ? '${(km * 1000).round()} m walk'
+        : '${km.toStringAsFixed(1)} km walk';
+  }
+
+  static String _fareLabel(double fare) {
+    if (!fare.isFinite) return '₱—';
+    return fare <= 0 ? 'Free' : '₱${fare.round()}';
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -805,28 +743,29 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Scaffold(
           backgroundColor: _bg,
-          appBar: _buildAppBar(),
-          body: Column(
-            children: [
-              _buildSearchBar(),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    await widget.onRefresh?.call();
-                    await _refreshRoutes();
-                    await _loadRecentSearches();
-                    if (_searchController.text.trim().isNotEmpty) {
-                      _onSearch(_searchController.text.trim());
-                    }
-                  },
-                  color: _accent,
-                  child:
-                      _isSearching
-                          ? _buildSearchResults()
-                          : _buildSearchSuggestions(),
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildSearchBar(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await widget.onRefresh?.call();
+                      await _refreshRoutes();
+                      await _loadRecentSearches();
+                      if (_searchController.text.trim().isNotEmpty) {
+                        _onSearch(_searchController.text.trim());
+                      }
+                    },
+                    color: _accent,
+                    child:
+                        _isSearching
+                            ? _buildSearchResults()
+                            : _buildSearchSuggestions(),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (_showNotificationOverlay)
@@ -838,197 +777,15 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: _surface,
-      foregroundColor: _textPrimary,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      leading: GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
-        child: Container(
-          margin: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: _surfaceAlt,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: _border),
-          ),
-          child: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 15,
-            color: _textSecondary,
-          ),
-        ),
-      ),
-      title: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _accentSoft,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.manage_search_rounded,
-              color: _accent,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Text(
-            'Search Routes',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: _openDownloadedRoutes,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: _border),
-              ),
-              child: const Icon(
-                Icons.download_for_offline_rounded,
-                size: 17,
-                color: _accent,
-              ),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: _showSearchHelpSheet,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: _border),
-              ),
-              child: const Icon(
-                Icons.help_outline_rounded,
-                size: 17,
-                color: _textSecondary,
-              ),
-            ),
-          ),
-        ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: _border),
-      ),
-    );
-  }
-
   void _setContributedSortMode(ContributedRouteSortMode mode) {
     setState(() => _contributedSortMode = mode);
   }
 
-  void _setOriginUseCurrentLocation() {
-    setState(() {
-      _useCurrentLocation = true;
-      _originController.clear();
-    });
-  }
+  Widget _buildSearchBar() => _buildSearchBarSection();
 
-  void _setOriginUseManualAddress() {
-    setState(() => _useCurrentLocation = false);
-  }
+  Widget _buildOmnibox() => _buildOmniboxSection();
 
-  Widget _buildSearchBar() {
-    return this._buildSearchBarSection();
-  }
+  Widget _buildSearchResults() => _buildSearchResultsSection();
 
-  Widget _buildOmnibox() {
-    return this._buildOmniboxSection();
-  }
-
-  // ─── Search results ───────────────────────────────────────────────────────
-
-  Widget _buildSearchResults() {
-    return this._buildSearchResultsSection();
-  }
-
-  Widget _buildGenerateRouteOptionCard() {
-    return this._buildGenerateRouteOptionCardSection();
-  }
-
-  Widget _buildContributedFilterRow() {
-    return this._buildContributedFilterRowSection();
-  }
-
-  Widget _sortFilterChip({
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return this._sortFilterChipSection(
-      label: label,
-      active: active,
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildTopPicksCard(List<route_model.Route> topPicks) {
-    return this._buildTopPicksCardSection(topPicks);
-  }
-
-  Widget _buildOrsResultCard() {
-    return this._buildOrsResultCardSection();
-  }
-
-  Widget _buildAlternativesPanel() {
-    return this._buildAlternativesPanelSection();
-  }
-
-  Widget _buildOrsEmptyState() {
-    return this._buildOrsEmptyStateSection();
-  }
-
-  Widget _buildOriginSelector() {
-    return this._buildOriginSelectorSection();
-  }
-
-  Widget _originToggleBtn({
-    required String label,
-    required IconData icon,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return this._originToggleBtnSection(
-      label: label,
-      icon: icon,
-      active: active,
-      onTap: onTap,
-    );
-  }
-
-  // ─── Suggestions panel ────────────────────────────────────────────────────
-
-  Widget _buildSearchSuggestions() {
-    return this._buildSearchSuggestionsSection();
-  }
-
-  Widget _buildRecentSearches() {
-    return this._buildRecentSearchesSection();
-  }
-
-  Widget _buildTopSearches() {
-    return this._buildTopSearchesSection();
-  }
+  Widget _buildSearchSuggestions() => _buildSearchSuggestionsSection();
 }

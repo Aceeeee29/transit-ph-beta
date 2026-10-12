@@ -24,8 +24,7 @@ class SearchService {
 
       user.recentSearches = recentSearches;
       await GamificationService.saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Get recent searches
@@ -44,8 +43,7 @@ class SearchService {
       final user = await GamificationService.loadUser();
       user.recentSearches = [];
       await GamificationService.saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   /// Remove a single recent search
@@ -54,7 +52,6 @@ class SearchService {
       final user = await GamificationService.loadUser();
       user.recentSearches.remove(query);
       await GamificationService.saveUser(user);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 }

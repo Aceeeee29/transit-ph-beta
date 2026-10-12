@@ -15,9 +15,13 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
 
     try {
       LatLng origin;
-      String originName;
+      // A label only, so the reverse lookup for "current location" runs
+      // alongside the routing instead of before it.
+      Future<String> originNameFuture;
 
-      if (_useCurrentLocation) {
+      // An empty start field means "Your location".
+      final originText = _originController.text.trim();
+      if (originText.isEmpty) {
         final hasAccess = await ensureLocationAccess(
           context,
           reason: 'plan a route from where you are',
@@ -38,22 +42,14 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           return;
         }
         origin = LatLng(position.latitude, position.longitude);
-        final resolvedName = await LocationService.getAddressFromCoordinates(
+        originNameFuture = LocationService.getAddressFromCoordinates(
           position.latitude,
           position.longitude,
+        ).then(
+          (name) => name ?? 'Current Location',
+          onError: (_) => 'Current Location',
         );
-        if (!mounted) return;
-        originName = resolvedName ?? 'Current Location';
       } else {
-        final originText = _originController.text.trim();
-        if (originText.isEmpty) {
-          setState(() {
-            _isLoadingOrs = false;
-            _orsError = true;
-            _orsErrorMessage = 'Please enter a starting point.';
-          });
-          return;
-        }
         final originLatLng = await _geocodePhilippines(originText);
         if (!mounted) return;
         if (originLatLng == null) {
@@ -66,7 +62,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           return;
         }
         origin = originLatLng;
-        originName = originText;
+        originNameFuture = Future.value(originText);
       }
 
       final destLatLng = await _geocodePhilippines(query);
@@ -221,10 +217,37 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           addLabeled('Carousel', carouselPick);
         }
 
-        alternatives = selected;
+        // Routes riders contributed are checked by people who ride them,
+        // unlike the GTFS feed, so the option using the most of them comes
+        // first (and is the one shown on open).
+        int communityLegs(DijkstraRouteAlternative alt) =>
+            alt.result.plan.legs.where((leg) => leg.isCommunity).length;
+        DijkstraRouteAlternative? mostCommunity;
+        for (final alt in merged) {
+          final legs = communityLegs(alt);
+          if (legs > 0 &&
+              (mostCommunity == null || legs > communityLegs(mostCommunity))) {
+            mostCommunity = alt;
+          }
+        }
+        addLabeled('Community', mostCommunity);
+
+        final order = List<int>.generate(selected.length, (i) => i)
+          ..sort((a, b) {
+            final byCommunity = communityLegs(
+              selected[b],
+            ).compareTo(communityLegs(selected[a]));
+            return byCommunity != 0 ? byCommunity : a.compareTo(b);
+          });
+        alternatives = [for (final i in order) selected[i]];
+        labelsByIndex = {
+          for (var n = 0; n < order.length; n++)
+            if (labelsByIndex[order[n]] != null) n: labelsByIndex[order[n]]!,
+        };
       } catch (e) {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
+      final originName = await originNameFuture;
       final result =
           fallbackAlternatives[0] ??
           (alternatives.isNotEmpty

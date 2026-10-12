@@ -42,9 +42,8 @@ class OrsRouteResult {
     return {
       'distanceMeters': distanceMeters,
       'durationSeconds': durationSeconds,
-      'polyline': polyline
-          .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-          .toList(),
+      'polyline':
+          polyline.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
       'steps': steps.map((s) => s.toJson()).toList(),
       'bbox': bbox,
     };
@@ -54,15 +53,19 @@ class OrsRouteResult {
     return OrsRouteResult(
       distanceMeters: (json['distanceMeters'] as num).toDouble(),
       durationSeconds: (json['durationSeconds'] as num).toDouble(),
-      polyline: (json['polyline'] as List)
-          .map((p) => LatLng(
-                (p['lat'] as num).toDouble(),
-                (p['lng'] as num).toDouble(),
-              ))
-          .toList(),
-      steps: (json['steps'] as List)
-          .map((s) => OrsStep.fromJson(s as Map<String, dynamic>))
-          .toList(),
+      polyline:
+          (json['polyline'] as List)
+              .map(
+                (p) => LatLng(
+                  (p['lat'] as num).toDouble(),
+                  (p['lng'] as num).toDouble(),
+                ),
+              )
+              .toList(),
+      steps:
+          (json['steps'] as List)
+              .map((s) => OrsStep.fromJson(s as Map<String, dynamic>))
+              .toList(),
       bbox: (json['bbox'] as List).map((v) => (v as num).toDouble()).toList(),
     );
   }
@@ -92,24 +95,24 @@ class OrsStep {
   });
 
   Map<String, dynamic> toJson() => {
-        'instruction': instruction,
-        'distanceMeters': distanceMeters,
-        'durationSeconds': durationSeconds,
-        'suggestedMode': suggestedMode,
-        'estimatedFare': estimatedFare,
-        'wayPointStart': wayPointStart,
-        'wayPointEnd': wayPointEnd,
-        'isCommunity': isCommunity,
-      };
+    'instruction': instruction,
+    'distanceMeters': distanceMeters,
+    'durationSeconds': durationSeconds,
+    'suggestedMode': suggestedMode,
+    'estimatedFare': estimatedFare,
+    'wayPointStart': wayPointStart,
+    'wayPointEnd': wayPointEnd,
+    'isCommunity': isCommunity,
+  };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
-        instruction: json['instruction'] as String,
-        distanceMeters: (json['distanceMeters'] as num).toDouble(),
-        durationSeconds: (json['durationSeconds'] as num).toDouble(),
-        suggestedMode: json['suggestedMode'] as String? ?? 'Jeepney',
-        estimatedFare: (json['estimatedFare'] as num?)?.toDouble() ?? 0.0,
-        wayPointStart: json['wayPointStart'] as int? ?? 0,
-        wayPointEnd: json['wayPointEnd'] as int? ?? 0,
-        isCommunity: json['isCommunity'] as bool? ?? false,
-      );
+    instruction: json['instruction'] as String,
+    distanceMeters: (json['distanceMeters'] as num).toDouble(),
+    durationSeconds: (json['durationSeconds'] as num).toDouble(),
+    suggestedMode: json['suggestedMode'] as String? ?? 'Jeepney',
+    estimatedFare: (json['estimatedFare'] as num?)?.toDouble() ?? 0.0,
+    wayPointStart: json['wayPointStart'] as int? ?? 0,
+    wayPointEnd: json['wayPointEnd'] as int? ?? 0,
+    isCommunity: json['isCommunity'] as bool? ?? false,
+  );
 }

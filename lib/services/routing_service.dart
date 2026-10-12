@@ -157,12 +157,10 @@ class RoutingService {
     required DijkstraTripPlanResult alternative,
     String preferredMode = 'Auto',
   }) async {
-    final shapePolylines = await Future.wait(
+    final shapePolylines = Future.wait(
       alternative.plan.legs.map(
-        (leg) => _buildTransitLegPolyline(
-          leg: leg,
-          preferredMode: preferredMode,
-        ),
+        (leg) =>
+            _buildTransitLegPolyline(leg: leg, preferredMode: preferredMode),
       ),
     );
 
@@ -452,12 +450,10 @@ class RoutingService {
     debugPrint('[RoutingService] Plan: ${plan.legs.length} leg(s)');
 
     // ── Step 3: Road-snap each leg via OSRM ──────────────────────────────────
-    final shapePolylines = await Future.wait(
+    final shapePolylines = Future.wait(
       plan.legs.map(
-        (leg) => _buildTransitLegPolyline(
-          leg: leg,
-          preferredMode: preferredMode,
-        ),
+        (leg) =>
+            _buildTransitLegPolyline(leg: leg, preferredMode: preferredMode),
       ),
     );
 
@@ -819,7 +815,7 @@ class RoutingService {
     required LatLng origin,
     required LatLng destination,
     required List<TransitLeg> legs,
-    required List<List<LatLng>> shapePolylines,
+    required Future<List<List<LatLng>>> shapePolylines,
     required String preferredMode,
     required Map<String, dynamic> selectedOriginStop,
     required Map<String, dynamic> selectedDestStop,
@@ -828,33 +824,66 @@ class RoutingService {
     final steps = <OrsStep>[];
     final firstLeg = legs.first;
     final lastLeg = legs.last;
-    final firstLegMode = _inferModeFromRoute(
-      routeId: firstLeg.routeId,
-      routeType: firstLeg.routeType,
-      routeShortName: firstLeg.routeShortName,
-      routeLongName: firstLeg.routeLongName,
-      preferredMode: preferredMode,
-    );
-    final lastLegMode = _inferModeFromRoute(
-      routeId: lastLeg.routeId,
-      routeType: lastLeg.routeType,
-      routeShortName: lastLeg.routeShortName,
-      routeLongName: lastLeg.routeLongName,
-      preferredMode: preferredMode,
-    );
+    final legModes = [
+      for (final leg in legs)
+        _inferModeFromRoute(
+          routeId: leg.routeId,
+          routeType: leg.routeType,
+          routeShortName: leg.routeShortName,
+          routeLongName: leg.routeLongName,
+          preferredMode: preferredMode,
+        ),
+    ];
+    final firstLegMode = legModes.first;
+    final lastLegMode = legModes.last;
 
-    // ── Walk-in ───────────────────────────────────────────────────────────────
     final boardFirst = LatLng(
       (selectedOriginStop['stop_lat'] as num).toDouble(),
       (selectedOriginStop['stop_lon'] as num).toDouble(),
     );
+    final alightLast = LatLng(
+      (selectedDestStop['stop_lat'] as num).toDouble(),
+      (selectedDestStop['stop_lon'] as num).toDouble(),
+    );
+
+    // Every walk connector is its own OSRM request. Start them all now,
+    // alongside the ride shapes, instead of one after another below.
     final walkInKm = _haversineKm(origin, boardFirst);
-    if (walkInKm > _minWalkSegmentKm) {
-      final walkInPts = await _buildWalkConnectorPolyline(
-        origin,
-        boardFirst,
-        allowRoadSnap: !_isStationBasedLeg(firstLeg, firstLegMode),
+    final walkInFuture =
+        walkInKm > _minWalkSegmentKm
+            ? _buildWalkConnectorPolyline(
+              origin,
+              boardFirst,
+              allowRoadSnap: !_isStationBasedLeg(firstLeg, firstLegMode),
+            )
+            : null;
+    final transferFutures = <int, Future<List<LatLng>>>{};
+    for (int i = 0; i < legs.length - 1; i++) {
+      final alightPt = LatLng(legs[i].alightLat, legs[i].alightLon);
+      final boardPt = LatLng(legs[i + 1].boardLat, legs[i + 1].boardLon);
+      if (_haversineKm(alightPt, boardPt) <= _minWalkSegmentKm) continue;
+      transferFutures[i] = _buildWalkConnectorPolyline(
+        alightPt,
+        boardPt,
+        allowRoadSnap:
+            !_isStationBasedLeg(legs[i], legModes[i]) &&
+            !_isStationBasedLeg(legs[i + 1], legModes[i + 1]),
       );
+    }
+    final walkOutKm = _haversineKm(alightLast, destination);
+    final walkOutFuture =
+        walkOutKm > _minWalkSegmentKm
+            ? _buildWalkConnectorPolyline(
+              alightLast,
+              destination,
+              allowRoadSnap: !_isStationBasedLeg(lastLeg, lastLegMode),
+            )
+            : null;
+    final shapes = await shapePolylines;
+
+    // ── Walk-in ───────────────────────────────────────────────────────────────
+    if (walkInFuture != null) {
+      final walkInPts = await walkInFuture;
       final walkInDistM = _polylineDistanceKm(walkInPts) * 1000;
       combinedPolyline.addAll(walkInPts);
       steps.add(
@@ -876,14 +905,8 @@ class RoutingService {
     // ── Vehicle legs ──────────────────────────────────────────────────────────
     for (int i = 0; i < legs.length; i++) {
       final leg = legs[i];
-      final polyline = shapePolylines[i];
-      final mode = _inferModeFromRoute(
-        routeId: leg.routeId,
-        routeType: leg.routeType,
-        routeShortName: leg.routeShortName,
-        routeLongName: leg.routeLongName,
-        preferredMode: preferredMode,
-      );
+      final polyline = shapes[i];
+      final mode = legModes[i];
 
       final vehicleStartIdx = combinedPolyline.length - 1;
 
@@ -921,26 +944,11 @@ class RoutingService {
       // ── Transfer walk ──────────────────────────────────────────────────────
       if (i < legs.length - 1) {
         final nextLeg = legs[i + 1];
-        final nextMode = _inferModeFromRoute(
-          routeId: nextLeg.routeId,
-          routeType: nextLeg.routeType,
-          routeShortName: nextLeg.routeShortName,
-          routeLongName: nextLeg.routeLongName,
-          preferredMode: preferredMode,
-        );
-        final alightPt = LatLng(leg.alightLat, leg.alightLon);
-        final boardPt = LatLng(nextLeg.boardLat, nextLeg.boardLon);
-        final transferKm = _haversineKm(alightPt, boardPt);
         final transferRouteLabel = _routeLabelForLeg(nextLeg) ?? 'next line';
+        final transferFuture = transferFutures[i];
 
-        if (transferKm > _minWalkSegmentKm) {
-          final transferPts = await _buildWalkConnectorPolyline(
-            alightPt,
-            boardPt,
-            allowRoadSnap:
-                !_isStationBasedLeg(leg, mode) &&
-                !_isStationBasedLeg(nextLeg, nextMode),
-          );
+        if (transferFuture != null) {
+          final transferPts = await transferFuture;
           final transferDistM = _polylineDistanceKm(transferPts) * 1000;
           final tStart = combinedPolyline.length - 1;
           final transferToAdd =
@@ -982,17 +990,8 @@ class RoutingService {
     }
 
     // ── Walk-out ──────────────────────────────────────────────────────────────
-    final alightLast = LatLng(
-      (selectedDestStop['stop_lat'] as num).toDouble(),
-      (selectedDestStop['stop_lon'] as num).toDouble(),
-    );
-    final walkOutKm = _haversineKm(alightLast, destination);
-    if (walkOutKm > _minWalkSegmentKm) {
-      final walkOutPts = await _buildWalkConnectorPolyline(
-        alightLast,
-        destination,
-        allowRoadSnap: !_isStationBasedLeg(lastLeg, lastLegMode),
-      );
+    if (walkOutFuture != null) {
+      final walkOutPts = await walkOutFuture;
       final walkOutDistM = _polylineDistanceKm(walkOutPts) * 1000;
       final startIdx = combinedPolyline.length - 1;
       final walkOutToAdd =
@@ -1046,6 +1045,15 @@ class RoutingService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
+  /// The ride mode for [leg] (Jeepney, Bus, Train, …), as route steps use.
+  static String modeForLeg(TransitLeg leg) => _inferModeFromRoute(
+    routeId: leg.routeId,
+    routeType: leg.routeType,
+    routeShortName: leg.routeShortName,
+    routeLongName: leg.routeLongName,
+    preferredMode: 'Auto',
+  );
+
   static String _inferModeFromRoute({
     required String? routeId,
     required int? routeType,
@@ -1071,8 +1079,8 @@ class RoutingService {
     }
 
     final joinedName =
-      '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
-        .toLowerCase();
+        '${routeId ?? ''} ${routeShortName ?? ''} ${routeLongName ?? ''}'
+            .toLowerCase();
 
     if (_containsRouteCode(joinedName, 'pub')) {
       return 'Bus';
@@ -1173,7 +1181,7 @@ class RoutingService {
       routeLongName: leg.routeLongName,
       preferredMode: preferredMode,
     );
-    
+
     // 1. The GTFS shape is the route's real path, so it decides which roads
     //    the leg follows for every mode — OSRM's fastest-car path between two
     //    stops can leave the jeep's actual route entirely.
@@ -1217,9 +1225,9 @@ class RoutingService {
     // 3. Nothing known between the two stops: OSRM between them.
     final snapped = await _osrmSnap(board, alight, _osrmProfileForMode(mode));
     if (snapped != null && snapped.length >= 2) {
-      // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry 
+      // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry
       // and causes the straight-line bug.
-      return snapped; 
+      return snapped;
     }
 
     // Ultimate fallback

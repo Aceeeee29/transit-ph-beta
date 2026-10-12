@@ -18,193 +18,190 @@ export 'fare_matrix.dart';
 // =============================================================================
 
 class PhRoadDatabase {
-
   static const Map<String, String> _roadModes = {
-
     // ── TRAIN LINES & STATIONS ───────────────────────────────────────────────
-    'metro rail transit': 'Train',  'light rail transit': 'Train',
+    'metro rail transit': 'Train', 'light rail transit': 'Train',
     'philippine national railways': 'Train',
-    'mrt-3': 'Train',  'mrt3': 'Train',  'mrt': 'Train',
-    'lrt-1': 'Train',  'lrt1': 'Train',
-    'lrt-2': 'Train',  'lrt2': 'Train',
-    'pnr':   'Train',
+    'mrt-3': 'Train', 'mrt3': 'Train', 'mrt': 'Train',
+    'lrt-1': 'Train', 'lrt1': 'Train',
+    'lrt-2': 'Train', 'lrt2': 'Train',
+    'pnr': 'Train',
     // MRT-3 stations
-    'north avenue station': 'Train',  'quezon avenue station': 'Train',
-    'kamuning station': 'Train',      'cubao station': 'Train',
-    'santolan station': 'Train',      'ortigas station': 'Train',
-    'shaw boulevard station': 'Train','boni station': 'Train',
-    'guadalupe station': 'Train',     'buendia station': 'Train',
-    'ayala station': 'Train',         'magallanes station': 'Train',
+    'north avenue station': 'Train', 'quezon avenue station': 'Train',
+    'kamuning station': 'Train', 'cubao station': 'Train',
+    'santolan station': 'Train', 'ortigas station': 'Train',
+    'shaw boulevard station': 'Train', 'boni station': 'Train',
+    'guadalupe station': 'Train', 'buendia station': 'Train',
+    'ayala station': 'Train', 'magallanes station': 'Train',
     'taft avenue station': 'Train',
     // LRT-1 stations
-    'baclaran station': 'Train',      'edsa station': 'Train',
-    'libertad station': 'Train',      'gil puyat station': 'Train',
-    'vito cruz station': 'Train',     'quirino station': 'Train',
-    'pedro gil station': 'Train',     'united nations station': 'Train',
-    'central terminal': 'Train',      'carriedo station': 'Train',
-    'doroteo jose': 'Train',          'bambang station': 'Train',
-    'tayuman station': 'Train',       'blumentritt station': 'Train',
-    'abad santos station': 'Train',   'r. papa station': 'Train',
-    'balintawak station': 'Train',    'roosevelt station': 'Train',
+    'baclaran station': 'Train', 'edsa station': 'Train',
+    'libertad station': 'Train', 'gil puyat station': 'Train',
+    'vito cruz station': 'Train', 'quirino station': 'Train',
+    'pedro gil station': 'Train', 'united nations station': 'Train',
+    'central terminal': 'Train', 'carriedo station': 'Train',
+    'doroteo jose': 'Train', 'bambang station': 'Train',
+    'tayuman station': 'Train', 'blumentritt station': 'Train',
+    'abad santos station': 'Train', 'r. papa station': 'Train',
+    'balintawak station': 'Train', 'roosevelt station': 'Train',
     // LRT-2 stations
-    'recto station': 'Train',         'legarda station': 'Train',
-    'pureza station': 'Train',        'v. mapa': 'Train',
-    'gilmore station': 'Train',       'betty go-belmonte': 'Train',
-    'araneta cubao': 'Train',         'anonas station': 'Train',
-    'katipunan station': 'Train',     'santolan-annapolis': 'Train',
-    'masinag station': 'Train',       'antipolo station': 'Train',
+    'recto station': 'Train', 'legarda station': 'Train',
+    'pureza station': 'Train', 'v. mapa': 'Train',
+    'gilmore station': 'Train', 'betty go-belmonte': 'Train',
+    'araneta cubao': 'Train', 'anonas station': 'Train',
+    'katipunan station': 'Train', 'santolan-annapolis': 'Train',
+    'masinag station': 'Train', 'antipolo station': 'Train',
     // PNR
-    'tutuban': 'Train',  'alabang station': 'Train',  'calamba station': 'Train',
+    'tutuban': 'Train', 'alabang station': 'Train', 'calamba station': 'Train',
 
     // ── FERRY ─────────────────────────────────────────────────────────────────
-    'pasig river ferry': 'Ferry',  'pasig river': 'Ferry',
-    'manila bay': 'Ferry',         'manila north harbor': 'Ferry',
-    'manila south harbor': 'Ferry','north harbor': 'Ferry',
-    'south harbor': 'Ferry',       'batangas port': 'Ferry',
-    'pier 15': 'Ferry',  'pier 4': 'Ferry',  'pier 2': 'Ferry',  'pier 1': 'Ferry',
-    'ro-ro': 'Ferry',  'roro': 'Ferry',
-    'superferry': 'Ferry',  'oceanjet': 'Ferry',  'weesam': 'Ferry',
+    'pasig river ferry': 'Ferry', 'pasig river': 'Ferry',
+    'manila bay': 'Ferry', 'manila north harbor': 'Ferry',
+    'manila south harbor': 'Ferry', 'north harbor': 'Ferry',
+    'south harbor': 'Ferry', 'batangas port': 'Ferry',
+    'pier 15': 'Ferry', 'pier 4': 'Ferry', 'pier 2': 'Ferry', 'pier 1': 'Ferry',
+    'ro-ro': 'Ferry', 'roro': 'Ferry',
+    'superferry': 'Ferry', 'oceanjet': 'Ferry', 'weesam': 'Ferry',
 
     // ── EXPRESSWAYS → FX/Van ─────────────────────────────────────────────────
     // Confirmed: jeepneys/tricycles cannot use these roads legally.
-    'south luzon expressway': 'FX/Van',  'slex': 'FX/Van',
-    'north luzon expressway': 'FX/Van',  'nlex': 'FX/Van',
+    'south luzon expressway': 'FX/Van', 'slex': 'FX/Van',
+    'north luzon expressway': 'FX/Van', 'nlex': 'FX/Van',
     'nlex mindanao avenue link': 'FX/Van',
-    'metro skyway': 'FX/Van',  'skyway': 'FX/Van',
-    'star tollway': 'FX/Van',  'cavitex': 'FX/Van',
-    'manila-cavite expressway': 'FX/Van',  'mcx': 'FX/Van',
-    'calax': 'FX/Van',  'cavite-laguna expressway': 'FX/Van',
+    'metro skyway': 'FX/Van', 'skyway': 'FX/Van',
+    'star tollway': 'FX/Van', 'cavitex': 'FX/Van',
+    'manila-cavite expressway': 'FX/Van', 'mcx': 'FX/Van',
+    'calax': 'FX/Van', 'cavite-laguna expressway': 'FX/Van',
     'muntinlupa-cavite expressway': 'FX/Van',
-    'naiax': 'FX/Van',  'naiaix': 'FX/Van',
-    'tplex': 'FX/Van',  'subic-clark-tarlac': 'FX/Van',
-    'circumferential road 6': 'FX/Van',  'c6': 'FX/Van',
-    'daang hari': 'FX/Van',        // P2P-only corridor
-    'susana heights road': 'FX/Van',// SLEX access
+    'naiax': 'FX/Van', 'naiaix': 'FX/Van',
+    'tplex': 'FX/Van', 'subic-clark-tarlac': 'FX/Van',
+    'circumferential road 6': 'FX/Van', 'c6': 'FX/Van',
+    'daang hari': 'FX/Van', // P2P-only corridor
+    'susana heights road': 'FX/Van', // SLEX access
     'east service road': 'FX/Van', // SLEX service road
-
     // ── BUS-DOMINANT ROADS ────────────────────────────────────────────────────
     // Confirmed by named bus routes in OSM Metro Manila/Bus_routes.
-    'epifanio de los santos': 'Bus',  'edsa': 'Bus',
+    'epifanio de los santos': 'Bus', 'edsa': 'Bus',
     // Macapagal / PITX / Coastal (bus routes 1,4,5,6,7,22,23,26-32,34,43)
     'president diosdado macapagal boulevard': 'Bus',
-    'macapagal boulevard': 'Bus',  'diosdado macapagal': 'Bus',
-    'seaside drive': 'Bus',        'pacific avenue': 'Bus',
+    'macapagal boulevard': 'Bus', 'diosdado macapagal': 'Bus',
+    'seaside drive': 'Bus', 'pacific avenue': 'Bus',
     'coastal road': 'Bus',
     // Osmeña Highway / Ayala-Alabang (bus routes 10,11,12,24,25,P2P)
-    'osmena highway': 'Bus',  'osmeña highway': 'Bus',
+    'osmena highway': 'Bus', 'osmeña highway': 'Bus',
     // C-5 Road — corrected: major bus corridor (routes 4,15,18,38-42,55)
-    'c-5 road': 'Bus',  'circumferential road 5': 'Bus',
+    'c-5 road': 'Bus', 'circumferential road 5': 'Bus',
     // Road 10 / Bonifacio Drive (routes 22,35,36,44,45,46)
-    'road 10': 'Bus',  'bonifacio drive': 'Bus',  'mel lopez boulevard': 'Bus',
+    'road 10': 'Bus', 'bonifacio drive': 'Bus', 'mel lopez boulevard': 'Bus',
     // Alabang area
-    'national road 1': 'Bus',  'national road': 'Bus',  'national highway': 'Bus',
-    'alabang-zapote road': 'Bus',  'alabang zapote road': 'Bus',
+    'national road 1': 'Bus', 'national road': 'Bus', 'national highway': 'Bus',
+    'alabang-zapote road': 'Bus', 'alabang zapote road': 'Bus',
     'spectrum midway': 'Bus',
     // South Luzon / Cavite arterials (routes 26-32,58)
-    'aguinaldo boulevard': 'Bus',  'aguinaldo highway': 'Bus',
+    'aguinaldo boulevard': 'Bus', 'aguinaldo highway': 'Bus',
     'emilio aguinaldo highway': 'Bus',
     'antero soriano highway': 'Bus',
-    "governor's drive": 'Bus',  'governors drive': 'Bus',
+    "governor's drive": 'Bus', 'governors drive': 'Bus',
     'molino road': 'Bus',
     // QC arterials (bus routes 6,7,17,33,34)
-    'commonwealth avenue': 'Bus',  'mindanao avenue': 'Bus',
-    'visayas avenue': 'Bus',       'congressional avenue': 'Bus',
-    'batasan road': 'Bus',         'quirino highway': 'Bus',
-    'tandang sora avenue': 'Bus',  'regalado highway': 'Bus',
+    'commonwealth avenue': 'Bus', 'mindanao avenue': 'Bus',
+    'visayas avenue': 'Bus', 'congressional avenue': 'Bus',
+    'batasan road': 'Bus', 'quirino highway': 'Bus',
+    'tandang sora avenue': 'Bus', 'regalado highway': 'Bus',
     'belfast street': 'Bus',
     // Aurora / Marcos / Sumulong (routes 3,17,18,55)
-    'aurora boulevard': 'Bus',  'aurora blvd': 'Bus',
-    'marcos highway': 'Bus',    'sumulong highway': 'Bus',
-    'c.p. garcia avenue': 'Bus',  'cp garcia avenue': 'Bus',
-    'c.p. garcia': 'Bus',         'cp garcia': 'Bus',
-    'e. rodriguez sr. avenue': 'Bus',  'e. rodriguez sr': 'Bus',
-    'e. rodriguez avenue': 'Bus',      'e. rodriguez': 'Bus',
-    'e. rodriguez jr. avenue': 'Bus',  'e. rodriguez jr': 'Bus',
+    'aurora boulevard': 'Bus', 'aurora blvd': 'Bus',
+    'marcos highway': 'Bus', 'sumulong highway': 'Bus',
+    'c.p. garcia avenue': 'Bus', 'cp garcia avenue': 'Bus',
+    'c.p. garcia': 'Bus', 'cp garcia': 'Bus',
+    'e. rodriguez sr. avenue': 'Bus', 'e. rodriguez sr': 'Bus',
+    'e. rodriguez avenue': 'Bus', 'e. rodriguez': 'Bus',
+    'e. rodriguez jr. avenue': 'Bus', 'e. rodriguez jr': 'Bus',
     // España / Lerma / Quezon Blvd corridor (routes 5,6,7,17,34)
-    'espana boulevard': 'Bus',  'espana blvd': 'Bus',
-    'españa boulevard': 'Bus',  'españa blvd': 'Bus',
-    'lerma street': 'Bus',       'quezon boulevard': 'Bus',
+    'espana boulevard': 'Bus', 'espana blvd': 'Bus',
+    'españa boulevard': 'Bus', 'españa blvd': 'Bus',
+    'lerma street': 'Bus', 'quezon boulevard': 'Bus',
     'padre burgos avenue': 'Bus',
-    'a. mendoza boulevard': 'Bus',  'a. mendoza street': 'Bus',
-    'laon laan street': 'Bus',      'dimasalang road': 'Bus',
+    'a. mendoza boulevard': 'Bus', 'a. mendoza street': 'Bus',
+    'laon laan street': 'Bus', 'dimasalang road': 'Bus',
     // Pasay / Taft / Gil Puyat (routes 4,5,6,7,10,17,23,24)
-    'taft avenue': 'Bus',       'taft ave': 'Bus',
-    'roxas boulevard': 'Bus',   'roxas blvd': 'Bus',
-    'gil puyat avenue': 'Bus',  'sen. gil puyat': 'Bus',
-    'ayala avenue': 'Bus',      'ayala ave': 'Bus',
-    'buendia avenue': 'Bus',    'buendia ave': 'Bus',
-    'chino roces avenue': 'Bus','chino roces': 'Bus',
-    'paseo de roxas': 'Bus',    'makati avenue': 'Bus',  'makati ave': 'Bus',
+    'taft avenue': 'Bus', 'taft ave': 'Bus',
+    'roxas boulevard': 'Bus', 'roxas blvd': 'Bus',
+    'gil puyat avenue': 'Bus', 'sen. gil puyat': 'Bus',
+    'ayala avenue': 'Bus', 'ayala ave': 'Bus',
+    'buendia avenue': 'Bus', 'buendia ave': 'Bus',
+    'chino roces avenue': 'Bus', 'chino roces': 'Bus',
+    'paseo de roxas': 'Bus', 'makati avenue': 'Bus', 'makati ave': 'Bus',
     // NAIA / Paranaque (routes T428,T436-438,43)
-    'dr. a. santos avenue': 'Bus',  'ninoy aquino avenue': 'Bus',
-    'naia road': 'Bus',             'domestic road': 'Bus',
-    'andrews avenue': 'Bus',        'airport road': 'Bus',
+    'dr. a. santos avenue': 'Bus', 'ninoy aquino avenue': 'Bus',
+    'naia road': 'Bus', 'domestic road': 'Bus',
+    'andrews avenue': 'Bus', 'airport road': 'Bus',
     // Rizal / MacArthur / C-3 (routes 8,9,14,22,35,36)
-    'macarthur highway': 'Bus',        'mcarthur highway': 'Bus',
-    'rizal avenue extension': 'Bus',   'rizal avenue': 'Bus',  'rizal ave': 'Bus',
-    'andres bonifacio avenue': 'Bus',  'a. bonifacio avenue': 'Bus',
-    'c-3 road': 'Bus',  'radial road 10': 'Bus',  'r-10': 'Bus',
+    'macarthur highway': 'Bus', 'mcarthur highway': 'Bus',
+    'rizal avenue extension': 'Bus', 'rizal avenue': 'Bus', 'rizal ave': 'Bus',
+    'andres bonifacio avenue': 'Bus', 'a. bonifacio avenue': 'Bus',
+    'c-3 road': 'Bus', 'radial road 10': 'Bus', 'r-10': 'Bus',
     // Governor F. Halili / Santa Maria (routes 19,20,21,22,33)
-    'governor f. halili avenue': 'Bus',  'governor fortunato halili': 'Bus',
+    'governor f. halili avenue': 'Bus', 'governor fortunato halili': 'Bus',
     'santa maria bypass road': 'Bus',
     // Ortigas Center (routes 2,4,18,55)
-    'ortigas avenue': 'Bus',   'ortigas ave': 'Bus',
-    'julia vargas': 'Bus',     'meralco avenue': 'Bus',  'meralco ave': 'Bus',
-    'shaw boulevard': 'Bus',   'shaw blvd': 'Bus',
+    'ortigas avenue': 'Bus', 'ortigas ave': 'Bus',
+    'julia vargas': 'Bus', 'meralco avenue': 'Bus', 'meralco ave': 'Bus',
+    'shaw boulevard': 'Bus', 'shaw blvd': 'Bus',
     'magsaysay boulevard': 'Bus',
     // BGC / McKinley Hill (BGC Bus routes, P2P 4,15,16)
-    'mckinley road': 'Bus',    'mckinley parkway': 'Bus',  'upper mckinley': 'Bus',
-    'malabon-navotas road': 'Bus',  'maharlika highway': 'Bus',
+    'mckinley road': 'Bus', 'mckinley parkway': 'Bus', 'upper mckinley': 'Bus',
+    'malabon-navotas road': 'Bus', 'maharlika highway': 'Bus',
 
     // ── JEEPNEY-DOMINANT ROADS ────────────────────────────────────────────────
     // Confirmed by route descriptions in OSM Jeepney_and_UV_Express_routes.
     // Camanava / Valenzuela feeders
     'samson road': 'Jeepney',
     'don basilio bautista boulevard': 'Jeepney',
-    'susano road': 'Jeepney',     'zabarte road': 'Jeepney',
-    'old zabarte road': 'Jeepney','camarin road': 'Jeepney',
-    'bagbag road': 'Jeepney',     'novaliches road': 'Jeepney',
-    'paso de blas road': 'Jeepney','paso de blas': 'Jeepney',
-    'maysan road': 'Jeepney',     'gen. luis street': 'Jeepney',
-    'general luis': 'Jeepney',    'buenamar street': 'Jeepney',
+    'susano road': 'Jeepney', 'zabarte road': 'Jeepney',
+    'old zabarte road': 'Jeepney', 'camarin road': 'Jeepney',
+    'bagbag road': 'Jeepney', 'novaliches road': 'Jeepney',
+    'paso de blas road': 'Jeepney', 'paso de blas': 'Jeepney',
+    'maysan road': 'Jeepney', 'gen. luis street': 'Jeepney',
+    'general luis': 'Jeepney', 'buenamar street': 'Jeepney',
     'san bartolome': 'Jeepney',
     // QC: Batasan / Commonwealth feeders
     'batasan-san mateo road': 'Jeepney',
-    'general luna street': 'Jeepney',  'general luna avenue': 'Jeepney',
-    'batasan hills': 'Jeepney',   'fairview': 'Jeepney',
-    'litex road': 'Jeepney',      'payatas road': 'Jeepney',
-    'mayon avenue': 'Jeepney',    'rodriguez highway': 'Jeepney',
-    'east capitol drive': 'Jeepney','capitol hills': 'Jeepney',
+    'general luna street': 'Jeepney', 'general luna avenue': 'Jeepney',
+    'batasan hills': 'Jeepney', 'fairview': 'Jeepney',
+    'litex road': 'Jeepney', 'payatas road': 'Jeepney',
+    'mayon avenue': 'Jeepney', 'rodriguez highway': 'Jeepney',
+    'east capitol drive': 'Jeepney', 'capitol hills': 'Jeepney',
     // QC: Scouts / Timog / Tomas Morato / Banawe
-    'scout mandarin': 'Jeepney',  'scout albano': 'Jeepney',
-    'scout tuazon': 'Jeepney',    'lt. artiaga': 'Jeepney',
-    'tomas morato avenue': 'Jeepney','tomas morato': 'Jeepney',
-    'timog avenue': 'Jeepney',    'timog ave': 'Jeepney',
-    'mother ignacia': 'Jeepney',  'panay avenue': 'Jeepney',
+    'scout mandarin': 'Jeepney', 'scout albano': 'Jeepney',
+    'scout tuazon': 'Jeepney', 'lt. artiaga': 'Jeepney',
+    'tomas morato avenue': 'Jeepney', 'tomas morato': 'Jeepney',
+    'timog avenue': 'Jeepney', 'timog ave': 'Jeepney',
+    'mother ignacia': 'Jeepney', 'panay avenue': 'Jeepney',
     'sergeant esguerra': 'Jeepney',
-    'banawe avenue': 'Jeepney',   'banawe ave': 'Jeepney',
-    'don a. roces avenue': 'Jeepney','don a. roces': 'Jeepney',
-    'kamuning road': 'Jeepney',   'kamuning': 'Jeepney',
+    'banawe avenue': 'Jeepney', 'banawe ave': 'Jeepney',
+    'don a. roces avenue': 'Jeepney', 'don a. roces': 'Jeepney',
+    'kamuning road': 'Jeepney', 'kamuning': 'Jeepney',
     // QC: Del Monte / Roosevelt / Cubao feeders
-    'del monte avenue': 'Jeepney','del monte ave': 'Jeepney',
-    'fpj avenue': 'Jeepney',      'n. quezon': 'Jeepney',
-    'kabayani': 'Jeepney',        'sgt. rivera': 'Jeepney',
+    'del monte avenue': 'Jeepney', 'del monte ave': 'Jeepney',
+    'fpj avenue': 'Jeepney', 'n. quezon': 'Jeepney',
+    'kabayani': 'Jeepney', 'sgt. rivera': 'Jeepney',
     'sergeant rivera': 'Jeepney', 'araneta avenue': 'Jeepney',
-    'e. quintos': 'Jeepney',      'p. tuazon boulevard': 'Jeepney',
-    'p. tuazon': 'Jeepney',       'murphy road': 'Jeepney',
-    'murphy': 'Jeepney',          'n. domingo street': 'Jeepney',
-    'n. domingo': 'Jeepney',      'new manila': 'Jeepney',
-    'd. tuazon street': 'Jeepney','kamias road': 'Jeepney',
-    'quezon avenue': 'Jeepney',   'quezon ave': 'Jeepney',
+    'e. quintos': 'Jeepney', 'p. tuazon boulevard': 'Jeepney',
+    'p. tuazon': 'Jeepney', 'murphy road': 'Jeepney',
+    'murphy': 'Jeepney', 'n. domingo street': 'Jeepney',
+    'n. domingo': 'Jeepney', 'new manila': 'Jeepney',
+    'd. tuazon street': 'Jeepney', 'kamias road': 'Jeepney',
+    'quezon avenue': 'Jeepney', 'quezon ave': 'Jeepney',
     // Marikina / Pasig
-    'j.p. rizal street': 'Jeepney',  'jp rizal street': 'Jeepney',
-    'j.p. rizal avenue': 'Jeepney',  'jp rizal avenue': 'Jeepney',
-    'fortune avenue': 'Jeepney',     'bayan-bayanan avenue': 'Jeepney',
-    'sampaguita avenue': 'Jeepney',  'shoe avenue': 'Jeepney',
-    'east bank road': 'Jeepney',     'caruncho avenue': 'Jeepney',
-    'ramon jabson street': 'Jeepney','pasig boulevard': 'Jeepney',
+    'j.p. rizal street': 'Jeepney', 'jp rizal street': 'Jeepney',
+    'j.p. rizal avenue': 'Jeepney', 'jp rizal avenue': 'Jeepney',
+    'fortune avenue': 'Jeepney', 'bayan-bayanan avenue': 'Jeepney',
+    'sampaguita avenue': 'Jeepney', 'shoe avenue': 'Jeepney',
+    'east bank road': 'Jeepney', 'caruncho avenue': 'Jeepney',
+    'ramon jabson street': 'Jeepney', 'pasig boulevard': 'Jeepney',
     'dr. sixto antonio avenue': 'Jeepney',
-    'elisco road': 'Jeepney',        'maestrang pinang street': 'Jeepney',
+    'elisco road': 'Jeepney', 'maestrang pinang street': 'Jeepney',
     'a. sandoval avenue': 'Jeepney', 'barkadahan bridge': 'Jeepney',
     // Taguig / Fort Bonifacio feeders
     'pedro cayetano boulevard': 'Jeepney',
@@ -212,70 +209,71 @@ class PhRoadDatabase {
     'jp rizal avenue extension': 'Jeepney',
     'felix y. manalo street': 'Jeepney',
     'm.l. quezon avenue': 'Jeepney', 'p. victor street': 'Jeepney',
-    'bayani road': 'Jeepney',        'lawton avenue': 'Jeepney',
+    'bayani road': 'Jeepney', 'lawton avenue': 'Jeepney',
     // Mandaluyong
-    'kalentong': 'Jeepney',  'nueve de febrero': 'Jeepney',
-    'vergara street': 'Jeepney',  'maysilo circle': 'Jeepney',
+    'kalentong': 'Jeepney', 'nueve de febrero': 'Jeepney',
+    'vergara street': 'Jeepney', 'maysilo circle': 'Jeepney',
     'coronado street': 'Jeepney',
     // Makati feeders
-    'pasong tamo': 'Jeepney',       'dela rosa street': 'Jeepney',
-    'jupiter street': 'Jeepney',    'kalayaan avenue': 'Jeepney',
-    'kalayaan ave': 'Jeepney',      'antonio arnaiz avenue': 'Jeepney',
-    'arnaiz avenue': 'Jeepney',     'perea street': 'Jeepney',
-    'leon guinto street': 'Jeepney','leon guinto': 'Jeepney',
-    'a. lacson avenue': 'Jeepney',  'lacson avenue': 'Jeepney',
-    'vito cruz street': 'Jeepney',  'vito cruz': 'Jeepney',
-    'leveriza street': 'Jeepney',   'leveriza': 'Jeepney',
-    'pablo ocampo avenue': 'Jeepney','pablo ocampo': 'Jeepney',
-    'san marcelino': 'Jeepney',     'pedro gil street': 'Jeepney',
+    'pasong tamo': 'Jeepney', 'dela rosa street': 'Jeepney',
+    'jupiter street': 'Jeepney', 'kalayaan avenue': 'Jeepney',
+    'kalayaan ave': 'Jeepney', 'antonio arnaiz avenue': 'Jeepney',
+    'arnaiz avenue': 'Jeepney', 'perea street': 'Jeepney',
+    'leon guinto street': 'Jeepney', 'leon guinto': 'Jeepney',
+    'a. lacson avenue': 'Jeepney', 'lacson avenue': 'Jeepney',
+    'vito cruz street': 'Jeepney', 'vito cruz': 'Jeepney',
+    'leveriza street': 'Jeepney', 'leveriza': 'Jeepney',
+    'pablo ocampo avenue': 'Jeepney', 'pablo ocampo': 'Jeepney',
+    'san marcelino': 'Jeepney', 'pedro gil street': 'Jeepney',
     'pedro gil': 'Jeepney',
     // Manila: Sampaloc / España feeders
-    'sampaloc': 'Jeepney',  'algeciras': 'Jeepney',
-    'blumentritt road': 'Jeepney',  'moriones street': 'Jeepney',
-    'recto avenue': 'Jeepney',      'c.m. recto avenue': 'Jeepney',
-    'claro m. recto': 'Jeepney',    'c.m. recto': 'Jeepney',
-    'g. tuazon street': 'Jeepney',  'j. fajardo street': 'Jeepney',
-    'cayco street': 'Jeepney',      'vicente cruz': 'Jeepney',
-    'lepanto street': 'Jeepney',    'legarda street': 'Jeepney',
-    'dapitan': 'Jeepney',           'lacson': 'Jeepney',
+    'sampaloc': 'Jeepney', 'algeciras': 'Jeepney',
+    'blumentritt road': 'Jeepney', 'moriones street': 'Jeepney',
+    'recto avenue': 'Jeepney', 'c.m. recto avenue': 'Jeepney',
+    'claro m. recto': 'Jeepney', 'c.m. recto': 'Jeepney',
+    'g. tuazon street': 'Jeepney', 'j. fajardo street': 'Jeepney',
+    'cayco street': 'Jeepney', 'vicente cruz': 'Jeepney',
+    'lepanto street': 'Jeepney', 'legarda street': 'Jeepney',
+    'dapitan': 'Jeepney', 'lacson': 'Jeepney',
     // Manila: Tondo / Binondo feeders
-    'abad santos avenue': 'Jeepney','abad santos': 'Jeepney',
-    'bambang street': 'Jeepney',    'bambang': 'Jeepney',
-    'tayuman street': 'Jeepney',    'tayuman': 'Jeepney',
-    'lavezares street': 'Jeepney',  'lavezares': 'Jeepney',
+    'abad santos avenue': 'Jeepney', 'abad santos': 'Jeepney',
+    'bambang street': 'Jeepney', 'bambang': 'Jeepney',
+    'tayuman street': 'Jeepney', 'tayuman': 'Jeepney',
+    'lavezares street': 'Jeepney', 'lavezares': 'Jeepney',
     'c. palanca street': 'Jeepney', 'c. palanca': 'Jeepney',
-    'dagupan street': 'Jeepney',    'antipolo street': 'Jeepney',
-    'solis street': 'Jeepney',      'del fierro street': 'Jeepney',
-    't. earnshaw street': 'Jeepney','mayhaligue street': 'Jeepney',
-    'maysilo street': 'Jeepney',    'juan luna street': 'Jeepney',
-    'herbosa street': 'Jeepney',    'velasquez street': 'Jeepney',
-    'ilaya street': 'Jeepney',      'vitas road': 'Jeepney',
-    "heroes del '96": 'Jeepney',    'heroes del 96': 'Jeepney',
-    'nicanor reyes street': 'Jeepney','morayta': 'Jeepney',
-    'evangelista street': 'Jeepney','general belarmino': 'Jeepney',
-    'ipil street': 'Jeepney',       'new antipolo street': 'Jeepney',
-    'laguna street': 'Jeepney',     'divisoria': 'Jeepney',
+    'dagupan street': 'Jeepney', 'antipolo street': 'Jeepney',
+    'solis street': 'Jeepney', 'del fierro street': 'Jeepney',
+    't. earnshaw street': 'Jeepney', 'mayhaligue street': 'Jeepney',
+    'maysilo street': 'Jeepney', 'juan luna street': 'Jeepney',
+    'herbosa street': 'Jeepney', 'velasquez street': 'Jeepney',
+    'ilaya street': 'Jeepney', 'vitas road': 'Jeepney',
+    "heroes del '96": 'Jeepney', 'heroes del 96': 'Jeepney',
+    'nicanor reyes street': 'Jeepney', 'morayta': 'Jeepney',
+    'evangelista street': 'Jeepney', 'general belarmino': 'Jeepney',
+    'ipil street': 'Jeepney', 'new antipolo street': 'Jeepney',
+    'laguna street': 'Jeepney', 'divisoria': 'Jeepney',
     'c-4 road': 'Jeepney',
     // Manila: Pandacan / Paco / Santa Ana
-    'pandacan': 'Jeepney',   'paco': 'Jeepney',
-    'nagtahan': 'Jeepney',   'sta. mesa boulevard': 'Jeepney',
-    'sta. mesa blvd': 'Jeepney',  'santa mesa boulevard': 'Jeepney',
+    'pandacan': 'Jeepney', 'paco': 'Jeepney',
+    'nagtahan': 'Jeepney', 'sta. mesa boulevard': 'Jeepney',
+    'sta. mesa blvd': 'Jeepney', 'santa mesa boulevard': 'Jeepney',
     'dimasalang': 'Jeepney', 'amang rodriguez': 'Jeepney',
     'san andres': 'Jeepney', 'san antonio': 'Jeepney',
     'g. puyat street': 'Jeepney', 'beata street': 'Jeepney',
-    'jesus street': 'Jeepney',    'penafrancia street': 'Jeepney',
-    'peñafrancia street': 'Jeepney','apacible street': 'Jeepney',
+    'jesus street': 'Jeepney', 'penafrancia street': 'Jeepney',
+    'peñafrancia street': 'Jeepney', 'apacible street': 'Jeepney',
     'sgt. fabian yabut': 'Jeepney',
     // Southern MM feeders
     'diego cera avenue': 'Jeepney', 'fruto santos avenue': 'Jeepney',
-    'naga road': 'Jeepney',         'marcos alvarez avenue': 'Jeepney',
-    'marcos alvarez': 'Jeepney',    'sucat road': 'Jeepney',
+    'naga road': 'Jeepney', 'marcos alvarez avenue': 'Jeepney',
+    'marcos alvarez': 'Jeepney', 'sucat road': 'Jeepney',
   };
 
   static String? lookupMode(String instruction) {
-    final text   = instruction.toLowerCase();
-    final sorted = _roadModes.entries.toList()
-      ..sort((a, b) => b.key.length.compareTo(a.key.length));
+    final text = instruction.toLowerCase();
+    final sorted =
+        _roadModes.entries.toList()
+          ..sort((a, b) => b.key.length.compareTo(a.key.length));
     for (final entry in sorted) {
       if (text.contains(entry.key)) return entry.value;
     }
@@ -299,18 +297,41 @@ class PhRoadDatabase {
 ///   7. dominantMode — user's chosen vehicle (anchors ambiguous roads)
 ///   8. Distance     — heuristic fallback
 class TransitModeInferrer {
-  static const _walkMax      = 350.0;
-  static const _tricycleMax  = 1500.0;
-  static const _jeepneyMax   = 8000.0;
-  static const _busMax       = 20000.0;
+  static const _walkMax = 350.0;
+  static const _tricycleMax = 1500.0;
+  static const _jeepneyMax = 8000.0;
+  static const _busMax = 20000.0;
 
-  static const _trainKws       = ['station', 'rail', 'metro rail', 'light rail'];
-  static const _ferryKws       = ['pier', 'port', 'ferry', 'wharf', 'harbor', 'harbour'];
-  static const _expressWayKws  = ['expressway', 'tollway', 'toll road'];
-  static const _residentialKws = ['street', 'st.', ' st,', 'lane', 'drive',
-                                   'subdivision', 'village', 'barangay', 'brgy', 'alley'];
-  static const _majorAveKws    = ['avenue', 'blvd', 'boulevard', 'highway'];
-  static const _departKws      = ['depart', 'arrive', 'destination', 'start', 'head'];
+  static const _trainKws = ['station', 'rail', 'metro rail', 'light rail'];
+  static const _ferryKws = [
+    'pier',
+    'port',
+    'ferry',
+    'wharf',
+    'harbor',
+    'harbour',
+  ];
+  static const _expressWayKws = ['expressway', 'tollway', 'toll road'];
+  static const _residentialKws = [
+    'street',
+    'st.',
+    ' st,',
+    'lane',
+    'drive',
+    'subdivision',
+    'village',
+    'barangay',
+    'brgy',
+    'alley',
+  ];
+  static const _majorAveKws = ['avenue', 'blvd', 'boulevard', 'highway'];
+  static const _departKws = [
+    'depart',
+    'arrive',
+    'destination',
+    'start',
+    'head',
+  ];
 
   /// Applies mode inference, fare calculation, and step merging.
   ///
@@ -336,31 +357,34 @@ class TransitModeInferrer {
     final totalDist = steps.fold(0.0, (s, e) => s + e.distanceMeters);
 
     // Pass 1 — assign a mode to every raw ORS step
-    final labeled = steps.asMap().entries.map((entry) {
-      final i    = entry.key;
-      final step = entry.value;
-      final overpassMode = (overpassModes != null && i < overpassModes.length)
-          ? overpassModes[i] : null;
+    final labeled =
+        steps.asMap().entries.map((entry) {
+          final i = entry.key;
+          final step = entry.value;
+          final overpassMode =
+              (overpassModes != null && i < overpassModes.length)
+                  ? overpassModes[i]
+                  : null;
 
-      final mode = _inferMode(
-        step:          step,
-        isFirst:       i == 0,
-        isLast:        i == steps.length - 1,
-        totalDistance: totalDist,
-        dominantMode:  dominantMode,
-        overpassMode:  overpassMode,
-      );
+          final mode = _inferMode(
+            step: step,
+            isFirst: i == 0,
+            isLast: i == steps.length - 1,
+            totalDistance: totalDist,
+            dominantMode: dominantMode,
+            overpassMode: overpassMode,
+          );
 
-      return OrsStep(
-        instruction:    step.instruction,
-        distanceMeters: step.distanceMeters,
-        durationSeconds:step.durationSeconds,
-        suggestedMode:  mode,
-        estimatedFare:  PhFareCalculator.compute(mode, step.distanceMeters),
-        wayPointStart:  step.wayPointStart,
-        wayPointEnd:    step.wayPointEnd,
-      );
-    }).toList();
+          return OrsStep(
+            instruction: step.instruction,
+            distanceMeters: step.distanceMeters,
+            durationSeconds: step.durationSeconds,
+            suggestedMode: mode,
+            estimatedFare: PhFareCalculator.compute(mode, step.distanceMeters),
+            wayPointStart: step.wayPointStart,
+            wayPointEnd: step.wayPointEnd,
+          );
+        }).toList();
 
     // Pass 2 — merge consecutive steps that share the same mode
     return _mergeConsecutiveSameMode(labeled);
@@ -401,40 +425,43 @@ class TransitModeInferrer {
   static OrsStep _collapseGroup(List<OrsStep> group) {
     if (group.length == 1) return group.first;
 
-    final mode        = group.first.suggestedMode;
-    final totalDist   = group.fold(0.0, (s, e) => s + e.distanceMeters);
-    final totalDur    = group.fold(0.0, (s, e) => s + e.durationSeconds);
-    final fare        = PhFareCalculator.compute(mode, totalDist);
-    final wayStart    = group.first.wayPointStart;
-    final wayEnd      = group.last.wayPointEnd;
+    final mode = group.first.suggestedMode;
+    final totalDist = group.fold(0.0, (s, e) => s + e.distanceMeters);
+    final totalDur = group.fold(0.0, (s, e) => s + e.durationSeconds);
+    final fare = PhFareCalculator.compute(mode, totalDist);
+    final wayStart = group.first.wayPointStart;
+    final wayEnd = group.last.wayPointEnd;
 
     // Build a human-readable instruction:
     //   "Ride Jeepney via España Blvd → Quezon Ave → EDSA"
     // We pick road names from the step instructions, skipping pure turn words.
-    final roadNames = group
-        .map((s) => _extractRoadName(s.instruction))
-        .where((r) => r.isNotEmpty)
-        .toList();
+    final roadNames =
+        group
+            .map((s) => _extractRoadName(s.instruction))
+            .where((r) => r.isNotEmpty)
+            .toList();
 
     final String instruction;
     if (mode == 'Walk') {
-      instruction = roadNames.isEmpty
-          ? 'Walk ${_distLabel(totalDist)}'
-          : 'Walk via ${roadNames.join(' → ')}';
+      instruction =
+          roadNames.isEmpty
+              ? 'Walk ${_distLabel(totalDist)}'
+              : 'Walk via ${roadNames.join(' → ')}';
     } else {
-      instruction = roadNames.isEmpty
-          ? 'Ride $mode (${_distLabel(totalDist)})'
-          : 'Ride $mode via ${roadNames.join(' → ')}';
+      instruction =
+          roadNames.isEmpty
+              ? 'Ride $mode (${_distLabel(totalDist)})'
+              : 'Ride $mode via ${roadNames.join(' → ')}';
     }
 
     return OrsStep(
-      instruction:    instruction,
+      instruction: instruction,
       distanceMeters: totalDist,
-      durationSeconds:totalDur,
-      suggestedMode:  mode,
-      estimatedFare:  fare,
-      wayPointStart:  wayStart,
-      wayPointEnd:    wayEnd,
+      durationSeconds: totalDur,
+      suggestedMode: mode,
+      estimatedFare: fare,
+      wayPointStart: wayStart,
+      wayPointEnd: wayEnd,
     );
   }
 
@@ -446,15 +473,16 @@ class TransitModeInferrer {
     // ORS instruction patterns that precede a road name
     final patterns = [
       RegExp(r'onto (.+)$', caseSensitive: false),
-      RegExp(r'on (.+)$',   caseSensitive: false),
-      RegExp(r'along (.+)$',caseSensitive: false),
+      RegExp(r'on (.+)$', caseSensitive: false),
+      RegExp(r'along (.+)$', caseSensitive: false),
     ];
     for (final p in patterns) {
       final m = p.firstMatch(instruction.trim());
       if (m != null) {
         final road = m.group(1)!.trim();
         // Skip generic or very short fragments
-        if (road.length > 2 && !road.toLowerCase().startsWith('the ')) return road;
+        if (road.length > 2 && !road.toLowerCase().startsWith('the '))
+          return road;
       }
     }
     return '';
@@ -498,7 +526,8 @@ class TransitModeInferrer {
     //    Road-based Overpass results are only used when there is NO dominantMode
     //    (i.e. the caller didn't know what mode to use and is relying purely on
     //    inference). When dominantMode IS set, it wins over road-based results.
-    if (overpassMode == 'Train' || overpassMode == 'Ferry') return overpassMode!;
+    if (overpassMode == 'Train' || overpassMode == 'Ferry')
+      return overpassMode!;
 
     // 4. Road DB — keyword match against PhRoadDatabase
     final dbMode = PhRoadDatabase.lookupMode(text);
@@ -526,8 +555,8 @@ class TransitModeInferrer {
 
     // 10. Distance heuristics (only when dominantMode is null)
     if (dist <= _tricycleMax && _any(text, _residentialKws)) return 'Tricycle';
-    if (_any(text, _majorAveKws) && dist > _jeepneyMax)      return 'Bus';
-    if (dist > _busMax)    return 'FX/Van';
+    if (_any(text, _majorAveKws) && dist > _jeepneyMax) return 'Bus';
+    if (dist > _busMax) return 'FX/Van';
     if (dist > _jeepneyMax) return totalDistance > 25000 ? 'FX/Van' : 'Bus';
 
     return 'Jeepney';

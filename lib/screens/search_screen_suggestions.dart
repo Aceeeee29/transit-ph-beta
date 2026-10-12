@@ -1,137 +1,70 @@
 part of 'search_screen.dart';
 
 extension _SearchScreenDiscoverySections on _SearchScreenState {
-  static const _surface = _SearchScreenState._surface;
-  static const _surfaceAlt = _SearchScreenState._surfaceAlt;
   static const _textPrimary = _SearchScreenState._textPrimary;
   static const _textSecondary = _SearchScreenState._textSecondary;
-  static const _border = _SearchScreenState._border;
 
+  /// Before searching: recent searches, then popular community routes.
   Widget _buildSearchSuggestionsSection() {
-    return SingleChildScrollView(
+    final popular = _topSearches;
+    return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_recentSearches.isNotEmpty) ...[
-            _buildRecentSearches(),
-            const SizedBox(height: 24),
-          ],
-          _buildTopSearches(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentSearchesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'RECENT SEARCHES',
-              style: TextStyle(
-                color: _textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
+        if (_recentSearches.isNotEmpty) ...[
+          RouteOptionSection(
+            title: 'Recent',
+            trailing: TextButton(
+              onPressed: _onClearRecentSearches,
+              child: const Text('Clear'),
             ),
-            GestureDetector(
-              onTap: _onClearRecentSearches,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(color: _border),
-                ),
-                child: const Text(
-                  'Clear All',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children:
-              _recentSearches.map((search) {
-                return GestureDetector(
+            children: [
+              for (final search in _recentSearches)
+                InkWell(
                   onTap: () => _onRecentSearchTap(search),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(color: _border),
-                    ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(
                           Icons.history_rounded,
-                          size: 13,
+                          size: 20,
                           color: _textSecondary,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          search,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: _textPrimary,
-                            fontWeight: FontWeight.w500,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            search,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => _onRemoveRecentSearch(search),
-                          child: const Icon(
-                            Icons.close,
-                            size: 12,
+                        IconButton(
+                          tooltip: 'Remove',
+                          onPressed: () => _onRemoveRecentSearch(search),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
                             color: _textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                );
-              }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTopSearchesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'TOP SEARCHES',
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
+                ),
+            ],
           ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Popular routes based on community activity',
-          style: TextStyle(fontSize: 13, color: _textSecondary),
-        ),
-        const SizedBox(height: 16),
-        ..._topSearches.map((route) => _routeCardWithBadge(route)),
+          const SizedBox(height: 24),
+        ],
+        if (popular.isNotEmpty)
+          RouteOptionSection(
+            title: 'Popular routes',
+            children: [for (final route in popular) _communityRouteRow(route)],
+          ),
       ],
     );
   }

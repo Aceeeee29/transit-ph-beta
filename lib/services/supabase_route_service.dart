@@ -108,7 +108,9 @@ class CommunityRoute {
           actualFare: step.actualFare,
           designatedStops: step.usesDesignatedStops,
           stops:
-              step.usesDesignatedStops ? step.stops : const <route_model.RouteStop>[],
+              step.usesDesignatedStops
+                  ? step.stops
+                  : const <route_model.RouteStop>[],
         ),
       );
     }
@@ -390,10 +392,20 @@ class SupabaseRouteService {
 
   static const _inFilterChunk = 250;
 
+  /// Stop times come back by the thousands, paged 1000 rows at a time. Small
+  /// chunks fetched side by side finish far sooner than big ones paged one
+  /// after another (measured VGC → STI Caloocan: 0.9 s vs 4.9 s).
+  static const _stopTimesChunk = 100;
+  static const _parallelRequests = 6;
+
   static const _fallbackTransitSpeedKmh = 20.0;
 
   static const _dijkstraContextTtl = Duration(seconds: 45);
   static _DijkstraContextCacheEntry? _dijkstraContextCache;
+  static final Map<String, Future<_DijkstraGraphContext?>>
+  _dijkstraContextInFlight = {};
+  static final Map<String, Future<List<Map<String, dynamic>>>>
+  _nearestStopsInFlight = {};
 
   static Future<DijkstraTripPlanResult?> findTripPlanDijkstra({
     required LatLng origin,
@@ -442,16 +454,25 @@ class SupabaseRouteService {
     );
 
     var context = _getCachedDijkstraContext(contextKey);
-    context ??= await _buildDijkstraGraphContext(
-      origin: origin,
-      destination: destination,
-      originCandidates: originCandidates,
-      destCandidates: destCandidates,
-      allowFerry: allowFerry,
-      communityRoutes: communityRoutes,
-    );
-    if (context != null) {
-      _cacheDijkstraContext(contextKey, context);
+    if (context == null) {
+      // Search runs the balanced, fastest and budget plans at the same time
+      // over the same graph, so they share one build instead of each
+      // fetching and building it.
+      context =
+          await (_dijkstraContextInFlight[contextKey] ??=
+              _buildDijkstraGraphContext(
+                origin: origin,
+                destination: destination,
+                originCandidates: originCandidates,
+                destCandidates: destCandidates,
+                allowFerry: allowFerry,
+                communityRoutes: communityRoutes,
+              ).whenComplete(
+                () => _dijkstraContextInFlight.remove(contextKey),
+              ));
+      if (context != null) {
+        _cacheDijkstraContext(contextKey, context);
+      }
     }
     if (context == null) return const <DijkstraRouteAlternative>[];
 
@@ -1048,7 +1069,6 @@ class SupabaseRouteService {
         }
       }
     }
-
   }
 
   // ── Community routes ──────────────────────────────────────────────────────
@@ -1241,7 +1261,8 @@ class SupabaseRouteService {
       final a = match.segment;
       final b = math.min(a + 1, path.length - 1);
       final index =
-          _haversineKm(path[a], match.point) <= _haversineKm(path[b], match.point)
+          _haversineKm(path[a], match.point) <=
+                  _haversineKm(path[b], match.point)
               ? a
               : b;
       byIndex[index] = (
@@ -1347,7 +1368,10 @@ class SupabaseRouteService {
   }
 
   /// Path indices roughly every [spacingKm], always including both ends.
-  static List<int> _sampleIndicesAlongPath(List<LatLng> path, double spacingKm) {
+  static List<int> _sampleIndicesAlongPath(
+    List<LatLng> path,
+    double spacingKm,
+  ) {
     final out = <int>[0];
     var sinceLast = 0.0;
     for (var i = 1; i < path.length; i++) {
@@ -1600,17 +1624,41 @@ class SupabaseRouteService {
     return out.take(_dijkstraStopLimit).toList();
   }
 
+  /// Splits [ids] into chunks of [size] and fetches them with up to
+  /// [_parallelRequests] in flight. Rows come back in chunk order.
+  static Future<List<Map<String, dynamic>>> _fetchInParallelChunks(
+    List<String> ids,
+    int size,
+    Future<List<Map<String, dynamic>>> Function(List<String> chunk) fetch,
+  ) async {
+    final chunks = [
+      for (var i = 0; i < ids.length; i += size)
+        ids.sublist(i, math.min(i + size, ids.length)),
+    ];
+    final results = List<List<Map<String, dynamic>>>.filled(
+      chunks.length,
+      const [],
+    );
+    var next = 0;
+    Future<void> worker() async {
+      while (next < chunks.length) {
+        final index = next++;
+        results[index] = await fetch(chunks[index]);
+      }
+    }
+
+    await Future.wait([
+      for (var w = 0; w < math.min(_parallelRequests, chunks.length); w++)
+        worker(),
+    ]);
+    return [for (final rows in results) ...rows];
+  }
+
   static Future<List<Map<String, dynamic>>> _fetchStopTimesForStopIds(
     List<String> stopIds,
-  ) async {
-    final out = <Map<String, dynamic>>[];
-
-    for (var i = 0; i < stopIds.length; i += _inFilterChunk) {
-      final chunk = stopIds.sublist(
-        i,
-        math.min(i + _inFilterChunk, stopIds.length),
-      );
-
+  ) {
+    return _fetchInParallelChunks(stopIds, _stopTimesChunk, (chunk) async {
+      final out = <Map<String, dynamic>>[];
       var from = 0;
       while (true) {
         final rows = await _client
@@ -1627,40 +1675,28 @@ class SupabaseRouteService {
         if (mapped.length < _pageSize) break;
         from += _pageSize;
       }
-    }
-
-    return out;
+      return out;
+    });
   }
 
   static Future<List<Map<String, dynamic>>> _fetchTripsByIds(
     List<String> tripIds,
-  ) async {
-    final out = <Map<String, dynamic>>[];
-    for (var i = 0; i < tripIds.length; i += _inFilterChunk) {
-      final chunk = tripIds.sublist(
-        i,
-        math.min(i + _inFilterChunk, tripIds.length),
-      );
+  ) {
+    return _fetchInParallelChunks(tripIds, _inFilterChunk, (chunk) async {
       final rows = await _client
           .schema('gtfs')
           .from('trips')
           .select('trip_id, route_id, shape_id')
           .inFilter('trip_id', chunk);
-      out.addAll(rows.map((r) => Map<String, dynamic>.from(r)));
-    }
-    return out;
+      return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+    });
   }
 
   static Future<List<Map<String, dynamic>>> _fetchRoutesByIds(
     List<String> routeIds,
   ) async {
     if (routeIds.isEmpty) return const <Map<String, dynamic>>[];
-    final out = <Map<String, dynamic>>[];
-    for (var i = 0; i < routeIds.length; i += _inFilterChunk) {
-      final chunk = routeIds.sublist(
-        i,
-        math.min(i + _inFilterChunk, routeIds.length),
-      );
+    return _fetchInParallelChunks(routeIds, _inFilterChunk, (chunk) async {
       final rows = await _client
           .schema('gtfs')
           .from('routes')
@@ -1668,9 +1704,8 @@ class SupabaseRouteService {
             'route_id, route_short_name, route_long_name, route_color, route_type',
           )
           .inFilter('route_id', chunk);
-      out.addAll(rows.map((r) => Map<String, dynamic>.from(r)));
-    }
-    return out;
+      return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+    });
   }
 
   static int _asInt(dynamic value) {
@@ -1876,8 +1911,7 @@ class SupabaseRouteService {
   }) {
     final communityKey = communityRoutes
         .map(
-          (r) =>
-              '${r.id}:${r.steps.fold<int>(0, (n, s) => n + s.path.length)}',
+          (r) => '${r.id}:${r.steps.fold<int>(0, (n, s) => n + s.path.length)}',
         )
         .join(',');
     final originKey =
@@ -1981,7 +2015,10 @@ class SupabaseRouteService {
     for (final row in rows) {
       final name = row['stop_name']?.toString().trim() ?? '';
       if (name.isEmpty) continue;
-      final point = LatLng(_asDouble(row['stop_lat']), _asDouble(row['stop_lon']));
+      final point = LatLng(
+        _asDouble(row['stop_lat']),
+        _asDouble(row['stop_lon']),
+      );
       final match = line.nearestInRange(point, 0, line.totalMeters);
       if (match == null || match.distance > maxMeters) continue;
       final duplicate = found.any(
@@ -2001,6 +2038,23 @@ class SupabaseRouteService {
     LatLng point, {
     double radiusKm = 0.5,
     int limit = 4,
+  }) async {
+    // Parallel searches for the same trip ask for the same stops; share the
+    // one query and hand each caller its own copies of the rows.
+    final key = '${point.latitude},${point.longitude}|$radiusKm|$limit';
+    final rows =
+        await (_nearestStopsInFlight[key] ??= _queryNearestStops(
+          point,
+          radiusKm: radiusKm,
+          limit: limit,
+        ).whenComplete(() => _nearestStopsInFlight.remove(key)));
+    return [for (final row in rows) Map<String, dynamic>.of(row)];
+  }
+
+  static Future<List<Map<String, dynamic>>> _queryNearestStops(
+    LatLng point, {
+    required double radiusKm,
+    required int limit,
   }) async {
     final safeLimit = limit.clamp(1, _maxNearestStopsLimit);
     final latDelta = radiusKm / 111.0;

@@ -22,7 +22,8 @@ class RouteCacheRepository {
     return routeId.startsWith(_generatedRoutePrefix);
   }
 
-  static String _currentUid() => FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+  static String _currentUid() =>
+      FirebaseAuth.instance.currentUser?.uid ?? 'guest';
 
   static Future<Database> _database() async {
     if (_db != null) return _db!;
@@ -154,20 +155,16 @@ class RouteCacheRepository {
     try {
       final db = await _database();
       await _ensureSchema(db);
-      await db.insert(
-        _table,
-        {
-          'cache_key': key,
-          'user_id': uid,
-          'origin_name': originName,
-          'destination_name': destinationName,
-          'mode': mode,
-          'profile': profile,
-          'cached_at': DateTime.now().millisecondsSinceEpoch,
-          'route_json': jsonEncode(result.toJson()),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert(_table, {
+        'cache_key': key,
+        'user_id': uid,
+        'origin_name': originName,
+        'destination_name': destinationName,
+        'mode': mode,
+        'profile': profile,
+        'cached_at': DateTime.now().millisecondsSinceEpoch,
+        'route_json': jsonEncode(result.toJson()),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       debugPrint('Route cached: $key');
     } catch (e) {
       debugPrint('Route cache write error: $e');
@@ -318,17 +315,18 @@ class RouteCacheRepository {
     final start = points.isNotEmpty ? points.first : null;
     final end = points.isNotEmpty ? points.last : null;
 
-    final steps = result.steps
-        .map(
-          (s) => route_model.Step(
-            mode: s.suggestedMode,
-            instruction: s.instruction,
-            details: '${(s.distanceMeters / 1000).toStringAsFixed(2)} km',
-            actualFare: s.estimatedFare > 0 ? s.estimatedFare : null,
-            is24_7: true,
-          ),
-        )
-        .toList();
+    final steps =
+        result.steps
+            .map(
+              (s) => route_model.Step(
+                mode: s.suggestedMode,
+                instruction: s.instruction,
+                details: '${(s.distanceMeters / 1000).toStringAsFixed(2)} km',
+                actualFare: s.estimatedFare > 0 ? s.estimatedFare : null,
+                is24_7: true,
+              ),
+            )
+            .toList();
 
     final totalFare = result.steps.fold<double>(
       0,
