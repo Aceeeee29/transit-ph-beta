@@ -65,7 +65,10 @@ void main() async {
   ModerationService.init();
 
   // Prime user preference cache so distance displays use the last selected unit.
-  await SettingsService.loadPreferences();
+  // Only the copy on the phone is awaited: waiting on Firestore here kept the
+  // screen blank for ~10 s on networks it can't reach quickly.
+  await SettingsService.loadCachedPreferences();
+  unawaited(SettingsService.loadPreferences());
 
   // Map look (classic or clean) and night mode, kept on the device.
   await MapStyleService.instance.load();

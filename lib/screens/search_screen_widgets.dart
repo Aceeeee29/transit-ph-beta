@@ -25,6 +25,8 @@ extension _SearchScreenSections on _SearchScreenState {
               const SizedBox(width: 48),
             ],
           ),
+          if (_originSuggestions.isNotEmpty)
+            _buildSuggestionList(_originSuggestions, _onOriginSuggestionTap),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -120,6 +122,7 @@ extension _SearchScreenSections on _SearchScreenState {
         final isCustom = value.text.isNotEmpty;
         return TextField(
           controller: _originController,
+          focusNode: _originFocusNode,
           textInputAction: TextInputAction.next,
           style: const TextStyle(color: _textPrimary, fontSize: 16),
           decoration: InputDecoration(
@@ -148,6 +151,7 @@ extension _SearchScreenSections on _SearchScreenState {
                       tooltip: 'Start from your location',
                       onPressed: () {
                         _originController.clear();
+                        _onOriginTyped('');
                         _onOriginChanged();
                       },
                       icon: const Icon(
@@ -158,20 +162,31 @@ extension _SearchScreenSections on _SearchScreenState {
                     )
                     : null,
           ),
-          onSubmitted: (_) => _onOriginChanged(),
+          onChanged: _onOriginTyped,
+          onSubmitted: (_) {
+            _onOriginTyped('');
+            _onOriginChanged();
+          },
         );
       },
     );
   }
 
-  Widget _buildOmniboxSection() {
+  Widget _buildOmniboxSection() =>
+      _buildSuggestionList(_suggestions, _onSuggestionTap);
+
+  /// Place suggestions under a field (start or "Where to?").
+  Widget _buildSuggestionList(
+    List<String> suggestions,
+    void Function(String) onTap,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Column(
         children: [
-          for (final suggestion in _suggestions)
+          for (final suggestion in suggestions)
             InkWell(
-              onTap: () => _onSuggestionTap(suggestion),
+              onTap: () => onTap(suggestion),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 11),
                 child: Row(

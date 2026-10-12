@@ -122,7 +122,9 @@ class WeatherChip extends StatefulWidget {
     WeatherData? weather;
     try {
       weather = await WeatherService.getCurrentWeatherAndLocation();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Weather] Load failed: $e');
+    }
     if (weather == null) {
       _pending = null;
       _fetchedAt = null;
@@ -159,7 +161,7 @@ class _WeatherChipState extends State<WeatherChip> {
     if (condition.contains('rain') ||
         condition.contains('shower') ||
         condition.contains('drizzle')) {
-      return Icons.grain_rounded;
+      return Icons.water_drop_rounded;
     }
     if (condition.contains('fog')) return Icons.foggy;
     if (condition.contains('clear')) {
@@ -187,7 +189,7 @@ class _WeatherChipState extends State<WeatherChip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_iconFor(weather), size: 20, color: const Color(0xFF5B6F8E)),
+            Icon(_iconFor(weather), size: 22, color: const Color(0xFF5B6F8E)),
             const SizedBox(width: 6),
             Text(
               degrees != null ? '${degrees.round()}°' : weather.temp,

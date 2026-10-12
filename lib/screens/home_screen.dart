@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/route.dart' as route_model;
 import 'downloaded_routes_screen.dart';
 import '../services/map_tab_controller.dart';
@@ -87,13 +88,33 @@ class _HomeScreenState extends State<HomeScreen> {
     if (weather != null && mounted) setState(() => _weatherData = weather);
   }
 
+  static const _totalUsersKey = 'home_total_users';
+
+  /// Counts only come from the server (the offline cache can't answer them),
+  /// so the last count is kept on the phone and shown right away, and a
+  /// failed count is tried again a few times (slow networks, offline start).
   Future<void> _loadTotalUsers() async {
     try {
-      final snap =
-          await FirebaseFirestore.instance.collection('users').count().get();
-      if (mounted) setState(() => _totalUsers = snap.count);
-    } catch (_) {
-      // The line just stays hidden.
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getInt(_totalUsersKey);
+      if (cached != null && mounted) setState(() => _totalUsers = cached);
+    } catch (_) {}
+
+    for (var attempt = 0; attempt < 3 && mounted; attempt++) {
+      if (attempt > 0) await Future.delayed(const Duration(seconds: 20));
+      if (!mounted) return;
+      try {
+        final snap =
+            await FirebaseFirestore.instance.collection('users').count().get();
+        final count = snap.count;
+        if (count == null) return;
+        if (mounted) setState(() => _totalUsers = count);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(_totalUsersKey, count);
+        return;
+      } catch (_) {
+        // Try again shortly; the line keeps the last known count meanwhile.
+      }
     }
   }
 

@@ -29,7 +29,7 @@ class MapStyleService {
   static const _lookKey = 'map_look';
   static const _nightKey = 'map_night';
 
-  final look = ValueNotifier<MapLook>(MapLook.classic);
+  final look = ValueNotifier<MapLook>(MapLook.clean);
   final night = ValueNotifier<NightMap>(NightMap.off);
 
   /// Whether the map is dark right now ([night], with "auto" resolved).
@@ -44,14 +44,14 @@ class MapStyleService {
       final prefs = await SharedPreferences.getInstance();
       look.value = MapLook.values.firstWhere(
         (l) => l.name == prefs.getString(_lookKey),
-        orElse: () => MapLook.classic,
+        orElse: () => MapLook.clean,
       );
       night.value = NightMap.values.firstWhere(
         (n) => n.name == prefs.getString(_nightKey),
         orElse: () => NightMap.off,
       );
     } catch (_) {
-      // Defaults: classic, day.
+      // Defaults: clean, day.
     }
     _resolveNight();
     // "Auto" follows the clock.

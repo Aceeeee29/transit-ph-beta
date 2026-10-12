@@ -45,10 +45,17 @@ class WeatherService {
         throw Exception('Location permission denied forever');
       }
 
-      // Get current position
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      // Weather only needs the rough area: use the phone's last known spot
+      // when it has one, and otherwise don't wait forever for a fix (a
+      // high-accuracy GPS fix indoors can take minutes or never come).
+      final position =
+          await Geolocator.getLastKnownPosition() ??
+          await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 15),
+            ),
+          );
 
       final lat = position.latitude;
       final lng = position.longitude;
@@ -56,7 +63,10 @@ class WeatherService {
       // Get address from coordinates
       String address = '';
       try {
-        List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          lat,
+          lng,
+        ).timeout(const Duration(seconds: 8));
         if (placemarks.isNotEmpty) {
           Placemark place = placemarks[0];
           // Prioritize full name if available
@@ -91,7 +101,7 @@ class WeatherService {
         'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lng&current_weather=true&hourly=precipitation,relative_humidity_2m&timezone=Asia/Manila',
       );
 
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

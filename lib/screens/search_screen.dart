@@ -53,6 +53,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Where routes start; empty means "Your location".
   final TextEditingController _originController = TextEditingController();
+  final FocusNode _originFocusNode = FocusNode();
+  List<String> _originSuggestions = [];
 
   List<String> _recentSearches = [];
   List<route_model.Route> _routes = [];
@@ -102,6 +104,12 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _routes = List<route_model.Route>.from(widget.routes);
+    // Moving on to "Where to?" closes the start field's suggestions.
+    _searchFocusNode.addListener(() {
+      if (_searchFocusNode.hasFocus && _originSuggestions.isNotEmpty) {
+        setState(() => _originSuggestions = []);
+      }
+    });
     _loadRecentSearches();
     _refreshRoutes();
     final destination = widget.initialDestination?.trim() ?? '';
@@ -133,6 +141,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _originController.dispose();
+    _originFocusNode.dispose();
     super.dispose();
   }
 
@@ -237,23 +246,8 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final searchTerm = query.trim().toLowerCase();
-    final newSuggestions = <String>[];
+    final newSuggestions = _placeSuggestions(searchTerm);
 
-    for (final s in _recentSearches) {
-      if (s.toLowerCase().contains(searchTerm) && !newSuggestions.contains(s)) {
-        newSuggestions.add(s);
-      }
-    }
-    for (final route in _routes) {
-      if (route.endLocation.toLowerCase().contains(searchTerm) &&
-          !newSuggestions.contains(route.endLocation)) {
-        newSuggestions.add(route.endLocation);
-      }
-      if (route.startLocation.toLowerCase().contains(searchTerm) &&
-          !newSuggestions.contains(route.startLocation)) {
-        newSuggestions.add(route.startLocation);
-      }
-    }
     for (final route in _routes) {
       if (route.shortDescription.toLowerCase().contains(searchTerm)) {
         final suggestion = '${route.startLocation} to ${route.endLocation}';
@@ -310,6 +304,47 @@ class _SearchScreenState extends State<SearchScreen> {
         _lastDestinationForAlternatives = null;
       }
     });
+  }
+
+  /// Recent searches and route ends that contain [searchTerm] (lowercase).
+  List<String> _placeSuggestions(String searchTerm) {
+    final places = <String>[];
+    for (final s in _recentSearches) {
+      if (s.toLowerCase().contains(searchTerm) && !places.contains(s)) {
+        places.add(s);
+      }
+    }
+    for (final route in _routes) {
+      if (route.endLocation.toLowerCase().contains(searchTerm) &&
+          !places.contains(route.endLocation)) {
+        places.add(route.endLocation);
+      }
+      if (route.startLocation.toLowerCase().contains(searchTerm) &&
+          !places.contains(route.startLocation)) {
+        places.add(route.startLocation);
+      }
+    }
+    return places;
+  }
+
+  /// Typing in the start field suggests places, like "Where to?" does.
+  void _onOriginTyped(String query) {
+    final searchTerm = query.trim().toLowerCase();
+    setState(() {
+      _originSuggestions =
+          searchTerm.isEmpty
+              ? []
+              : (_placeSuggestions(searchTerm)..sort(
+                (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+              )).take(5).toList();
+      if (_originSuggestions.isNotEmpty) _showOmnibox = false;
+    });
+  }
+
+  void _onOriginSuggestionTap(String suggestion) {
+    _originController.text = suggestion;
+    setState(() => _originSuggestions = []);
+    _onOriginChanged();
   }
 
   void _onSuggestionTap(String suggestion) {

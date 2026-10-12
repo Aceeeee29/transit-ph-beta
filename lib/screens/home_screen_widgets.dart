@@ -148,7 +148,7 @@ extension _HomeScreenSections on _HomeScreenState {
     );
   }
 
-  /// "1,234 commuters on TransitPH · Live".
+  /// "1,234 commuters on TransitPH".
   Widget _activeUsersLine(int count) {
     final digits = count.toString();
     final grouped = digits.replaceAllMapped(
@@ -168,20 +168,6 @@ extension _HomeScreenSections on _HomeScreenState {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12, color: _textSecondary),
             ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3EC97A),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          const TranslatedText(
-            'Live',
-            style: TextStyle(fontSize: 12, color: Color(0xFF2D9F63)),
           ),
         ],
       ),
