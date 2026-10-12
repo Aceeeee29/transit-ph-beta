@@ -72,6 +72,8 @@ dependencies:
   cached_network_image: ^3.3.1
   supabase_flutter: ^2.12.0
   google_mlkit_translation: ^0.13.1
+  vector_map_tiles: 9.0.0-beta.9
+  vector_tile_renderer: 6.1.0
 
 dev_dependencies:
   flutter_test:

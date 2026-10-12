@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -7,8 +8,10 @@ import '../screens/legal_documents_screen.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/media_service.dart';
 import '../services/moderation_service.dart';
+import '../services/map_style_service.dart';
 import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
+import '../widgets/translate_chathead.dart';
 import '../widgets/translated_text.dart';
 part 'settings_screen_dialogs.dart';
 
@@ -179,8 +182,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -226,7 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title,
                   style: const TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: _textPrimary,
                     letterSpacing: -0.2,
                   ),
@@ -263,7 +266,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: _textPrimary,
                       ),
                     ),
@@ -297,6 +300,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  static const _mapLookLabels = {
+    MapLook.classic: 'Classic',
+    MapLook.clean: 'Clean',
+  };
+  static const _nightMapLabels = {
+    NightMap.off: 'Off',
+    NightMap.on: 'On',
+    NightMap.auto: 'Auto',
+  };
+
   // ─── Dropdown row
   Widget _dropdownRow<T>({
     required String title,
@@ -320,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: _textPrimary,
                       ),
                     ),
@@ -358,7 +371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: const TextStyle(
                       color: _textPrimary,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                     dropdownColor: _surface,
                     borderRadius: BorderRadius.circular(12),
@@ -417,7 +430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: _textPrimary,
                   ),
                 ),
@@ -463,7 +476,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       color: c,
                     ),
                     maxLines: 1,
@@ -502,7 +515,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               color: _textPrimary,
               fontSize: 17,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               letterSpacing: -0.3,
             ),
           ),
@@ -557,7 +570,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(
                 color: _textPrimary,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 letterSpacing: -0.3,
               ),
             ),
@@ -604,8 +617,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   colors: [
-                                    Color(0xFF4A7CE0),
-                                    Color(0xFF6A9EFF),
+                                    Color(0xFF0B8FD6),
+                                    Color(0xFF2BB5F0),
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
@@ -642,7 +655,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 20,
-                                                  fontWeight: FontWeight.w800,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
                                               ),
                                             ),
@@ -655,7 +668,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 20,
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ),
@@ -690,7 +703,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _displayName,
                               style: const TextStyle(
                                 fontSize: 15,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w500,
                                 color: _textPrimary,
                               ),
                             ),
@@ -726,7 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: TextStyle(
                               color: _accent,
                               fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -802,7 +815,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (val) {
                     if (val != null) _updateDistanceUnit(val);
                   },
-                  isLast: true,
+                ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: TranslateChatHead.enabled,
+                  builder:
+                      (context, enabled, _) => _toggleRow(
+                        title: 'Translate Bubble',
+                        subtitle:
+                            'Show the floating button for quick translations',
+                        value: enabled,
+                        onChanged: TranslateChatHead.setEnabled,
+                      ),
+                ),
+                ListenableBuilder(
+                  listenable: Listenable.merge([
+                    MapStyleService.instance.look,
+                    MapStyleService.instance.night,
+                  ]),
+                  builder: (context, _) {
+                    final styles = MapStyleService.instance;
+                    return Column(
+                      children: [
+                        _dropdownRow<String>(
+                          title: 'Map Style',
+                          subtitle: 'Clean is a calmer, minimal map (beta)',
+                          value: _mapLookLabels[styles.look.value]!,
+                          items: _mapLookLabels.values.toList(),
+                          onChanged: (label) {
+                            final look =
+                                _mapLookLabels.entries
+                                    .where((e) => e.value == label)
+                                    .firstOrNull
+                                    ?.key;
+                            if (look != null) styles.setLook(look);
+                          },
+                        ),
+                        _dropdownRow<String>(
+                          title: 'Night Map',
+                          subtitle: 'Auto is dark from 6 PM to 6 AM',
+                          value: _nightMapLabels[styles.night.value]!,
+                          items: _nightMapLabels.values.toList(),
+                          onChanged: (label) {
+                            final night =
+                                _nightMapLabels.entries
+                                    .where((e) => e.value == label)
+                                    .firstOrNull
+                                    ?.key;
+                            if (night != null) styles.setNight(night);
+                          },
+                          isLast: true,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -864,8 +929,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'About',
               icon: Icons.info_outline_rounded,
               children: [
-                _infoRow(label: 'Version', value: '0.1.23'),
-                _infoRow(label: 'Last Updated', value: 'April 2026'),
+                // From the installed app, so it can't go stale.
+                FutureBuilder<PackageInfo>(
+                  future: PackageInfo.fromPlatform(),
+                  builder:
+                      (context, snapshot) => _infoRow(
+                        label: 'Version',
+                        value: snapshot.data?.version ?? '…',
+                      ),
+                ),
+                _infoRow(label: 'Last Updated', value: 'October 2026'),
                 Divider(color: _border, height: 1),
                 _actionRow(
                   label: 'Privacy Policy',
@@ -949,7 +1022,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _isLoggingOut ? 'Logging out...' : 'Log Out',
               style: const TextStyle(
                 color: danger,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 fontSize: 14,
               ),
             ),
@@ -1014,7 +1087,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: TextStyle(
                             color: _textPrimary,
                             fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             letterSpacing: -0.2,
                           ),
                         ),
@@ -1067,7 +1140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'Cancel',
                                 style: TextStyle(
                                   color: _textSecondary,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   fontSize: 14,
                                 ),
                               ),
@@ -1115,8 +1188,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   colors: [
-                                    Color(0xFF4A7CE0),
-                                    Color(0xFF6A9EFF),
+                                    Color(0xFF0B8FD6),
+                                    Color(0xFF2BB5F0),
                                   ],
                                   begin: Alignment.centerLeft,
                                   end: Alignment.centerRight,
@@ -1135,7 +1208,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'Submit Feedback',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w600,
                                   fontSize: 14,
                                 ),
                               ),

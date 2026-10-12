@@ -10,14 +10,16 @@ import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/location_service.dart';
 import 'services/moderation_service.dart';
+import 'services/map_style_service.dart';
 import 'services/settings_service.dart';
 import 'widgets/update_dialog.dart';
 import 'config.dart';
+import 'theme/app_colors.dart';
 
 /// app's theme.
 ThemeData buildTheme() {
   return ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue.shade700),
+    colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
     useMaterial3: true,
     scaffoldBackgroundColor: Colors.grey.shade100,
     inputDecorationTheme: InputDecorationTheme(
@@ -30,13 +32,13 @@ ThemeData buildTheme() {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
+        borderSide: const BorderSide(color: AppColors.accent, width: 2),
       ),
       prefixIconColor: Colors.grey.shade600,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: AppColors.accent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(vertical: 16),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -58,12 +60,15 @@ void main() async {
     url: Config.supabaseUrl,
     anonKey: Config.supabaseAnonKey,
   );
-                                                                                                                                   
+
   // Initialize moderation service listeners
   ModerationService.init();
 
   // Prime user preference cache so distance displays use the last selected unit.
   await SettingsService.loadPreferences();
+
+  // Map look (classic or clean) and night mode, kept on the device.
+  await MapStyleService.instance.load();
 
   runApp(const TransitPHApp());
 }
@@ -189,10 +194,11 @@ class _TransitPHAppState extends State<TransitPHApp> {
           }
 
           return MaterialPageRoute(
-            builder: (_) => MainScreen(
-              isAdmin: isAdmin,
-              quickRouteToken: quickRouteToken,
-            ),
+            builder:
+                (_) => MainScreen(
+                  isAdmin: isAdmin,
+                  quickRouteToken: quickRouteToken,
+                ),
           );
         }
 

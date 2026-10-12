@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'map/app_base_map.dart';
 import '../models/route.dart' as route_model;
 import '../services/route_metrics_service.dart';
 
@@ -17,16 +18,16 @@ class RoutePreview extends StatelessWidget {
     this.onSubmit,
     this.readOnly = false,
   }) : assert(
-          readOnly || (onEdit != null && onSubmit != null),
-          'onEdit and onSubmit are required when readOnly is false',
-        );
+         readOnly || (onEdit != null && onSubmit != null),
+         'onEdit and onSubmit are required when readOnly is false',
+       );
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFFF4F8FF);
   static const _surface = Color(0xFFFFFFFF);
   static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _accent = Color(0xFF2E7CF6);
-  static const _accentSoft = Color(0x1A2E7CF6);
+  static const _accent = Color(0xFF0B8FD6);
+  static const _accentSoft = Color(0x1A0B8FD6);
   static const _textPrimary = Color(0xFF0F1D35);
   static const _textSecondary = Color(0xFF7A92B2);
   static const _border = Color(0xFFD4E4F7);
@@ -51,21 +52,25 @@ class RoutePreview extends StatelessWidget {
     }();
 
     // Prefer ORS-derived ETA/fare stored on the route over recalculating
-    final formattedEta = route.eta != null && route.eta!.isNotEmpty
-      ? RouteMetricsService.formatEtaLabel(route.eta)
-        : RouteMetricsService.formatEta(RouteMetricsService.calculateEta(
-            route.pathPoints,
-            route.steps.map((s) => s.mode).toList(),
-            route.stepBoundaries,
-          ));
+    final formattedEta =
+        route.eta != null && route.eta!.isNotEmpty
+            ? RouteMetricsService.formatEtaLabel(route.eta)
+            : RouteMetricsService.formatEta(
+              RouteMetricsService.calculateEta(
+                route.pathPoints,
+                route.steps.map((s) => s.mode).toList(),
+                route.stepBoundaries,
+              ),
+            );
 
-    final fare = (route.price != null && route.price!.isNotEmpty)
-        ? route.price!
-        : RouteMetricsService.calculateFareEstimate(
-            route.pathPoints,
-            route.steps.map((s) => s.mode).toList(),
-            route.stepBoundaries,
-          );
+    final fare =
+        (route.price != null && route.price!.isNotEmpty)
+            ? route.price!
+            : RouteMetricsService.calculateFareEstimate(
+              route.pathPoints,
+              route.steps.map((s) => s.mode).toList(),
+              route.stepBoundaries,
+            );
 
     return Scaffold(
       backgroundColor: _bg,
@@ -128,7 +133,10 @@ class RoutePreview extends StatelessWidget {
               onTap: onEdit,
               child: Container(
                 margin: const EdgeInsets.only(right: 16),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: _surfaceAlt,
                   borderRadius: BorderRadius.circular(9),
@@ -167,10 +175,7 @@ class RoutePreview extends StatelessWidget {
                 initialZoom: _calculateZoomLevel(),
               ),
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.app.transitph_beta',
-                ),
+                const AppBaseMap(),
                 PolylineLayer(polylines: _buildPolylines()),
                 MarkerLayer(markers: _buildMarkers()),
               ],
@@ -422,199 +427,210 @@ class RoutePreview extends StatelessWidget {
                     // ── Submit button ────────────────────────────────────────
                     GestureDetector(
                       onTap: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder:
-                            (context) => Dialog(
-                              backgroundColor: Colors.transparent,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: _bg,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: _border),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.08),
-                                      blurRadius: 32,
-                                      offset: const Offset(0, 12),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Dialog header
-                                    Container(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        20,
-                                        18,
-                                        16,
-                                        16,
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder:
+                              (context) => Dialog(
+                                backgroundColor: Colors.transparent,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: _bg,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: _border),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _accent.withOpacity(0.08),
+                                        blurRadius: 32,
+                                        offset: const Offset(0, 12),
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: _surface,
-                                        borderRadius:
-                                            const BorderRadius.vertical(
-                                              top: Radius.circular(20),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Dialog header
+                                      Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          20,
+                                          18,
+                                          16,
+                                          16,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _surface,
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                top: Radius.circular(20),
+                                              ),
+                                          border: Border(
+                                            bottom: BorderSide(color: _border),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: BoxDecoration(
+                                                color: _green.withOpacity(0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(9),
+                                              ),
+                                              child: Icon(
+                                                Icons.send_rounded,
+                                                color: _green,
+                                                size: 16,
+                                              ),
                                             ),
-                                        border: Border(
-                                          bottom: BorderSide(color: _border),
+                                            const SizedBox(width: 10),
+                                            const Text(
+                                              'Confirm Submission',
+                                              style: TextStyle(
+                                                color: _textPrimary,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: -0.2,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            width: 32,
-                                            height: 32,
-                                            decoration: BoxDecoration(
-                                              color: _green.withOpacity(0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(9),
+                                      Padding(
+                                        padding: const EdgeInsets.all(18),
+                                        child: Column(
+                                          children: [
+                                            const Text(
+                                              'Are you sure you want to submit this route for review?',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: _textSecondary,
+                                                height: 1.5,
+                                              ),
+                                              textAlign: TextAlign.center,
                                             ),
-                                            child: Icon(
-                                              Icons.send_rounded,
-                                              color: _green,
-                                              size: 16,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          const Text(
-                                            'Confirm Submission',
-                                            style: TextStyle(
-                                              color: _textPrimary,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                              letterSpacing: -0.2,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(18),
-                                      child: Column(
-                                        children: [
-                                          const Text(
-                                            'Are you sure you want to submit this route for review?',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: _textSecondary,
-                                              height: 1.5,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                          const SizedBox(height: 18),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: GestureDetector(
-                                                  onTap:
-                                                      () => Navigator.pop(
-                                                        context,
-                                                        false,
+                                            const SizedBox(height: 18),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: GestureDetector(
+                                                    onTap:
+                                                        () => Navigator.pop(
+                                                          context,
+                                                          false,
+                                                        ),
+                                                    child: Container(
+                                                      height: 44,
+                                                      decoration: BoxDecoration(
+                                                        color: _surface,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              11,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: _border,
+                                                        ),
                                                       ),
-                                                  child: Container(
-                                                    height: 44,
-                                                    decoration: BoxDecoration(
-                                                      color: _surface,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            11,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: _border,
-                                                      ),
-                                                    ),
-                                                    alignment: Alignment.center,
-                                                    child: const Text(
-                                                      'Cancel',
-                                                      style: TextStyle(
-                                                        color: _textSecondary,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        fontSize: 14,
+                                                      alignment:
+                                                          Alignment.center,
+                                                      child: const Text(
+                                                        'Cancel',
+                                                        style: TextStyle(
+                                                          color: _textSecondary,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontSize: 14,
+                                                        ),
                                                       ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                flex: 2,
-                                                child: GestureDetector(
-                                                  onTap:
-                                                      () => Navigator.pop(
-                                                        context,
-                                                        true,
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  flex: 2,
+                                                  child: GestureDetector(
+                                                    onTap:
+                                                        () => Navigator.pop(
+                                                          context,
+                                                          true,
+                                                        ),
+                                                    child: Container(
+                                                      height: 44,
+                                                      decoration: BoxDecoration(
+                                                        gradient:
+                                                            const LinearGradient(
+                                                              colors: [
+                                                                Color(
+                                                                  0xFF3EC97A,
+                                                                ),
+                                                                Color(
+                                                                  0xFF6DDDA0,
+                                                                ),
+                                                              ],
+                                                              begin:
+                                                                  Alignment
+                                                                      .centerLeft,
+                                                              end:
+                                                                  Alignment
+                                                                      .centerRight,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              11,
+                                                            ),
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                            color: _green
+                                                                .withOpacity(
+                                                                  0.3,
+                                                                ),
+                                                            blurRadius: 10,
+                                                            offset:
+                                                                const Offset(
+                                                                  0,
+                                                                  3,
+                                                                ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                  child: Container(
-                                                    height: 44,
-                                                    decoration: BoxDecoration(
-                                                      gradient:
-                                                          const LinearGradient(
-                                                            colors: [
-                                                              Color(0xFF3EC97A),
-                                                              Color(0xFF6DDDA0),
-                                                            ],
-                                                            begin:
-                                                                Alignment
-                                                                    .centerLeft,
-                                                            end:
-                                                                Alignment
-                                                                    .centerRight,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            11,
-                                                          ),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: _green
-                                                              .withOpacity(0.3),
-                                                          blurRadius: 10,
-                                                          offset: const Offset(
-                                                            0,
-                                                            3,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    alignment: Alignment.center,
-                                                    child: const Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .center,
-                                                      children: [
-                                                        Icon(
-                                                          Icons.send_rounded,
-                                                          color: Colors.white,
-                                                          size: 15,
-                                                        ),
-                                                        SizedBox(width: 6),
-                                                        Text(
-                                                          'Submit',
-                                                          style: TextStyle(
+                                                      alignment:
+                                                          Alignment.center,
+                                                      child: const Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Icon(
+                                                            Icons.send_rounded,
                                                             color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 14,
+                                                            size: 15,
                                                           ),
-                                                        ),
-                                                      ],
+                                                          SizedBox(width: 6),
+                                                          Text(
+                                                            'Submit',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              fontSize: 14,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                      );
+                        );
                         if (confirm == true) {
                           onSubmit!.call();
                         }
@@ -624,7 +640,7 @@ class RoutePreview extends StatelessWidget {
                         height: 52,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF4A7CE0), Color(0xFF6A9EFF)],
+                            colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
