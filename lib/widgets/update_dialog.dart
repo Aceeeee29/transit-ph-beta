@@ -19,8 +19,13 @@ import '../theme/app_colors.dart';
 class UpdateDialog {
   UpdateDialog._();
 
-  /// Runs an update check and, if an update is available, presents the dialog.
+  static bool _checkedThisRun = false;
+
+  /// Runs an update check and, if an update is available, presents the
+  /// dialog. Once per app run, however often the main screen is rebuilt.
   static Future<void> checkAndShow(BuildContext context) async {
+    if (_checkedThisRun) return;
+    _checkedThisRun = true;
     final info = await UpdateChecker.checkForUpdate();
     if (!info.updateAvailable) return;
     if (!context.mounted) return;
@@ -201,22 +206,59 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     return PopScope(
       // Block the Back button while force-updating or actively downloading.
       canPop: !widget.info.forceUpdate && _state != _DownloadState.downloading,
-      child: AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.system_update_rounded, color: Colors.blue.shade700),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'TransitPH Update Available',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: Dialog(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.accentSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.system_update_rounded,
+                      color: AppColors.accent,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Update available',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              // Long release notes scroll instead of pushing the buttons
+              // off the screen.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                ),
+                child: SingleChildScrollView(child: _buildContent()),
+              ),
+              const SizedBox(height: 20),
+              _buildActions(),
+            ],
+          ),
         ),
-        content: _buildContent(),
-        actions: _buildActions(),
       ),
     );
   }
@@ -231,7 +273,11 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
               ? widget.info.updateMessage
               : 'A new version of TransitPH is available. Update now to enjoy '
                   'the latest features and improvements.',
-          style: const TextStyle(fontSize: 14, height: 1.5),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            height: 1.5,
+          ),
         );
 
       case _DownloadState.downloading:
@@ -239,14 +285,17 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Downloading update…', style: TextStyle(fontSize: 14)),
+            Text(
+              'Downloading update…',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            ),
             const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: _progress,
                 backgroundColor: AppColors.surfaceAlt,
-                color: Colors.blue.shade700,
+                color: AppColors.accent,
                 minHeight: 8,
               ),
             ),
@@ -274,7 +323,11 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
             const SizedBox(height: 12),
             Text(
               _errorMessage ?? 'An unexpected error occurred.',
-              style: const TextStyle(fontSize: 13, height: 1.45),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                height: 1.45,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -284,54 +337,88 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
 
   // ── Actions per state ─────────────────────────────────────────────────────
 
-  List<Widget> _buildActions() {
-    switch (_state) {
-      case _DownloadState.idle:
-        return [
-          if (!widget.info.forceUpdate)
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Later'),
-            ),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.download_rounded, size: 18),
-            label: const Text('Update'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade700,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: _startDownload,
-          ),
-        ];
+  /// Side by side, equal widths, so neither can run off the dialog.
+  Widget _buildActions() {
+    final (secondary, primary) = switch (_state) {
+      _DownloadState.idle => (
+        widget.info.forceUpdate
+            ? null
+            : _secondaryButton('Later', () => Navigator.of(context).pop()),
+        _primaryButton('Update', Icons.download_rounded, _startDownload),
+      ),
+      _DownloadState.downloading => (
+        _secondaryButton('Cancel', _cancelDownload),
+        null,
+      ),
+      _DownloadState.error => (
+        widget.info.forceUpdate
+            ? null
+            : _secondaryButton('Cancel', () => Navigator.of(context).pop()),
+        _primaryButton('Retry', Icons.refresh_rounded, _startDownload),
+      ),
+    };
+    return Row(
+      children: [
+        if (secondary != null) Expanded(child: secondary),
+        if (secondary != null && primary != null) const SizedBox(width: 12),
+        if (primary != null) Expanded(child: primary),
+      ],
+    );
+  }
 
-      case _DownloadState.downloading:
-        return [
-          TextButton(onPressed: _cancelDownload, child: const Text('Cancel')),
-        ];
-
-      case _DownloadState.error:
-        return [
-          if (!widget.info.forceUpdate)
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: const Text('Retry'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade700,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: _startDownload,
+  Widget _secondaryButton(String label, VoidCallback onPressed) {
+    return SizedBox(
+      height: 46,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.textSecondary,
+          backgroundColor: AppColors.surfaceAlt,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-        ];
-    }
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+
+  /// The app's gradient button.
+  Widget _primaryButton(String label, IconData icon, VoidCallback onPressed) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: AppColors.buttonGradient),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 46,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: 18),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

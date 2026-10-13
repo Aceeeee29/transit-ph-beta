@@ -12,7 +12,6 @@ import 'services/location_service.dart';
 import 'services/moderation_service.dart';
 import 'services/map_style_service.dart';
 import 'services/settings_service.dart';
-import 'widgets/update_dialog.dart';
 import 'config.dart';
 import 'theme/app_colors.dart';
 
@@ -53,7 +52,9 @@ ThemeData buildTheme({bool dark = false}) {
     dividerColor: dark ? palette.border : null,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? palette.surfaceAlt : Colors.white,
+      // The card color, as white is by day: many fields sit borderless
+      // inside cards, where any other fill shows as a box.
+      fillColor: dark ? palette.surface : Colors.white,
       contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -125,7 +126,6 @@ class _TransitPHAppState extends State<TransitPHApp> {
     super.initState();
     _applyAppearance();
     MapStyleService.instance.isDark.addListener(_onAppearanceChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     WidgetsBinding.instance.addPostFrameCallback((_) => _initDeepLinks());
     // Needs an attached activity, hence after the first frame.
     if (!kIsWeb) {
@@ -214,12 +214,6 @@ class _TransitPHAppState extends State<TransitPHApp> {
         _openQuickRouteToken(token);
       }
     });
-  }
-
-  Future<void> _checkForUpdates() async {
-    final ctx = _navigatorKey.currentContext;
-    if (ctx == null) return;
-    await UpdateDialog.checkAndShow(ctx);
   }
 
   @override

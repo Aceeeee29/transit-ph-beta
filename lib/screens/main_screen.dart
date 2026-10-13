@@ -26,6 +26,7 @@ import '../services/map_tab_controller.dart';
 import '../widgets/announcement_dialog.dart';
 import '../widgets/translate_chathead.dart';
 import '../widgets/translated_text.dart';
+import '../widgets/update_dialog.dart';
 
 class MainScreen extends StatefulWidget {
   final bool isAdmin;
@@ -184,6 +185,8 @@ class _MainScreenState extends State<MainScreen> {
     if (_didCheckAnnouncements || !mounted) return;
     _didCheckAnnouncements = true;
     await AnnouncementDialog.checkAndShow(context);
+    // Offered once signed in (this screen), not over the login screen.
+    if (mounted) await UpdateDialog.checkAndShow(context);
   }
 
   /// Fetches the latest routes and posts from Firestore.

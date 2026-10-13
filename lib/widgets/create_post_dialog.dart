@@ -286,7 +286,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
         color: _surface,
         border: Border(bottom: BorderSide(color: _border, width: 1.5)),
@@ -303,7 +303,9 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             child: const Icon(Icons.edit_outlined, color: _accent, size: 18),
           ),
           const SizedBox(width: 12),
-          Flexible(
+          // Expanded, not Flexible + Spacer: those split the free space,
+          // leaving the title's unused share as a gap after the X.
+          Expanded(
             child: TranslatedText(
               'New Post',
               overflow: TextOverflow.ellipsis,
@@ -316,15 +318,16 @@ class _CreatePostDialogState extends State<CreatePostDialog>
               ),
             ),
           ),
-          const Spacer(),
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
+            // Same size and corners as the pencil badge, so the header
+            // reads as one even row.
             child: Container(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: _surfaceAlt,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(Icons.close, color: _textSecondary, size: 18),
             ),

@@ -585,40 +585,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 // Type label + time row
                                 Row(
                                   children: [
-                                    Flexible(
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: color.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            5,
+                                    // The label takes the free space (its pill
+                                    // stays its own size), so the time sits flush
+                                    // right; Flexible + Spacer left a gap there.
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 2,
                                           ),
-                                        ),
-                                        child: TranslatedText(
-                                          _notifTypeLabel(notification.type),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w500,
-                                            color: color,
+                                          decoration: BoxDecoration(
+                                            color: color.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(
+                                              5,
+                                            ),
+                                          ),
+                                          child: TranslatedText(
+                                            _notifTypeLabel(notification.type),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                              color: color,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                    const Spacer(),
-                                    Flexible(
-                                      child: TranslatedText(
-                                        _formatTime(notification.timestamp),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: _textSecondary,
-                                        ),
+                                    const SizedBox(width: 8),
+                                    TranslatedText(
+                                      _formatTime(notification.timestamp),
+                                      maxLines: 1,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _textSecondary,
                                       ),
                                     ),
                                     if (isUnread) ...[
