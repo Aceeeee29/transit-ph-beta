@@ -39,6 +39,18 @@ class FareRule {
 }
 
 class PhFareCalculator {
+  /// Students pay 20% less.
+  static const studentDiscount = 0.8;
+
+  /// A trip's estimated fare as riders see it, e.g. "₱14–18": a range,
+  /// since the real fare depends on where you board and get off.
+  static String tripEstimateLabel(double baseFare, {bool student = false}) {
+    if (!baseFare.isFinite) return '₱—';
+    if (baseFare <= 0) return 'Free';
+    final fare = student ? baseFare * studentDiscount : baseFare;
+    return '₱${(fare * 0.9).round()}–${(fare * 1.15).round()}';
+  }
+
   static const jeepney = FareRule(
     base: 14.0,
     baseKm: 4,

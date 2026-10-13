@@ -164,7 +164,7 @@ class RoutingService {
       ),
     );
 
-    return _buildResult(
+    final result = await _buildResult(
       origin: origin,
       destination: destination,
       legs: alternative.plan.legs,
@@ -172,6 +172,14 @@ class RoutingService {
       preferredMode: preferredMode,
       selectedOriginStop: alternative.selectedOriginStop,
       selectedDestStop: alternative.selectedDestStop,
+    );
+    // Drawing re-derives time from road distance and average speeds (no
+    // waiting), so it came out shorter than the option picked from the list
+    // (39 vs 54 min). Keep the search's time and fare: the same numbers as
+    // the row that was tapped.
+    return result.copyWith(
+      durationSeconds: alternative.totalCostSeconds,
+      estimatedFarePhp: SupabaseRouteService.estimateFarePhp(alternative),
     );
   }
 

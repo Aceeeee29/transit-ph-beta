@@ -467,9 +467,11 @@ class SupabaseRouteService {
                 destCandidates: destCandidates,
                 allowFerry: allowFerry,
                 communityRoutes: communityRoutes,
-              ).whenComplete(
-                () => _dijkstraContextInFlight.remove(contextKey),
-              ));
+              ).whenComplete(() {
+                // A block: returning the removed future would make this
+                // wait on itself (see findNearestStops).
+                _dijkstraContextInFlight.remove(contextKey);
+              }));
       if (context != null) {
         _cacheDijkstraContext(contextKey, context);
       }
@@ -745,17 +747,27 @@ class SupabaseRouteService {
       case RouteOptimizationMode.fastest:
         return edge.isWalk ? edge.costSeconds * 3.0 : edge.costSeconds * 0.5;
       case RouteOptimizationMode.budget:
-        final inferredMode =
-            edge.isWalk
-                ? 'Walk'
-                : _inferRouteMode(
-                  routeId: edge.routeId,
-                  routeType: edge.routeType,
-                  routeShortName: edge.routeShortName,
-                  routeLongName: edge.routeLongName,
-                );
-        return PhFareCalculator.compute(inferredMode, edge.distanceMeters);
+        // Worked out once per edge: the search weighs each edge thousands
+        // of times over its repeated runs, and inferring the mode (string
+        // building and matching) every time made Budget take ~65 s on a
+        // phone while Balanced and Fastest took under a second.
+        return _budgetEdgeWeights[edge] ??= _budgetEdgeWeight(edge);
     }
+  }
+
+  static final _budgetEdgeWeights = Expando<double>('budgetEdgeWeight');
+
+  static double _budgetEdgeWeight(_GraphEdge edge) {
+    final inferredMode =
+        edge.isWalk
+            ? 'Walk'
+            : _inferRouteMode(
+              routeId: edge.routeId,
+              routeType: edge.routeType,
+              routeShortName: edge.routeShortName,
+              routeLongName: edge.routeLongName,
+            );
+    return PhFareCalculator.compute(inferredMode, edge.distanceMeters);
   }
 
   static Future<_DijkstraGraphContext?> _buildDijkstraGraphContext({
@@ -1467,7 +1479,7 @@ class SupabaseRouteService {
     List<DijkstraTripPlanResult> results,
     RouteOptimizationMode mode,
   ) {
-    final fares = results.map(_estimateFarePhp).toList();
+    final fares = results.map(estimateFarePhp).toList();
     final times = results.map((r) => r.totalCostSeconds / 60.0).toList();
 
     final minFare = fares.reduce(math.min);
@@ -1522,7 +1534,8 @@ class SupabaseRouteService {
   /// Metro Manila; used when a leg has no drawn path to measure.
   static const _roadDetourFactor = 1.3;
 
-  static double _estimateFarePhp(DijkstraTripPlanResult result) {
+  /// The fare (before discounts) an option shows in the list.
+  static double estimateFarePhp(DijkstraTripPlanResult result) {
     var total = 0.0;
     for (final leg in result.plan.legs) {
       if (leg.communityFare != null) {
@@ -1535,18 +1548,35 @@ class SupabaseRouteService {
         routeShortName: leg.routeShortName,
         routeLongName: leg.routeLongName,
       );
-      final path = leg.communityPath;
-      final km =
-          path != null && path.length >= 2
-              ? _polylineKm(path)
-              : _haversineKm(
-                    LatLng(leg.boardLat, leg.boardLon),
-                    LatLng(leg.alightLat, leg.alightLon),
-                  ) *
-                  _roadDetourFactor;
-      total += PhFareCalculator.compute(mode, km * 1000.0);
+      total += PhFareCalculator.compute(mode, _legRideKm(leg) * 1000.0);
     }
     return total;
+  }
+
+  /// How much of an option's riding (by distance, 0–1) is on routes riders
+  /// shared. Riders check those routes, unlike the GTFS feed, so a high share
+  /// means a more trustworthy option.
+  static double riderRouteShare(DijkstraTripPlanResult result) {
+    var all = 0.0;
+    var rider = 0.0;
+    for (final leg in result.plan.legs) {
+      final km = _legRideKm(leg);
+      all += km;
+      if (leg.isCommunity) rider += km;
+    }
+    return all <= 0 ? 0 : rider / all;
+  }
+
+  /// A ride leg's length: along the rider's drawn path when it has one,
+  /// otherwise straight between the stops with a detour allowance.
+  static double _legRideKm(TransitLeg leg) {
+    final path = leg.communityPath;
+    if (path != null && path.length >= 2) return _polylineKm(path);
+    return _haversineKm(
+          LatLng(leg.boardLat, leg.boardLon),
+          LatLng(leg.alightLat, leg.alightLon),
+        ) *
+        _roadDetourFactor;
   }
 
   static double _polylineKm(List<LatLng> path) {
@@ -2047,7 +2077,12 @@ class SupabaseRouteService {
           point,
           radiusKm: radiusKm,
           limit: limit,
-        ).whenComplete(() => _nearestStopsInFlight.remove(key)));
+          // A block, not `=>`: remove() returns this very future, and
+          // whenComplete waits on a returned future, so it waited on itself
+          // and the lookup never finished ("Stop lookup timed out").
+        ).whenComplete(() {
+          _nearestStopsInFlight.remove(key);
+        }));
     return [for (final row in rows) Map<String, dynamic>.of(row)];
   }
 

@@ -18,6 +18,10 @@ class MapTabRoute {
   /// Distinguishes two openings of the same route, so the view restarts.
   final int serial;
 
+  /// Where back goes after the route closes, e.g. the search it was
+  /// picked from; null means the map.
+  final void Function(BuildContext context)? onBack;
+
   const MapTabRoute._({
     this.route,
     this.generated,
@@ -26,6 +30,7 @@ class MapTabRoute {
     required this.enableRouteIntegrity,
     required this.showDownloadButton,
     required this.serial,
+    this.onBack,
   });
 }
 
@@ -60,6 +65,7 @@ class MapTabController extends ChangeNotifier {
     route_model.Route route, {
     bool enableRouteIntegrity = true,
     bool showDownloadButton = true,
+    void Function(BuildContext context)? onBack,
   }) {
     _current = MapTabRoute._(
       route: route,
@@ -68,6 +74,7 @@ class MapTabController extends ChangeNotifier {
       enableRouteIntegrity: enableRouteIntegrity,
       showDownloadButton: showDownloadButton,
       serial: ++_serial,
+      onBack: onBack,
     );
     notifyListeners();
   }
@@ -77,6 +84,7 @@ class MapTabController extends ChangeNotifier {
     required String originName,
     required String destinationName,
     bool showDownloadButton = true,
+    void Function(BuildContext context)? onBack,
   }) {
     _current = MapTabRoute._(
       generated: result,
@@ -85,6 +93,7 @@ class MapTabController extends ChangeNotifier {
       enableRouteIntegrity: false,
       showDownloadButton: showDownloadButton,
       serial: ++_serial,
+      onBack: onBack,
     );
     notifyListeners();
   }
@@ -94,6 +103,14 @@ class MapTabController extends ChangeNotifier {
     if (_current == null) return;
     _current = null;
     notifyListeners();
+  }
+
+  /// The route view's back: closes the route, then returns to where it was
+  /// opened from (e.g. the search options) when that was recorded.
+  void back(BuildContext context) {
+    final onBack = _current?.onBack;
+    close();
+    onBack?.call(context);
   }
 
   /// Closes pages pushed over the Map tab's host, so the route shows.
@@ -109,12 +126,14 @@ class MapTabController extends ChangeNotifier {
     route_model.Route route, {
     bool enableRouteIntegrity = true,
     bool showDownloadButton = true,
+    void Function(BuildContext context)? onBack,
   }) {
     instance._returnToHost(context);
     instance.showRoute(
       route,
       enableRouteIntegrity: enableRouteIntegrity,
       showDownloadButton: showDownloadButton,
+      onBack: onBack,
     );
   }
 
@@ -125,6 +144,7 @@ class MapTabController extends ChangeNotifier {
     required String originName,
     required String destinationName,
     bool showDownloadButton = true,
+    void Function(BuildContext context)? onBack,
   }) {
     instance._returnToHost(context);
     instance.showGenerated(
@@ -132,6 +152,7 @@ class MapTabController extends ChangeNotifier {
       originName: originName,
       destinationName: destinationName,
       showDownloadButton: showDownloadButton,
+      onBack: onBack,
     );
   }
 }

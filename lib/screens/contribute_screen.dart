@@ -181,8 +181,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Zoom slider state ───────────────────────────────────────────────────────
   double _currentZoom = 11.0;
-  bool _zoomControlsVisible = false;
-  Timer? _zoomVisibilityTimer;
 
   // ─── Color tokens
   static const _bg = Color(0xFFF4F8FF);
@@ -197,9 +195,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Map chrome layout ──────────────────────────────────────────────────────
   /// The drawer at rest: its handle plus the area/weather row.
   static const double _drawerPeekHeight = 80.0;
-
-  /// Below the search bar (8 + 54) and the category chips (8 + 38).
-  static const double _overlayTop = 116.0;
 
   /// Keeps bottom overlays clear of the right-side buttons.
   static const double _sideButtonsInset = 12 + MapSideButton.size + 12;
@@ -488,7 +483,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void dispose() {
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
-    _zoomVisibilityTimer?.cancel();
     _drawerController.dispose();
     _startLocationController.dispose();
     _endLocationController.dispose();
@@ -1389,95 +1383,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     this._onPreviewRouteSection();
   }
 
-  void _revealZoomControls() {
-    setState(() => _zoomControlsVisible = true);
-    _zoomVisibilityTimer?.cancel();
-    _zoomVisibilityTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _zoomControlsVisible = false);
-    });
-  }
-
-  // ─── Vertical zoom slider ────────────────────────────────────────────────────
-
-  Widget _buildVerticalZoomSlider() {
-    return Positioned(
-      right: 12,
-      top: _overlayTop + 8,
-      // Above the right-side buttons (hide pins, GPS).
-      bottom: _drawerPeekHeight + 12 + MapSideButtons.heightFor(2) + 16,
-      child: IgnorePointer(
-        ignoring: !_zoomControlsVisible,
-        child: AnimatedOpacity(
-          opacity: _zoomControlsVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: GestureDetector(
-            onTap: _revealZoomControls,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    _revealZoomControls();
-                    final z = (_currentZoom + 1).clamp(9.0, 18.0);
-                    setState(() => _currentZoom = z);
-                    _mapController.move(_mapController.camera.center, z);
-                  },
-                  child: const Icon(Icons.add_circle, size: 22, color: _accent),
-                ),
-                Expanded(
-                  child: RotatedBox(
-                    quarterTurns: 3,
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: _accent,
-                        inactiveTrackColor: _border,
-                        thumbColor: _accent,
-                        overlayColor: _accent.withOpacity(0.15),
-                        trackHeight: 2,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
-                        ),
-                      ),
-                      child: Slider(
-                        min: 9.0,
-                        max: 18.0,
-                        value: _currentZoom.clamp(9.0, 18.0),
-                        onChanged: (value) {
-                          _revealZoomControls();
-                          setState(() {
-                            _currentZoom = value;
-                            selectedRegion = null;
-                          });
-                          _mapController.move(
-                            _mapController.camera.center,
-                            value,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    _revealZoomControls();
-                    final z = (_currentZoom - 1).clamp(9.0, 18.0);
-                    setState(() => _currentZoom = z);
-                    _mapController.move(_mapController.camera.center, z);
-                  },
-                  child: const Icon(
-                    Icons.remove_circle,
-                    size: 22,
-                    color: _accent,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // ─── Build ───────────────────────────────────────────────────────────────────
 
   @override
@@ -1510,7 +1415,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                   else
                     _buildDrawCardSection(),
                   _buildTopBar(),
-                  _buildVerticalZoomSlider(),
                   _buildSideButtons(),
                   _buildDrawer(),
                 ],

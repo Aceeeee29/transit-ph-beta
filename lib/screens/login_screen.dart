@@ -184,9 +184,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: Image.asset(
-                      'assets/transitph_logo.png',
+                      'assets/icon/app_icon.png',
                       height: 72,
                       width: 72,
+                      // The file is 1024 px; decode only what's shown.
+                      cacheWidth: 216,
                       fit: BoxFit.cover,
                     ),
                   ),

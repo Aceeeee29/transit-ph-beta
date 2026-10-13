@@ -11,6 +11,14 @@ class RouteOptionRow extends StatelessWidget {
 
   /// Tints the tag, e.g. for options built from community routes.
   final bool tagHighlighted;
+
+  /// Adds a "Community route" badge after [tag], so an option keeps its label
+  /// (Fastest, Budget, …) when it also uses community routes.
+  final bool community;
+
+  /// The option riding most on rider-shared routes (see the search screen);
+  /// shown in green instead of the [community] badge.
+  final bool verified;
   final VoidCallback? onTap;
   final bool busy;
 
@@ -21,6 +29,8 @@ class RouteOptionRow extends StatelessWidget {
     required this.modes,
     this.tag,
     this.tagHighlighted = false,
+    this.community = false,
+    this.verified = false,
     this.onTap,
     this.busy = false,
   });
@@ -41,9 +51,14 @@ class RouteOptionRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  // Wraps so several tags never overflow a narrow phone.
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Flexible(
+                      Padding(
+                        padding: const EdgeInsets.only(right: 2),
                         child: Text(
                           headline,
                           maxLines: 2,
@@ -55,10 +70,12 @@ class RouteOptionRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (tag != null) ...[
-                        const SizedBox(width: 8),
+                      if (tag != null)
                         _Tag(label: tag!, highlighted: tagHighlighted),
-                      ],
+                      if (verified)
+                        const _VerifiedTag()
+                      else if (community)
+                        const _Tag(label: 'Community route', highlighted: true),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -88,6 +105,38 @@ class RouteOptionRow extends StatelessWidget {
                 ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _VerifiedTag extends StatelessWidget {
+  const _VerifiedTag();
+
+  static const _green = Color(0xFF1E8E4E);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6F5EC),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified_rounded, size: 12, color: _green),
+          SizedBox(width: 4),
+          Text(
+            'Most rider-verified',
+            style: TextStyle(
+              color: _green,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -179,6 +228,9 @@ class ModeSequence extends StatelessWidget {
 /// A titled group of [RouteOptionRow]s on one white surface.
 class RouteOptionSection extends StatelessWidget {
   final String title;
+
+  /// A short grey line under the title saying where the routes come from.
+  final String? subtitle;
   final Widget? trailing;
   final List<Widget> children;
   final String? footnote;
@@ -187,6 +239,7 @@ class RouteOptionSection extends StatelessWidget {
     super.key,
     required this.title,
     required this.children,
+    this.subtitle,
     this.trailing,
     this.footnote,
   });
@@ -201,13 +254,28 @@ class RouteOptionSection extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: RouteOptionRow._textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: RouteOptionRow._textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: RouteOptionRow._textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (trailing != null) trailing!,

@@ -39,7 +39,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Where to?'), 'STI');
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
-    expect(find.text('Suggested routes'), findsOneWidget);
+    expect(find.text('Generated routes'), findsOneWidget);
     expect(find.text('Community routes'), findsOneWidget);
   });
 }

@@ -269,7 +269,6 @@ extension _ContributeScreenSections on _ContributeScreenState {
         onPositionChanged: (position, hasGesture) {
           if (hasGesture) {
             _setUiState(() => _currentZoom = position.zoom);
-            _revealZoomControls();
           }
         },
       ),

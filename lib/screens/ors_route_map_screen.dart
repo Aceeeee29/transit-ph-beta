@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import '../widgets/map/app_base_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -10,6 +8,8 @@ import 'dart:async';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/active_navigation_service.dart';
+import '../services/fare_matrix.dart';
+import '../services/fare_profile_service.dart';
 import '../services/offline_tile_service.dart';
 import '../services/route_guide.dart';
 import '../services/route_follow_engine.dart';
@@ -131,26 +131,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   }
 
   Future<void> _loadFareProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = snapshot.data();
-      if (data == null || !mounted || _hasManualFareDiscountOverride) return;
-
-      final category =
-          (data['userCategory'] as String?)?.toLowerCase().trim() ?? '';
-      if (!_isStudentCategory(category)) return;
-      setState(() => _isDiscountFareEnabled = true);
-    } catch (_) {}
+    final student = await FareProfileService.isStudent();
+    if (!student || !mounted || _hasManualFareDiscountOverride) return;
+    setState(() => _isDiscountFareEnabled = true);
   }
 
-  bool _isStudentCategory(String category) =>
-      category.replaceAll('_', ' ') == 'student';
-
-  double get _fareDiscountMultiplier => _isDiscountFareEnabled ? 0.8 : 1.0;
+  double get _fareDiscountMultiplier =>
+      _isDiscountFareEnabled ? PhFareCalculator.studentDiscount : 1.0;
 
   double _applyFareDiscount(double fare) => fare * _fareDiscountMultiplier;
 
@@ -1085,15 +1072,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   }
 
   String _totalFareLabel() {
-    final baseTotal = widget.result.steps.fold(
-      0.0,
-      (sum, s) => sum + s.estimatedFare,
+    final label = PhFareCalculator.tripEstimateLabel(
+      widget.result.baseFarePhp,
+      student: _isDiscountFareEnabled,
     );
-    if (baseTotal == 0) return 'Free';
-    final total = _applyFareDiscount(baseTotal);
-    final low = (total * 0.9).round();
-    final high = (total * 1.15).round();
-    return '₱$low–$high est.';
+    return label == 'Free' ? label : '$label est.';
   }
 
   bool get _hasFareSteps => widget.result.steps.any(

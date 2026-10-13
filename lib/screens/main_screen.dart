@@ -213,7 +213,7 @@ class _MainScreenState extends State<MainScreen> {
   void _onBack() {
     final mapTab = MapTabController.instance;
     if (_selectedIndex == 2 && mapTab.current != null) {
-      mapTab.close();
+      mapTab.back(context);
     } else if (_selectedIndex == 2 && _mapTabMode == MapTabMode.contribute) {
       setState(() => _mapTabMode = MapTabMode.nearby);
     } else if (_selectedIndex != 0) {
@@ -422,7 +422,7 @@ class _MainScreenState extends State<MainScreen> {
                 route: current.route!,
                 enableRouteIntegrity: current.enableRouteIntegrity,
                 showDownloadButton: current.showDownloadButton,
-                onClose: MapTabController.instance.close,
+                onClose: () => MapTabController.instance.back(context),
               )
             else
               OrsRouteMapScreen(
@@ -431,7 +431,7 @@ class _MainScreenState extends State<MainScreen> {
                 originName: current.originName,
                 destinationName: current.destinationName,
                 showDownloadButton: current.showDownloadButton,
-                onClose: MapTabController.instance.close,
+                onClose: () => MapTabController.instance.back(context),
               ),
           ],
         );

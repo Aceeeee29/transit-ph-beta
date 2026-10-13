@@ -42,7 +42,7 @@ extension _SearchScreenSections on _SearchScreenState {
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
-                  autofocus: true,
+                  autofocus: widget.restore == null,
                   textInputAction: TextInputAction.search,
                   style: const TextStyle(color: _textPrimary, fontSize: 16),
                   decoration: InputDecoration(
@@ -164,7 +164,7 @@ extension _SearchScreenSections on _SearchScreenState {
           ),
           onChanged: _onOriginTyped,
           onSubmitted: (_) {
-            _onOriginTyped('');
+            _closeOriginSuggestions();
             _onOriginChanged();
           },
         );
@@ -234,17 +234,14 @@ extension _SearchScreenSections on _SearchScreenState {
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
       children: [
         RouteOptionSection(
-          title: 'Suggested routes',
-          footnote:
-              _routeAlternatives.isNotEmpty || _orsResult != null
-                  ? 'Built from transit stops and community routes. Times '
-                      'and fares are estimates.'
-                  : null,
+          title: 'Generated routes',
+          subtitle: 'Built by TransitPH from transit data and community routes',
           children: _suggestedRouteRows(),
         ),
         const SizedBox(height: 24),
         RouteOptionSection(
           title: 'Community routes',
+          subtitle: 'Shared by riders',
           trailing: community.length > 1 ? _sortMenu() : null,
           children:
               community.isEmpty
@@ -273,17 +270,19 @@ extension _SearchScreenSections on _SearchScreenState {
           onAction: _fetchOrsRoute,
         ),
     ];
+    if (hasOptions) rows.add(const _GeneratedRouteCaution());
     if (_routeAlternatives.isNotEmpty) {
+      final verified = _mostRiderVerifiedIndex();
       for (var i = 0; i < _routeAlternatives.length; i++) {
-        rows.add(_alternativeRow(i));
+        rows.add(_alternativeRow(i, verified: i == verified));
       }
     } else if (_orsResult != null) {
       rows.add(_generatedResultRow(_orsResult!));
     } else if (!_orsError) {
       rows.add(
         _MessageRow(
-          text: 'Search to see routes from where you are.',
-          actionLabel: 'Find routes',
+          text: 'Let TransitPH build a route for this trip.',
+          actionLabel: 'Generate routes',
           onAction: _fetchOrsRoute,
         ),
       );
@@ -291,16 +290,61 @@ extension _SearchScreenSections on _SearchScreenState {
     return rows;
   }
 
-  Widget _alternativeRow(int index) {
+  /// One tag per option: "Fastest & cheapest" when it is both, otherwise
+  /// its main label. (Not "Best": the estimates can be wrong, and the most
+  /// rider-verified option may be the better pick.) The badge already says
+  /// Community route.
+  static String? _optionTag(String? label) {
+    final names =
+        (label ?? '')
+            .split(' • ')
+            .where((part) => part.isNotEmpty && part != 'Community')
+            .toList();
+    if (names.contains('Fastest') && names.contains('Budget')) {
+      return 'Fastest & cheapest';
+    }
+    for (final preferred in const ['Fastest', 'Budget']) {
+      if (names.contains(preferred)) return preferred;
+    }
+    return names.firstOrNull;
+  }
+
+  /// The option riding most on rider-shared routes, if at least half its
+  /// ride is on them. Ties (often several at 100%) go to the one with the
+  /// fewest transfers, then the quickest.
+  int? _mostRiderVerifiedIndex() {
+    int? best;
+    var bestShare = 0.0;
+    for (var i = 0; i < _routeAlternatives.length; i++) {
+      if (_fallbackAlternativeRoutes[i] != null) continue;
+      final alt = _routeAlternatives[i];
+      final share = SupabaseRouteService.riderRouteShare(alt.result);
+      if (share < 0.5) continue;
+      if (best == null || share > bestShare + 0.001) {
+        best = i;
+        bestShare = share;
+        continue;
+      }
+      if ((share - bestShare).abs() > 0.001) continue;
+      final current = _routeAlternatives[best];
+      final legs = alt.result.plan.legs.length;
+      final currentLegs = current.result.plan.legs.length;
+      if (legs < currentLegs ||
+          (legs == currentLegs &&
+              alt.estimatedTimeMinutes < current.estimatedTimeMinutes)) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  Widget _alternativeRow(int index, {bool verified = false}) {
     final alt = _routeAlternatives[index];
     final fallback = _fallbackAlternativeRoutes[index];
     final legs = alt.result.plan.legs;
     final usesCommunity =
         fallback == null && legs.any((leg) => leg.isCommunity);
-    final fare =
-        fallback == null
-            ? alt.estimatedFarePhp
-            : fallback.steps.fold<double>(0, (sum, s) => sum + s.estimatedFare);
+    final fare = fallback == null ? alt.estimatedFarePhp : fallback.baseFarePhp;
     final minutes =
         fallback == null
             ? alt.estimatedTimeMinutes
@@ -316,7 +360,7 @@ extension _SearchScreenSections on _SearchScreenState {
     return RouteOptionRow(
       headline: _SearchScreenState._minutesLabel(minutes),
       details: [
-        _SearchScreenState._fareLabel(fare),
+        _tripFareLabel(fare),
         if (fallback == null)
           _SearchScreenState._transfersLabel(legs.length)
         else
@@ -325,32 +369,23 @@ extension _SearchScreenSections on _SearchScreenState {
           _SearchScreenState._walkLabel(alt.totalWalkKm),
       ].join(' · '),
       modes: modes,
-      tag:
-          usesCommunity
-              ? 'Community'
-              : (label == null || label.isEmpty
-                  ? null
-                  : label.split(' • ').first),
-      tagHighlighted: usesCommunity,
+      tag: _optionTag(label),
+      community: usesCommunity,
+      verified: verified,
       busy: _pendingAlternativeIndex == index,
       onTap: () => _openAlternative(index),
     );
   }
 
   Widget _generatedResultRow(OrsRouteResult result) {
-    final fare = result.steps.fold<double>(
-      0,
-      (sum, s) => sum + s.estimatedFare,
-    );
     return RouteOptionRow(
       headline: _SearchScreenState._minutesLabel(result.durationSeconds / 60),
       details: [
-        _SearchScreenState._fareLabel(fare),
+        _tripFareLabel(result.baseFarePhp),
         result.distanceLabel,
       ].join(' · '),
       modes: collapseModes(result.steps.map((s) => s.suggestedMode)),
-      tag: result.usesCommunityRoutes ? 'Community' : null,
-      tagHighlighted: result.usesCommunityRoutes,
+      community: result.usesCommunityRoutes,
       onTap: _openResultOnMap,
     );
   }
@@ -399,6 +434,43 @@ extension _SearchScreenSections on _SearchScreenState {
 
 /// A plain line in a results section: loading, empty or an error, with an
 /// optional action on the right.
+/// Shown above generated routes, which can be wrong: the transit data
+/// behind them is limited and can be out of date.
+class _GeneratedRouteCaution extends StatelessWidget {
+  const _GeneratedRouteCaution();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFB7791F)),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Generated automatically, so these may be inaccurate: transit '
+              'data is limited and can be outdated. Jeep, bus, train and '
+              'walking only. Times and fares are estimates.',
+              style: TextStyle(
+                color: Color(0xFF7A5414),
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MessageRow extends StatelessWidget {
   final String text;
   final bool busy;

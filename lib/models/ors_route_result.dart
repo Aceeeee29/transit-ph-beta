@@ -11,13 +11,35 @@ class OrsRouteResult {
 
   final List<double> bbox;
 
+  /// The trip's fare before any discount, when it was worked out with the
+  /// option it was drawn from, so the route shows the same fare as the list.
+  /// Null means the sum of the steps' fares.
+  final double? estimatedFarePhp;
+
   const OrsRouteResult({
     required this.distanceMeters,
     required this.durationSeconds,
     required this.polyline,
     required this.steps,
     required this.bbox,
+    this.estimatedFarePhp,
   });
+
+  /// The fare before any discount: [estimatedFarePhp], or the steps' sum.
+  double get baseFarePhp =>
+      estimatedFarePhp ??
+      steps.fold(0.0, (sum, step) => sum + step.estimatedFare);
+
+  OrsRouteResult copyWith({double? durationSeconds, double? estimatedFarePhp}) {
+    return OrsRouteResult(
+      distanceMeters: distanceMeters,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      polyline: polyline,
+      steps: steps,
+      bbox: bbox,
+      estimatedFarePhp: estimatedFarePhp ?? this.estimatedFarePhp,
+    );
+  }
 
   bool get usesCommunityRoutes => steps.any((s) => s.isCommunity);
 
@@ -46,6 +68,7 @@ class OrsRouteResult {
           polyline.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
       'steps': steps.map((s) => s.toJson()).toList(),
       'bbox': bbox,
+      if (estimatedFarePhp != null) 'estimatedFarePhp': estimatedFarePhp,
     };
   }
 
@@ -67,6 +90,7 @@ class OrsRouteResult {
               .map((s) => OrsStep.fromJson(s as Map<String, dynamic>))
               .toList(),
       bbox: (json['bbox'] as List).map((v) => (v as num).toDouble()).toList(),
+      estimatedFarePhp: (json['estimatedFarePhp'] as num?)?.toDouble(),
     );
   }
 }

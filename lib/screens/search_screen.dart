@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -9,6 +10,8 @@ import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/map_tab_controller.dart';
 import '../services/search_service.dart';
+import '../services/fare_matrix.dart';
+import '../services/fare_profile_service.dart';
 import '../services/gamification_service.dart';
 import '../services/routing_service.dart';
 import '../services/location_service.dart';
@@ -35,16 +38,52 @@ class SearchScreen extends StatefulWidget {
   final String? initialDestination;
   final LatLng? initialDestinationPoint;
 
+  /// Reopens a previous search as it was (back from a route opened here).
+  final SearchSession? restore;
+
   const SearchScreen({
     super.key,
     required this.routes,
     this.onRefresh,
     this.initialDestination,
     this.initialDestinationPoint,
+    this.restore,
   });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
+}
+
+/// What Search showed when a route was opened from it, so back from that
+/// route returns to the same options instead of starting over.
+class SearchSession {
+  final String origin;
+  final String destination;
+  final List<route_model.Route> routes;
+  final List<DijkstraRouteAlternative> alternatives;
+  final Map<int, OrsRouteResult> fallbackRoutes;
+  final Map<int, String> labels;
+  final int selectedIndex;
+  final OrsRouteResult? result;
+  final LatLng? originPoint;
+  final LatLng? destinationPoint;
+  final String? originName;
+  final String? destinationName;
+
+  const SearchSession({
+    required this.origin,
+    required this.destination,
+    required this.routes,
+    required this.alternatives,
+    required this.fallbackRoutes,
+    required this.labels,
+    required this.selectedIndex,
+    required this.result,
+    required this.originPoint,
+    required this.destinationPoint,
+    required this.originName,
+    required this.destinationName,
+  });
 }
 
 class _SearchScreenState extends State<SearchScreen> {
@@ -98,6 +137,43 @@ class _SearchScreenState extends State<SearchScreen> {
 
   int? _pendingAlternativeIndex;
 
+  /// The route list refresh started on open; route generation waits for it
+  /// only when no routes came with the screen (see _fetchOrsRouteSection).
+  Future<void>? _routesRefresh;
+
+  /// The first option being drawn in the background after the list shows.
+  Future<void>? _firstRouteDraw;
+
+  /// Counts route searches: only the latest one may show its result, so
+  /// changing the trip mid-search never shows the old trip's routes.
+  int _routeRequestId = 0;
+
+  /// Student fares (20% off), so generated options show the fare their
+  /// route page will.
+  bool _studentFare = false;
+
+  /// The start field's text when routes were last searched.
+  String _lastOrsOrigin = '';
+
+  bool _isStaleRouteRequest(int id) => !mounted || id != _routeRequestId;
+
+  /// The trip changed: drops the routes shown, and any search still running.
+  /// Call inside setState.
+  void _clearGeneratedRoutes() {
+    _routeRequestId++;
+    _firstRouteDraw = null;
+    _isLoadingOrs = false;
+    _orsResult = null;
+    _orsError = false;
+    _orsErrorMessage = '';
+    _routeAlternatives = [];
+    _fallbackAlternativeRoutes = <int, OrsRouteResult>{};
+    _alternativeLabels = <int, String>{};
+    _selectedAlternativeIndex = 0;
+    _lastOriginForAlternatives = null;
+    _lastDestinationForAlternatives = null;
+  }
+
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   @override
@@ -111,15 +187,27 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     });
     _loadRecentSearches();
-    _refreshRoutes();
+    _routesRefresh = _refreshRoutes();
+    FareProfileService.isStudent().then((student) {
+      if (student && mounted) setState(() => _studentFare = true);
+    });
+    final restore = widget.restore;
+    if (restore != null) {
+      _restore(restore);
+      return;
+    }
     final destination = widget.initialDestination?.trim() ?? '';
     if (destination.isNotEmpty) {
       _searchController.text = destination;
       // Picked on the map, so its spot is known: no need to look it up.
       final point = widget.initialDestinationPoint;
       if (point != null) _geocodeCache[destination.toLowerCase()] = point;
+      // Handed a destination (e.g. the map's Directions): that already
+      // asked for routes, so search right away.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _onSearchSubmitted(destination);
+        if (!mounted) return;
+        _onSearchSubmitted(destination);
+        _fetchOrsRoute();
       });
     }
   }
@@ -234,7 +322,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ─── Search logic ─────────────────────────────────────────────────────────
 
-  void _onSearch(String query) {
+  /// [showSuggestions] false updates the results without reopening the
+  /// suggestions list (e.g. after a background refresh).
+  void _onSearch(String query, {bool showSuggestions = true}) {
     if (query.trim().isEmpty) {
       setState(() {
         _isSearching = false;
@@ -246,30 +336,16 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final searchTerm = query.trim().toLowerCase();
+    // Places only: whole routes ("A to B") and route tags read as a
+    // destination when picked, which no search can find.
     final newSuggestions = _placeSuggestions(searchTerm);
-
-    for (final route in _routes) {
-      if (route.shortDescription.toLowerCase().contains(searchTerm)) {
-        final suggestion = '${route.startLocation} to ${route.endLocation}';
-        if (!newSuggestions.contains(suggestion)) {
-          newSuggestions.add(suggestion);
-        }
-      }
-      for (final tag in route.audienceTags) {
-        if (_otherSuggestionTags.contains(tag) &&
-            tag.toLowerCase().contains(searchTerm) &&
-            !newSuggestions.contains(tag)) {
-          newSuggestions.add(tag);
-        }
-      }
-    }
 
     newSuggestions.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     setState(() {
       _isSearching = true;
       _suggestions = newSuggestions.take(5).toList();
-      _showOmnibox = _suggestions.isNotEmpty;
+      _showOmnibox = showSuggestions && _suggestions.isNotEmpty;
       // Only show approved routes in search results
       _filteredRoutes =
           _routes.where((r) {
@@ -292,17 +368,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   _communityReliabilityScore(a) + _suggestionTagScore(a);
               return scoreB.compareTo(scoreA);
             });
-      if (query.trim() != _lastOrsQuery) {
-        _orsResult = null;
-        _orsError = false;
-        _orsErrorMessage = '';
-        _routeAlternatives = [];
-        _fallbackAlternativeRoutes = <int, OrsRouteResult>{};
-        _alternativeLabels = <int, String>{};
-        _selectedAlternativeIndex = 0;
-        _lastOriginForAlternatives = null;
-        _lastDestinationForAlternatives = null;
-      }
+      if (query.trim() != _lastOrsQuery) _clearGeneratedRoutes();
     });
   }
 
@@ -338,13 +404,22 @@ class _SearchScreenState extends State<SearchScreen> {
                 (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
               )).take(5).toList();
       if (_originSuggestions.isNotEmpty) _showOmnibox = false;
+      if (query.trim() != _lastOrsOrigin) _clearGeneratedRoutes();
     });
   }
 
   void _onOriginSuggestionTap(String suggestion) {
     _originController.text = suggestion;
-    setState(() => _originSuggestions = []);
+    setState(() {
+      _originSuggestions = [];
+      if (suggestion.trim() != _lastOrsOrigin) _clearGeneratedRoutes();
+    });
     _onOriginChanged();
+  }
+
+  void _closeOriginSuggestions() {
+    if (_originSuggestions.isEmpty) return;
+    setState(() => _originSuggestions = []);
   }
 
   void _onSuggestionTap(String suggestion) {
@@ -361,24 +436,42 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _onSearchSubmitted(String query) async {
-    await _refreshRoutes();
-    if (query.trim().isNotEmpty) {
-      await SearchService.addRecentSearch(query.trim());
+    _onSearch(query);
+    if (query.trim().isEmpty) return;
+    // Submitted: the suggestions would only cover the results.
+    setState(() => _showOmnibox = false);
+    // Routes are searched with the "Generate routes" button, not on every
+    // change. The bookkeeping runs in the background: it saves to
+    // Firestore, and a save doesn't finish until the server answers.
+    unawaited(_recordSearch(query.trim()));
+    // Routes added since the screen opened, without holding up the search.
+    unawaited(
+      _refreshRoutes().then((_) {
+        if (mounted && _searchController.text.trim() == query.trim()) {
+          _onSearch(query, showSuggestions: false);
+        }
+      }),
+    );
+  }
+
+  /// Recent searches and the "routes searched" achievements.
+  Future<void> _recordSearch(String query) async {
+    try {
+      await SearchService.addRecentSearch(query);
       await _loadRecentSearches();
       final user = await GamificationService.loadUser();
       final unlockedItems = await GamificationService.incrementRoutesSearched(
         user,
       );
-      if (unlockedItems.isNotEmpty) {
+      if (unlockedItems.isNotEmpty && mounted) {
         setState(() {
           _pendingNotifications = unlockedItems;
           _showNotificationOverlay = true;
         });
       }
+    } catch (e) {
+      debugPrint('[Search] Saving the search failed: $e');
     }
-    _onSearch(query);
-    // Routes from where you are come up on their own; no extra button.
-    if (query.trim().isNotEmpty) _fetchOrsRoute();
   }
 
   void _onNotificationsDismissed() {
@@ -390,10 +483,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _onRecentSearchTap(String query) async {
     _searchController.text = query;
-    await SearchService.addRecentSearch(query);
-    await _loadRecentSearches();
     _onSearch(query);
-    _fetchOrsRoute();
+    // Moves it to the top; in the background, like _onSearchSubmitted.
+    unawaited(
+      SearchService.addRecentSearch(query).then((_) => _loadRecentSearches()),
+    );
   }
 
   Future<void> _onClearRecentSearches() async {
@@ -407,7 +501,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onRouteTap(route_model.Route route) {
-    MapTabController.openRoute(context, route);
+    MapTabController.openRoute(context, route, onBack: _returnHere());
   }
 
   List<route_model.Route> get _topSearches {
@@ -704,6 +798,15 @@ class _SearchScreenState extends State<SearchScreen> {
   /// on the map.
   Future<void> _openAlternative(int index) async {
     if (_isLoadingOrs) return;
+    // The first option may still be drawing in the background: wait for it
+    // rather than drawing it a second time.
+    final firstDraw = _firstRouteDraw;
+    if (index == 0 && _orsResult == null && firstDraw != null) {
+      setState(() => _pendingAlternativeIndex = 0);
+      await firstDraw;
+      if (!mounted) return;
+      setState(() => _pendingAlternativeIndex = null);
+    }
     if (_orsResult == null || index != _selectedAlternativeIndex) {
       setState(() => _pendingAlternativeIndex = index);
       await _selectAlternative(index);
@@ -712,6 +815,96 @@ class _SearchScreenState extends State<SearchScreen> {
       if (index != _selectedAlternativeIndex) return;
     }
     _openResultOnMap();
+  }
+
+  void _restore(SearchSession session) {
+    _routes = List<route_model.Route>.from(session.routes);
+    _originController.text = session.origin;
+    _searchController.text = session.destination;
+    _lastOrsQuery = session.destination.trim();
+    _lastOrsOrigin = session.origin.trim();
+    _routeAlternatives = session.alternatives;
+    _fallbackAlternativeRoutes = session.fallbackRoutes;
+    _alternativeLabels = session.labels;
+    _selectedAlternativeIndex = session.selectedIndex;
+    _orsResult = session.result;
+    _lastOriginForAlternatives = session.originPoint;
+    _lastDestinationForAlternatives = session.destinationPoint;
+    _lastGeneratedOriginName = session.originName;
+    _lastGeneratedDestinationName = session.destinationName;
+    // Fills the community list for the same trip (the options stay: the
+    // query is unchanged) after the first frame, when setState is allowed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _onSearch(session.destination, showSuggestions: false);
+    });
+  }
+
+  /// Back from a route opened here: this search again, as it is now.
+  void Function(BuildContext) _returnHere() {
+    final session = SearchSession(
+      origin: _originController.text,
+      destination: _searchController.text,
+      routes: _routes,
+      alternatives: _routeAlternatives,
+      fallbackRoutes: _fallbackAlternativeRoutes,
+      labels: _alternativeLabels,
+      selectedIndex: _selectedAlternativeIndex,
+      result: _orsResult,
+      originPoint: _lastOriginForAlternatives,
+      destinationPoint: _lastDestinationForAlternatives,
+      originName: _lastGeneratedOriginName,
+      destinationName: _lastGeneratedDestinationName,
+    );
+    final onRefresh = widget.onRefresh;
+    return (context) => Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => SearchScreen(
+              routes: session.routes,
+              onRefresh: onRefresh,
+              restore: session,
+            ),
+      ),
+    );
+  }
+
+  /// Draws the first of [alternatives] on the roads after the list is up.
+  /// Dropped if a new search or another option replaced it meanwhile.
+  Future<void> _drawFirstAlternative(
+    List<DijkstraRouteAlternative> alternatives,
+    LatLng origin,
+    LatLng destination,
+    String originName,
+    String destinationName,
+  ) async {
+    try {
+      final result = await RoutingService.buildRouteFromDijkstraAlternative(
+        origin: origin,
+        destination: destination,
+        alternative: alternatives.first.result,
+        preferredMode: 'Auto',
+      );
+      await RouteCacheRepository.put(
+        originName,
+        destinationName,
+        'Auto',
+        RouteCacheRepository.generatedRouteProfile,
+        result,
+      );
+      if (!mounted ||
+          !identical(_routeAlternatives, alternatives) ||
+          _orsResult != null) {
+        return;
+      }
+      setState(() {
+        _orsResult = result;
+        _selectedAlternativeIndex = 0;
+      });
+    } catch (e) {
+      // Opening the option draws it again (and shows any error then).
+      debugPrint('[SearchScreen] Drawing the first option failed: $e');
+    }
   }
 
   void _openResultOnMap() {
@@ -727,15 +920,14 @@ class _SearchScreenState extends State<SearchScreen> {
               : _originController.text.trim()),
       destinationName:
           _lastGeneratedDestinationName ?? _searchController.text.trim(),
+      onBack: _returnHere(),
     );
   }
 
   /// The start changed: search again so the options match it, or move on to
   /// the destination when there isn't one yet.
   void _onOriginChanged() {
-    if (_isSearching && _searchController.text.trim().isNotEmpty) {
-      _fetchOrsRoute();
-    } else {
+    if (_searchController.text.trim().isEmpty) {
       _searchFocusNode.requestFocus();
     }
   }
@@ -764,6 +956,10 @@ class _SearchScreenState extends State<SearchScreen> {
         ? '${(km * 1000).round()} m walk'
         : '${km.toStringAsFixed(1)} km walk';
   }
+
+  /// A generated option's fare, worded as on its route page.
+  String _tripFareLabel(double baseFare) =>
+      PhFareCalculator.tripEstimateLabel(baseFare, student: _studentFare);
 
   static String _fareLabel(double fare) {
     if (!fare.isFinite) return '₱—';

@@ -5,13 +5,17 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
+    final requestId = ++_routeRequestId;
     setState(() {
       _isLoadingOrs = true;
       _orsError = false;
       _orsErrorMessage = '';
       _orsResult = null;
+      _routeAlternatives = [];
       _lastOrsQuery = query;
+      _lastOrsOrigin = _originController.text.trim();
     });
+    _firstRouteDraw = null;
 
     try {
       LatLng origin;
@@ -26,10 +30,10 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           context,
           reason: 'plan a route from where you are',
         );
-        if (!mounted) return;
+        if (_isStaleRouteRequest(requestId)) return;
         final position =
             hasAccess ? await LocationService.getCurrentPosition() : null;
-        if (!mounted) return;
+        if (_isStaleRouteRequest(requestId)) return;
         if (position == null) {
           setState(() {
             _isLoadingOrs = false;
@@ -51,7 +55,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         );
       } else {
         final originLatLng = await _geocodePhilippines(originText);
-        if (!mounted) return;
+        if (_isStaleRouteRequest(requestId)) return;
         if (originLatLng == null) {
           setState(() {
             _isLoadingOrs = false;
@@ -66,7 +70,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       }
 
       final destLatLng = await _geocodePhilippines(query);
-      if (!mounted) return;
+      if (_isStaleRouteRequest(requestId)) return;
       if (destLatLng == null) {
         setState(() {
           _isLoadingOrs = false;
@@ -81,6 +85,17 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       var fallbackAlternatives = <int, OrsRouteResult>{};
       var labelsByIndex = <int, String>{};
       try {
+        // Community routes are the most reliable legs. Opened right after
+        // launch on a slow network, the screen can arrive with none loaded
+        // yet, so wait a little for its own refresh in that case.
+        final routesRefresh = _routesRefresh;
+        if (_routes.isEmpty && routesRefresh != null) {
+          await routesRefresh.timeout(
+            const Duration(seconds: 12),
+            onTimeout: () {},
+          );
+          if (_isStaleRouteRequest(requestId)) return;
+        }
         final communityRoutes =
             _routes
                 .map(CommunityRoute.fromRoute)
@@ -109,7 +124,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             communityRoutes: communityRoutes,
           ),
         ]);
-        if (!mounted) return;
+        if (_isStaleRouteRequest(requestId)) return;
 
         final merged = <DijkstraRouteAlternative>[];
         final mergedSeen = <String>{};
@@ -218,15 +233,15 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         }
 
         // Routes riders contributed are checked by people who ride them,
-        // unlike the GTFS feed, so the option using the most of them comes
-        // first (and is the one shown on open).
-        int communityLegs(DijkstraRouteAlternative alt) =>
-            alt.result.plan.legs.where((leg) => leg.isCommunity).length;
+        // unlike the GTFS feed, so the option riding most on them (by
+        // distance) comes first (and is the one shown on open).
+        double riderShare(DijkstraRouteAlternative alt) =>
+            SupabaseRouteService.riderRouteShare(alt.result);
         DijkstraRouteAlternative? mostCommunity;
         for (final alt in merged) {
-          final legs = communityLegs(alt);
-          if (legs > 0 &&
-              (mostCommunity == null || legs > communityLegs(mostCommunity))) {
+          final share = riderShare(alt);
+          if (share > 0 &&
+              (mostCommunity == null || share > riderShare(mostCommunity))) {
             mostCommunity = alt;
           }
         }
@@ -234,10 +249,10 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
 
         final order = List<int>.generate(selected.length, (i) => i)
           ..sort((a, b) {
-            final byCommunity = communityLegs(
+            final byShare = riderShare(
               selected[b],
-            ).compareTo(communityLegs(selected[a]));
-            return byCommunity != 0 ? byCommunity : a.compareTo(b);
+            ).compareTo(riderShare(selected[a]));
+            return byShare != 0 ? byShare : a.compareTo(b);
           });
         alternatives = [for (final i in order) selected[i]];
         labelsByIndex = {
@@ -248,6 +263,33 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
       final originName = await originNameFuture;
+      if (fallbackAlternatives[0] == null && alternatives.isNotEmpty) {
+        // The list needs only times, fares and modes. Drawing a route on the
+        // roads can take 8+ s (the map service often times out), so the
+        // options show now and the first is drawn in the background, ready
+        // by the time it's opened.
+        if (_isStaleRouteRequest(requestId)) return;
+        setState(() {
+          _isLoadingOrs = false;
+          _orsResult = null;
+          _routeAlternatives = alternatives;
+          _fallbackAlternativeRoutes = fallbackAlternatives;
+          _alternativeLabels = labelsByIndex;
+          _selectedAlternativeIndex = 0;
+          _lastOriginForAlternatives = origin;
+          _lastDestinationForAlternatives = destLatLng;
+          _lastGeneratedOriginName = originName;
+          _lastGeneratedDestinationName = query;
+        });
+        _firstRouteDraw = _drawFirstAlternative(
+          alternatives,
+          origin,
+          destLatLng,
+          originName,
+          query,
+        );
+        return;
+      }
       final result =
           fallbackAlternatives[0] ??
           (alternatives.isNotEmpty
@@ -273,7 +315,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         result,
       );
 
-      if (!mounted) return;
+      if (_isStaleRouteRequest(requestId)) return;
       setState(() {
         _isLoadingOrs = false;
         _orsResult = result;
@@ -287,14 +329,14 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         _lastGeneratedDestinationName = query;
       });
     } on RoutingException catch (e) {
-      if (!mounted) return;
+      if (_isStaleRouteRequest(requestId)) return;
       setState(() {
         _isLoadingOrs = false;
         _orsError = true;
         _orsErrorMessage = e.message;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (_isStaleRouteRequest(requestId)) return;
       setState(() {
         _isLoadingOrs = false;
         _orsError = true;
