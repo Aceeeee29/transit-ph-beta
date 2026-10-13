@@ -8,6 +8,7 @@ import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/route_preview.dart';
 import 'contribute_screen.dart';
+import '../theme/app_colors.dart';
 part 'moderator_screen_route_cards.dart';
 part 'moderator_screen_user_management.dart';
 
@@ -29,14 +30,14 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   String _userSearchQuery = '';
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
   static const _success = Color(0xFF3EC97A);
   static const _warning = Color(0xFFFFB547);
@@ -174,11 +175,10 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(Icons.shield_rounded,
-                  color: _accent, size: 16),
+              child: const Icon(Icons.shield_rounded, color: _accent, size: 16),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Moderator Panel',
               style: TextStyle(
                 color: _textPrimary,
@@ -197,9 +197,13 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           indicatorWeight: 2.5,
           labelPadding: const EdgeInsets.symmetric(horizontal: 4),
           labelStyle: const TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
           unselectedLabelStyle: const TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w500),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
           tabs: [
             _tabWithBadge('Routes', pendingRoutesCount),
             const Tab(text: 'Trust'),
@@ -239,19 +243,19 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(Icons.route_rounded,
-                  size: 32, color: _textSecondary),
+              child: Icon(Icons.route_rounded, size: 32, color: _textSecondary),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'No pending routes',
               style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: _textPrimary),
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'All submitted routes have been reviewed.',
               style: TextStyle(fontSize: 13, color: _textSecondary),
             ),
@@ -282,11 +286,12 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   void _openRoutePreview(route_model.Route route) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (previewContext) => RoutePreview(
-          route: route,
-          readOnly: true,
-          onEdit: () => _openRouteEditor(previewContext, route),
-        ),
+        builder:
+            (previewContext) => RoutePreview(
+              route: route,
+              readOnly: true,
+              onEdit: () => _openRouteEditor(previewContext, route),
+            ),
       ),
     );
   }
@@ -336,14 +341,14 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                     color: _surfaceAlt,
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.verified_user_outlined,
                     size: 32,
                     color: _textSecondary,
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'No routes with trust data',
                   style: TextStyle(
                     fontSize: 16,
@@ -352,7 +357,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Approved routes will appear here with confidence scores.',
                   style: TextStyle(fontSize: 13, color: _textSecondary),
                 ),
@@ -392,7 +397,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         children: [
           Text(
             '${route.startLocation} -> ${route.endLocation}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: _textPrimary,
@@ -409,7 +414,11 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                 route.approvalStatus.name.toUpperCase(),
                 route.isApproved ? _success : _warning,
               ),
-              _metaChip(Icons.directions_rounded, '${route.steps.length} steps', _textSecondary),
+              _metaChip(
+                Icons.directions_rounded,
+                '${route.steps.length} steps',
+                _textSecondary,
+              ),
             ],
           ),
         ],
@@ -419,8 +428,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
 
   Widget _metaChip(IconData icon, String label, Color color) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(6),
@@ -434,9 +442,10 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           Text(
             label,
             style: TextStyle(
-                fontSize: 11,
-                color: color,
-                fontWeight: FontWeight.w600),
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -448,17 +457,23 @@ class _ModeratorScreenState extends State<ModeratorScreen>
       stream: RouteService.watchRouteFeedbackSummary(route.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _metaChip(Icons.verified_user_outlined, 'Trust loading...', _textSecondary);
+          return _metaChip(
+            Icons.verified_user_outlined,
+            'Trust loading...',
+            _textSecondary,
+          );
         }
 
-        final summary = snapshot.data ?? const {
-          'fareAccurateYes': 0,
-          'fareAccurateNo': 0,
-          'scheduleAccurateYes': 0,
-          'scheduleAccurateNo': 0,
-          'stillOperatingYes': 0,
-          'stillOperatingNo': 0,
-        };
+        final summary =
+            snapshot.data ??
+            const {
+              'fareAccurateYes': 0,
+              'fareAccurateNo': 0,
+              'scheduleAccurateYes': 0,
+              'scheduleAccurateNo': 0,
+              'stillOperatingYes': 0,
+              'stillOperatingNo': 0,
+            };
 
         final score = RouteTrustService.computeConfidence(
           route: route,
@@ -466,41 +481,41 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         );
         final isCritical = score.total < 30;
         final label = RouteTrustService.confidenceLabel(score.total);
-        final color = score.total >= 85
-            ? _success
-            : score.total >= 65
+        final color =
+            score.total >= 85
+                ? _success
+                : score.total >= 65
                 ? _accent
                 : _warning;
 
-        final trustChip = isCritical
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _metaChip(
-                    Icons.warning_amber_rounded,
-                    'Trust ${score.total}/100 ($label)',
-                    _danger,
-                  ),
-                  const SizedBox(width: 6),
-                  _metaChip(
-                    Icons.notification_important_rounded,
-                    'ALERT',
-                    _danger,
-                  ),
-                ],
-              )
-            : _metaChip(
-                Icons.verified_user_outlined,
-                'Trust ${score.total}/100 ($label)',
-                color,
-              );
+        final trustChip =
+            isCritical
+                ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _metaChip(
+                      Icons.warning_amber_rounded,
+                      'Trust ${score.total}/100 ($label)',
+                      _danger,
+                    ),
+                    const SizedBox(width: 6),
+                    _metaChip(
+                      Icons.notification_important_rounded,
+                      'ALERT',
+                      _danger,
+                    ),
+                  ],
+                )
+                : _metaChip(
+                  Icons.verified_user_outlined,
+                  'Trust ${score.total}/100 ($label)',
+                  color,
+                );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            trustChip,
-          ],
+          children: [trustChip],
         );
       },
     );
@@ -581,19 +596,24 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }
 
   List<Post> _getReportedPendingPosts() {
-    final reportedPostIds = ModerationService.getFeedbacks()
-        .where((f) =>
-            f.type == feedback_model.FeedbackType.report &&
-        f.status == feedback_model.FeedbackStatus.pending &&
-            f.targetType == feedback_model.FeedbackTargetType.post &&
-            f.targetId != null)
-        .map((f) => f.targetId!)
-        .toSet();
+    final reportedPostIds =
+        ModerationService.getFeedbacks()
+            .where(
+              (f) =>
+                  f.type == feedback_model.FeedbackType.report &&
+                  f.status == feedback_model.FeedbackStatus.pending &&
+                  f.targetType == feedback_model.FeedbackTargetType.post &&
+                  f.targetId != null,
+            )
+            .map((f) => f.targetId!)
+            .toSet();
 
     return ModerationService.postsNotifier.value
-      .where((p) =>
-        reportedPostIds.contains(p.id) &&
-        p.moderationStatus != ModerationStatus.rejected)
+        .where(
+          (p) =>
+              reportedPostIds.contains(p.id) &&
+              p.moderationStatus != ModerationStatus.rejected,
+        )
         .toList();
   }
 

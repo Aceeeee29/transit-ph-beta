@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/location_search_result.dart';
 import '../services/place_search_service.dart';
+import '../theme/app_colors.dart';
 
 class ContributeLocationSearchScreen extends StatefulWidget {
   final String initialQuery;
@@ -21,13 +22,13 @@ class _ContributeLocationSearchScreenState
   List<LocationSearchResult> _suggestions = [];
   bool _isLoadingSuggestions = false;
 
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   @override
   void initState() {
@@ -102,14 +103,14 @@ class _ContributeLocationSearchScreenState
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
             ),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Search Location',
           style: TextStyle(
             color: _textPrimary,
@@ -138,13 +139,10 @@ class _ContributeLocationSearchScreenState
                   focusNode: _searchFocusNode,
                   autofocus: true,
                   textInputAction: TextInputAction.search,
-                  style: const TextStyle(color: _textPrimary, fontSize: 14),
+                  style: TextStyle(color: _textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Search location...',
-                    hintStyle: const TextStyle(
-                      color: _textSecondary,
-                      fontSize: 14,
-                    ),
+                    hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
                     prefixIcon: const Icon(
                       Icons.search_rounded,
                       color: _accent,
@@ -167,7 +165,7 @@ class _ContributeLocationSearchScreenState
                                   color: _border,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.close,
                                   size: 14,
                                   color: _textSecondary,
@@ -187,7 +185,7 @@ class _ContributeLocationSearchScreenState
               ),
               const SizedBox(height: 8),
               if (_isLoadingSuggestions)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -222,11 +220,8 @@ class _ContributeLocationSearchScreenState
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       itemCount: _suggestions.length,
                       separatorBuilder:
-                          (_, __) => const Divider(
-                            height: 1,
-                            indent: 48,
-                            color: _border,
-                          ),
+                          (_, __) =>
+                              Divider(height: 1, indent: 48, color: _border),
                       itemBuilder: (_, index) {
                         final suggestion = _suggestions[index];
                         return InkWell(
@@ -255,7 +250,7 @@ class _ContributeLocationSearchScreenState
                                 Expanded(
                                   child: Text(
                                     suggestion.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: _textPrimary,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
@@ -264,7 +259,7 @@ class _ContributeLocationSearchScreenState
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const Icon(
+                                Icon(
                                   Icons.north_west_rounded,
                                   size: 15,
                                   color: _textSecondary,
@@ -290,7 +285,7 @@ class _ContributeLocationSearchScreenState
                     color: _accent,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
@@ -323,7 +318,7 @@ class _ContributeLocationSearchScreenState
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _border),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(
                       Icons.info_outline_rounded,

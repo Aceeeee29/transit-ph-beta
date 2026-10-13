@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/tutorial_service.dart';
+import '../theme/app_colors.dart';
 
 class TutorialOverlay extends StatefulWidget {
   final List<TutorialStep> steps;
@@ -30,13 +31,13 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   late Animation<double> _fadeAnimation;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   @override
   void initState() {
@@ -226,7 +227,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                                 Expanded(
                                   child: Text(
                                     currentStep.title,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: _textPrimary,
@@ -264,7 +265,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                               children: [
                                 Text(
                                   currentStep.description,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
                                     color: _textSecondary,
                                     height: 1.6,
@@ -329,7 +330,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                                                 ),
                                               ),
                                               alignment: Alignment.center,
-                                              child: const Text(
+                                              child: Text(
                                                 'Load Example',
                                                 style: TextStyle(
                                                   fontSize: 13,
@@ -374,7 +375,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                                                 ),
                                               ),
                                               alignment: Alignment.center,
-                                              child: const Text(
+                                              child: Text(
                                                 'Skip',
                                                 style: TextStyle(
                                                   fontSize: 13,

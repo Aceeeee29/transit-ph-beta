@@ -8,6 +8,7 @@ import '../models/route.dart' as route_model;
 import '../services/route_follow_engine.dart';
 import '../services/supabase_route_service.dart';
 import '../widgets/translated_text.dart';
+import '../theme/app_colors.dart';
 
 /// Edits the designated stops of one contributed step: tap the step's line
 /// to add a stop, tap a stop to rename it or change pickup/drop-off, or pull
@@ -274,7 +275,7 @@ class _StopDot extends StatelessWidget {
         color: Colors.white,
         shape: BoxShape.circle,
         border: Border.all(
-          color: restricted ? Colors.grey.shade500 : color,
+          color: restricted ? AppColors.textSecondary : color,
           width: 3,
         ),
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
@@ -413,11 +414,11 @@ class _SuggestionsSheetState extends State<_SuggestionsSheet> {
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: TranslatedText(
                 'Keep only the ones this vehicle actually stops at.',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
             Flexible(

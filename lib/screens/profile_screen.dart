@@ -55,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (user == null) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: ProfileColors.bg,
         body: Center(
           child: CircularProgressIndicator(
@@ -131,7 +131,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'Profile',
             style: TextStyle(
               color: ProfileColors.textPrimary,
@@ -169,7 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: ProfileColors.border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.settings_outlined,
               color: ProfileColors.textSecondary,
               size: 18,
@@ -186,11 +186,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildTabBar() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: ProfileColors.surface,
         border: Border(bottom: BorderSide(color: ProfileColors.border)),
       ),
-      child: const TabBar(
+      child: TabBar(
         labelColor: ProfileColors.accent,
         unselectedLabelColor: ProfileColors.textSecondary,
         indicatorColor: ProfileColors.accent,
@@ -266,7 +266,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             user.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w600,
               color: ProfileColors.textPrimary,
@@ -277,10 +277,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             showEmailInProfile ? user.email : 'Email hidden',
-            style: const TextStyle(
-              fontSize: 13,
-              color: ProfileColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 13, color: ProfileColors.textSecondary),
             overflow: TextOverflow.ellipsis,
           ),
           if (_hasTagData()) ...[const SizedBox(height: 12), _pills()],
@@ -456,7 +453,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
@@ -464,10 +461,7 @@ class _ProfileHeaderCard extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: ProfileColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 11, color: ProfileColors.textSecondary),
           ),
         ],
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 /// A round icon-only map button for the right-side stack (GPS center, hide
 /// pins, report). No labels; the tooltip says what it does.
@@ -23,9 +24,9 @@ class MapSideButton extends StatelessWidget {
   });
 
   static const size = 48.0;
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textSecondary = Color(0xFF5B6F8E);
+  static Color get _textSecondary => AppColors.textSecondary;
 
   @override
   Widget build(BuildContext context) {

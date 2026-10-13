@@ -56,7 +56,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Why are you reporting this post?',
                     style: TextStyle(
                       color: FeedColors.textSecondary,

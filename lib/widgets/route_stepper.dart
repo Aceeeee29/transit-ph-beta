@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 import '../services/media_service.dart';
 import '../services/route_metrics_service.dart';
+import '../theme/app_colors.dart';
 
 class RouteStepperWidget extends StatefulWidget {
   final List<route_model.Step> steps;
@@ -32,13 +33,13 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
   List<File?> _stepImages = [];
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   @override
@@ -193,7 +194,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: _textPrimary,
@@ -209,11 +210,11 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
           child: TextFormField(
             initialValue: initialValue,
             maxLines: maxLines,
-            style: const TextStyle(color: _textPrimary, fontSize: 13),
+            style: TextStyle(color: _textPrimary, fontSize: 13),
             onChanged: onChanged,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+              hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
               prefixIcon: Icon(icon, color: _accent, size: 16),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -241,14 +242,10 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
-                Icons.alt_route,
-                size: 28,
-                color: _textSecondary,
-              ),
+              child: Icon(Icons.alt_route, size: 28, color: _textSecondary),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'No steps yet',
               style: TextStyle(
                 fontSize: 14,
@@ -382,7 +379,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
                                     ),
                                     child: Text(
                                       distance,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
                                         color: _textSecondary,
                                         fontWeight: FontWeight.w600,
@@ -417,7 +414,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
                               const SizedBox(height: 2),
                               Text(
                                 step.instruction,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   color: _textSecondary,
                                 ),
@@ -472,7 +469,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
                         const SizedBox(height: 14),
 
                         // Photo attachment
-                        const Text(
+                        Text(
                           'Landmark Photo',
                           style: TextStyle(
                             fontSize: 12,

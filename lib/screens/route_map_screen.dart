@@ -40,6 +40,7 @@ import '../widgets/map_tab/map_side_button.dart';
 import '../widgets/map_tab/place_category_chips.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
+import '../theme/app_colors.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_data.dart';
 part 'route_map_screen_chrome.dart';
@@ -125,13 +126,13 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   double _animTargetRotation = 0.0;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
   static const _green = Color(0xFF3EC97A);
 

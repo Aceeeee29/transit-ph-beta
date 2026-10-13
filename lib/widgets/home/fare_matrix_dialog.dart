@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../services/fare_matrix.dart';
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 class HomeFareMatrixDialog extends StatelessWidget {
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   const HomeFareMatrixDialog({super.key});
@@ -117,7 +118,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: TranslatedText(
               'Fare Matrix',
               overflow: TextOverflow.ellipsis,
@@ -138,7 +139,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
             child: InkWell(
               onTap: () => Navigator.of(context).pop(),
               borderRadius: BorderRadius.circular(9),
-              child: const SizedBox(
+              child: SizedBox(
                 width: 32,
                 height: 32,
                 child: Icon(Icons.close, size: 16, color: _textSecondary),
@@ -182,7 +183,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
                   label,
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: _textPrimary,
@@ -193,7 +194,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     detail,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: _textSecondary),
+                    style: TextStyle(fontSize: 11, color: _textSecondary),
                   ),
               ],
             ),

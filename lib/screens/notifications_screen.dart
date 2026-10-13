@@ -6,6 +6,7 @@ import '../services/route_service.dart';
 import '../models/notification.dart';
 import 'post_detail_screen.dart';
 import '../widgets/translated_text.dart';
+import '../theme/app_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final String currentUserId;
@@ -25,14 +26,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   late Future<List<NotificationModel>> _notificationsFuture;
 
   // ─── Color tokens (matches design system) ──────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   @override
@@ -256,7 +257,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   Flexible(
                     child: TranslatedText(
                       message,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         color: _textPrimary,
                         fontWeight: FontWeight.w500,
@@ -290,7 +291,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -313,7 +314,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Flexible(
+            Flexible(
               child: TranslatedText(
                 'Notifications',
                 overflow: TextOverflow.ellipsis,
@@ -365,7 +366,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const TranslatedText(
+                  TranslatedText(
                     'Something went wrong',
                     style: TextStyle(
                       fontSize: 16,
@@ -376,7 +377,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   const SizedBox(height: 6),
                   Text(
                     '${snapshot.error}',
-                    style: const TextStyle(fontSize: 13, color: _textSecondary),
+                    style: TextStyle(fontSize: 13, color: _textSecondary),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -397,14 +398,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       color: _surfaceAlt,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.notifications_off_outlined,
                       size: 36,
                       color: _textSecondary,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const TranslatedText(
+                  TranslatedText(
                     'No notifications yet',
                     style: TextStyle(
                       fontSize: 17,
@@ -413,7 +414,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const TranslatedText(
+                  TranslatedText(
                     'Upvotes, downvotes, comments, replies, and route approvals\nwill appear here.',
                     style: TextStyle(
                       fontSize: 13,
@@ -614,7 +615,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         _formatTime(notification.timestamp),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
                                           color: _textSecondary,
                                         ),
@@ -663,7 +664,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     ),
                                     if (navigable) ...[
                                       const SizedBox(width: 8),
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.only(top: 2),
                                         child: Icon(
                                           Icons.arrow_forward_ios_rounded,

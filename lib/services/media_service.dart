@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'cloudinary_service.dart';
+import '../theme/app_colors.dart';
 
 /// Thrown when a post media upload fails — carries a user-facing message
 /// plus the raw details for logs.
@@ -425,7 +426,7 @@ class _AudioPreviewWidgetState extends State<AudioPreviewWidget> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: AppColors.surfaceAlt,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -443,7 +444,7 @@ class _AudioPreviewWidgetState extends State<AudioPreviewWidget> {
               Expanded(
                 child: LinearProgressIndicator(
                   value: _playbackProgress,
-                  backgroundColor: Colors.grey.shade300,
+                  backgroundColor: AppColors.border,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                 ),
               ),

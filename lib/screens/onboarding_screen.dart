@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/gamification_service.dart';
+import '../theme/app_colors.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final User user;
@@ -18,13 +19,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isLoading = false;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   final List<Map<String, dynamic>> _slides = [
     {
@@ -203,7 +204,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 28),
 
-              const Text(
+              Text(
                 'Welcome to\nTransitPH!',
                 style: TextStyle(
                   fontSize: 30,
@@ -214,7 +215,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 'Select your category to personalize your experience:',
                 style: TextStyle(
                   fontSize: 14,
@@ -286,7 +287,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                         children: [
                                           Text(
                                             cat.label,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                               color: _textPrimary,
@@ -295,7 +296,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                           const SizedBox(height: 2),
                                           Text(
                                             cat.description,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 12,
                                               color: _textSecondary,
                                             ),
@@ -303,7 +304,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                         ],
                                       ),
                                     ),
-                                    const Icon(
+                                    Icon(
                                       Icons.arrow_forward_ios_rounded,
                                       size: 14,
                                       color: _textSecondary,
@@ -405,7 +406,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                     Text(
                       slide['title'] as String,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         color: _textPrimary,
@@ -419,7 +420,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                     Text(
                       slide['description'] as String,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         color: _textSecondary,
                         height: 1.6,
@@ -491,7 +492,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ],
                 ),
-                child: const Text(
+                child: Text(
                   'Skip',
                   style: TextStyle(
                     fontSize: 13,

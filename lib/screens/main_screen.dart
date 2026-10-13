@@ -58,11 +58,11 @@ class _MainScreenState extends State<MainScreen> {
   List<route_model.Route> routes = [];
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   String get currentUserName {
     final user = FirebaseAuth.instance.currentUser;
@@ -536,7 +536,7 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       decoration: BoxDecoration(
         color: _surface,
-        border: const Border(top: BorderSide(color: _border, width: 1.5)),
+        border: Border(top: BorderSide(color: _border, width: 1.5)),
         boxShadow: [
           BoxShadow(
             color: _accent.withValues(alpha: 0.06),
@@ -574,9 +574,9 @@ class _MainScreenState extends State<MainScreen> {
                                   colors:
                                       isSelected
                                           ? AppColors.buttonGradient
-                                          : const [
-                                            Color(0xFFD4E4F7),
-                                            Color(0xFFEAF2FF),
+                                          : [
+                                            AppColors.border,
+                                            AppColors.surfaceAlt,
                                           ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,

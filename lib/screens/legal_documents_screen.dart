@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 enum LegalDocumentType { privacyPolicy, termsAndConditions }
 
@@ -7,13 +8,13 @@ class LegalDocumentsScreen extends StatelessWidget {
 
   const LegalDocumentsScreen({super.key, required this.type});
 
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +30,7 @@ class LegalDocumentsScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         title: Text(
           content.title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
             color: _textPrimary,
             letterSpacing: -0.2,
@@ -55,7 +56,7 @@ class LegalDocumentsScreen extends StatelessWidget {
               ),
               child: Text(
                 content.summary,
-                style: const TextStyle(
+                style: TextStyle(
                   color: _textSecondary,
                   fontSize: 13,
                   height: 1.45,
@@ -217,11 +218,11 @@ class _LegalSectionCard extends StatelessWidget {
 
   const _LegalSectionCard({required this.section});
 
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +246,7 @@ class _LegalSectionCard extends StatelessWidget {
         children: [
           Text(
             section.heading,
-            style: const TextStyle(
+            style: TextStyle(
               color: _textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -255,7 +256,7 @@ class _LegalSectionCard extends StatelessWidget {
           for (final paragraph in section.paragraphs) ...[
             Text(
               '• $paragraph',
-              style: const TextStyle(
+              style: TextStyle(
                 color: _textSecondary,
                 fontSize: 13,
                 height: 1.45,

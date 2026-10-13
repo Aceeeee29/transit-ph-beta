@@ -1,13 +1,13 @@
 part of 'moderator_screen.dart';
 
 extension _ModeratorScreenManagementSections on _ModeratorScreenState {
-  static const _surface = _ModeratorScreenState._surface;
-  static const _surfaceAlt = _ModeratorScreenState._surfaceAlt;
+  static Color get _surface => _ModeratorScreenState._surface;
+  static Color get _surfaceAlt => _ModeratorScreenState._surfaceAlt;
   static const _accent = _ModeratorScreenState._accent;
-  static const _accentSoft = _ModeratorScreenState._accentSoft;
-  static const _textPrimary = _ModeratorScreenState._textPrimary;
-  static const _textSecondary = _ModeratorScreenState._textSecondary;
-  static const _border = _ModeratorScreenState._border;
+  static Color get _accentSoft => _ModeratorScreenState._accentSoft;
+  static Color get _textPrimary => _ModeratorScreenState._textPrimary;
+  static Color get _textSecondary => _ModeratorScreenState._textSecondary;
+  static Color get _border => _ModeratorScreenState._border;
   static const _danger = _ModeratorScreenState._danger;
   static const _success = _ModeratorScreenState._success;
   static const _warning = _ModeratorScreenState._warning;
@@ -60,19 +60,16 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                 child: TextField(
                   controller: _userSearchController,
                   onChanged: _setUserSearchQuery,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Search users by name or email',
-                    hintStyle: const TextStyle(
-                      color: _textSecondary,
-                      fontSize: 13,
-                    ),
+                    hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
                     border: InputBorder.none,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.search_rounded,
                       size: 18,
                       color: _textSecondary,
@@ -81,7 +78,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         _userSearchQuery.isNotEmpty
                             ? IconButton(
                               onPressed: _clearUserSearchQuery,
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.close_rounded,
                                 size: 18,
                                 color: _textSecondary,
@@ -138,7 +135,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                           children: [
                             Text(
                               user.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: _textPrimary,
@@ -147,7 +144,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                             const SizedBox(height: 2),
                             Text(
                               user.email,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: _textSecondary,
                               ),
@@ -270,7 +267,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                           const SizedBox(width: 10),
                           Text(
                             feedback.type.name.toUpperCase(),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: _textPrimary,
@@ -312,7 +309,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                     ),
                     child: Text(
                       feedback.content,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: _textPrimary,
                         height: 1.35,

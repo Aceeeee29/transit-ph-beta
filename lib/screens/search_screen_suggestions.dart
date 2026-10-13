@@ -1,8 +1,8 @@
 part of 'search_screen.dart';
 
 extension _SearchScreenDiscoverySections on _SearchScreenState {
-  static const _textPrimary = _SearchScreenState._textPrimary;
-  static const _textSecondary = _SearchScreenState._textSecondary;
+  static Color get _textPrimary => _SearchScreenState._textPrimary;
+  static Color get _textSecondary => _SearchScreenState._textSecondary;
 
   /// Before searching: recent searches, then popular community routes.
   Widget _buildSearchSuggestionsSection() {
@@ -26,7 +26,7 @@ extension _SearchScreenDiscoverySections on _SearchScreenState {
                     padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.history_rounded,
                           size: 20,
                           color: _textSecondary,
@@ -37,16 +37,13 @@ extension _SearchScreenDiscoverySections on _SearchScreenState {
                             search,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _textPrimary,
-                              fontSize: 15,
-                            ),
+                            style: TextStyle(color: _textPrimary, fontSize: 15),
                           ),
                         ),
                         IconButton(
                           tooltip: 'Remove',
                           onPressed: () => _onRemoveRecentSearch(search),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.close_rounded,
                             size: 18,
                             color: _textSecondary,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class FareDiscountToggle extends StatelessWidget {
   static const String defaultLabel = 'Student / PWD / Senior';
@@ -9,7 +10,9 @@ class FareDiscountToggle extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final BoxDecoration? decoration;
   final TextStyle? labelStyle;
-  final Color iconColor;
+
+  /// Defaults to the secondary text color.
+  final Color? iconColor;
   final double iconSize;
   final Color? activeColor;
 
@@ -21,7 +24,7 @@ class FareDiscountToggle extends StatelessWidget {
     this.padding = EdgeInsets.zero,
     this.decoration,
     this.labelStyle,
-    this.iconColor = Colors.grey,
+    this.iconColor,
     this.iconSize = 16,
     this.activeColor,
   });
@@ -30,7 +33,11 @@ class FareDiscountToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final row = Row(
       children: [
-        Icon(Icons.badge_outlined, size: iconSize, color: iconColor),
+        Icon(
+          Icons.badge_outlined,
+          size: iconSize,
+          color: iconColor ?? AppColors.textSecondary,
+        ),
         const SizedBox(width: 8),
         Expanded(child: Text(label, style: labelStyle)),
         Switch.adaptive(

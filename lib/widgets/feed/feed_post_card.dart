@@ -268,7 +268,7 @@ class _PostHeader extends StatelessWidget {
             children: [
               Text(
                 displayName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w500,
                   fontSize: 14,
                   color: FeedColors.textPrimary,
@@ -276,7 +276,7 @@ class _PostHeader extends StatelessWidget {
               ),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.access_time,
                     size: 11,
                     color: FeedColors.textSecondary,
@@ -285,7 +285,7 @@ class _PostHeader extends StatelessWidget {
                   Text(
                     '${post.timestamp.hour}:'
                     '${post.timestamp.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: FeedColors.textSecondary,
                     ),
@@ -299,7 +299,7 @@ class _PostHeader extends StatelessWidget {
         if (canDelete || onLifetimeTapped != null) ...[
           const SizedBox(width: 4),
           PopupMenuButton<String>(
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert,
               size: 18,
               color: FeedColors.textSecondary,
@@ -369,7 +369,7 @@ class _PostContent extends StatelessWidget {
         Linkify(
           onOpen: (link) async => SecurityManager.openLink(context, link.url),
           text: post.content,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             color: FeedColors.textPrimary,
             height: 1.5,
@@ -392,7 +392,7 @@ class _PostContent extends StatelessWidget {
                 color: FeedColors.surfaceAlt,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
+              child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -484,7 +484,7 @@ Widget _mediaImage(String url) {
             width: 200,
             height: 200,
             color: FeedColors.surfaceAlt,
-            child: const Icon(
+            child: Icon(
               Icons.broken_image_outlined,
               color: FeedColors.textSecondary,
             ),
@@ -502,7 +502,7 @@ Widget _mediaImage(String url) {
             width: 200,
             height: 200,
             color: FeedColors.surfaceAlt,
-            child: const Icon(
+            child: Icon(
               Icons.broken_image_outlined,
               color: FeedColors.textSecondary,
             ),
@@ -513,10 +513,7 @@ Widget _mediaImage(String url) {
     width: 200,
     height: 200,
     color: FeedColors.surfaceAlt,
-    child: const Icon(
-      Icons.broken_image_outlined,
-      color: FeedColors.textSecondary,
-    ),
+    child: Icon(Icons.broken_image_outlined, color: FeedColors.textSecondary),
   );
 }
 

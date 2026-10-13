@@ -13,6 +13,7 @@ import '../services/settings_service.dart';
 import '../services/gamification_service.dart';
 import '../widgets/translate_chathead.dart';
 import '../widgets/translated_text.dart';
+import '../theme/app_colors.dart';
 part 'settings_screen_dialogs.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -34,7 +35,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool routeApprovalUpdates = false;
   bool newDiscussions = false;
-  bool weeklyDigest = false;
   bool _isSubmittingFeedback = false;
   bool _isLoadingPreferences = true;
   bool _isSavingPreferences = false;
@@ -82,7 +82,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         routeApprovalUpdates =
             preferences['routeApprovalUpdates'] as bool? ?? false;
         newDiscussions = preferences['newDiscussions'] as bool? ?? false;
-        weeklyDigest = preferences['weeklyDigest'] as bool? ?? false;
         distanceUnit = preferences['distanceUnit'] as String? ?? 'Miles';
         language = preferences['language'] as String? ?? 'English';
         showEmailInProfile =
@@ -105,7 +104,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SettingsService.savePreferences({
       'routeApprovalUpdates': routeApprovalUpdates,
       'newDiscussions': newDiscussions,
-      'weeklyDigest': weeklyDigest,
       'distanceUnit': distanceUnit,
       'language': language,
       'showEmailInProfile': showEmailInProfile,
@@ -179,14 +177,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ─── Color tokens
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   // ─── Section card wrapper
   Widget _section({
@@ -227,7 +225,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(width: 10),
                 TranslatedText(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                     color: _textPrimary,
@@ -264,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     TranslatedText(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: _textPrimary,
@@ -273,7 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     TranslatedText(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: _textSecondary,
                         height: 1.4,
@@ -304,10 +302,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     MapLook.classic: 'Classic',
     MapLook.clean: 'Clean',
   };
-  static const _nightMapLabels = {
-    NightMap.off: 'Off',
-    NightMap.on: 'On',
-    NightMap.auto: 'Auto',
+  static const _appearanceLabels = {
+    Appearance.light: 'Light',
+    Appearance.dark: 'Dark',
+    Appearance.auto: 'Auto',
+    Appearance.system: 'Follow phone',
   };
 
   // ─── Dropdown row
@@ -331,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     TranslatedText(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: _textPrimary,
@@ -340,10 +339,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     TranslatedText(
                       subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _textSecondary,
-                      ),
+                      style: TextStyle(fontSize: 12, color: _textSecondary),
                     ),
                   ],
                 ),
@@ -368,7 +364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: _accent,
                       size: 18,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -413,7 +409,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Flexible(
                 child: TranslatedText(
                   label,
-                  style: const TextStyle(fontSize: 14, color: _textSecondary),
+                  style: TextStyle(fontSize: 14, color: _textSecondary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -428,7 +424,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: _textPrimary,
@@ -510,7 +506,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          title: const Text(
+          title: Text(
             'Settings',
             style: TextStyle(
               color: _textPrimary,
@@ -542,7 +538,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -565,7 +561,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const TranslatedText(
+            TranslatedText(
               'Settings',
               style: TextStyle(
                 color: _textPrimary,
@@ -588,7 +584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Page title
-            const TranslatedText(
+            TranslatedText(
               'Customize your experience',
               style: TextStyle(fontSize: 13, color: _textSecondary),
             ),
@@ -701,7 +697,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           children: [
                             Text(
                               _displayName,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                                 color: _textPrimary,
@@ -710,7 +706,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             const SizedBox(height: 2),
                             Text(
                               widget.userEmail,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: _textSecondary,
                               ),
@@ -777,16 +773,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         updater: (value) => newDiscussions = value,
                         value: val,
                       ),
-                ),
-                _toggleRow(
-                  title: 'Weekly Digest',
-                  subtitle: 'Summary of community activity',
-                  value: weeklyDigest,
-                  onChanged:
-                      (val) => _updateBooleanPreference(
-                        updater: (value) => weeklyDigest = value,
-                        value: val,
-                      ),
                   isLast: true,
                 ),
               ],
@@ -830,7 +816,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListenableBuilder(
                   listenable: Listenable.merge([
                     MapStyleService.instance.look,
-                    MapStyleService.instance.night,
+                    MapStyleService.instance.appearance,
                   ]),
                   builder: (context, _) {
                     final styles = MapStyleService.instance;
@@ -851,17 +837,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                         _dropdownRow<String>(
-                          title: 'Night Map',
+                          title: 'Appearance',
                           subtitle: 'Auto is dark from 6 PM to 6 AM',
-                          value: _nightMapLabels[styles.night.value]!,
-                          items: _nightMapLabels.values.toList(),
+                          value: _appearanceLabels[styles.appearance.value]!,
+                          items: _appearanceLabels.values.toList(),
                           onChanged: (label) {
-                            final night =
-                                _nightMapLabels.entries
+                            final appearance =
+                                _appearanceLabels.entries
                                     .where((e) => e.value == label)
                                     .firstOrNull
                                     ?.key;
-                            if (night != null) styles.setNight(night);
+                            if (appearance != null) {
+                              styles.setAppearance(appearance);
+                            }
                           },
                           isLast: true,
                         ),
@@ -894,7 +882,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 16),
 
             if (_isSavingPreferences)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 16),
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -966,13 +954,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                       ),
                     );
-                  },
-                ),
-                _actionRow(
-                  label: 'Contact Support',
-                  icon: Icons.support_agent_outlined,
-                  onTap: () {
-                    // TODO: Open Contact Support
                   },
                 ),
                 _actionRow(
@@ -1082,7 +1063,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const TranslatedText(
+                        TranslatedText(
                           'Post Feedback',
                           style: TextStyle(
                             color: _textPrimary,
@@ -1105,11 +1086,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: TextField(
                         controller: feedbackController,
                         maxLines: 5,
-                        style: const TextStyle(
-                          color: _textPrimary,
-                          fontSize: 14,
-                        ),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: _textPrimary, fontSize: 14),
+                        decoration: InputDecoration(
                           hintText: 'Enter your feedback here...',
                           hintStyle: TextStyle(
                             color: _textSecondary,
@@ -1136,7 +1114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 border: Border.all(color: _border),
                               ),
                               alignment: Alignment.center,
-                              child: const TranslatedText(
+                              child: TranslatedText(
                                 'Cancel',
                                 style: TextStyle(
                                   color: _textSecondary,

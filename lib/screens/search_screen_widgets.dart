@@ -1,10 +1,10 @@
 part of 'search_screen.dart';
 
 extension _SearchScreenSections on _SearchScreenState {
-  static const _surface = _SearchScreenState._surface;
+  static Color get _surface => _SearchScreenState._surface;
   static const _accent = _SearchScreenState._accent;
-  static const _textPrimary = _SearchScreenState._textPrimary;
-  static const _textSecondary = _SearchScreenState._textSecondary;
+  static Color get _textPrimary => _SearchScreenState._textPrimary;
+  static Color get _textSecondary => _SearchScreenState._textSecondary;
 
   // ─── Top: where you start and the search field ────────────────────────────
 
@@ -19,7 +19,7 @@ extension _SearchScreenSections on _SearchScreenState {
               IconButton(
                 onPressed: () => Navigator.of(context).maybePop(),
                 tooltip: 'Back',
-                icon: const Icon(Icons.arrow_back_rounded, color: _textPrimary),
+                icon: Icon(Icons.arrow_back_rounded, color: _textPrimary),
               ),
               Expanded(child: _buildFromRow()),
               const SizedBox(width: 48),
@@ -30,7 +30,7 @@ extension _SearchScreenSections on _SearchScreenState {
           const SizedBox(height: 6),
           Row(
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 48,
                 child: Icon(
                   Icons.location_on_outlined,
@@ -44,15 +44,12 @@ extension _SearchScreenSections on _SearchScreenState {
                   focusNode: _searchFocusNode,
                   autofocus: widget.restore == null,
                   textInputAction: TextInputAction.search,
-                  style: const TextStyle(color: _textPrimary, fontSize: 16),
+                  style: TextStyle(color: _textPrimary, fontSize: 16),
                   decoration: InputDecoration(
                     hintText: 'Where to?',
-                    hintStyle: const TextStyle(
-                      color: _textSecondary,
-                      fontSize: 16,
-                    ),
+                    hintStyle: TextStyle(color: _textSecondary, fontSize: 16),
                     filled: true,
-                    fillColor: const Color(0xFFF1F4F9),
+                    fillColor: AppColors.surfaceAlt,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -70,7 +67,7 @@ extension _SearchScreenSections on _SearchScreenState {
                                 _searchController.clear();
                                 _onSearch('');
                               },
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.close_rounded,
                                 size: 20,
                                 color: _textSecondary,
@@ -85,20 +82,12 @@ extension _SearchScreenSections on _SearchScreenState {
               ),
               PopupMenuButton<String>(
                 tooltip: 'More',
-                icon: const Icon(
-                  Icons.more_vert_rounded,
-                  color: _textSecondary,
-                ),
+                icon: Icon(Icons.more_vert_rounded, color: _textSecondary),
                 onSelected: (value) {
-                  if (value == 'downloaded') _openDownloadedRoutes();
                   if (value == 'help') _showSearchHelpSheet();
                 },
                 itemBuilder:
                     (_) => const [
-                      PopupMenuItem(
-                        value: 'downloaded',
-                        child: Text('Downloaded routes'),
-                      ),
                       PopupMenuItem(
                         value: 'help',
                         child: Text('How search works'),
@@ -124,18 +113,18 @@ extension _SearchScreenSections on _SearchScreenState {
           controller: _originController,
           focusNode: _originFocusNode,
           textInputAction: TextInputAction.next,
-          style: const TextStyle(color: _textPrimary, fontSize: 16),
+          style: TextStyle(color: _textPrimary, fontSize: 16),
           decoration: InputDecoration(
             // Reads as the value, not a faded hint: it's the real start.
             hintText: 'Your location',
-            hintStyle: const TextStyle(color: _textPrimary, fontSize: 16),
+            hintStyle: TextStyle(color: _textPrimary, fontSize: 16),
             prefixIcon: Icon(
               isCustom ? Icons.trip_origin_rounded : Icons.my_location_rounded,
               size: 18,
               color: _accent,
             ),
             filled: true,
-            fillColor: const Color(0xFFF1F4F9),
+            fillColor: AppColors.surfaceAlt,
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -154,7 +143,7 @@ extension _SearchScreenSections on _SearchScreenState {
                         _onOriginTyped('');
                         _onOriginChanged();
                       },
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close_rounded,
                         size: 20,
                         color: _textSecondary,
@@ -206,10 +195,7 @@ extension _SearchScreenSections on _SearchScreenState {
                         suggestion,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _textPrimary,
-                          fontSize: 15,
-                        ),
+                        style: TextStyle(color: _textPrimary, fontSize: 15),
                       ),
                     ),
                     const SizedBox(width: 16),

@@ -15,7 +15,9 @@ type RouteTrustScore = {
 }
 
 function computeRouteTrust(route: RouteItem): RouteTrustScore {
-  const approvalPoints = route.status === 'approved' ? 50 : route.status === 'pending' ? 20 : 0
+  // Approval keeps a route at the base score (same as the app's
+  // RouteTrustService): trust comes from riders' confirmations.
+  const approvalPoints = route.status === 'rejected' ? 0 : 20
 
   const summary = route.feedbackSummary
   const fareYes = summary?.fareAccurateYes ?? 0

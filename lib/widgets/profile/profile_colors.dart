@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 class ProfileColors {
-  static const bg = Color(0xFFF4F8FF);
-  static const surface = Color(0xFFFFFFFF);
-  static const surfaceAlt = Color(0xFFEAF2FF);
+  static Color get bg => AppColors.bg;
+  static Color get surface => AppColors.surface;
+  static Color get surfaceAlt => AppColors.surfaceAlt;
   static const accent = Color(0xFF0B8FD6);
-  static const accentSoft = Color(0x1A0B8FD6);
-  static const textPrimary = Color(0xFF0F1D35);
-  static const textSecondary = Color(0xFF7A92B2);
-  static const border = Color(0xFFD4E4F7);
+  static Color get accentSoft => AppColors.accentSoft;
+  static Color get textPrimary => AppColors.textPrimary;
+  static Color get textSecondary => AppColors.textSecondary;
+  static Color get border => AppColors.border;
   static const danger = Color(0xFFE05C6A);
   static const green = Color(0xFF3EC97A);
 }

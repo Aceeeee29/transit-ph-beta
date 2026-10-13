@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/route.dart' as route_model;
 import '../../screens/step_stops_editor_screen.dart';
+import '../../theme/app_colors.dart';
 
 // ─── Shared colors ────────────────────────────────────────────────────────────
 
 class ContributeColors {
-  static const bg = Color(0xFFF4F8FF);
-  static const surface = Color(0xFFFFFFFF);
-  static const surfaceAlt = Color(0xFFEAF2FF);
+  static Color get bg => AppColors.bg;
+  static Color get surface => AppColors.surface;
+  static Color get surfaceAlt => AppColors.surfaceAlt;
   static const accent = Color(0xFF0B8FD6);
-  static const accentSoft = Color(0x1A0B8FD6);
-  static const textPrimary = Color(0xFF0F1D35);
-  static const textSecondary = Color(0xFF7A92B2);
-  static const border = Color(0xFFD4E4F7);
+  static Color get accentSoft => AppColors.accentSoft;
+  static Color get textPrimary => AppColors.textPrimary;
+  static Color get textSecondary => AppColors.textSecondary;
+  static Color get border => AppColors.border;
 }
 
 // ─── Shared dialog header ─────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ class _DialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: ContributeColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         border: Border(
@@ -46,7 +47,7 @@ class _DialogHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: ContributeColors.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -56,7 +57,7 @@ class _DialogHeader extends StatelessWidget {
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: ContributeColors.textSecondary,
                       fontSize: 11,
                     ),
@@ -147,7 +148,7 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             color: ContributeColors.textSecondary,
             fontWeight: FontWeight.w500,
             fontSize: 14,
@@ -348,7 +349,7 @@ class _StepDialogState extends State<StepDialog> {
                           : 'No stops added yet; until you add some, riders '
                               'board at its start and get off at its end.')
                       : '${_stops.length} stop(s) added',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: ContributeColors.textSecondary,
                     fontSize: 11,
                   ),
@@ -377,7 +378,7 @@ class _StepDialogState extends State<StepDialog> {
       builder:
           (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(
+              colorScheme: ColorScheme.light(
                 primary: ContributeColors.accent,
                 onPrimary: Colors.white,
                 surface: ContributeColors.surface,
@@ -556,7 +557,7 @@ class _StepDialogState extends State<StepDialog> {
                     // Schedule header row
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -637,7 +638,7 @@ class _StepDialogState extends State<StepDialog> {
                     ),
                     if (_isMotorizedMode) ...[
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         'Set operating hours for this transport leg. 24/7 is allowed when applicable.',
                         style: TextStyle(
                           color: ContributeColors.textSecondary,
@@ -668,7 +669,7 @@ class _StepDialogState extends State<StepDialog> {
                                           onTap: () => _pickTime(isStart: true),
                                         ),
                                       ),
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 8,
                                         ),
@@ -750,7 +751,7 @@ class _StepDialogState extends State<StepDialog> {
                                           hint:
                                               'e.g., Take the MRT-3 instead, or ride a tricycle to the next terminal',
                                           maxLines: 2,
-                                          fillColor: Colors.white,
+                                          fillColor: AppColors.surface,
                                         ),
                                       ],
                                     ),
@@ -766,7 +767,7 @@ class _StepDialogState extends State<StepDialog> {
             // ── Footer ───────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: ContributeColors.surface,
                 borderRadius: BorderRadius.vertical(
                   bottom: Radius.circular(20),
@@ -812,7 +813,7 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: const TextStyle(
+    style: TextStyle(
       color: ContributeColors.textPrimary,
       fontSize: 13,
       fontWeight: FontWeight.w500,
@@ -842,13 +843,10 @@ class _Field extends StatelessWidget {
     controller: controller,
     maxLines: maxLines,
     keyboardType: keyboardType,
-    style: const TextStyle(color: ContributeColors.textPrimary, fontSize: 13),
+    style: TextStyle(color: ContributeColors.textPrimary, fontSize: 13),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(
-        color: ContributeColors.textSecondary,
-        fontSize: 12,
-      ),
+      hintStyle: TextStyle(color: ContributeColors.textSecondary, fontSize: 12),
       filled: true,
       fillColor: fillColor ?? ContributeColors.surface,
       prefixIcon:
@@ -862,11 +860,11 @@ class _Field extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: ContributeColors.border),
+        borderSide: BorderSide(color: ContributeColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: ContributeColors.border),
+        borderSide: BorderSide(color: ContributeColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -919,7 +917,7 @@ class _TimePicker extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: ContributeColors.textSecondary,
                     fontSize: 10,
                     fontWeight: FontWeight.w500,

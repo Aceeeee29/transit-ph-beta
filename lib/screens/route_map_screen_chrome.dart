@@ -4,9 +4,9 @@ part of 'route_map_screen.dart';
 /// following), the right-side buttons and the route drawer.
 extension _RouteMapScreenChrome on _RouteMapScreenState {
   static const _accent = _RouteMapScreenState._accent;
-  static const _textPrimary = _RouteMapScreenState._textPrimary;
-  static const _textSecondary = _RouteMapScreenState._textSecondary;
-  static const _border = _RouteMapScreenState._border;
+  static Color get _textPrimary => _RouteMapScreenState._textPrimary;
+  static Color get _textSecondary => _RouteMapScreenState._textSecondary;
+  static Color get _border => _RouteMapScreenState._border;
   static const _danger = _RouteMapScreenState._danger;
   static const _green = _RouteMapScreenState._green;
 
@@ -139,7 +139,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
             distanceKm: _distanceToPlace(place),
             onClose: _clearSelectedPlace,
           ),
-          const Divider(height: 1, color: _border),
+          Divider(height: 1, color: _border),
         ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -218,7 +218,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
                 const SizedBox(width: 5),
                 Text(
                   entry.key,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: _textPrimary,
                     fontWeight: FontWeight.w500,

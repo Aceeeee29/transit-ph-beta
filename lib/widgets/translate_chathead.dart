@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/translation_service.dart';
+import '../theme/app_colors.dart';
 
-const _bg = Color(0xFFF4F8FF);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceAlt = Color(0xFFEAF2FF);
+Color get _bg => AppColors.bg;
+Color get _surface => AppColors.surface;
+Color get _surfaceAlt => AppColors.surfaceAlt;
 const _accent = Color(0xFF0B8FD6);
-const _accentSoft = Color(0x1A0B8FD6);
-const _textPrimary = Color(0xFF0F1D35);
-const _textSecondary = Color(0xFF7A92B2);
-const _border = Color(0xFFD4E4F7);
+Color get _accentSoft => AppColors.accentSoft;
+Color get _textPrimary => AppColors.textPrimary;
+Color get _textSecondary => AppColors.textSecondary;
+Color get _border => AppColors.border;
 const _danger = Color(0xFFE05C6A);
 
 class TranslateChatHead extends StatefulWidget {
@@ -214,7 +215,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
       maxChildSize: 0.95,
       builder:
           (context, scrollController) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: _bg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
@@ -247,7 +248,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text(
+                      Text(
                         'Quick Translator',
                         style: TextStyle(
                           color: _textPrimary,
@@ -259,7 +260,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                     ],
                   ),
                 ),
-                const Divider(color: _border, height: 1),
+                Divider(color: _border, height: 1),
                 Expanded(
                   child: ListView(
                     controller: scrollController,
@@ -285,10 +286,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                           minLines: 3,
                           maxLines: 5,
                           textInputAction: TextInputAction.done,
-                          style: const TextStyle(
-                            color: _textPrimary,
-                            height: 1.35,
-                          ),
+                          style: TextStyle(color: _textPrimary, height: 1.35),
                           decoration: InputDecoration(
                             labelText: 'Text to translate',
                             hintText: 'Type your sentence here...',
@@ -296,11 +294,11 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                             fillColor: _surfaceAlt,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: _border),
+                              borderSide: BorderSide(color: _border),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: _border),
+                              borderSide: BorderSide(color: _border),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -480,7 +478,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                children: const [
+                                children: [
                                   Icon(
                                     Icons.notes_rounded,
                                     size: 16,
@@ -499,7 +497,7 @@ class _TranslatorSheetState extends State<_TranslatorSheet> {
                               const SizedBox(height: 8),
                               SelectableText(
                                 _translatedText,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   height: 1.4,
                                   color: _textPrimary,
@@ -540,10 +538,7 @@ class _LanguageDropdown extends StatelessWidget {
               ? value
               : options.first.code,
       isExpanded: true,
-      icon: const Icon(
-        Icons.keyboard_arrow_down_rounded,
-        color: _textSecondary,
-      ),
+      icon: Icon(Icons.keyboard_arrow_down_rounded, color: _textSecondary),
       dropdownColor: _surface,
       items:
           options
@@ -553,7 +548,7 @@ class _LanguageDropdown extends StatelessWidget {
                   child: Text(
                     option.label,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _textPrimary, fontSize: 13),
+                    style: TextStyle(color: _textPrimary, fontSize: 13),
                   ),
                 ),
               )
@@ -561,7 +556,7 @@ class _LanguageDropdown extends StatelessWidget {
       onChanged: (next) {
         if (next != null) onChanged(next);
       },
-      style: const TextStyle(color: _textPrimary, fontSize: 13),
+      style: TextStyle(color: _textPrimary, fontSize: 13),
       decoration: InputDecoration(
         labelText: label,
         filled: true,
@@ -572,11 +567,11 @@ class _LanguageDropdown extends StatelessWidget {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(color: _border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(color: _border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

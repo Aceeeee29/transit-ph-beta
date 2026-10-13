@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_colors.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -14,14 +15,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   String? _errorMessage;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   bool _isValidEmail(String email) {
@@ -125,7 +126,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -148,7 +149,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Forgot Password',
               style: TextStyle(
                 color: _textPrimary,
@@ -214,7 +215,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           'Reset Your Password',
                           style: TextStyle(
                             fontSize: 22,
@@ -224,7 +225,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'Enter your email and we\'ll send you a link to reset your password.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -244,7 +245,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Email label
-                        const Text(
+                        Text(
                           'Email Address',
                           style: TextStyle(
                             fontSize: 13,
@@ -269,11 +270,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           child: TextField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
-                            style: const TextStyle(
-                              color: _textPrimary,
-                              fontSize: 14,
-                            ),
-                            decoration: const InputDecoration(
+                            style: TextStyle(color: _textPrimary, fontSize: 14),
+                            decoration: InputDecoration(
                               hintText: 'you@example.com',
                               hintStyle: TextStyle(
                                 color: _textSecondary,

@@ -211,7 +211,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: FeedColors.border),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.arrow_back_ios_new_rounded,
             color: FeedColors.textPrimary,
             size: 16,
@@ -237,7 +237,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
           const SizedBox(width: 8),
           Text(
             'Comments${_comments.isNotEmpty ? ' (${_comments.length})' : ''}',
-            style: const TextStyle(
+            style: TextStyle(
               color: FeedColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -266,14 +266,14 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 color: FeedColors.surfaceAlt,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.chat_bubble_outline_rounded,
                 size: 30,
                 color: FeedColors.textSecondary,
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'No comments yet',
               style: TextStyle(
                 color: FeedColors.textPrimary,
@@ -282,7 +282,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Be the first to comment!',
               style: TextStyle(color: FeedColors.textSecondary, fontSize: 13),
             ),
@@ -342,7 +342,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomPadding),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: FeedColors.surface,
         border: Border(top: BorderSide(color: FeedColors.border)),
       ),
@@ -361,16 +361,13 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 maxLines: 4,
                 minLines: 1,
                 textInputAction: TextInputAction.newline,
-                style: const TextStyle(
-                  color: FeedColors.textPrimary,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: FeedColors.textPrimary, fontSize: 14),
                 decoration: InputDecoration(
                   hintText:
                       _replyingTo != null
                           ? 'Reply to ${_replyingTo!.userName}...'
                           : 'Write a comment...',
-                  hintStyle: const TextStyle(
+                  hintStyle: TextStyle(
                     color: FeedColors.textSecondary,
                     fontSize: 14,
                   ),
@@ -414,7 +411,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
               ),
               child:
                   _isSubmitting
-                      ? const Padding(
+                      ? Padding(
                         padding: EdgeInsets.all(12),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,

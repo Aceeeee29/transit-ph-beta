@@ -64,7 +64,7 @@ class _CommentItemState extends State<CommentItem> {
             ),
             title: Text(
               'Delete ${isReply ? 'reply' : 'comment'}?',
-              style: const TextStyle(
+              style: TextStyle(
                 color: FeedColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -74,15 +74,12 @@ class _CommentItemState extends State<CommentItem> {
               isReply
                   ? 'This reply will be permanently deleted.'
                   : 'This comment and all its replies will be permanently deleted.',
-              style: const TextStyle(
-                color: FeedColors.textSecondary,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: FeedColors.textSecondary, fontSize: 13),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
+                child: Text(
                   'Cancel',
                   style: TextStyle(color: FeedColors.textSecondary),
                 ),
@@ -143,7 +140,7 @@ class _CommentItemState extends State<CommentItem> {
                     children: [
                       Text(
                         comment.userName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: FeedColors.textPrimary,
@@ -154,7 +151,7 @@ class _CommentItemState extends State<CommentItem> {
                         (_showTranslated && _translated != null)
                             ? _translated!
                             : comment.content,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           color: FeedColors.textSecondary,
                           height: 1.4,
@@ -198,7 +195,7 @@ class _CommentItemState extends State<CommentItem> {
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: FeedColors.border),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.reply_rounded,
                       size: 13,
                       color: FeedColors.textSecondary,

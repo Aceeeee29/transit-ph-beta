@@ -48,8 +48,9 @@ class MapTabController extends ChangeNotifier {
   /// The page that hosts the Map tab; opening a route pops back to it.
   Route<dynamic>? hostRoute;
 
+  /// Empty means "All", which is how the map opens.
   final ValueNotifier<Set<PlaceCategory>> placeCategories = ValueNotifier(
-    const {PlaceCategory.tourist},
+    const {},
   );
   final ValueNotifier<bool> showPins = ValueNotifier(true);
 

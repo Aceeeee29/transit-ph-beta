@@ -6,6 +6,7 @@ import '../repositories/offline_route_repository.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/offline_tile_service.dart';
 import '../services/map_tab_controller.dart';
+import '../theme/app_colors.dart';
 
 class DownloadedRoutesScreen extends StatefulWidget {
   const DownloadedRoutesScreen({super.key});
@@ -15,13 +16,13 @@ class DownloadedRoutesScreen extends StatefulWidget {
 }
 
 class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   late Future<List<route_model.Route>> _routesFuture;
   final TextEditingController _searchController = TextEditingController();
@@ -126,7 +127,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           color: _textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w500,
@@ -162,19 +163,16 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
           ),
           title: Text(
             '${entry.startLabel} to ${entry.endLabel}',
-            style: const TextStyle(
-              color: _textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: _textPrimary, fontWeight: FontWeight.w500),
           ),
           subtitle: Text(
             'Followed ${_followedAgo(entry.followedAt)} · route only, '
             'map shows if downloaded or cached',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: _textSecondary, fontSize: 12),
+            style: TextStyle(color: _textSecondary, fontSize: 12),
           ),
-          trailing: const Icon(Icons.chevron_right, color: _textSecondary),
+          trailing: Icon(Icons.chevron_right, color: _textSecondary),
           onTap: () => _openFollowedRoute(entry),
         ),
       ),
@@ -190,28 +188,29 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
     if (!mounted) return;
     await _refresh();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Downloaded route deleted.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Downloaded route deleted.')));
   }
 
   Future<void> _confirmDeleteRoute(route_model.Route route) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Downloaded Route'),
-        content: const Text('Remove this route from offline storage?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete Downloaded Route'),
+            content: const Text('Remove this route from offline storage?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -222,22 +221,23 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
   Future<void> _confirmClearAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete All Downloaded Routes'),
-        content: const Text(
-          'This will remove all offline routes stored on this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete All Downloaded Routes'),
+            content: const Text(
+              'This will remove all offline routes stored on this device.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Delete All'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true) return;
@@ -274,7 +274,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -297,7 +297,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Downloaded Routes',
               style: TextStyle(
                 color: _textPrimary,
@@ -320,7 +320,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                   borderRadius: BorderRadius.circular(9),
                   border: Border.all(color: _border),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.delete_sweep_outlined,
                   size: 17,
                   color: _textSecondary,
@@ -355,20 +355,21 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                 ),
                 child: Text(
                   'Failed to load downloaded routes: ${snapshot.error}',
-                  style: const TextStyle(color: _textPrimary),
+                  style: TextStyle(color: _textPrimary),
                 ),
               ),
             );
           }
 
           final routes = snapshot.data ?? const <route_model.Route>[];
-          final filteredRoutes = routes.where((route) {
-            final q = _searchQuery.trim().toLowerCase();
-            if (q.isEmpty) return true;
-            return route.startLocation.toLowerCase().contains(q) ||
-                route.endLocation.toLowerCase().contains(q) ||
-                route.shortDescription.toLowerCase().contains(q);
-          }).toList();
+          final filteredRoutes =
+              routes.where((route) {
+                final q = _searchQuery.trim().toLowerCase();
+                if (q.isEmpty) return true;
+                return route.startLocation.toLowerCase().contains(q) ||
+                    route.endLocation.toLowerCase().contains(q) ||
+                    route.shortDescription.toLowerCase().contains(q);
+              }).toList();
           final filteredRecent =
               _recent.where((entry) {
                 final q = _searchQuery.trim().toLowerCase();
@@ -392,7 +393,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: _border),
                     ),
-                    child: const Column(
+                    child: Column(
                       children: [
                         Icon(
                           Icons.download_done_rounded,
@@ -440,8 +441,8 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                     onChanged: (value) {
                       setState(() => _searchQuery = value);
                     },
-                    style: const TextStyle(color: _textPrimary, fontSize: 14),
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: _textPrimary, fontSize: 14),
+                    decoration: InputDecoration(
                       prefixIcon: Icon(
                         Icons.search_rounded,
                         color: _accent,
@@ -472,7 +473,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: _border),
                     ),
-                    child: const Text(
+                    child: Text(
                       'No routes found for your search.',
                       style: TextStyle(color: _textSecondary),
                     ),
@@ -514,7 +515,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                         ),
                         title: Text(
                           '${route.startLocation} to ${route.endLocation}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: _textPrimary,
                             fontWeight: FontWeight.w500,
                           ),
@@ -523,7 +524,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                           route.shortDescription,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: _textSecondary),
+                          style: TextStyle(color: _textSecondary),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -548,10 +549,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: _textSecondary,
-                            ),
+                            Icon(Icons.chevron_right, color: _textSecondary),
                           ],
                         ),
                         onTap: () {

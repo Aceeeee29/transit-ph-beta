@@ -156,17 +156,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CommentsScreen(
-          postId: post.id,
-          post: post,
-          initialComments: _comments,
-          currentUserId: widget.currentUserId,
-          currentUserName: widget.currentUserName,
-          onCommentPosted: () async {
-            final fresh = await PostService.getComments(post.id);
-            if (mounted) setState(() => _comments = fresh);
-          },
-        ),
+        builder:
+            (_) => CommentsScreen(
+              postId: post.id,
+              post: post,
+              initialComments: _comments,
+              currentUserId: widget.currentUserId,
+              currentUserName: widget.currentUserName,
+              onCommentPosted: () async {
+                final fresh = await PostService.getComments(post.id);
+                if (mounted) setState(() => _comments = fresh);
+              },
+            ),
       ),
     );
   }
@@ -187,14 +188,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: FeedColors.border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new_rounded,
               color: FeedColors.textPrimary,
               size: 16,
             ),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Post',
           style: TextStyle(
             color: FeedColors.textPrimary,
@@ -234,14 +235,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   color: FeedColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.forum_outlined,
                   size: 32,
                   color: FeedColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Post unavailable',
                 style: TextStyle(
                   fontSize: 17,
@@ -253,7 +254,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               Text(
                 _error ?? 'This post may have been deleted.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   color: FeedColors.textSecondary,
                   height: 1.5,
@@ -335,14 +336,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       _comments.isEmpty
                           ? 'Be the first to comment'
                           : 'View ${_comments.length} comment${_comments.length == 1 ? '' : 's'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: FeedColors.textPrimary,
                       ),
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_ios_rounded,
                     size: 14,
                     color: FeedColors.textSecondary,

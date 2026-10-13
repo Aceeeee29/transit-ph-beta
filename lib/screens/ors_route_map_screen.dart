@@ -32,6 +32,7 @@ import '../widgets/map_tab/map_side_button.dart';
 import '../widgets/map_tab/place_category_chips.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
+import '../theme/app_colors.dart';
 
 /// Displays an ORS-generated route on an interactive map.
 /// Shows the road-snapped polyline, start/end markers, current location,
@@ -915,12 +916,12 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
               value: _isDiscountFareEnabled,
               onChanged: _setDiscountEnabled,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              labelStyle: const TextStyle(
+              labelStyle: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Colors.black87,
+                color: AppColors.textPrimary,
               ),
-              iconColor: Colors.grey,
+              iconColor: AppColors.textSecondary,
               iconSize: 15,
               activeColor: Colors.blue.shade700,
             ),
@@ -938,7 +939,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
             child: Center(
               child: Text(
                 'No step data available',
-                style: TextStyle(color: Colors.grey.shade500),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           )
@@ -951,7 +952,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Text(
             '© OSRM · © OpenStreetMap contributors',
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
         ),
       ],
@@ -1051,7 +1052,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
           if (step.distanceMeters > 0)
             Text(
               _formatStepDistance(step.distanceMeters),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
           if (step.estimatedFare > 0)
             Text(

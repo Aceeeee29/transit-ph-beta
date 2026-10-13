@@ -5,14 +5,16 @@ import 'feed_colors.dart';
 class FeedDialogHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  final Color iconBg;
+
+  /// Defaults to the soft accent.
+  final Color? iconBg;
   final Color iconColor;
 
   const FeedDialogHeader({
     super.key,
     required this.icon,
     required this.title,
-    this.iconBg = FeedColors.accentSoft,
+    this.iconBg,
     this.iconColor = FeedColors.accent,
   });
 
@@ -20,7 +22,7 @@ class FeedDialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: FeedColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         border: Border(bottom: BorderSide(color: FeedColors.border)),
@@ -31,7 +33,7 @@ class FeedDialogHeader extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: iconBg,
+              color: iconBg ?? FeedColors.accentSoft,
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, color: iconColor, size: 16),
@@ -39,7 +41,7 @@ class FeedDialogHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: FeedColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -70,7 +72,7 @@ class FeedDialogCancelButton extends StatelessWidget {
           border: Border.all(color: FeedColors.border),
         ),
         alignment: Alignment.center,
-        child: const Text(
+        child: Text(
           'Cancel',
           style: TextStyle(
             color: FeedColors.textSecondary,

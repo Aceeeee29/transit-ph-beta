@@ -116,10 +116,7 @@ class _BadgeCard extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           badge.description,
-          style: const TextStyle(
-            color: ProfileColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: ProfileColors.textSecondary, fontSize: 12),
         ),
         if (isUnlocked && formattedDate != null) ...[
           const SizedBox(height: 4),

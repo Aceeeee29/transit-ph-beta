@@ -192,10 +192,7 @@ class _AchievementCard extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           achievement.description,
-          style: const TextStyle(
-            color: ProfileColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: ProfileColors.textSecondary, fontSize: 12),
         ),
       ],
     );

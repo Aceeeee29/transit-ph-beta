@@ -16,25 +16,56 @@ import 'widgets/update_dialog.dart';
 import 'config.dart';
 import 'theme/app_colors.dart';
 
-/// app's theme.
-ThemeData buildTheme() {
+/// The app's theme, light or dark (Settings > Appearance). Most screens
+/// take their colors from [AppColors]; this covers Material's own widgets
+/// (dialogs, sheets, menus, fields, snack bars).
+ThemeData buildTheme({bool dark = false}) {
+  final palette = dark ? AppPalette.dark : AppPalette.light;
+  var scheme = ColorScheme.fromSeed(
+    seedColor: AppColors.accent,
+    brightness: dark ? Brightness.dark : Brightness.light,
+  );
+  if (dark) {
+    scheme = scheme.copyWith(
+      surface: palette.surface,
+      onSurface: palette.textPrimary,
+      onSurfaceVariant: palette.textSecondary,
+      surfaceContainerLowest: palette.bg,
+      surfaceContainerLow: palette.surface,
+      surfaceContainer: palette.surface,
+      surfaceContainerHigh: palette.surface,
+      surfaceContainerHighest: palette.surfaceAlt,
+      outline: palette.border,
+      outlineVariant: palette.border,
+    );
+  }
   return ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
+    colorScheme: scheme,
     useMaterial3: true,
-    scaffoldBackgroundColor: Colors.grey.shade100,
+    scaffoldBackgroundColor: dark ? palette.bg : Colors.grey.shade100,
+    appBarTheme:
+        dark
+            ? AppBarTheme(
+              backgroundColor: palette.surface,
+              foregroundColor: palette.textPrimary,
+            )
+            : null,
+    dividerColor: dark ? palette.border : null,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: dark ? palette.surfaceAlt : Colors.white,
       contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(
+          color: dark ? palette.border : Colors.grey.shade300,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.accent, width: 2),
       ),
-      prefixIconColor: Colors.grey.shade600,
+      prefixIconColor: dark ? palette.textSecondary : Colors.grey.shade600,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -70,7 +101,8 @@ void main() async {
   await SettingsService.loadCachedPreferences();
   unawaited(SettingsService.loadPreferences());
 
-  // Map look (classic or clean) and night mode, kept on the device.
+  // Map look (classic or clean) and light or dark appearance, kept on the
+  // device; loaded before the first frame so the app opens in its colors.
   await MapStyleService.instance.load();
 
   runApp(const TransitPHApp());
@@ -91,6 +123,8 @@ class _TransitPHAppState extends State<TransitPHApp> {
   @override
   void initState() {
     super.initState();
+    _applyAppearance();
+    MapStyleService.instance.isDark.addListener(_onAppearanceChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     WidgetsBinding.instance.addPostFrameCallback((_) => _initDeepLinks());
     // Needs an attached activity, hence after the first frame.
@@ -103,8 +137,29 @@ class _TransitPHAppState extends State<TransitPHApp> {
 
   @override
   void dispose() {
+    MapStyleService.instance.isDark.removeListener(_onAppearanceChanged);
     _deepLinkSub?.cancel();
     super.dispose();
+  }
+
+  void _applyAppearance() {
+    AppColors.palette =
+        MapStyleService.instance.isDark.value
+            ? AppPalette.dark
+            : AppPalette.light;
+  }
+
+  void _onAppearanceChanged() {
+    setState(_applyAppearance);
+    // Screens read their colors from AppColors rather than the theme, so
+    // nothing tells them to redraw: mark every widget for a rebuild. Each
+    // keeps its state, so the open screen stays where it is.
+    void markAll(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(markAll);
+    }
+
+    (context as Element).visitChildren(markAll);
   }
 
   String? _extractQuickToken(Uri? uri) {
@@ -172,7 +227,7 @@ class _TransitPHAppState extends State<TransitPHApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'TransitPH',
-      theme: buildTheme(),
+      theme: buildTheme(dark: AppColors.isDark),
       initialRoute: '/',
       onGenerateRoute: (settings) {
         final name = settings.name ?? '/';

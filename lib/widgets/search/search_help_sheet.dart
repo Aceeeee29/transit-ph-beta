@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/fare_matrix.dart';
+import '../../theme/app_colors.dart';
 
 /// Full-screen bottom sheet explaining how to use the search & route features.
 /// Self-contained – no state or callbacks required.
@@ -14,8 +15,8 @@ class SearchHelpSheet extends StatelessWidget {
       maxChildSize: 0.95,
       builder:
           (_, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: ListView(
@@ -29,7 +30,7 @@ class SearchHelpSheet extends StatelessWidget {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: AppColors.border,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -39,7 +40,7 @@ class SearchHelpSheet extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.help_outline,
-                      color: Colors.blue.shade700,
+                      color: AppColors.tintText(Colors.blue),
                       size: 22,
                     ),
                     const SizedBox(width: 8),
@@ -48,7 +49,7 @@ class SearchHelpSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
+                        color: AppColors.tintText(Colors.blue),
                       ),
                     ),
                   ],
@@ -59,8 +60,8 @@ class SearchHelpSheet extends StatelessWidget {
                 _sectionTitle('✅ Recommended Format'),
                 const SizedBox(height: 8),
                 _card(
-                  color: Colors.green.shade50,
-                  border: Colors.green.shade200,
+                  color: AppColors.tint(Colors.green),
+                  border: AppColors.tintBorder(Colors.green),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -69,39 +70,39 @@ class SearchHelpSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade800,
+                          color: AppColors.tintText(Colors.green, shade: 800),
                         ),
                       ),
                       const SizedBox(height: 10),
                       _example(
                         '✓',
                         'SM Megamall, Mandaluyong',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                       _example(
                         '✓',
                         'Quezon City Hall, Quezon City',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                       _example(
                         '✓',
                         'NAIA Terminal 3, Pasay',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                       _example(
                         '✓',
                         'Ayala MRT Station, Makati',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                       _example(
                         '✓',
                         'Robinsons Place Manila, Ermita',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                       _example(
                         '✓',
                         'UST, Sampaloc, Manila',
-                        Colors.green.shade700,
+                        AppColors.tintText(Colors.green),
                       ),
                     ],
                   ),
@@ -112,31 +113,35 @@ class SearchHelpSheet extends StatelessWidget {
                 _sectionTitle('❌ Inputs That May Fail'),
                 const SizedBox(height: 8),
                 _card(
-                  color: Colors.red.shade50,
-                  border: Colors.red.shade200,
+                  color: AppColors.tint(Colors.red),
+                  border: AppColors.tintBorder(Colors.red),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _example('✗', '"Mall" — too vague', Colors.red.shade700),
+                      _example(
+                        '✗',
+                        '"Mall" — too vague',
+                        AppColors.tintText(Colors.red),
+                      ),
                       _example(
                         '✗',
                         '"Cubao" — no city context',
-                        Colors.red.shade700,
+                        AppColors.tintText(Colors.red),
                       ),
                       _example(
                         '✗',
                         '"Home" — not a real address',
-                        Colors.red.shade700,
+                        AppColors.tintText(Colors.red),
                       ),
                       _example(
                         '✗',
                         '"EDSA" — a road, not a point',
-                        Colors.red.shade700,
+                        AppColors.tintText(Colors.red),
                       ),
                       _example(
                         '✗',
                         '"School" — too generic',
-                        Colors.red.shade700,
+                        AppColors.tintText(Colors.red),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -144,7 +149,7 @@ class SearchHelpSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
-                          color: Colors.red.shade800,
+                          color: AppColors.tintText(Colors.red, shade: 800),
                         ),
                       ),
                     ],
@@ -156,8 +161,8 @@ class SearchHelpSheet extends StatelessWidget {
                 _sectionTitle('🗺️ Community Routes vs Generated Routes'),
                 const SizedBox(height: 8),
                 _card(
-                  color: Colors.blue.shade50,
-                  border: Colors.blue.shade200,
+                  color: AppColors.tint(Colors.blue),
+                  border: AppColors.tintBorder(Colors.blue),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -165,14 +170,14 @@ class SearchHelpSheet extends StatelessWidget {
                         Icons.people_alt_outlined,
                         'Community Routes',
                         'Contributed by real commuters. Includes accurate jeepney codes, stops, and fares.',
-                        Colors.blue.shade700,
+                        AppColors.tintText(Colors.blue),
                       ),
                       const SizedBox(height: 10),
                       _info(
                         Icons.map_outlined,
                         'Generated Routes (Supabase + OSRM)',
                         'Auto-generated from Supabase GTFS transit data, with OSRM used to connect road geometry between stops. Modes/fares are still estimates — verify locally.',
-                        Colors.orange.shade700,
+                        AppColors.tintText(Colors.orange),
                       ),
                     ],
                   ),
@@ -183,8 +188,8 @@ class SearchHelpSheet extends StatelessWidget {
                 _sectionTitle('📍 Starting Point Tips'),
                 const SizedBox(height: 8),
                 _card(
-                  color: Colors.purple.shade50,
-                  border: Colors.purple.shade200,
+                  color: AppColors.tint(Colors.purple),
+                  border: AppColors.tintBorder(Colors.purple),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -192,14 +197,14 @@ class SearchHelpSheet extends StatelessWidget {
                         Icons.my_location,
                         'Your location (GPS)',
                         'Routes start from your current GPS position by default. Make sure location permission is granted.',
-                        Colors.purple.shade700,
+                        AppColors.tintText(Colors.purple),
                       ),
                       const SizedBox(height: 10),
                       _info(
                         Icons.edit_location_alt_outlined,
                         'Start somewhere else',
                         'Type a landmark or address in the top field. Clear it with the × to start from your location again.',
-                        Colors.purple.shade700,
+                        AppColors.tintText(Colors.purple),
                       ),
                     ],
                   ),
@@ -210,8 +215,8 @@ class SearchHelpSheet extends StatelessWidget {
                 _sectionTitle('💰 About Estimated Fares'),
                 const SizedBox(height: 8),
                 _card(
-                  color: Colors.amber.shade50,
-                  border: Colors.amber.shade300,
+                  color: AppColors.tint(Colors.amber),
+                  border: AppColors.tintBorder(Colors.amber, shade: 300),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -219,34 +224,34 @@ class SearchHelpSheet extends StatelessWidget {
                         'Fares shown for generated routes are estimates based on LTFRB 2025–2026 rates and the calculated road distance.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.amber.shade900,
+                          color: AppColors.tintText(Colors.amber, shade: 900),
                         ),
                       ),
                       const SizedBox(height: 8),
                       _example(
                         '•',
                         'Jeepney: ${_rule(PhFareCalculator.jeepney)}',
-                        Colors.amber.shade900,
+                        AppColors.tintText(Colors.amber, shade: 900),
                       ),
                       _example(
                         '•',
                         'Bus: ${PhFareCalculator.peso(PhFareCalculator.busOrdinary.base)} base + ${PhFareCalculator.peso(PhFareCalculator.busOrdinary.perKm)}–${PhFareCalculator.peso(PhFareCalculator.busAircon.perKm)}/km',
-                        Colors.amber.shade900,
+                        AppColors.tintText(Colors.amber, shade: 900),
                       ),
                       _example(
                         '•',
                         'FX/Van: ${_rule(PhFareCalculator.fxVan)}',
-                        Colors.amber.shade900,
+                        AppColors.tintText(Colors.amber, shade: 900),
                       ),
                       _example(
                         '•',
                         'Tricycle: ${_rule(PhFareCalculator.tricycle)}',
-                        Colors.amber.shade900,
+                        AppColors.tintText(Colors.amber, shade: 900),
                       ),
                       _example(
                         '•',
                         'Train: ${PhFareCalculator.peso(PhFareCalculator.trainMin)} base',
-                        Colors.amber.shade900,
+                        AppColors.tintText(Colors.amber, shade: 900),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -254,7 +259,7 @@ class SearchHelpSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
-                          color: Colors.amber.shade900,
+                          color: AppColors.tintText(Colors.amber, shade: 900),
                         ),
                       ),
                     ],

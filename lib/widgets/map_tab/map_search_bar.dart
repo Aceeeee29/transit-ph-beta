@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 /// The big search pill across the top of the Map tab, Google Maps style.
 /// The whole bar is one tap target; the round buttons on its right side are
@@ -21,9 +22,9 @@ class MapSearchBar extends StatelessWidget {
     this.actions = const [],
   });
 
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textSecondary = Color(0xFF7A92B2);
+  static Color get _textSecondary => AppColors.textSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +56,7 @@ class MapSearchBar extends StatelessWidget {
                   hintText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,

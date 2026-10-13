@@ -49,8 +49,8 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
   List<LocationSearchResult> _places = [];
   bool _loadingPlaces = false;
 
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
 
   String get _query => _controller.text.trim();
 
@@ -104,7 +104,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
   Widget build(BuildContext context) {
     final routes = _matchingRoutes;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -116,25 +116,22 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
                   IconButton(
                     tooltip: 'Back',
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: _textPrimary,
-                    ),
+                    icon: Icon(Icons.arrow_back_rounded, color: _textPrimary),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _controller,
                       autofocus: true,
                       textInputAction: TextInputAction.search,
-                      style: const TextStyle(color: _textPrimary, fontSize: 16),
+                      style: TextStyle(color: _textPrimary, fontSize: 16),
                       decoration: InputDecoration(
                         hintText: 'Search places or routes',
-                        hintStyle: const TextStyle(
+                        hintStyle: TextStyle(
                           color: _textSecondary,
                           fontSize: 16,
                         ),
                         filled: true,
-                        fillColor: const Color(0xFFF1F4F9),
+                        fillColor: AppColors.surfaceAlt,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -153,7 +150,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
                                     _controller.clear();
                                     _onChanged('');
                                   },
-                                  icon: const Icon(
+                                  icon: Icon(
                                     Icons.close_rounded,
                                     size: 20,
                                     color: _textSecondary,
@@ -178,7 +175,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
             Expanded(
               child:
                   _query.isEmpty
-                      ? const Center(
+                      ? Center(
                         child: Padding(
                           padding: EdgeInsets.all(32),
                           child: TranslatedText(
@@ -266,7 +263,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
     child: TranslatedText(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w500,
         color: _textSecondary,
@@ -278,7 +275,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
     child: TranslatedText(
       text,
-      style: const TextStyle(fontSize: 13, color: _textSecondary),
+      style: TextStyle(fontSize: 13, color: _textSecondary),
     ),
   );
 }

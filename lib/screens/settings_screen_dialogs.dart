@@ -1,13 +1,13 @@
 part of 'settings_screen.dart';
 
 extension _SettingsScreenSections on _SettingsScreenState {
-  static const _bg = _SettingsScreenState._bg;
-  static const _surface = _SettingsScreenState._surface;
+  static Color get _bg => _SettingsScreenState._bg;
+  static Color get _surface => _SettingsScreenState._surface;
   static const _accent = _SettingsScreenState._accent;
-  static const _accentSoft = _SettingsScreenState._accentSoft;
-  static const _textPrimary = _SettingsScreenState._textPrimary;
-  static const _textSecondary = _SettingsScreenState._textSecondary;
-  static const _border = _SettingsScreenState._border;
+  static Color get _accentSoft => _SettingsScreenState._accentSoft;
+  static Color get _textPrimary => _SettingsScreenState._textPrimary;
+  static Color get _textSecondary => _SettingsScreenState._textSecondary;
+  static Color get _border => _SettingsScreenState._border;
 
   Future<void> _clearGeneratedRouteCacheSection() async {
     final shouldClear = await showDialog<bool>(
@@ -62,7 +62,7 @@ extension _SettingsScreenSections on _SettingsScreenState {
       backgroundColor: Colors.transparent,
       builder:
           (sheetContext) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: _bg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -80,7 +80,7 @@ extension _SettingsScreenSections on _SettingsScreenState {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
                     child: Align(
                       alignment: Alignment.centerLeft,
@@ -244,7 +244,7 @@ extension _SettingsScreenSections on _SettingsScreenState {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const TranslatedText(
+                        TranslatedText(
                           'Edit Profile Name',
                           style: TextStyle(
                             color: _textPrimary,
@@ -268,11 +268,8 @@ extension _SettingsScreenSections on _SettingsScreenState {
                         controller: controller,
                         autofocus: true,
                         textInputAction: TextInputAction.done,
-                        style: const TextStyle(
-                          color: _textPrimary,
-                          fontSize: 14,
-                        ),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: _textPrimary, fontSize: 14),
+                        decoration: InputDecoration(
                           labelText: 'Name',
                           labelStyle: TextStyle(color: _textSecondary),
                           prefixIcon: Icon(
@@ -304,7 +301,7 @@ extension _SettingsScreenSections on _SettingsScreenState {
                                 border: Border.all(color: _border),
                               ),
                               alignment: Alignment.center,
-                              child: const TranslatedText(
+                              child: TranslatedText(
                                 'Cancel',
                                 style: TextStyle(
                                   color: _textSecondary,

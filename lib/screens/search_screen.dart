@@ -23,7 +23,7 @@ import '../widgets/location_permission_notice.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/search/route_option_card.dart';
 import '../widgets/search/search_help_sheet.dart';
-import 'downloaded_routes_screen.dart';
+import '../theme/app_colors.dart';
 part 'search_screen_widgets.dart';
 part 'search_screen_routing_logic.dart';
 part 'search_screen_suggestions.dart';
@@ -107,18 +107,17 @@ class _SearchScreenState extends State<SearchScreen> {
       ContributedRouteSortMode.balanced;
 
   static const Set<String> _otherSuggestionTags = {
-    'Tourist',
     'Budget',
     'Fast',
     'Accessible',
   };
 
   // ─── Color tokens ─────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
 
   // ─── Route state ──────────────────────────────────────────────────────────
   OrsRouteResult? _orsResult;
@@ -784,12 +783,6 @@ class _SearchScreenState extends State<SearchScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => const SearchHelpSheet(),
     );
-  }
-
-  void _openDownloadedRoutes() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()));
   }
 
   // ─── Generated options ────────────────────────────────────────────────────

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
-const _bg = Color(0xFFF4F8FF);
-const _surface = Color(0xFFFFFFFF);
-const _surfaceAlt = Color(0xFFEAF2FF);
+Color get _bg => AppColors.bg;
+Color get _surface => AppColors.surface;
+Color get _surfaceAlt => AppColors.surfaceAlt;
 const _accent = Color(0xFF0B8FD6);
-const _accentSoft = Color(0x1A0B8FD6);
-const _textPrimary = Color(0xFF0F1D35);
-const _textSecondary = Color(0xFF7A92B2);
-const _border = Color(0xFFD4E4F7);
+Color get _accentSoft => AppColors.accentSoft;
+Color get _textPrimary => AppColors.textPrimary;
+Color get _textSecondary => AppColors.textSecondary;
+Color get _border => AppColors.border;
 const _danger = Color(0xFFE05C6A);
 
 const Map<String, List<String>> reportCategories = {
@@ -70,7 +71,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
       maxChildSize: 0.95,
       builder:
           (context, scrollController) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: _bg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -78,7 +79,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
               children: [
                 _buildHandle(),
                 _buildHeader(),
-                const Divider(color: _border, height: 1),
+                Divider(color: _border, height: 1),
                 Expanded(child: _buildContent(scrollController)),
               ],
             ),
@@ -117,7 +118,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
             ),
           ),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'Report an Issue',
             style: TextStyle(
               color: _textPrimary,
@@ -160,7 +161,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
           title: Text(
             entry.key,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: _textPrimary,
@@ -219,8 +220,8 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
       child: TextField(
         onChanged: (val) => _description = val,
         maxLines: 3,
-        style: const TextStyle(color: _textPrimary, fontSize: 14),
-        decoration: const InputDecoration(
+        style: TextStyle(color: _textPrimary, fontSize: 14),
+        decoration: InputDecoration(
           hintText: 'Additional description (optional)',
           hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
           prefixIcon: Icon(Icons.edit_note_outlined, color: _accent, size: 20),
@@ -246,7 +247,7 @@ class _RouteReportSheetState extends State<_RouteReportSheet> {
                 border: Border.all(color: _border),
               ),
               alignment: Alignment.center,
-              child: const Text(
+              child: Text(
                 'Cancel',
                 style: TextStyle(
                   color: _textSecondary,

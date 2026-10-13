@@ -6,7 +6,7 @@ import 'package:transitph_beta/services/map_style_service.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 
 Map<String, dynamic> _fixture(String name) =>
-    jsonDecode(File('test/fixtures/openfreemap_$name.json').readAsStringSync())
+    jsonDecode(File('assets/map/style_$name.json').readAsStringSync())
         as Map<String, dynamic>;
 
 void main() {
@@ -53,7 +53,7 @@ void main() {
     expect(paint('highway_motorway_inner', 'line-color'), '#746855');
   });
 
-  test('auto night runs from 6 PM to 6 AM', () {
+  test('auto appearance is dark from 6 PM to 6 AM', () {
     expect(MapStyleService.isNightHour(DateTime(2026, 10, 12, 17, 59)), false);
     expect(MapStyleService.isNightHour(DateTime(2026, 10, 12, 18)), true);
     expect(MapStyleService.isNightHour(DateTime(2026, 10, 12, 5, 59)), true);

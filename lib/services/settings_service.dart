@@ -14,7 +14,6 @@ class SettingsService {
   static const Map<String, dynamic> _defaultPreferences = {
     'routeApprovalUpdates': true,
     'newDiscussions': true,
-    'weeklyDigest': false,
     'distanceUnit': 'Miles',
     'showEmailInProfile': false,
     'language': 'English',

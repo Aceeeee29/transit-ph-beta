@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/announcement.dart';
 import '../services/announcement_service.dart';
+import '../theme/app_colors.dart';
 
 class AnnouncementDialog {
   AnnouncementDialog._();
@@ -63,10 +64,10 @@ class _AnnouncementAlertDialog extends StatelessWidget {
           Expanded(
             child: Text(
               announcement.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF0F1D35),
+                color: AppColors.textPrimary,
                 height: 1.2,
               ),
             ),

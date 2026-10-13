@@ -55,13 +55,13 @@ class _HomeScreenState extends State<HomeScreen> {
   };
 
   // ─── Color tokens ────────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
   static const _accent = AppColors.accent;
-  static const _accentSoft = AppColors.accentSoft;
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────

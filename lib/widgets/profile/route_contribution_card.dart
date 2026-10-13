@@ -84,7 +84,7 @@ class RouteContributionCard extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: ProfileColors.textPrimary,
               fontWeight: FontWeight.w500,
@@ -127,7 +127,7 @@ class _CardHeader extends StatelessWidget {
             children: [
               Text(
                 route.shortDescription,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: ProfileColors.textPrimary,
@@ -153,10 +153,7 @@ class _CardHeader extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            style: const TextStyle(
-              fontSize: 12,
-              color: ProfileColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 12, color: ProfileColors.textSecondary),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -198,7 +195,7 @@ class _CardHeader extends StatelessWidget {
           borderRadius: BorderRadius.circular(9),
           border: Border.all(color: ProfileColors.border),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.edit_outlined,
           size: 16,
           color: ProfileColors.textSecondary,
@@ -244,7 +241,7 @@ class _MetricsGrid extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: ProfileColors.textPrimary,
@@ -252,10 +249,7 @@ class _MetricsGrid extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 10,
-              color: ProfileColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 10, color: ProfileColors.textSecondary),
           ),
         ],
       ),
@@ -289,13 +283,13 @@ class _MetricsGrid extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 '${trust.total}/100',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: ProfileColors.textPrimary,
                 ),
               ),
-              const Text(
+              Text(
                 'Integrity',
                 style: TextStyle(
                   fontSize: 10,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_profile_bootstrap_service.dart';
 import '../widgets/auth/auth_text_field.dart';
+import '../theme/app_colors.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -22,14 +23,14 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isConfirmPasswordVisible = false;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   // Common passwords to block
@@ -208,7 +209,7 @@ class _SignupScreenState extends State<SignupScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -231,7 +232,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Create Account',
               style: TextStyle(
                 color: _textPrimary,
@@ -280,7 +281,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text(
+                Text(
                   'Join TransitPH',
                   style: TextStyle(
                     fontSize: 24,
@@ -290,7 +291,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Create an account to get started',
                   style: TextStyle(fontSize: 13, color: _textSecondary),
                 ),
@@ -343,8 +344,10 @@ class _SignupScreenState extends State<SignupScreen> {
                         obscure: !_isPasswordVisible,
                         suffix: _visibilityToggle(
                           visible: _isPasswordVisible,
-                          onTap: () => setState(
-                              () => _isPasswordVisible = !_isPasswordVisible),
+                          onTap:
+                              () => setState(
+                                () => _isPasswordVisible = !_isPasswordVisible,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -363,10 +366,12 @@ class _SignupScreenState extends State<SignupScreen> {
                         obscure: !_isConfirmPasswordVisible,
                         suffix: _visibilityToggle(
                           visible: _isConfirmPasswordVisible,
-                          onTap: () => setState(
-                            () => _isConfirmPasswordVisible =
-                                !_isConfirmPasswordVisible,
-                          ),
+                          onTap:
+                              () => setState(
+                                () =>
+                                    _isConfirmPasswordVisible =
+                                        !_isConfirmPasswordVisible,
+                              ),
                         ),
                       ),
 
@@ -386,13 +391,13 @@ class _SignupScreenState extends State<SignupScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.info_outline_rounded,
                               size: 14,
                               color: _textSecondary,
                             ),
                             const SizedBox(width: 7),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'At least 8 characters with 2 of: uppercase, lowercase, numbers, symbols.',
                                 style: TextStyle(
@@ -418,8 +423,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           decoration: BoxDecoration(
                             color: _danger.withOpacity(0.07),
                             borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: _danger.withOpacity(0.3)),
+                            border: Border.all(color: _danger.withOpacity(0.3)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,57 +459,60 @@ class _SignupScreenState extends State<SignupScreen> {
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
-                            gradient: _isLoading
-                                ? null
-                                : const LinearGradient(
-                                    colors: [
-                                      Color(0xFF0B8FD6),
-                                      Color(0xFF2BB5F0),
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
+                            gradient:
+                                _isLoading
+                                    ? null
+                                    : const LinearGradient(
+                                      colors: [
+                                        Color(0xFF0B8FD6),
+                                        Color(0xFF2BB5F0),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
                             color: _isLoading ? _border : null,
                             borderRadius: BorderRadius.circular(13),
-                            boxShadow: _isLoading
-                                ? null
-                                : [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                            boxShadow:
+                                _isLoading
+                                    ? null
+                                    : [
+                                      BoxShadow(
+                                        color: _accent.withOpacity(0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                           ),
                           alignment: Alignment.center,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.person_add_rounded,
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
                                       color: Colors.white,
-                                      size: 17,
+                                      strokeWidth: 2.5,
                                     ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Create Account',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                  )
+                                  : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.person_add_rounded,
                                         color: Colors.white,
+                                        size: 17,
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Create Account',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                         ),
                       ),
                     ],
@@ -518,7 +525,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
+                    Text(
                       'Already have an account? ',
                       style: TextStyle(fontSize: 13, color: _textSecondary),
                     ),

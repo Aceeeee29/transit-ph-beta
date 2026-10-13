@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 
 import '../../services/map_style_service.dart';
@@ -15,7 +18,7 @@ class AppBaseMap extends StatelessWidget {
     return ListenableBuilder(
       listenable: styles.changes,
       builder: (context, _) {
-        final night = styles.isNight.value;
+        final night = styles.isDark.value;
         if (styles.look.value == MapLook.clean) {
           return _CleanBaseMap(key: ValueKey(night), night: night);
         }
@@ -38,8 +41,11 @@ TileLayer offlineTileLayer(String urlTemplate) => TileLayer(
   urlTemplate: urlTemplate,
   tileProvider: FileTileProvider(),
   tileBuilder:
-      MapStyleService.instance.isNight.value ? darkModeTileBuilder : null,
+      MapStyleService.instance.isDark.value ? darkModeTileBuilder : null,
 );
+
+Future<Directory> _tileCacheFolder() async =>
+    Directory('${(await getApplicationSupportDirectory()).path}/map_tiles');
 
 class _CleanBaseMap extends StatefulWidget {
   final bool night;
@@ -66,6 +72,14 @@ class _CleanBaseMapState extends State<_CleanBaseMap> {
         return VectorTileLayer(
           theme: style.theme,
           tileProviders: style.providers,
+          // Kept with the app's own files, where Android doesn't clear
+          // them the way it clears the temporary folder (the plugin's
+          // default), so a downloaded tile is downloaded once.
+          // (`dynamic`: the analyzer reads the plugin's web stub, where
+          // its Directory is a String; on the phone it is dart:io's.)
+          cacheFolder: _tileCacheFolder as dynamic,
+          fileCacheTtl: const Duration(days: 365),
+          fileCacheMaximumSizeInBytes: 150 * 1024 * 1024,
         );
       },
     );

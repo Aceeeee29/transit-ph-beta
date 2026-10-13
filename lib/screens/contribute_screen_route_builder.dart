@@ -1,13 +1,13 @@
 part of 'contribute_screen.dart';
 
 extension _ContributeScreenSections on _ContributeScreenState {
-  static const _surface = _ContributeScreenState._surface;
-  static const _surfaceAlt = _ContributeScreenState._surfaceAlt;
+  static Color get _surface => _ContributeScreenState._surface;
+  static Color get _surfaceAlt => _ContributeScreenState._surfaceAlt;
   static const _accent = _ContributeScreenState._accent;
-  static const _accentSoft = _ContributeScreenState._accentSoft;
-  static const _textPrimary = _ContributeScreenState._textPrimary;
-  static const _textSecondary = _ContributeScreenState._textSecondary;
-  static const _border = _ContributeScreenState._border;
+  static Color get _accentSoft => _ContributeScreenState._accentSoft;
+  static Color get _textPrimary => _ContributeScreenState._textPrimary;
+  static Color get _textSecondary => _ContributeScreenState._textSecondary;
+  static Color get _border => _ContributeScreenState._border;
 
   route_model.Route _buildRouteSection({String? existingId}) {
     double totalDurS = 0;
@@ -448,7 +448,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 Expanded(
                   child: TranslatedText(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _textPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -470,7 +470,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               const SizedBox(height: 4),
               Text(
                 _routeMetricsLine(),
-                style: const TextStyle(color: _textSecondary, fontSize: 12),
+                style: TextStyle(color: _textSecondary, fontSize: 12),
               ),
             ],
             if (_hasOpenStep) ...[
@@ -802,7 +802,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
       children: [
         Row(
           children: [
-            const TranslatedText(
+            TranslatedText(
               'Route Steps',
               style: TextStyle(
                 fontSize: 13,
@@ -827,7 +827,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
               ),
             ),
             const Spacer(),
-            const Flexible(
+            Flexible(
               child: TranslatedText(
                 'Drag the dots on the map to fix a line',
                 style: TextStyle(fontSize: 11, color: _textSecondary),
@@ -842,7 +842,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
           _buildStepEditorTileSection(i),
           const SizedBox(height: 8),
         ],
-        const Divider(height: 8, color: _border),
+        Divider(height: 8, color: _border),
       ],
     );
   }
@@ -887,7 +887,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   step.instruction,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: _textPrimary,
@@ -897,7 +897,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   _stepEditorSubtitle(step),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: _textSecondary),
+                  style: TextStyle(fontSize: 10, color: _textSecondary),
                 ),
               ],
             ),
@@ -1053,7 +1053,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             const SizedBox(width: 6),
             Text(
               '${coord.latitude.toStringAsFixed(5)}, ${coord.longitude.toStringAsFixed(5)}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: _textPrimary,
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -1077,20 +1077,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
                   ),
                 );
               },
-              child: const Icon(
-                Icons.copy_rounded,
-                color: _textSecondary,
-                size: 14,
-              ),
+              child: Icon(Icons.copy_rounded, color: _textSecondary, size: 14),
             ),
             const SizedBox(width: 6),
             GestureDetector(
               onTap: () => _setUiState(() => _debugCoord = null),
-              child: const Icon(
-                Icons.close_rounded,
-                color: _textSecondary,
-                size: 14,
-              ),
+              child: Icon(Icons.close_rounded, color: _textSecondary, size: 14),
             ),
           ],
         ),

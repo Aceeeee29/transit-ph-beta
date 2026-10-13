@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/route_follow_guidance.dart';
 import '../../services/route_metrics_service.dart';
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 /// Tells a traveler who isn't on the route they're following how to get to
 /// it: walking to the boarding point, rerouting back, or waiting out a
@@ -25,7 +26,7 @@ class FollowGuidanceCard extends StatelessWidget {
 
   static const _accent = Color(0xFF0B8FD6);
   static const _warning = Color(0xFFB8732F);
-  static const _textPrimary = Color(0xFF0F1D35);
+  static Color get _textPrimary => AppColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +46,7 @@ class FollowGuidanceCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.5)),
         boxShadow: [
@@ -63,7 +64,7 @@ class FollowGuidanceCard extends StatelessWidget {
           Expanded(
             child: TranslatedText(
               _message(),
-              style: const TextStyle(
+              style: TextStyle(
                 color: _textPrimary,
                 fontWeight: FontWeight.w500,
                 fontSize: 12.5,

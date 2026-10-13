@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class RouteFormStepper extends StatefulWidget {
   final TextEditingController startLocationController;
@@ -47,13 +48,13 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
   int _activeStep = 0;
 
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
+  static Color get _border => AppColors.border;
   static const _warning = Color(0xFFFFB547);
   static const _danger = Color(0xFFE05C6A);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
 
   static const _stepTitles = ['Basic Info', 'Route Tags', 'Description'];
 
@@ -104,7 +105,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   canFinish
                       ? 'Finish your route to submit it or share it as a quick link.'
                       : 'Add at least one step on the map, then finish your route to submit it or share it as a quick link.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: _textSecondary,
                     height: 1.4,
@@ -239,7 +240,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
       children: [
         TextFormField(
           controller: widget.startLocationController,
-          style: const TextStyle(color: _textPrimary, fontSize: 13),
+          style: TextStyle(color: _textPrimary, fontSize: 13),
           decoration: _buildInputDecoration(
             label: 'Starting Location (tap map to select or type)',
           ),
@@ -247,7 +248,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         const SizedBox(height: 16),
         TextFormField(
           controller: widget.endLocationController,
-          style: const TextStyle(color: _textPrimary, fontSize: 13),
+          style: TextStyle(color: _textPrimary, fontSize: 13),
           decoration: _buildInputDecoration(
             label: 'End Location (tap map to select or type)',
           ),
@@ -265,7 +266,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           child: Text(
             'User Tags (Onboarding)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF67758D),
+              color: AppColors.textSecondary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -274,39 +275,41 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children:
-              widget.userTagOptions.map((tag) {
-                final isSelected = widget.selectedRouteTags.contains(tag);
-                return FilterChip(
-                  label: Text(tag),
-                  selected: isSelected,
-                  selectedColor: _accentSoft,
-                  showCheckmark: false,
-                  checkmarkColor: _accent,
-                  labelStyle: TextStyle(
-                    color: isSelected ? _accent : const Color(0xFF0F1D35),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                  ),
-                  backgroundColor: const Color(0xFFEAF2FF),
-                  visualDensity: VisualDensity.compact,
-                  side: BorderSide(
-                    color: isSelected ? _accent.withOpacity(0.35) : _border,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  onSelected: (selected) {
-                    final next = List<String>.from(widget.selectedRouteTags);
-                    if (selected) {
-                      if (!next.contains(tag)) next.add(tag);
-                    } else {
-                      next.remove(tag);
-                    }
-                    widget.onRouteTagsChanged(next);
-                  },
-                );
-              }).toList(),
+          children: [
+            _buildEveryoneChip(),
+            ...widget.userTagOptions.map((tag) {
+              final isSelected = widget.selectedRouteTags.contains(tag);
+              return FilterChip(
+                label: Text(tag),
+                selected: isSelected,
+                selectedColor: _accentSoft,
+                showCheckmark: false,
+                checkmarkColor: _accent,
+                labelStyle: TextStyle(
+                  color: isSelected ? _accent : AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+                backgroundColor: AppColors.surfaceAlt,
+                visualDensity: VisualDensity.compact,
+                side: BorderSide(
+                  color: isSelected ? _accent.withOpacity(0.35) : _border,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                onSelected: (selected) {
+                  final next = List<String>.from(widget.selectedRouteTags);
+                  if (selected) {
+                    if (!next.contains(tag)) next.add(tag);
+                  } else {
+                    next.remove(tag);
+                  }
+                  widget.onRouteTagsChanged(next);
+                },
+              );
+            }),
+          ],
         ),
         const SizedBox(height: 12),
         Align(
@@ -314,7 +317,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           child: Text(
             'Other Tags (pick one)',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF67758D),
+              color: AppColors.textSecondary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -333,11 +336,11 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   showCheckmark: false,
                   checkmarkColor: _accent,
                   labelStyle: TextStyle(
-                    color: isSelected ? _accent : const Color(0xFF0F1D35),
+                    color: isSelected ? _accent : AppColors.textPrimary,
                     fontWeight: FontWeight.w500,
                     fontSize: 12,
                   ),
-                  backgroundColor: const Color(0xFFEAF2FF),
+                  backgroundColor: AppColors.surfaceAlt,
                   visualDensity: VisualDensity.compact,
                   side: BorderSide(
                     color: isSelected ? _accent.withOpacity(0.35) : _border,
@@ -361,12 +364,45 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     );
   }
 
+  /// Selects every user tag at once (and clears them all when tapped
+  /// again). It's a shortcut, not a tag of its own, so recommendations
+  /// keep matching on the individual tags.
+  Widget _buildEveryoneChip() {
+    final selectedTags = widget.selectedRouteTags;
+    final isSelected = widget.userTagOptions.every(selectedTags.contains);
+    return FilterChip(
+      label: const Text('Everyone'),
+      selected: isSelected,
+      selectedColor: _accentSoft,
+      showCheckmark: false,
+      labelStyle: TextStyle(
+        color: isSelected ? _accent : AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+        fontSize: 12,
+      ),
+      backgroundColor: AppColors.surfaceAlt,
+      visualDensity: VisualDensity.compact,
+      side: BorderSide(
+        color: isSelected ? _accent.withValues(alpha: 0.35) : _border,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onSelected: (selected) {
+        final next =
+            selectedTags
+                .where((t) => !widget.userTagOptions.contains(t))
+                .toList();
+        if (selected) next.addAll(widget.userTagOptions);
+        widget.onRouteTagsChanged(next);
+      },
+    );
+  }
+
   Widget _buildDescriptionStep() {
     return Column(
       children: [
         TextFormField(
           controller: widget.shortDescriptionController,
-          style: const TextStyle(color: _textPrimary, fontSize: 13),
+          style: TextStyle(color: _textPrimary, fontSize: 13),
           decoration: _buildInputDecoration(label: 'Short Description'),
           maxLines: 2,
         ),
@@ -384,7 +420,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
             child: ElevatedButton(
               onPressed: () => _setStep(_activeStep - 1),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7A92B2),
+                backgroundColor: AppColors.textSecondary,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Back'),
@@ -438,9 +474,9 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   widget.quickCreateMode
                       ? 'This route is temporary and expires automatically after 24 hours.'
                       : 'Your route will be reviewed by a moderator before it appears publicly.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF7A92B2),
+                    color: AppColors.textSecondary,
                     height: 1.4,
                   ),
                 ),
@@ -481,11 +517,11 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         if (widget.quickCreateMode &&
             widget.onSubmitForReviewInstead != null) ...[
           const SizedBox(height: 12),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Prefer to keep this as a temporary route instead?',
-              style: TextStyle(fontSize: 11, color: Color(0xFF7A92B2)),
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
           ),
           const SizedBox(height: 8),
@@ -505,9 +541,9 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         ],
         if (!widget.quickCreateMode && widget.onCreateQuickLink != null) ...[
           const SizedBox(height: 16),
-          const Row(
+          Row(
             children: [
-              Expanded(child: Divider(height: 1, color: Color(0xFFD4E4F7))),
+              Expanded(child: Divider(height: 1, color: AppColors.border)),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 child: Text(
@@ -515,16 +551,16 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                   style: TextStyle(
                     fontSize: 10,
                     letterSpacing: 0.8,
-                    color: Color(0xFF7A92B2),
+                    color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
-              Expanded(child: Divider(height: 1, color: Color(0xFFD4E4F7))),
+              Expanded(child: Divider(height: 1, color: AppColors.border)),
             ],
           ),
           const SizedBox(height: 8),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Create a 24-hour link without moderator review. '
@@ -532,7 +568,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
               style: TextStyle(
                 fontSize: 11,
                 height: 1.4,
-                color: Color(0xFF7A92B2),
+                color: AppColors.textSecondary,
               ),
             ),
           ),
@@ -573,7 +609,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
   InputDecoration _buildInputDecoration({required String label}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: _textSecondary, fontSize: 12),
+      labelStyle: TextStyle(color: _textSecondary, fontSize: 12),
       floatingLabelStyle: const TextStyle(
         color: _accent,
         fontSize: 12,
@@ -584,11 +620,11 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _border),
+        borderSide: BorderSide(color: _border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _border),
+        borderSide: BorderSide(color: _border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

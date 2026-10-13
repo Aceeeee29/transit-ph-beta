@@ -6,6 +6,7 @@ import 'main_screen.dart';
 import 'email_verification_screen.dart';
 import 'onboarding_screen.dart';
 import 'legal_consent_screen.dart';
+import '../theme/app_colors.dart';
 
 class AuthGate extends StatelessWidget {
   final String? quickRouteToken;
@@ -16,18 +17,18 @@ class AuthGate extends StatelessWidget {
   static const _termsVersion = '2026-04-08';
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
   static const _maxRestrictionDuration = Duration(days: 7);
 
   // ─── Shared loading scaffold ───────────────────────────────────────────────
   static Widget _loadingScaffold() {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: _bg,
       body: Center(
         child: Column(
@@ -300,9 +301,9 @@ class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
                   color: AuthGate._surface,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: AuthGate._border),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x1A0B8FD6),
+                      color: AppColors.accentSoft,
                       blurRadius: 24,
                       offset: Offset(0, 10),
                     ),
@@ -328,7 +329,7 @@ class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Account Restricted',
                             style: TextStyle(

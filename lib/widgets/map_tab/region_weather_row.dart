@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/location_service.dart';
 import '../../services/weather_service.dart';
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 /// The drawer's resting row: the area picker on the left (CAMANAVA,
 /// Valenzuela, …) and the current weather on the right.
@@ -19,7 +20,7 @@ class RegionWeatherRow extends StatelessWidget {
   });
 
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
+  static Color get _textPrimary => AppColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +68,7 @@ class RegionWeatherRow extends StatelessWidget {
                         selectedRegion ?? 'Choose area',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: _textPrimary,
                           fontSize: 22,
                           fontWeight: FontWeight.w600,
@@ -76,7 +77,7 @@ class RegionWeatherRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 2),
-                    const Icon(
+                    Icon(
                       Icons.keyboard_arrow_down_rounded,
                       color: _textPrimary,
                     ),
@@ -183,18 +184,18 @@ class _WeatherChipState extends State<WeatherChip> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF2FF),
+          color: AppColors.surfaceAlt,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_iconFor(weather), size: 22, color: const Color(0xFF5B6F8E)),
+            Icon(_iconFor(weather), size: 22, color: AppColors.textSecondary),
             const SizedBox(width: 6),
             Text(
               degrees != null ? '${degrees.round()}°' : weather.temp,
-              style: const TextStyle(
-                color: Color(0xFF0F1D35),
+              style: TextStyle(
+                color: AppColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),

@@ -77,7 +77,7 @@ class _ErrorState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Error loading contributions',
             style: TextStyle(
               fontSize: 15,
@@ -87,10 +87,7 @@ class _ErrorState extends StatelessWidget {
           ),
           Text(
             '$error',
-            style: const TextStyle(
-              fontSize: 12,
-              color: ProfileColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 12, color: ProfileColors.textSecondary),
           ),
         ],
       ),
@@ -103,7 +100,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

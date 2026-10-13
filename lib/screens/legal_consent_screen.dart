@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'legal_documents_screen.dart';
+import '../theme/app_colors.dart';
 
 class LegalConsentScreen extends StatefulWidget {
   final User user;
@@ -22,13 +23,13 @@ class LegalConsentScreen extends StatefulWidget {
 }
 
 class _LegalConsentScreenState extends State<LegalConsentScreen> {
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
   bool _acceptPrivacy = false;
@@ -51,15 +52,18 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
     });
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).set({
-        'legalAcceptance': {
-          'privacyPolicyAccepted': true,
-          'termsAccepted': true,
-          'privacyPolicyVersion': widget.privacyPolicyVersion,
-          'termsVersion': widget.termsVersion,
-          'acceptedAt': FieldValue.serverTimestamp(),
-        },
-      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .set({
+            'legalAcceptance': {
+              'privacyPolicyAccepted': true,
+              'termsAccepted': true,
+              'privacyPolicyVersion': widget.privacyPolicyVersion,
+              'termsVersion': widget.termsVersion,
+              'acceptedAt': FieldValue.serverTimestamp(),
+            },
+          }, SetOptions(merge: true));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -87,7 +91,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
           automaticallyImplyLeading: false,
-          title: const Text(
+          title: Text(
             'Required Consent',
             style: TextStyle(
               color: _textPrimary,
@@ -116,7 +120,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'To use TransitPH, you must review and accept both documents below.',
                       style: TextStyle(
                         color: _textSecondary,
@@ -133,9 +137,10 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                       onOpen: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const LegalDocumentsScreen(
-                              type: LegalDocumentType.privacyPolicy,
-                            ),
+                            builder:
+                                (_) => const LegalDocumentsScreen(
+                                  type: LegalDocumentType.privacyPolicy,
+                                ),
                           ),
                         );
                       },
@@ -149,9 +154,10 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                       onOpen: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const LegalDocumentsScreen(
-                              type: LegalDocumentType.termsAndConditions,
-                            ),
+                            builder:
+                                (_) => const LegalDocumentsScreen(
+                                  type: LegalDocumentType.termsAndConditions,
+                                ),
                           ),
                         );
                       },
@@ -180,19 +186,20 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                        child:
+                            _isSubmitting
+                                ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : const Text(
+                                  'Accept and Continue',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
-                              )
-                            : const Text(
-                                'Accept and Continue',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -246,7 +253,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -255,13 +262,16 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(color: _textSecondary, fontSize: 12),
+                  style: TextStyle(color: _textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: onOpen,
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),

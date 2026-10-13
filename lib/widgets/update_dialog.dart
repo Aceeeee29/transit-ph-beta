@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/update_checker.dart';
+import '../theme/app_colors.dart';
 
 /// Shows an update dialog when a new version of TransitPH is available.
 ///
@@ -244,7 +245,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: _progress,
-                backgroundColor: Colors.grey.shade200,
+                backgroundColor: AppColors.surfaceAlt,
                 color: Colors.blue.shade700,
                 minHeight: 8,
               ),
@@ -253,7 +254,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
             Text(
               '${(_progress * 100).toStringAsFixed(0)}%',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: AppColors.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),

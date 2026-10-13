@@ -1,12 +1,12 @@
 part of 'moderator_screen.dart';
 
 extension _ModeratorScreenSections on _ModeratorScreenState {
-  static const _surface = _ModeratorScreenState._surface;
-  static const _surfaceAlt = _ModeratorScreenState._surfaceAlt;
+  static Color get _surface => _ModeratorScreenState._surface;
+  static Color get _surfaceAlt => _ModeratorScreenState._surfaceAlt;
   static const _accent = _ModeratorScreenState._accent;
-  static const _textPrimary = _ModeratorScreenState._textPrimary;
-  static const _textSecondary = _ModeratorScreenState._textSecondary;
-  static const _border = _ModeratorScreenState._border;
+  static Color get _textPrimary => _ModeratorScreenState._textPrimary;
+  static Color get _textSecondary => _ModeratorScreenState._textSecondary;
+  static Color get _border => _ModeratorScreenState._border;
   static const _danger = _ModeratorScreenState._danger;
   static const _success = _ModeratorScreenState._success;
   static const _warning = _ModeratorScreenState._warning;
@@ -145,7 +145,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 if (route.createdAt != null)
                   Text(
                     _formatDate(route.createdAt!),
-                    style: const TextStyle(fontSize: 11, color: _textSecondary),
+                    style: TextStyle(fontSize: 11, color: _textSecondary),
                   ),
               ],
             ),
@@ -162,7 +162,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     Expanded(
                       child: Text(
                         route.startLocation,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: _textPrimary,
@@ -191,7 +191,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     Expanded(
                       child: Text(
                         route.endLocation,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: _textPrimary,
@@ -203,7 +203,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 const SizedBox(height: 10),
                 Text(
                   route.shortDescription,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: _textSecondary,
                     height: 1.4,
@@ -237,7 +237,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 ),
                 if (route.audienceTags.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'SUBMITTED TAGS',
                     style: TextStyle(
                       fontSize: 10,
@@ -261,7 +261,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 ],
                 const SizedBox(height: 12),
                 if (route.steps.isNotEmpty) ...[
-                  const Text(
+                  Text(
                     'STEPS PREVIEW',
                     style: TextStyle(
                       fontSize: 10,
@@ -301,7 +301,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                               Expanded(
                                 child: Text(
                                   step.instruction,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     color: _textPrimary,
                                   ),
@@ -314,10 +314,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   if (route.steps.length > 3)
                     Text(
                       '+ ${route.steps.length - 3} more steps',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _textSecondary,
-                      ),
+                      style: TextStyle(fontSize: 11, color: _textSecondary),
                     ),
                 ],
               ],
@@ -510,7 +507,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: _textPrimary,
@@ -522,7 +519,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                     const SizedBox(height: 12),
                     Text(
                       message,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: _textSecondary,
                         height: 1.4,
@@ -542,7 +539,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                                 border: Border.all(color: _border),
                               ),
                               alignment: Alignment.center,
-                              child: const Text(
+                              child: Text(
                                 'Cancel',
                                 style: TextStyle(
                                   color: _textSecondary,
@@ -656,7 +653,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'Confirm User Restriction',
                               style: TextStyle(
@@ -671,7 +668,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                       const SizedBox(height: 12),
                       Text(
                         'You are about to restrict ${user.name} for up to 7 days. Type RESTRICT to confirm this action.',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           color: _textSecondary,
                           height: 1.4,
@@ -690,7 +687,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                             value: selectedDays,
                             isExpanded: true,
                             dropdownColor: _surface,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: _textPrimary,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -727,12 +724,12 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                             typedKeyword = value;
                             setDialogState(() {});
                           },
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: _textPrimary,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'Type RESTRICT',
                             hintStyle: TextStyle(
                               color: _textSecondary,
@@ -760,7 +757,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                                   border: Border.all(color: _border),
                                 ),
                                 alignment: Alignment.center,
-                                child: const Text(
+                                child: Text(
                                   'Cancel',
                                   style: TextStyle(
                                     color: _textSecondary,
@@ -840,14 +837,14 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check_circle_outline_rounded,
                 size: 32,
                 color: _textSecondary,
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'No reported posts',
               style: TextStyle(
                 fontSize: 16,
@@ -856,7 +853,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'All clear!',
               style: TextStyle(fontSize: 13, color: _textSecondary),
             ),
@@ -913,7 +910,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text(
+                      Text(
                         'Reported Post',
                         style: TextStyle(
                           fontSize: 14,
@@ -926,7 +923,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   const SizedBox(height: 10),
                   Text(
                     post.content,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       color: _textPrimary,
                       height: 1.4,
@@ -952,7 +949,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                                 post.imageUrls[index],
                                 fit: BoxFit.cover,
                                 errorBuilder:
-                                    (context, error, stackTrace) => const Icon(
+                                    (context, error, stackTrace) => Icon(
                                       Icons.broken_image,
                                       color: _textSecondary,
                                     ),

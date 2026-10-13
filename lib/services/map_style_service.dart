@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart'
     show ThemeReader;
+
+import 'map_tile_pack.dart';
 
 /// How the base map is drawn.
 enum MapLook {
@@ -17,26 +19,33 @@ enum MapLook {
   clean,
 }
 
-enum NightMap { off, on, auto }
+/// Light or dark screens and map (Settings > Preferences > Appearance):
+/// [auto] goes by the time of day, [system] by the phone's dark theme.
+enum Appearance { light, dark, auto, system }
 
-/// The base-map look and night mode, chosen in Settings and kept on the
-/// device. Every map screen draws its base through `AppBaseMap`, which
-/// listens to [changes].
-class MapStyleService {
+/// The base-map look and the app's appearance, chosen in Settings and kept
+/// on the device. Every map screen draws its base through `AppBaseMap`,
+/// which listens to [changes]; the app's colors follow [isDark].
+class MapStyleService with WidgetsBindingObserver {
   MapStyleService._();
   static final instance = MapStyleService._();
 
   static const _lookKey = 'map_look';
-  static const _nightKey = 'map_night';
+  static const _appearanceKey = 'app_appearance';
+
+  /// Before Appearance, a "Night Map" setting darkened only the map.
+  static const _oldNightKey = 'map_night';
 
   final look = ValueNotifier<MapLook>(MapLook.clean);
-  final night = ValueNotifier<NightMap>(NightMap.off);
+  final appearance = ValueNotifier<Appearance>(Appearance.light);
 
-  /// Whether the map is dark right now ([night], with "auto" resolved).
-  final isNight = ValueNotifier<bool>(false);
+  /// Whether the app is dark right now ([appearance], with "Auto" and
+  /// "Follow phone" resolved).
+  final isDark = ValueNotifier<bool>(false);
 
-  Listenable get changes => Listenable.merge([look, isNight]);
+  Listenable get changes => Listenable.merge([look, isDark]);
 
+  bool _observing = false;
   Timer? _clock;
 
   Future<void> load() async {
@@ -46,20 +55,36 @@ class MapStyleService {
         (l) => l.name == prefs.getString(_lookKey),
         orElse: () => MapLook.clean,
       );
-      night.value = NightMap.values.firstWhere(
-        (n) => n.name == prefs.getString(_nightKey),
-        orElse: () => NightMap.off,
-      );
+      final saved = prefs.getString(_appearanceKey);
+      appearance.value =
+          saved != null
+              ? Appearance.values.firstWhere(
+                (a) => a.name == saved,
+                orElse: () => Appearance.light,
+              )
+              : switch (prefs.getString(_oldNightKey)) {
+                'on' => Appearance.dark,
+                'auto' => Appearance.auto,
+                _ => Appearance.light,
+              };
     } catch (_) {
-      // Defaults: clean, day.
+      // Defaults: clean, light.
     }
-    _resolveNight();
+    _resolveDark();
+    // "Follow phone" follows the phone's dark theme as it changes.
+    if (!_observing) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+    }
     // "Auto" follows the clock.
     _clock ??= Timer.periodic(
       const Duration(minutes: 5),
-      (_) => _resolveNight(),
+      (_) => _resolveDark(),
     );
   }
+
+  @override
+  void didChangePlatformBrightness() => _resolveDark();
 
   Future<void> setLook(MapLook value) async {
     look.value = value;
@@ -69,12 +94,12 @@ class MapStyleService {
     } catch (_) {}
   }
 
-  Future<void> setNight(NightMap value) async {
-    night.value = value;
-    _resolveNight();
+  Future<void> setAppearance(Appearance value) async {
+    appearance.value = value;
+    _resolveDark();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_nightKey, value.name);
+      await prefs.setString(_appearanceKey, value.name);
     } catch (_) {}
   }
 
@@ -82,22 +107,26 @@ class MapStyleService {
   /// Metro Manila all year.
   static bool isNightHour(DateTime time) => time.hour >= 18 || time.hour < 6;
 
-  void _resolveNight() {
-    isNight.value = switch (night.value) {
-      NightMap.off => false,
-      NightMap.on => true,
-      NightMap.auto => isNightHour(DateTime.now()),
+  void _resolveDark() {
+    isDark.value = switch (appearance.value) {
+      Appearance.light => false,
+      Appearance.dark => true,
+      Appearance.auto => isNightHour(DateTime.now()),
+      Appearance.system =>
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark,
     };
   }
 
   // ─── Clean (vector) styles ──────────────────────────────────────────────────
 
-  static const _styleBase = 'https://tiles.openfreemap.org/styles';
-
   final Map<bool, Future<Style?>> _styles = {};
 
+  /// One tile source for day and night: both styles draw the same tiles.
+  PackedVectorTileProvider? _tiles;
+
   /// The clean style for day or night, loaded once. Null when it can't be
-  /// loaded (e.g. offline); the map then falls back to classic.
+  /// loaded; the map then falls back to classic.
   Future<Style?> cleanStyle({required bool night}) {
     return _styles[night] ??= _loadStyle(night).then((style) {
       // Try again next time instead of remembering a failure.
@@ -106,22 +135,21 @@ class MapStyleService {
     });
   }
 
+  /// Reads OpenFreeMap's style bundled with the app (no download, so the
+  /// map shows right away, offline too); tiles come from [MapTilePack].
   Future<Style?> _loadStyle(bool night) async {
     try {
       final name = night ? 'dark' : 'positron';
       final style =
-          jsonDecode(await _get('$_styleBase/$name')) as Map<String, dynamic>;
+          jsonDecode(await rootBundle.loadString('assets/map/style_$name.json'))
+              as Map<String, dynamic>;
       final source =
           (style['sources'] as Map<String, dynamic>)['openmaptiles']
               as Map<String, dynamic>;
-      final tileJson =
-          jsonDecode(await _get(source['url'] as String))
-              as Map<String, dynamic>;
-      final provider = NetworkVectorTileProvider(
-        urlTemplate: (tileJson['tiles'] as List).first as String,
-        maximumZoom: (tileJson['maxzoom'] as num?)?.toInt() ?? 14,
-        minimumZoom: (tileJson['minzoom'] as num?)?.toInt() ?? 0,
-      );
+      final provider =
+          _tiles ??= PackedVectorTileProvider(
+            tileJsonUrl: source['url'] as String,
+          );
       final cleaned = simplifyStyle(style, night: night);
       return Style(
         theme: ThemeReader().read(cleaned),
@@ -131,16 +159,6 @@ class MapStyleService {
       debugPrint('[MapStyle] Could not load the clean map: $e');
       return null;
     }
-  }
-
-  static Future<String> _get(String url) async {
-    final response = await http
-        .get(Uri.parse(url))
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) {
-      throw 'HTTP ${response.statusCode} for $url';
-    }
-    return response.body;
   }
 
   /// Layers left out for a calm map: shops, businesses and house numbers

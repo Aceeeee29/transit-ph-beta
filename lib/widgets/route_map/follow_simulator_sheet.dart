@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../services/follow_trip_simulator.dart';
+import '../../theme/app_colors.dart';
 
 /// Debug builds only: the button that opens [showFollowSimulatorSheet].
 class FollowSimulatorButton extends StatelessWidget {
@@ -73,9 +74,9 @@ class _SimulatorSheetState extends State<_SimulatorSheet> {
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Replaces GPS with a simulated trip along this route.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             Wrap(

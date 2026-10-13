@@ -1,12 +1,12 @@
 part of 'home_screen.dart';
 
 extension _HomeScreenSections on _HomeScreenState {
-  static const _surface = _HomeScreenState._surface;
+  static Color get _surface => _HomeScreenState._surface;
   static const _accent = _HomeScreenState._accent;
-  static const _accentSoft = _HomeScreenState._accentSoft;
-  static const _textPrimary = _HomeScreenState._textPrimary;
-  static const _textSecondary = _HomeScreenState._textSecondary;
-  static const _border = _HomeScreenState._border;
+  static Color get _accentSoft => _HomeScreenState._accentSoft;
+  static Color get _textPrimary => _HomeScreenState._textPrimary;
+  static Color get _textSecondary => _HomeScreenState._textSecondary;
+  static Color get _border => _HomeScreenState._border;
   static const _danger = _HomeScreenState._danger;
 
   // ─── Header: name, quick tools, weather and "Where to?" ─────────────────────
@@ -39,7 +39,7 @@ extension _HomeScreenSections on _HomeScreenState {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -67,16 +67,13 @@ extension _HomeScreenSections on _HomeScreenState {
                   tooltip: 'Fare matrix',
                   visualDensity: VisualDensity.compact,
                   onPressed: _showFareMatrixDialog,
-                  icon: const Icon(
-                    Icons.payments_outlined,
-                    color: _textSecondary,
-                  ),
+                  icon: Icon(Icons.payments_outlined, color: _textSecondary),
                 ),
                 IconButton(
                   tooltip: 'Downloaded routes',
                   visualDensity: VisualDensity.compact,
                   onPressed: _openDownloadedRoutes,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.download_for_offline_outlined,
                     color: _textSecondary,
                   ),
@@ -99,7 +96,7 @@ extension _HomeScreenSections on _HomeScreenState {
                 child: InkWell(
                   onTap: widget.onOpenSearch,
                   borderRadius: BorderRadius.circular(26),
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                     child: Row(
                       children: [
@@ -166,7 +163,7 @@ extension _HomeScreenSections on _HomeScreenState {
               '$grouped commuters on TransitPH',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: _textSecondary),
+              style: TextStyle(fontSize: 12, color: _textSecondary),
             ),
           ),
         ],
@@ -218,7 +215,7 @@ extension _HomeScreenSections on _HomeScreenState {
         if (_tagMatchedRoutes.isNotEmpty) ...[
           Row(
             children: [
-              const Flexible(
+              Flexible(
                 child: TranslatedText(
                   '🏷️ Routes Matching Your Tags',
                   overflow: TextOverflow.ellipsis,
@@ -332,7 +329,7 @@ extension _HomeScreenSections on _HomeScreenState {
                 Expanded(
                   child: TranslatedText(
                     '${route.startLocation} → ${route.endLocation}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 14,
                       color: _textPrimary,
@@ -349,7 +346,7 @@ extension _HomeScreenSections on _HomeScreenState {
             const SizedBox(height: 6),
             TranslatedText(
               route.shortDescription,
-              style: const TextStyle(
+              style: TextStyle(
                 fontStyle: FontStyle.italic,
                 fontSize: 12,
                 color: _textSecondary,
@@ -475,7 +472,7 @@ extension _HomeScreenSections on _HomeScreenState {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w500,
             fontSize: 17,
             color: _textPrimary,

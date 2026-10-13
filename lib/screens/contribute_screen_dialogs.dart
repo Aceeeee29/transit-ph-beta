@@ -33,11 +33,11 @@ class _SubmitSuccessDialog extends StatelessWidget {
   final bool isEdit;
   final bool quickCreateMode;
 
-  static const _bg = Color(0xFFF4F8FF);
+  static Color get _bg => AppColors.bg;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _warning = Color(0xFFFFB547);
   static const _green = Color(0xFF3EC97A);
 
@@ -100,7 +100,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
                   : (quickCreateMode
                       ? 'Quick Route Created'
                       : 'Pending Review'),
-              style: const TextStyle(
+              style: TextStyle(
                 color: _textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -116,7 +116,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
                     : (quickCreateMode
                         ? 'This temporary route is now available via quick link and expires automatically in 24 hours.'
                         : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.'),
-                style: const TextStyle(
+                style: TextStyle(
                   color: _textSecondary,
                   fontSize: 14,
                   height: 1.5,

@@ -37,6 +37,7 @@ import '../widgets/map_tab/region_weather_row.dart';
 import '../widgets/translated_text.dart';
 import '../widgets/location_permission_notice.dart';
 import 'dart:async';
+import '../theme/app_colors.dart';
 part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_chrome.dart';
 part 'contribute_screen_map_editor.dart';
@@ -183,14 +184,14 @@ class _ContributeScreenState extends State<ContributeScreen> {
   double _currentZoom = 11.0;
 
   // ─── Color tokens
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   // ─── Map chrome layout ──────────────────────────────────────────────────────
   /// The drawer at rest: its handle plus the area/weather row.
@@ -256,12 +257,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     'New to Area',
   ];
 
-  static const List<String> otherRouteTags = [
-    'Tourist',
-    'Budget',
-    'Fast',
-    'Accessible',
-  ];
+  static const List<String> otherRouteTags = ['Budget', 'Fast', 'Accessible'];
 
   static const List<String> routeAudienceTags = [
     ...onboardingUserTags,
@@ -472,6 +468,15 @@ class _ContributeScreenState extends State<ContributeScreen> {
       selectionMode = 'done';
     });
     _saveToHistory();
+    // Show where the example is, between the search bar and the drawer
+    // (which the tutorial lowers to its peek as it closes).
+    _mapController.fitCamera(
+      CameraFit.coordinates(
+        coordinates: exampleRoute.pathPoints,
+        padding: const EdgeInsets.fromLTRB(48, 140, 48, _drawerPeekHeight + 48),
+      ),
+    );
+    setState(() => _currentZoom = _mapController.camera.zoom);
   }
 
   /// Pin filter or visibility changed (here or in a route view).

@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../../models/place.dart';
 import '../../services/route_metrics_service.dart';
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 /// Pin sizes. Kept small so a pin is hard to hit by accident while drawing
 /// or panning; the selected one grows so it's easy to find again.
@@ -151,9 +152,9 @@ class PlaceDetailsSection extends StatelessWidget {
   });
 
   static const _accent = Color(0xFF0B8FD6);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +185,7 @@ class PlaceDetailsSection extends StatelessWidget {
               children: [
                 Text(
                   place.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 17,
                     fontWeight: FontWeight.w500,
@@ -202,21 +203,14 @@ class PlaceDetailsSection extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.place_outlined,
-                      color: _textSecondary,
-                      size: 14,
-                    ),
+                    Icon(Icons.place_outlined, color: _textSecondary, size: 14),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         locationParts.join(' · '),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _textSecondary,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: _textSecondary, fontSize: 12),
                       ),
                     ),
                   ],
@@ -225,7 +219,7 @@ class PlaceDetailsSection extends StatelessWidget {
                   const SizedBox(height: 8),
                   TranslatedText(
                     place.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _textPrimary,
                       fontSize: 13,
                       height: 1.35,
@@ -244,7 +238,7 @@ class PlaceDetailsSection extends StatelessWidget {
           IconButton(
             onPressed: onClose,
             tooltip: 'Close',
-            icon: const Icon(Icons.close_rounded, color: _textSecondary),
+            icon: Icon(Icons.close_rounded, color: _textSecondary),
           ),
         ],
       ),
@@ -259,7 +253,7 @@ class PlaceDetailsSection extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: known ? const Color(0xFFEAF6FF) : _surfaceAlt,
+          color: known ? AppColors.surfaceAlt : _surfaceAlt,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -284,7 +278,7 @@ class PlaceDetailsSection extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       )
-                      : const TranslatedText(
+                      : TranslatedText(
                         'Enable location to see distance',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -342,16 +336,16 @@ class PlaceListTile extends StatelessWidget {
                     place.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F1D35),
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   Text(
                     '${place.city} · ${place.categories.map((c) => c.label).join(', ')}',
-                    style: const TextStyle(
-                      color: Color(0xFF7A92B2),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
                       fontSize: 11,
                     ),
                   ),
@@ -362,7 +356,7 @@ class PlaceListTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF6FF),
+                  color: AppColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

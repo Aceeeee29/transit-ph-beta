@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'map/app_base_map.dart';
 import '../models/route.dart' as route_model;
 import '../services/route_metrics_service.dart';
+import '../theme/app_colors.dart';
 
 class RoutePreview extends StatelessWidget {
   final route_model.Route route;
@@ -23,14 +24,14 @@ class RoutePreview extends StatelessWidget {
        );
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _green = Color(0xFF3EC97A);
 
   @override
@@ -92,7 +93,7 @@ class RoutePreview extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: _border),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.arrow_back_ios_new,
                     size: 15,
                     color: _textSecondary,
@@ -116,7 +117,7 @@ class RoutePreview extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Route Preview',
               style: TextStyle(
                 color: _textPrimary,
@@ -142,7 +143,7 @@ class RoutePreview extends StatelessWidget {
                   borderRadius: BorderRadius.circular(9),
                   border: Border.all(color: _border),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.edit_outlined, color: _textSecondary, size: 14),
                     SizedBox(width: 5),
@@ -233,7 +234,7 @@ class RoutePreview extends StatelessWidget {
                                 Flexible(
                                   child: Text(
                                     route.startLocation,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: _textPrimary,
                                       fontWeight: FontWeight.w600,
@@ -255,7 +256,7 @@ class RoutePreview extends StatelessWidget {
                                 Flexible(
                                   child: Text(
                                     route.endLocation,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: _textPrimary,
                                       fontWeight: FontWeight.w600,
@@ -269,7 +270,7 @@ class RoutePreview extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 route.shortDescription,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   color: _textSecondary,
                                   fontStyle: FontStyle.italic,
@@ -324,7 +325,7 @@ class RoutePreview extends StatelessWidget {
                   const SizedBox(height: 16),
 
                   // ── Steps summary ────────────────────────────────────────
-                  const Text(
+                  Text(
                     'STEPS',
                     style: TextStyle(
                       fontSize: 10,
@@ -398,7 +399,7 @@ class RoutePreview extends StatelessWidget {
                                   ),
                                   Text(
                                     step.instruction,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: _textPrimary,
                                       height: 1.4,
@@ -407,7 +408,7 @@ class RoutePreview extends StatelessWidget {
                                   if (step.details.isNotEmpty)
                                     Text(
                                       step.details,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 11,
                                         color: _textSecondary,
                                       ),
@@ -483,7 +484,7 @@ class RoutePreview extends StatelessWidget {
                                               ),
                                             ),
                                             const SizedBox(width: 10),
-                                            const Text(
+                                            Text(
                                               'Confirm Submission',
                                               style: TextStyle(
                                                 color: _textPrimary,
@@ -499,7 +500,7 @@ class RoutePreview extends StatelessWidget {
                                         padding: const EdgeInsets.all(18),
                                         child: Column(
                                           children: [
-                                            const Text(
+                                            Text(
                                               'Are you sure you want to submit this route for review?',
                                               style: TextStyle(
                                                 fontSize: 14,
@@ -532,7 +533,7 @@ class RoutePreview extends StatelessWidget {
                                                       ),
                                                       alignment:
                                                           Alignment.center,
-                                                      child: const Text(
+                                                      child: Text(
                                                         'Cancel',
                                                         style: TextStyle(
                                                           color: _textSecondary,
@@ -707,16 +708,13 @@ class RoutePreview extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
               color: _textPrimary,
             ),
           ),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: _textSecondary),
-          ),
+          Text(label, style: TextStyle(fontSize: 10, color: _textSecondary)),
         ],
       ),
     );

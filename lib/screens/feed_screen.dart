@@ -81,7 +81,7 @@ class _FeedScreenState extends State<FeedScreen> {
                       ? 'Now: stays until deleted'
                       : 'Now: until ${expiresAt.month}/${expiresAt.day} '
                           '${expiresAt.hour}:${expiresAt.minute.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: FeedColors.textSecondary,
                   ),
@@ -362,7 +362,7 @@ class _FeedScreenState extends State<FeedScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: FeedColors.border),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.forum_rounded, color: FeedColors.accent, size: 16),
@@ -399,11 +399,7 @@ class _FeedScreenState extends State<FeedScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: FeedColors.border),
             ),
-            child: const Icon(
-              Icons.search,
-              color: FeedColors.textPrimary,
-              size: 20,
-            ),
+            child: Icon(Icons.search, color: FeedColors.textPrimary, size: 20),
           ),
         ),
         GestureDetector(
@@ -429,7 +425,7 @@ class _FeedScreenState extends State<FeedScreen> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                const Icon(
+                Icon(
                   Icons.notifications_outlined,
                   color: FeedColors.textPrimary,
                   size: 20,
@@ -552,7 +548,7 @@ class _FeedScreenState extends State<FeedScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const TranslatedText(
+          TranslatedText(
             'No posts yet',
             style: TextStyle(
               color: FeedColors.textPrimary,
@@ -561,7 +557,7 @@ class _FeedScreenState extends State<FeedScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          const TranslatedText(
+          TranslatedText(
             'Be the first to share something\nwith the community.',
             textAlign: TextAlign.center,
             style: TextStyle(

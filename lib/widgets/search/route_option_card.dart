@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 /// One route in a search result list. Every option (generated or
 /// community) uses the same row so they read the same way: the main fact on
@@ -36,8 +37,8 @@ class RouteOptionRow extends StatelessWidget {
   });
 
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF6B7F99);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +64,7 @@ class RouteOptionRow extends StatelessWidget {
                           headline,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: _textPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -83,7 +84,7 @@ class RouteOptionRow extends StatelessWidget {
                     details,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _textSecondary, fontSize: 13),
+                    style: TextStyle(color: _textSecondary, fontSize: 13),
                   ),
                   if (modes.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -99,10 +100,7 @@ class RouteOptionRow extends StatelessWidget {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-                : const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFFB4C2D6),
-                ),
+                : Icon(Icons.chevron_right_rounded, color: AppColors.border),
           ],
         ),
       ),
@@ -155,9 +153,7 @@ class _Tag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color:
-            highlighted
-                ? accent.withValues(alpha: 0.1)
-                : const Color(0xFFF0F3F8),
+            highlighted ? accent.withValues(alpha: 0.1) : AppColors.surfaceAlt,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -206,10 +202,10 @@ class ModeSequence extends StatelessWidget {
       children: [
         for (var i = 0; i < modes.length; i++) ...[
           if (i > 0)
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 14,
-              color: Color(0xFFB4C2D6),
+              color: AppColors.border,
             ),
           Tooltip(
             message: modes[i],
@@ -259,7 +255,7 @@ class RouteOptionSection extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: RouteOptionRow._textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -269,7 +265,7 @@ class RouteOptionSection extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: RouteOptionRow._textSecondary,
                           fontSize: 12,
                         ),
@@ -284,7 +280,7 @@ class RouteOptionSection extends StatelessWidget {
         ),
         DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(14),
           ),
           child: ClipRRect(
@@ -293,11 +289,7 @@ class RouteOptionSection extends StatelessWidget {
               children: [
                 for (var i = 0; i < children.length; i++) ...[
                   if (i > 0)
-                    const Divider(
-                      height: 1,
-                      indent: 16,
-                      color: Color(0xFFEDF1F7),
-                    ),
+                    Divider(height: 1, indent: 16, color: AppColors.surfaceAlt),
                   children[i],
                 ],
               ],
@@ -309,7 +301,7 @@ class RouteOptionSection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text(
               footnote!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: RouteOptionRow._textSecondary,
                 fontSize: 12,
               ),

@@ -134,12 +134,9 @@ class _FeedCommentDialogState extends State<FeedCommentDialog> {
                 ),
                 child: TextField(
                   controller: _controller,
-                  style: const TextStyle(
-                    color: FeedColors.textPrimary,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: FeedColors.textPrimary, fontSize: 14),
                   maxLines: 3,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Write your comment...',
                     hintStyle: TextStyle(
                       color: FeedColors.textSecondary,

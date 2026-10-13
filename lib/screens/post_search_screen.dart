@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/post.dart';
+import '../theme/app_colors.dart';
 
 class PostSearchScreen extends StatefulWidget {
   final List<Post> posts;
@@ -20,14 +21,14 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   bool _showOmnibox = false;
 
   // ─── Color tokens (matches design system) ──────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   // ─── Category helpers ───────────────────────────────────────────────────────
   Color _categoryColor(PostCategory cat) => switch (cat) {
@@ -183,7 +184,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   Widget _sectionLabel(String label) {
     return Text(
       label.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         color: _textSecondary,
         fontSize: 10,
         fontWeight: FontWeight.w700,
@@ -212,7 +213,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
@@ -235,7 +236,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Search Posts',
               style: TextStyle(
                 color: _textPrimary,
@@ -269,13 +270,10 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     autofocus: true,
-                    style: const TextStyle(color: _textPrimary, fontSize: 14),
+                    style: TextStyle(color: _textPrimary, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Search posts, hashtags, users...',
-                      hintStyle: const TextStyle(
-                        color: _textSecondary,
-                        fontSize: 14,
-                      ),
+                      hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
                       prefixIcon: const Icon(
                         Icons.search_rounded,
                         color: _accent,
@@ -294,7 +292,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                                     color: _border,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.close,
                                     size: 14,
                                     color: _textSecondary,
@@ -389,14 +387,14 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                                 Expanded(
                                   child: Text(
                                     suggestion,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: _textPrimary,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
-                                const Icon(
+                                Icon(
                                   Icons.north_west,
                                   size: 13,
                                   color: _textSecondary,
@@ -437,14 +435,14 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.search_off_rounded,
                 size: 36,
                 color: _textSecondary,
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No posts found',
               style: TextStyle(
                 fontSize: 17,
@@ -453,7 +451,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Try a different search term',
               style: TextStyle(fontSize: 14, color: _textSecondary),
             ),
@@ -497,7 +495,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(color: _border),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Clear All',
                       style: TextStyle(
                         fontSize: 11,
@@ -530,7 +528,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.history_rounded,
                               size: 13,
                               color: _textSecondary,
@@ -538,7 +536,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                             const SizedBox(width: 6),
                             Text(
                               search,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: _textPrimary,
                                 fontWeight: FontWeight.w500,
@@ -547,7 +545,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () => _onRemoveRecentSearch(search),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.close,
                                 size: 12,
                                 color: _textSecondary,
@@ -585,7 +583,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Popular hashtags from community posts',
             style: TextStyle(fontSize: 13, color: _textSecondary),
           ),
@@ -599,7 +597,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: _border),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
                     Icon(Icons.tag, size: 28, color: _textSecondary),
                     SizedBox(height: 8),
@@ -740,7 +738,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                     children: [
                       Text(
                         displayName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                           color: _textPrimary,
@@ -748,7 +746,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                       ),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.access_time,
                             size: 11,
                             color: _textSecondary,
@@ -756,7 +754,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                           const SizedBox(width: 3),
                           Text(
                             '${post.timestamp.hour}:${post.timestamp.minute.toString().padLeft(2, '0')}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               color: _textSecondary,
                             ),
@@ -793,11 +791,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
             // ─── Post content ──────────────────────────────────────
             Text(
               post.content,
-              style: const TextStyle(
-                fontSize: 14,
-                color: _textPrimary,
-                height: 1.5,
-              ),
+              style: TextStyle(fontSize: 14, color: _textPrimary, height: 1.5),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -825,7 +819,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
                                   width: 90,
                                   height: 90,
                                   color: _surfaceAlt,
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.broken_image_outlined,
                                     color: _textSecondary,
                                     size: 20,

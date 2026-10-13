@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 /// The Map tab's bottom drawer. It rests at [peekHeight] showing the handle
 /// line and [header] (like the "Local vibe" bar in Google Maps), and drags
@@ -22,8 +23,8 @@ class MapDrawer extends StatelessWidget {
   });
 
   static const handleHeight = 22.0;
-  static const _surface = Color(0xFFFFFFFF);
-  static const _handle = Color(0xFFC9D6EA);
+  static Color get _surface => AppColors.surface;
+  static Color get _handle => AppColors.border;
 
   /// Opens the drawer about halfway, or fully with [full].
   static void open(
@@ -65,7 +66,7 @@ class MapDrawer extends StatelessWidget {
           snapSizes: [if (mid > min + 0.05 && mid < max - 0.05) mid],
           builder: (context, scrollController) {
             return DecoratedBox(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: _surface,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
                 boxShadow: [

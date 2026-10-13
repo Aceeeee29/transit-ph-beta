@@ -193,7 +193,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       builder: (context, scrollController) {
         _listScrollController = scrollController;
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: FeedColors.bg,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
@@ -201,7 +201,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
             children: [
               _buildHandle(),
               _buildHeader(),
-              const Divider(color: FeedColors.border, height: 1),
+              Divider(color: FeedColors.border, height: 1),
               Expanded(child: _buildCommentsList(scrollController)),
               if (_replyingTo != null) _buildReplyBanner(),
               _buildInput(context),
@@ -245,7 +245,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
           const SizedBox(width: 10),
           Text(
             'Comments${_comments.isNotEmpty ? ' (${_comments.length})' : ''}',
-            style: const TextStyle(
+            style: TextStyle(
               color: FeedColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -263,7 +263,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: FeedColors.border),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.close_rounded,
                 size: 16,
                 color: FeedColors.textSecondary,
@@ -288,14 +288,14 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 color: FeedColors.surfaceAlt,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.chat_bubble_outline_rounded,
                 size: 28,
                 color: FeedColors.textSecondary,
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'No comments yet',
               style: TextStyle(
                 color: FeedColors.textPrimary,
@@ -304,7 +304,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Be the first to comment!',
               style: TextStyle(color: FeedColors.textSecondary, fontSize: 13),
             ),
@@ -366,7 +366,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomPadding),
       decoration: BoxDecoration(
         color: FeedColors.surface,
-        border: const Border(top: BorderSide(color: FeedColors.border)),
+        border: Border(top: BorderSide(color: FeedColors.border)),
       ),
       child: Row(
         children: [
@@ -383,16 +383,13 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 maxLines: 4,
                 minLines: 1,
                 textInputAction: TextInputAction.newline,
-                style: const TextStyle(
-                  color: FeedColors.textPrimary,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: FeedColors.textPrimary, fontSize: 14),
                 decoration: InputDecoration(
                   hintText:
                       _replyingTo != null
                           ? 'Reply to ${_replyingTo!.userName}...'
                           : 'Write a comment...',
-                  hintStyle: const TextStyle(
+                  hintStyle: TextStyle(
                     color: FeedColors.textSecondary,
                     fontSize: 14,
                   ),
@@ -436,7 +433,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               ),
               child:
                   _isSubmitting
-                      ? const Padding(
+                      ? Padding(
                         padding: EdgeInsets.all(12),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,

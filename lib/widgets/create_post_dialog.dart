@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,9 +5,9 @@ import 'package:flutter/services.dart';
 import '../models/post.dart';
 import '../models/location.dart';
 import '../models/route.dart' as route_model;
-import '../services/media_service.dart';
 import '../services/route_service.dart';
 import 'translated_text.dart';
+import '../theme/app_colors.dart';
 
 class CreatePostDialog extends StatefulWidget {
   final Function(Post) onPostCreated;
@@ -32,8 +31,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   final TextEditingController _contentController = TextEditingController();
   PostCategory _selectedCategory = PostCategory.discussion;
   bool _anonymous = false;
-  final List<File> _selectedImages = [];
-  File? _selectedVideo;
   Location? _taggedLocation;
   final List<String> _taggedUsers = [];
   String? _routeId;
@@ -44,15 +41,14 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   late Animation<Offset> _slideAnim;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
-  static const _danger = Color(0xFFE05C6A);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
 
   @override
   void initState() {
@@ -115,63 +111,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
 
       final postId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      // Upload media to Firebase Storage so feed can load them via URL.
-      // Previously local file paths were stored directly, which
-      // Image.network / VideoPlayer could never resolve.
-      final imageUrls = <String>[];
-      String? videoUrl;
-      try {
-        for (final file in _selectedImages) {
-          imageUrls.add(await MediaService.uploadPostImage(file, postId));
-        }
-        if (_selectedVideo != null) {
-          videoUrl = await MediaService.uploadPostVideo(
-            _selectedVideo!,
-            postId,
-          );
-        }
-      } on MediaUploadException catch (e) {
-        debugPrint('Post media upload failed: ${e.details}');
-        if (mounted) {
-          setState(() => _isPublishing = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: TranslatedText(e.userMessage),
-              duration: const Duration(seconds: 6),
-              action:
-                  e.details.isNotEmpty
-                      ? SnackBarAction(
-                        label: 'DETAILS',
-                        textColor: Colors.white,
-                        onPressed: () => _showUploadErrorDetails(e.details),
-                      )
-                      : null,
-            ),
-          );
-        }
-        return;
-      } catch (e) {
-        debugPrint('Post media upload failed: $e');
-        if (mounted) {
-          setState(() => _isPublishing = false);
-          final details = e.toString();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const TranslatedText(
-                'Failed to upload media. Check your connection and try again.',
-              ),
-              duration: const Duration(seconds: 6),
-              action: SnackBarAction(
-                label: 'DETAILS',
-                textColor: Colors.white,
-                onPressed: () => _showUploadErrorDetails(details),
-              ),
-            ),
-          );
-        }
-        return;
-      }
-
       final post = Post(
         id: postId,
         userName: _anonymous ? null : resolvedUserName,
@@ -180,16 +119,9 @@ class _CreatePostDialogState extends State<CreatePostDialog>
         userPhotoUrl: _anonymous ? null : resolvedPhotoUrl,
         anonymous: _anonymous,
         content: trimmedContent,
-        type:
-            videoUrl != null
-                ? PostType.video
-                : imageUrls.isNotEmpty
-                ? PostType.image
-                : PostType.text,
+        type: PostType.text,
         category: _selectedCategory,
         timestamp: DateTime.now(),
-        imageUrls: imageUrls,
-        videoUrl: videoUrl,
         taggedLocation: _taggedLocation,
         taggedUsers: _taggedUsers,
         routeId: _routeId,
@@ -208,46 +140,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
         setState(() => _isPublishing = false);
       }
     }
-  }
-
-  /// Shows the raw server error so it can be copied and sent to support.
-  /// This is what identifies the real cause (e.g. bucket missing vs denied).
-  void _showUploadErrorDetails(String details) {
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const TranslatedText('Upload error details'),
-            content: SingleChildScrollView(
-              child: SelectableText(
-                details.isEmpty ? '(no details captured)' : details,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const TranslatedText('Close'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: details));
-                  if (ctx.mounted) Navigator.of(ctx).pop();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: TranslatedText(
-                          'Error details copied. Send them to support.',
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: const TranslatedText('Copy'),
-              ),
-            ],
-          ),
-    );
   }
 
   Future<({String? name, String? photoUrl})> _resolveFirestoreUserProfile({
@@ -292,54 +184,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     }
 
     return (name: null, photoUrl: null);
-  }
-
-  Future<void> _pickImage() async {
-    final image = await MediaService.pickImageFromGallery();
-    if (image != null) {
-      setState(() {
-        _selectedImages.add(image);
-      });
-    }
-  }
-
-  Future<void> _takePhoto() async {
-    final image = await MediaService.takePhoto();
-    if (image != null) {
-      setState(() {
-        _selectedImages.add(image);
-      });
-    }
-  }
-
-  Future<void> _pickVideo() async {
-    final video = await MediaService.pickVideoFromGallery();
-    if (video != null) {
-      setState(() {
-        _selectedVideo = video;
-      });
-    }
-  }
-
-  Future<void> _recordVideo() async {
-    final video = await MediaService.recordVideo();
-    if (video != null) {
-      setState(() {
-        _selectedVideo = video;
-      });
-    }
-  }
-
-  void _removeImage(int index) {
-    setState(() {
-      _selectedImages.removeAt(index);
-    });
-  }
-
-  void _removeVideo() {
-    setState(() {
-      _selectedVideo = null;
-    });
   }
 
   // ─── UI Helpers ────────────────────────────────────────────────────────────
@@ -420,8 +264,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                         children: [
                           _buildTextInput(),
                           const SizedBox(height: 20),
-                          _buildMediaSection(),
-                          const SizedBox(height: 20),
                           _buildCategorySection(),
                           const SizedBox(height: 20),
                           _buildLocationField(),
@@ -461,7 +303,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             child: const Icon(Icons.edit_outlined, color: _accent, size: 18),
           ),
           const SizedBox(width: 12),
-          const Flexible(
+          Flexible(
             child: TranslatedText(
               'New Post',
               overflow: TextOverflow.ellipsis,
@@ -484,7 +326,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.close, color: _textSecondary, size: 18),
+              child: Icon(Icons.close, color: _textSecondary, size: 18),
             ),
           ),
         ],
@@ -508,14 +350,10 @@ class _CreatePostDialogState extends State<CreatePostDialog>
             inputFormatters: [
               LengthLimitingTextInputFormatter(_maxPostContentLength),
             ],
-            style: const TextStyle(
-              color: _textPrimary,
-              fontSize: 15,
-              height: 1.5,
-            ),
+            style: TextStyle(color: _textPrimary, fontSize: 15, height: 1.5),
             decoration: InputDecoration(
               hintText: "What's on your mind?",
-              hintStyle: const TextStyle(color: _textSecondary, fontSize: 15),
+              hintStyle: TextStyle(color: _textSecondary, fontSize: 15),
               contentPadding: const EdgeInsets.all(16),
               border: InputBorder.none,
             ),
@@ -525,212 +363,6 @@ class _CreatePostDialogState extends State<CreatePostDialog>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildMediaSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionLabel('Media'),
-        const SizedBox(height: 10),
-        // Media action buttons row
-        Row(
-          children: [
-            _mediaChip(
-              icon: Icons.photo_library_outlined,
-              label: 'Gallery',
-              onTap: _pickImage,
-            ),
-            const SizedBox(width: 8),
-            _mediaChip(
-              icon: Icons.camera_alt_outlined,
-              label: 'Camera',
-              onTap: _takePhoto,
-            ),
-            const SizedBox(width: 8),
-            _mediaChip(
-              icon: Icons.video_library_outlined,
-              label: 'Video',
-              onTap: _pickVideo,
-            ),
-            const SizedBox(width: 8),
-            _mediaChip(
-              icon: Icons.videocam_outlined,
-              label: 'Record',
-              onTap: _recordVideo,
-            ),
-          ],
-        ),
-
-        // Image previews
-        if (_selectedImages.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 90,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _selectedImages.length,
-              itemBuilder: (context, index) {
-                return Stack(
-                  children: [
-                    Container(
-                      width: 90,
-                      height: 90,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _border),
-                        image: DecorationImage(
-                          image: FileImage(_selectedImages[index]),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 12,
-                      child: GestureDetector(
-                        onTap: () => _removeImage(index),
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: _danger,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: _danger.withOpacity(0.4),
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            size: 13,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-
-        // Video preview
-        if (_selectedVideo != null) ...[
-          const SizedBox(height: 12),
-          Stack(
-            children: [
-              Container(
-                height: 80,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: const Color(0xFFEAF2FF),
-                  border: Border.all(color: _border),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _accentSoft,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: _accent,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TranslatedText(
-                          'Video attached',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                        TranslatedText(
-                          'Tap × to remove',
-                          style: TextStyle(color: _textSecondary, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: _removeVideo,
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: _danger,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      size: 13,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _mediaChip({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _border),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: _accent, size: 18),
-              const SizedBox(height: 4),
-              TranslatedText(
-                label,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: _textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -880,15 +512,11 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                         shape: BoxShape.circle,
                         border: Border.all(color: _border),
                       ),
-                      child: const Icon(
-                        Icons.close,
-                        size: 13,
-                        color: _textSecondary,
-                      ),
+                      child: Icon(Icons.close, size: 13, color: _textSecondary),
                     ),
                   )
                 else
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_ios_rounded,
                     size: 14,
                     color: _textSecondary,
@@ -970,7 +598,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
               ),
               TranslatedText(
                 'Your name won\'t be shown',
-                style: const TextStyle(color: _textSecondary, fontSize: 11),
+                style: TextStyle(color: _textSecondary, fontSize: 11),
               ),
             ],
           ),
@@ -1006,7 +634,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                 border: Border.all(color: _border),
               ),
               alignment: Alignment.center,
-              child: const TranslatedText(
+              child: TranslatedText(
                 'Cancel',
                 style: TextStyle(
                   color: _textSecondary,
@@ -1109,7 +737,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   Widget _sectionLabel(String label) {
     return TranslatedText(
       label.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         color: _textSecondary,
         fontSize: 10,
         fontWeight: FontWeight.w700,
@@ -1127,12 +755,12 @@ class _RoutePickerSheet extends StatefulWidget {
 
 class _RoutePickerSheetState extends State<_RoutePickerSheet> {
   static const _accent = Color(0xFF0B8FD6);
-  static const _accentSoft = Color(0x1A0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _bg = Color(0xFFF4F8FF);
+  static Color get _accentSoft => AppColors.accentSoft;
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
+  static Color get _surface => AppColors.surface;
+  static Color get _bg => AppColors.bg;
 
   late Future<List<route_model.Route>> _routesFuture;
   String _query = '';
@@ -1149,7 +777,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.8,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: _bg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1183,7 +811,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1212,11 +840,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _border),
                     ),
-                    child: const Icon(
-                      Icons.close,
-                      size: 16,
-                      color: _textSecondary,
-                    ),
+                    child: Icon(Icons.close, size: 16, color: _textSecondary),
                   ),
                 ),
               ],
@@ -1231,7 +855,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                 border: Border.all(color: _border),
               ),
               child: TextField(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search routes…',
                   hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
                   prefixIcon: Icon(
@@ -1242,7 +866,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
-                style: const TextStyle(color: _textPrimary, fontSize: 14),
+                style: TextStyle(color: _textPrimary, fontSize: 14),
                 onChanged:
                     (v) => setState(() => _query = v.trim().toLowerCase()),
               ),
@@ -1272,7 +896,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                           return hay.contains(_query);
                         }).toList();
                 if (filtered.isEmpty) {
-                  return const Padding(
+                  return Padding(
                     padding: EdgeInsets.all(32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -1339,7 +963,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                     route.shortDescription.isNotEmpty
                                         ? route.shortDescription
                                         : '${route.startLocation} → ${route.endLocation}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
                                       color: _textPrimary,
@@ -1349,7 +973,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                   const SizedBox(height: 2),
                                   TranslatedText(
                                     '${route.startLocation} → ${route.endLocation}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
                                       color: _textSecondary,
                                     ),
@@ -1358,7 +982,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                 ],
                               ),
                             ),
-                            const Icon(
+                            Icon(
                               Icons.arrow_forward_ios_rounded,
                               size: 14,
                               color: _textSecondary,

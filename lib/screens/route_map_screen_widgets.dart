@@ -1,13 +1,13 @@
 part of 'route_map_screen.dart';
 
 extension _RouteMapScreenSections on _RouteMapScreenState {
-  static const _bg = _RouteMapScreenState._bg;
-  static const _surface = _RouteMapScreenState._surface;
-  static const _surfaceAlt = _RouteMapScreenState._surfaceAlt;
+  static Color get _bg => _RouteMapScreenState._bg;
+  static Color get _surface => _RouteMapScreenState._surface;
+  static Color get _surfaceAlt => _RouteMapScreenState._surfaceAlt;
   static const _accent = _RouteMapScreenState._accent;
-  static const _textPrimary = _RouteMapScreenState._textPrimary;
-  static const _textSecondary = _RouteMapScreenState._textSecondary;
-  static const _border = _RouteMapScreenState._border;
+  static Color get _textPrimary => _RouteMapScreenState._textPrimary;
+  static Color get _textSecondary => _RouteMapScreenState._textSecondary;
+  static Color get _border => _RouteMapScreenState._border;
   static const _danger = _RouteMapScreenState._danger;
   static const _green = _RouteMapScreenState._green;
 
@@ -69,7 +69,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                     child: Center(
                       child: Text(
                         '${idx + 1}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                           color: _textSecondary,
@@ -95,7 +95,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                     const SizedBox(height: 2),
                     Text(
                       step.instruction,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: _textPrimary,
                         height: 1.4,
@@ -105,7 +105,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       const SizedBox(height: 4),
                       Text(
                         step.details,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: _textSecondary,
                           height: 1.4,
@@ -127,7 +127,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           Expanded(
                             child: TranslatedText(
                               boarding,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 color: _textSecondary,
                               ),
@@ -317,7 +317,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       label,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: _textPrimary,
@@ -366,7 +366,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const TranslatedText(
+                    TranslatedText(
                       'Quick trust feedback helps other commuters (asked at most once every 30 days).',
                       style: TextStyle(
                         fontSize: 11,
@@ -446,7 +446,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
           tooltip: 'Back to map',
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        title: const Text(
+        title: Text(
           'Route Map',
           style: TextStyle(
             color: _textPrimary,
@@ -466,14 +466,10 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 color: _surfaceAlt,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
-                Icons.map_outlined,
-                size: 36,
-                color: _textSecondary,
-              ),
+              child: Icon(Icons.map_outlined, size: 36, color: _textSecondary),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No route data available',
               style: TextStyle(
                 fontSize: 16,
@@ -547,7 +543,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _border),
           ),
-          labelStyle: const TextStyle(
+          labelStyle: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color: _textPrimary,
@@ -709,7 +705,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 children: [
                   Text(
                     report.type,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: _textPrimary,
@@ -720,27 +716,17 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                     const SizedBox(height: 2),
                     Text(
                       report.description!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: _textSecondary,
-                      ),
+                      style: TextStyle(fontSize: 12, color: _textSecondary),
                     ),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.access_time,
-                        size: 11,
-                        color: _textSecondary,
-                      ),
+                      Icon(Icons.access_time, size: 11, color: _textSecondary),
                       const SizedBox(width: 3),
                       Text(
                         _formatTime(report.timestamp),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _textSecondary,
-                        ),
+                        style: TextStyle(fontSize: 11, color: _textSecondary),
                       ),
                     ],
                   ),
@@ -790,7 +776,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   color: _textSecondary,
                   fontWeight: FontWeight.w500,
@@ -798,7 +784,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
               ),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: _textPrimary,
@@ -816,7 +802,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           color: _textSecondary,
           fontSize: 10,
           fontWeight: FontWeight.w500,

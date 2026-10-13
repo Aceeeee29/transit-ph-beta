@@ -42,7 +42,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
         onTap: _openLocationSearchScreen,
         leading: IconButton(
           tooltip: _isStandaloneEditor ? 'Back' : 'Done contributing',
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_rounded,
             color: _ContributeScreenState._textPrimary,
           ),
@@ -145,7 +145,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
                     ? () => _openDirectionsTo(place.name, place.lat, place.lng)
                     : null,
           ),
-          const Divider(height: 1, color: _ContributeScreenState._border),
+          Divider(height: 1, color: _ContributeScreenState._border),
         ] else if (isNearby && _foundPlace != null) ...[
           _FoundPlaceSection(
             place: _foundPlace!,
@@ -157,7 +157,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
                   _foundPlace!.longitude,
                 ),
           ),
-          const Divider(height: 1, color: _ContributeScreenState._border),
+          Divider(height: 1, color: _ContributeScreenState._border),
         ],
         if (isNearby)
           ..._nearbyListSection()
@@ -197,7 +197,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
         child: Row(
           children: [
-            const Expanded(
+            Expanded(
               child: TranslatedText(
                 'Nearby places',
                 style: TextStyle(
@@ -216,7 +216,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
         ),
       ),
       if (from != null)
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
           child: TranslatedText(
             'Nearest to farthest from you',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/place.dart';
 import 'place_widgets.dart' show placeNeutralColor;
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
 /// The always-visible row of place-category chips under the search bar.
 /// No selection means "All".
@@ -19,8 +20,8 @@ class PlaceCategoryChips extends StatelessWidget {
   });
 
   static const height = 32.0;
-  static const _surface = Color(0xFFFFFFFF);
-  static const _textPrimary = Color(0xFF0F1D35);
+  static Color get _surface => AppColors.surface;
+  static Color get _textPrimary => AppColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {

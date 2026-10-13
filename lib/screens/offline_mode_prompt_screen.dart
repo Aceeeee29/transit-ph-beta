@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class OfflineModePromptScreen extends StatelessWidget {
   const OfflineModePromptScreen({super.key});
 
   static const continueOfflineResult = 'continue_offline';
 
-  static const _bg = Color(0xFFF4F8FF);
-  static const _surface = Color(0xFFFFFFFF);
-  static const _surfaceAlt = Color(0xFFEAF2FF);
+  static Color get _bg => AppColors.bg;
+  static Color get _surface => AppColors.surface;
+  static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
-  static const _textPrimary = Color(0xFF0F1D35);
-  static const _textSecondary = Color(0xFF7A92B2);
-  static const _border = Color(0xFFD4E4F7);
+  static Color get _textPrimary => AppColors.textPrimary;
+  static Color get _textSecondary => AppColors.textSecondary;
+  static Color get _border => AppColors.border;
   static const _warn = Color(0xFFE89A3C);
 
   @override
@@ -33,14 +34,14 @@ class OfflineModePromptScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: _border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new,
               size: 15,
               color: _textSecondary,
             ),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Offline Mode',
           style: TextStyle(
             color: _textPrimary,
@@ -92,7 +93,7 @@ class OfflineModePromptScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No Internet Connection',
                     style: TextStyle(
                       color: _textPrimary,
@@ -103,7 +104,7 @@ class OfflineModePromptScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'You are currently offline. Continue to Offline Mode to view downloaded routes.',
                     style: TextStyle(color: _textSecondary),
                     textAlign: TextAlign.center,

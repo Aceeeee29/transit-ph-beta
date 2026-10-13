@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../translated_text.dart';
+import '../../theme/app_colors.dart';
 
-const _surface = Color(0xFFFFFFFF);
+Color get _surface => AppColors.surface;
 const _accent = Color(0xFF0B8FD6);
-const _textPrimary = Color(0xFF0F1D35);
-const _textSecondary = Color(0xFF7A92B2);
+Color get _textPrimary => AppColors.textPrimary;
+Color get _textSecondary => AppColors.textSecondary;
 const _danger = Color(0xFFE05C6A);
 const _green = Color(0xFF2D9F63);
 
@@ -38,7 +39,7 @@ class RouteTopBar extends StatelessWidget {
             IconButton(
               onPressed: onBack,
               tooltip: 'Back to map',
-              icon: const Icon(Icons.arrow_back_rounded, color: _textPrimary),
+              icon: Icon(Icons.arrow_back_rounded, color: _textPrimary),
             ),
             Expanded(
               child: Column(
@@ -49,7 +50,7 @@ class RouteTopBar extends StatelessWidget {
                     from,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -57,7 +58,7 @@ class RouteTopBar extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.arrow_forward,
                         size: 12,
                         color: _textSecondary,
@@ -68,10 +69,7 @@ class RouteTopBar extends StatelessWidget {
                           to,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: _textSecondary,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: _textSecondary, fontSize: 12),
                         ),
                       ),
                     ],
@@ -103,7 +101,7 @@ class RouteBackButton extends StatelessWidget {
       child: IconButton(
         onPressed: onBack,
         tooltip: 'Back to map',
-        icon: const Icon(Icons.arrow_back_rounded, color: _textPrimary),
+        icon: Icon(Icons.arrow_back_rounded, color: _textPrimary),
       ),
     );
   }
@@ -142,7 +140,7 @@ class RouteDrawerHeader extends StatelessWidget {
                   primary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -154,7 +152,7 @@ class RouteDrawerHeader extends StatelessWidget {
                     secondary!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -164,7 +162,7 @@ class RouteDrawerHeader extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person_outline_rounded,
                         size: 13,
                         color: _textSecondary,
@@ -175,10 +173,7 @@ class RouteDrawerHeader extends StatelessWidget {
                           byline!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: _textSecondary,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: _textSecondary, fontSize: 12),
                         ),
                       ),
                     ],
@@ -284,9 +279,7 @@ class RouteActionChip extends StatelessWidget {
     final color = active ? activeColor : _textPrimary;
     return Material(
       color:
-          active
-              ? activeColor.withValues(alpha: 0.12)
-              : const Color(0xFFF0F4FA),
+          active ? activeColor.withValues(alpha: 0.12) : AppColors.surfaceAlt,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,

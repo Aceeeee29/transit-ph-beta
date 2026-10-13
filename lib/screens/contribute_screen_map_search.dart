@@ -88,7 +88,7 @@ class _FoundPlaceSection extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     place.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: _ContributeScreenState._textPrimary,
@@ -99,7 +99,7 @@ class _FoundPlaceSection extends StatelessWidget {
               IconButton(
                 tooltip: 'Close',
                 onPressed: onClose,
-                icon: const Icon(
+                icon: Icon(
                   Icons.close_rounded,
                   color: _ContributeScreenState._textSecondary,
                 ),

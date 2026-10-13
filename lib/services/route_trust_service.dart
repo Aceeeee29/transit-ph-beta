@@ -15,6 +15,8 @@ class RouteTrustScore {
 }
 
 class RouteTrustService {
+  static const _baseApprovalPoints = 20;
+
   static RouteTrustScore computeConfidence({
     required route_model.Route route,
     required Map<String, int> feedbackSummary,
@@ -22,9 +24,11 @@ class RouteTrustService {
   }) {
     final current = now ?? DateTime.now();
 
+    // Approval keeps a route at the base score: trust has to come from
+    // riders' confirmations, not from a moderator's or admin's approval.
     final approvalPoints = switch (route.approvalStatus) {
-      route_model.RouteApprovalStatus.approved => 50,
-      route_model.RouteApprovalStatus.pending => 20,
+      route_model.RouteApprovalStatus.approved => _baseApprovalPoints,
+      route_model.RouteApprovalStatus.pending => _baseApprovalPoints,
       route_model.RouteApprovalStatus.rejected => 0,
     };
 
