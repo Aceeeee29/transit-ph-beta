@@ -73,7 +73,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   bool _isAutoFollowEnabled = false;
   bool _isDownloaded = false;
   bool _isDownloading = false;
-  String? _offlineTileTemplate;
   bool _isDiscountFareEnabled = false;
   bool _hasManualFareDiscountOverride = false;
 
@@ -128,7 +127,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     _initLocation();
     _loadFareProfile();
     _loadDownloadState();
-    _loadOfflineTileTemplate();
   }
 
   Future<void> _loadFareProfile() async {
@@ -137,10 +135,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     setState(() => _isDiscountFareEnabled = true);
   }
 
-  double get _fareDiscountMultiplier =>
-      _isDiscountFareEnabled ? PhFareCalculator.studentDiscount : 1.0;
-
-  double _applyFareDiscount(double fare) => fare * _fareDiscountMultiplier;
+  double _applyFareDiscount(double fare) =>
+      _isDiscountFareEnabled ? PhFareCalculator.discountedFare(fare) : fare;
 
   void _setDiscountEnabled(bool value) {
     setState(() {
@@ -194,12 +190,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     _cameraAnimController.stop();
     _cameraAnimController.reset();
     _cameraAnimController.forward();
-  }
-
-  Future<void> _loadOfflineTileTemplate() async {
-    final template = await OfflineTileService.getLocalTileTemplatePath();
-    if (!mounted) return;
-    setState(() => _offlineTileTemplate = template);
   }
 
   Future<void> _loadDownloadState() async {
@@ -721,9 +711,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
         ),
       ),
       children: [
-        // Saved tiles first: they show only where live ones can't load.
-        if (_offlineTileTemplate != null)
-          offlineTileLayer(_offlineTileTemplate!),
         const AppBaseMap(),
         // Place pins under the route, so its markers stay on top.
         if (MapTabController.instance.showPins.value)

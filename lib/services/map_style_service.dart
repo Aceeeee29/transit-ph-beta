@@ -6,13 +6,13 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart'
-    show ThemeReader;
+    show SpriteIndexReader, ThemeReader;
 
 import 'map_tile_pack.dart';
 
 /// How the base map is drawn.
 enum MapLook {
-  /// OpenStreetMap's standard pictures (colored roads, many icons).
+  /// OpenFreeMap's Liberty: colorful roads and parks, with icons.
   classic,
 
   /// A minimal vector style (OpenFreeMap), redrawn on the phone.
@@ -118,47 +118,87 @@ class MapStyleService with WidgetsBindingObserver {
     };
   }
 
-  // ─── Clean (vector) styles ──────────────────────────────────────────────────
+  // ─── Vector styles ──────────────────────────────────────────────────────────
 
-  final Map<bool, Future<Style?>> _styles = {};
+  final Map<String, Future<Style?>> _styles = {};
 
-  /// One tile source for day and night: both styles draw the same tiles.
-  PackedVectorTileProvider? _tiles;
-
-  /// The clean style for day or night, loaded once. Null when it can't be
-  /// loaded; the map then falls back to classic.
-  Future<Style?> cleanStyle({required bool night}) {
-    return _styles[night] ??= _loadStyle(night).then((style) {
+  /// The style for [look] by day, or the night style (dark appearance,
+  /// either look). Loaded once; null when it can't be loaded.
+  Future<Style?> styleFor({required MapLook look, required bool night}) {
+    final key = night ? 'night' : look.name;
+    return _styles[key] ??= _loadStyle(key).then((style) {
       // Try again next time instead of remembering a failure.
-      if (style == null) _styles.remove(night);
+      if (style == null) _styles.remove(key);
       return style;
     });
   }
 
-  /// Reads OpenFreeMap's style bundled with the app (no download, so the
+  /// Reads OpenFreeMap's styles bundled with the app (no download, so the
   /// map shows right away, offline too); tiles come from [MapTilePack].
-  Future<Style?> _loadStyle(bool night) async {
+  /// Clean is Positron by day and Dark at night, recolored to the app;
+  /// Classic is Liberty (colorful, with icons) as it comes.
+  Future<Style?> _loadStyle(String key) async {
     try {
-      final name = night ? 'dark' : 'positron';
+      final classic = key == MapLook.classic.name;
+      final name = switch (key) {
+        'night' => 'dark',
+        _ when classic => 'liberty',
+        _ => 'positron',
+      };
       final style =
           jsonDecode(await rootBundle.loadString('assets/map/style_$name.json'))
               as Map<String, dynamic>;
-      final source =
-          (style['sources'] as Map<String, dynamic>)['openmaptiles']
-              as Map<String, dynamic>;
-      final provider =
-          _tiles ??= PackedVectorTileProvider(
-            tileJsonUrl: source['url'] as String,
-          );
-      final cleaned = simplifyStyle(style, night: night);
+      final prepared =
+          classic
+              ? classicStyle(style)
+              : simplifyStyle(style, night: key == 'night');
       return Style(
-        theme: ThemeReader().read(cleaned),
-        providers: TileProviders({'openmaptiles': provider}),
+        theme: ThemeReader().read(prepared),
+        // Every style draws the same tiles, from one provider.
+        providers: TileProviders({
+          'openmaptiles': PackedVectorTileProvider.shared,
+        }),
+        sprites: classic ? await _classicIcons() : null,
       );
     } catch (e) {
-      debugPrint('[MapStyle] Could not load the clean map: $e');
+      debugPrint('[MapStyle] Could not load the $key map: $e');
       return null;
     }
+  }
+
+  static Future<SpriteStyle> _classicIcons() async {
+    final index =
+        jsonDecode(await rootBundle.loadString('assets/map/sprites.json'))
+            as Map<String, dynamic>;
+    return SpriteStyle(
+      atlasProvider:
+          () async =>
+              (await rootBundle.load(
+                'assets/map/sprites.png',
+              )).buffer.asUint8List(),
+      index: SpriteIndexReader().read(index),
+    );
+  }
+
+  /// Liberty with only what our tiles carry: the world relief image (its
+  /// own raster source) is left out.
+  @visibleForTesting
+  static Map<String, dynamic> classicStyle(Map<String, dynamic> style) {
+    return {
+      ...style,
+      'id': 'transitph-classic',
+      'metadata': {
+        ...?(style['metadata'] as Map<String, dynamic>?),
+        'version': _styleVersion,
+      },
+      'sources': {'openmaptiles': (style['sources'] as Map)['openmaptiles']},
+      'layers': [
+        for (final raw in style['layers'] as List)
+          if ((raw as Map)['type'] == 'background' ||
+              raw['source'] == 'openmaptiles')
+            raw,
+      ],
+    };
   }
 
   /// Layers left out for a calm map: shops, businesses and house numbers

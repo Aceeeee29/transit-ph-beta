@@ -31,6 +31,9 @@ class MapTilePack {
   /// The OpenFreeMap tile address the pack was built from.
   final String tileUrl;
 
+  bool has(TileIdentity tile) =>
+      _tiles.containsKey('${tile.z}/${tile.x}/${tile.y}');
+
   Future<Uint8List?> read(TileIdentity tile) async {
     final entry = _tiles['${tile.z}/${tile.x}/${tile.y}'];
     if (entry == null) return null;
@@ -85,14 +88,18 @@ class MapTilePack {
 }
 
 /// Vector tiles for the clean map: from the bundled pack inside CAMANAVA,
-/// downloaded everywhere else. The map keeps downloaded tiles on the phone
-/// (see `AppBaseMap`), so each one is fetched once.
+/// then tiles saved for downloaded routes ([RouteTileStore]), downloaded
+/// everywhere else. The map keeps downloaded tiles on the phone (see
+/// `AppBaseMap`), so each one is fetched once.
 class PackedVectorTileProvider extends VectorTileProvider {
-  /// [tileJsonUrl] lists OpenFreeMap's current tile address, which changes
-  /// whenever they publish fresh map data.
-  PackedVectorTileProvider({required this.tileJsonUrl});
+  PackedVectorTileProvider._();
 
-  final String tileJsonUrl;
+  /// Every map style draws the same tiles, so one provider serves them all.
+  static final shared = PackedVectorTileProvider._();
+
+  /// Lists OpenFreeMap's current tile address, which changes whenever they
+  /// publish fresh map data.
+  static const tileJsonUrl = 'https://tiles.openfreemap.org/planet';
 
   static const _tileUrlKey = 'map_tile_url';
 
@@ -117,7 +124,20 @@ class PackedVectorTileProvider extends VectorTileProvider {
     final pack = await MapTilePack.load();
     final packed = await pack?.read(tile);
     if (packed != null) return packed;
+    final saved = await RouteTileStore.read(tile);
+    if (saved != null) return saved;
+    return _fetch(tile, pack);
+  }
 
+  /// Saves [tile] for offline use unless the bundled pack already has it.
+  Future<void> saveForOffline(TileIdentity tile) async {
+    final pack = await MapTilePack.load();
+    if (pack?.has(tile) ?? false) return;
+    if (await RouteTileStore.has(tile)) return;
+    await RouteTileStore.write(tile, await _fetch(tile, pack));
+  }
+
+  Future<Uint8List> _fetch(TileIdentity tile, MapTilePack? pack) async {
     var url = await _currentTileUrl(pack);
     var response = await _download(url, tile);
     if (response.statusCode == 404 && !_refreshedThisRun) {
@@ -199,5 +219,44 @@ class PackedVectorTileProvider extends VectorTileProvider {
         if (!_refreshedThisRun) _refreshing = null;
       }
     }();
+  }
+}
+
+/// Vector tiles saved around downloaded routes, so they show offline
+/// outside the bundled CAMANAVA area (see `OfflineTileService`).
+class RouteTileStore {
+  RouteTileStore._();
+
+  static Future<Directory>? _root;
+
+  static Future<Directory> root() =>
+      _root ??= getApplicationSupportDirectory().then(
+        (dir) => Directory('${dir.path}/route_tiles'),
+      );
+
+  static Future<File> _file(TileIdentity tile) async =>
+      File('${(await root()).path}/${tile.z}/${tile.x}/${tile.y}.pbf');
+
+  static Future<bool> has(TileIdentity tile) async =>
+      (await _file(tile)).exists();
+
+  static Future<Uint8List?> read(TileIdentity tile) async {
+    try {
+      final file = await _file(tile);
+      return await file.exists() ? await file.readAsBytes() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> write(TileIdentity tile, Uint8List bytes) async {
+    final file = await _file(tile);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
+  }
+
+  static Future<void> clear() async {
+    final dir = await root();
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 }

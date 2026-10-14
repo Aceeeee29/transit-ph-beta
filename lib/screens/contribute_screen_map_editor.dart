@@ -261,13 +261,6 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
         _pieceRouterSection(stepIndex),
       ),
     });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: TranslatedText('Point removed.'),
-        duration: Duration(seconds: 1),
-      ),
-    );
   }
 
   Future<void> _onInsertHandleDragEndSection(

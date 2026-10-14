@@ -1,14 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 
 import '../../services/map_style_service.dart';
+import '../../theme/app_colors.dart';
 
-/// The base map under every map screen: classic OpenStreetMap pictures or
-/// the clean vector style, by day or night (Settings > Preferences).
+/// The base map under every map screen: the clean or classic (colorful)
+/// style by day, the night style in dark mode (Settings > Preferences).
+/// Everything comes from OpenFreeMap tiles, bundled for CAMANAVA.
 class AppBaseMap extends StatelessWidget {
   const AppBaseMap({super.key});
 
@@ -18,46 +19,34 @@ class AppBaseMap extends StatelessWidget {
     return ListenableBuilder(
       listenable: styles.changes,
       builder: (context, _) {
+        final look = styles.look.value;
         final night = styles.isDark.value;
-        if (styles.look.value == MapLook.clean) {
-          return _CleanBaseMap(key: ValueKey(night), night: night);
-        }
-        return classicTileLayer(night: night);
+        return _VectorBaseMap(
+          key: ValueKey('${look.name}-$night'),
+          look: look,
+          night: night,
+        );
       },
     );
   }
 }
 
-/// OpenStreetMap's standard tiles; at night their colors are inverted.
-TileLayer classicTileLayer({required bool night}) => TileLayer(
-  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  userAgentPackageName: 'com.example.app.transitph_beta',
-  tileBuilder: night ? darkModeTileBuilder : null,
-);
-
-/// Tiles saved for a downloaded route. Drawn under the live map, so they
-/// show only where live tiles can't load (offline).
-TileLayer offlineTileLayer(String urlTemplate) => TileLayer(
-  urlTemplate: urlTemplate,
-  tileProvider: FileTileProvider(),
-  tileBuilder:
-      MapStyleService.instance.isDark.value ? darkModeTileBuilder : null,
-);
-
 Future<Directory> _tileCacheFolder() async =>
     Directory('${(await getApplicationSupportDirectory()).path}/map_tiles');
 
-class _CleanBaseMap extends StatefulWidget {
+class _VectorBaseMap extends StatefulWidget {
+  final MapLook look;
   final bool night;
 
-  const _CleanBaseMap({super.key, required this.night});
+  const _VectorBaseMap({super.key, required this.look, required this.night});
 
   @override
-  State<_CleanBaseMap> createState() => _CleanBaseMapState();
+  State<_VectorBaseMap> createState() => _VectorBaseMapState();
 }
 
-class _CleanBaseMapState extends State<_CleanBaseMap> {
-  late final Future<Style?> _style = MapStyleService.instance.cleanStyle(
+class _VectorBaseMapState extends State<_VectorBaseMap> {
+  late final Future<Style?> _style = MapStyleService.instance.styleFor(
+    look: widget.look,
     night: widget.night,
   );
 
@@ -67,10 +56,11 @@ class _CleanBaseMapState extends State<_CleanBaseMap> {
       future: _style,
       builder: (context, snapshot) {
         final style = snapshot.data;
-        // Classic until the style arrives, or if it can't (offline).
-        if (style == null) return classicTileLayer(night: widget.night);
+        // The styles are bundled, so this is a blink at most.
+        if (style == null) return ColoredBox(color: AppColors.bg);
         return VectorTileLayer(
           theme: style.theme,
+          sprites: style.sprites,
           tileProviders: style.providers,
           // Kept with the app's own files, where Android doesn't clear
           // them the way it clears the temporary folder (the plugin's
@@ -80,6 +70,9 @@ class _CleanBaseMapState extends State<_CleanBaseMap> {
           cacheFolder: _tileCacheFolder as dynamic,
           fileCacheTtl: const Duration(days: 365),
           fileCacheMaximumSizeInBytes: 150 * 1024 * 1024,
+          // Parsed tiles kept in memory (default 20): panning back over
+          // the area just seen doesn't parse its tiles again.
+          memoryTileDataCacheMaxSize: 60,
         );
       },
     );

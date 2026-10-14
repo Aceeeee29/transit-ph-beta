@@ -39,15 +39,20 @@ class FareRule {
 }
 
 class PhFareCalculator {
-  /// Students pay 20% less.
+  /// Students, PWD and seniors pay 20% less.
   static const studentDiscount = 0.8;
+
+  /// A ride's discounted fare: 20% off, rounded up to the next peso, as
+  /// drivers charge it (the ₱14 jeepney minimum is ₱12, not ₱11.20).
+  static double discountedFare(double fare) =>
+      fare <= 0 ? fare : (fare * studentDiscount).ceilToDouble();
 
   /// A trip's estimated fare as riders see it, e.g. "₱14–18": a range,
   /// since the real fare depends on where you board and get off.
   static String tripEstimateLabel(double baseFare, {bool student = false}) {
     if (!baseFare.isFinite) return '₱—';
     if (baseFare <= 0) return 'Free';
-    final fare = student ? baseFare * studentDiscount : baseFare;
+    final fare = student ? discountedFare(baseFare) : baseFare;
     return '₱${(fare * 0.9).round()}–${(fare * 1.15).round()}';
   }
 

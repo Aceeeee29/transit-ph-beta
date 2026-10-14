@@ -1,11 +1,14 @@
 // Builds the map data bundled with the app, so the clean map draws CAMANAVA
 // without downloading anything:
-//   assets/map/style_positron.json, assets/map/style_dark.json  (OpenFreeMap)
+//   assets/map/style_{positron,dark,liberty}.json  (OpenFreeMap styles: clean
+//   day, clean night, and Classic)
+//   assets/map/sprites.json + sprites.png  (Classic's icons, 2x)
 //   assets/map/camanava.tiles  (every vector tile over CAMANAVA, zoom 8-14;
 //   the maps never zoom out further than that over the region, and wider
 //   views load from the internet)
 //
 // Run from the project root:  dart run tool/build_map_pack.dart
+// Add --styles-only to refresh the styles and icons but keep the tiles.
 // Re-run now and then to pick up newer OpenStreetMap data.
 //
 // camanava.tiles layout: a 4-byte big-endian header length, the header as
@@ -26,13 +29,14 @@ const minZoom = 8, maxZoom = 14;
 
 const styleBase = 'https://tiles.openfreemap.org/styles';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  final stylesOnly = args.contains('--styles-only');
   final client = http.Client();
   try {
     final outDir = Directory('assets/map')..createSync(recursive: true);
 
     String? tileJsonUrl;
-    for (final name in ['positron', 'dark']) {
+    for (final name in ['positron', 'dark', 'liberty']) {
       final body = await _get(client, '$styleBase/$name');
       final style = jsonDecode(utf8.decode(body)) as Map<String, dynamic>;
       tileJsonUrl ??=
@@ -40,6 +44,19 @@ Future<void> main() async {
       File('${outDir.path}/style_$name.json').writeAsBytesSync(body);
       stdout.writeln('style_$name.json  ${body.length} bytes');
     }
+
+    final liberty =
+        jsonDecode(
+              File('${outDir.path}/style_liberty.json').readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final spriteBase = liberty['sprite'] as String;
+    for (final ext in ['json', 'png']) {
+      final body = await _get(client, '$spriteBase@2x.$ext');
+      File('${outDir.path}/sprites.$ext').writeAsBytesSync(body);
+      stdout.writeln('sprites.$ext  ${body.length} bytes');
+    }
+    if (stylesOnly) return;
 
     final tileJson =
         jsonDecode(utf8.decode(await _get(client, tileJsonUrl!)))

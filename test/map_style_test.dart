@@ -53,6 +53,21 @@ void main() {
     expect(paint('highway_motorway_inner', 'line-color'), '#746855');
   });
 
+  test('classic keeps only what our tiles can draw, cached apart', () {
+    final classic = MapStyleService.classicStyle(_fixture('liberty'));
+    final layers = (classic['layers'] as List).cast<Map>();
+    expect(classic['id'], 'transitph-classic');
+    expect((classic['sources'] as Map).keys, ['openmaptiles']);
+    expect(
+      layers.every(
+        (l) => l['type'] == 'background' || l['source'] == 'openmaptiles',
+      ),
+      isTrue,
+    );
+    // Colorful, with icons: the shop and transit icon layers stay.
+    expect(layers.any((l) => l['id'] == 'poi_transit'), isTrue);
+  });
+
   test('auto appearance is dark from 6 PM to 6 AM', () {
     expect(MapStyleService.isNightHour(DateTime(2026, 10, 12, 17, 59)), false);
     expect(MapStyleService.isNightHour(DateTime(2026, 10, 12, 18)), true);

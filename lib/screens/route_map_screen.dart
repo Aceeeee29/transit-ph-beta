@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
 import '../models/route.dart' as route_model;
+import '../services/fare_matrix.dart';
 import '../services/gamification_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
@@ -104,7 +105,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   bool _isExitPromptOpen = false;
   bool _isRouteDownloaded = false;
   bool _isDownloadingRoute = false;
-  String? _offlineTileTemplate;
   bool _isDiscountFareEnabled = false;
   bool _hasManualFareDiscountOverride = false;
 
@@ -185,7 +185,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     }
     _loadFareProfile();
     _loadDownloadedState();
-    _loadOfflineTileTemplate();
   }
 
   // FIX: Camera animation tick — interpolates lat, lng, zoom, and bearing
@@ -233,12 +232,6 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     _cameraAnimController.stop();
     _cameraAnimController.reset();
     _cameraAnimController.forward();
-  }
-
-  Future<void> _loadOfflineTileTemplate() async {
-    final template = await OfflineTileService.getLocalTileTemplatePath();
-    if (!mounted) return;
-    setState(() => _offlineTileTemplate = template);
   }
 
   Future<void> _loadDownloadedState() async {
@@ -1027,12 +1020,12 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   bool get _hasFareSteps =>
       widget.route.steps.any((step) => step.mode != 'Walk');
 
-  double get _fareDiscountMultiplier => _isDiscountFareEnabled ? 0.8 : 1.0;
-
   bool _isStudentCategory(String category) =>
       category.replaceAll('_', ' ') == 'student';
 
-  double _applyFareDiscount(double fare) => fare * _fareDiscountMultiplier;
+  /// Per ride: the discount rounds each fare up to the next peso.
+  double _applyFareDiscount(double fare) =>
+      _isDiscountFareEnabled ? PhFareCalculator.discountedFare(fare) : fare;
 
   void _setDiscountEnabled(bool value) {
     setState(() {
@@ -1079,21 +1072,26 @@ class _RouteMapScreenState extends State<RouteMapScreen>
     return RouteMetricsService.calculateFareForMode(step.mode, distanceKm);
   }
 
-  double _calculateRouteFareTotal() {
+  double _calculateRouteFareTotal() =>
+      _routeFareTotal(discounted: _isDiscountFareEnabled);
+
+  double _routeFareTotal({required bool discounted}) {
+    double fare(double regular) =>
+        discounted ? PhFareCalculator.discountedFare(regular) : regular;
     double total = 0.0;
     for (int i = 0; i < widget.route.steps.length; i++) {
       final step = widget.route.steps[i];
       if (step.mode == 'Walk') continue;
       final baseFare = step.actualFare ?? _estimateStepFare(i, step);
-      total += baseFare;
+      total += fare(baseFare);
     }
 
     if (total <= 0) {
       final parsed = _parseFareAmount(widget.route.price);
-      if (parsed != null) total = parsed;
+      if (parsed != null) total = fare(parsed);
     }
 
-    return _applyFareDiscount(total);
+    return total;
   }
 
   RouteFollowEngine? _pathLineCache;
@@ -1131,7 +1129,7 @@ class _RouteMapScreenState extends State<RouteMapScreen>
   /// label keeps the regular fare visible ("Fare · reg. PHP 33").
   String? _regularFareNote() {
     if (!_isDiscountFareEnabled) return null;
-    final regular = _calculateRouteFareTotal() / _fareDiscountMultiplier;
+    final regular = _routeFareTotal(discounted: false);
     if (regular <= 0) return null;
     return 'Fare · reg. PHP ${regular.round()}';
   }

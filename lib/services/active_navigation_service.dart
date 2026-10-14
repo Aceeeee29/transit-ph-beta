@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -186,6 +187,11 @@ class ActiveNavigationService extends ChangeNotifier {
   List<LatLng>? _fetchedConnector;
   RouteFollowEngine? _fetchedConnectorEngine;
   LatLng? _fetchedConnectorTarget;
+
+  /// How far off the fetched walking path the traveler was when it was
+  /// fetched: walking routes start on the nearest road, which can be well
+  /// over [_connectorRefetchMeters] from someone indoors or in an alley.
+  double _fetchedConnectorSlack = 0;
   List<LatLng>? _connector;
   double? _connectorRemainingMeters;
   bool _isFetchingConnector = false;
@@ -559,10 +565,17 @@ class ActiveNavigationService extends ChangeNotifier {
       );
       final targetMoved = _distance.as(LengthUnit.Meter, fetchedTarget, target);
       if (onPath != null &&
-          onPath.distance <= _connectorRefetchMeters &&
+          onPath.distance <= _fetchedConnectorSlack + _connectorRefetchMeters &&
           targetMoved <= _connectorRefetchMeters) {
-        _connector = _fetchedConnector;
-        _connectorRemainingMeters = fetchedEngine.totalMeters - onPath.along;
+        // Straight to the nearest point of the walking path, then along it.
+        final path = fetchedEngine.path;
+        _connector = [
+          position,
+          onPath.point,
+          ...path.sublist(math.min(onPath.segment + 1, path.length - 1)),
+        ];
+        _connectorRemainingMeters =
+            onPath.distance + fetchedEngine.totalMeters - onPath.along;
         return;
       }
       _fetchedConnector = null;
@@ -600,9 +613,12 @@ class ActiveNavigationService extends ChangeNotifier {
               _connectorRefetchMeters) {
             return;
           }
+          final engine = RouteFollowEngine(path);
           _fetchedConnector = path;
-          _fetchedConnectorEngine = RouteFollowEngine(path);
+          _fetchedConnectorEngine = engine;
           _fetchedConnectorTarget = to;
+          _fetchedConnectorSlack =
+              engine.nearestInRange(from, 0, engine.totalMeters)?.distance ?? 0;
           final position = _lastPosition;
           if (position != null) {
             _updateConnector(LatLng(position.latitude, position.longitude));

@@ -1,79 +1,64 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:vector_map_tiles/vector_map_tiles.dart';
 
+import 'map_tile_pack.dart';
+
+/// Saves the map around a downloaded route so it shows offline. These are
+/// OpenFreeMap's vector tiles (which allow saving for offline use), kept in
+/// [RouteTileStore]; CAMANAVA is already bundled with the app, so only the
+/// parts outside it are downloaded. Vector tiles stop at zoom 14 and the
+/// map enlarges them beyond that, so a route needs few of them.
 class OfflineTileService {
-  static const _userAgent = 'TransitPH/1.0 (offline-tile-cache)';
-  static const _maxTileDownload = 1200;
+  static const _minZoom = 10;
+  static const _maxZoom = 14;
+  static const _maxTiles = 400;
 
-  static Future<String> getLocalTileTemplatePath() async {
-    final root = await _tileRoot();
-    return p.join(root.path, '{z}', '{x}', '{y}.png');
-  }
-
-  static Future<void> cacheRouteTiles(
-    List<LatLng> points, {
-    int minZoom = 11,
-    int maxZoom = 16,
-  }) async {
+  static Future<void> cacheRouteTiles(List<LatLng> points) async {
     final normalized = _normalizedPoints(points);
     if (normalized.length < 2) return;
 
     final bounds = _boundsForPoints(normalized);
-    var activeMaxZoom = maxZoom;
-
-    while (activeMaxZoom > minZoom &&
-        _estimateTileCount(bounds, minZoom, activeMaxZoom) > _maxTileDownload) {
-      activeMaxZoom -= 1;
+    var maxZoom = _maxZoom;
+    while (maxZoom > _minZoom &&
+        _estimateTileCount(bounds, _minZoom, maxZoom) > _maxTiles) {
+      maxZoom -= 1;
     }
 
-    final root = await _tileRoot();
-    final client = http.Client();
-    try {
-      for (var z = minZoom; z <= activeMaxZoom; z++) {
-        final (minX, maxX, minY, maxY) = _tileRangeForBounds(bounds, z);
-        for (var x = minX; x <= maxX; x++) {
-          for (var y = minY; y <= maxY; y++) {
-            final tileFile = File(p.join(root.path, '$z', '$x', '$y.png'));
-            if (await tileFile.exists()) continue;
-
-            await tileFile.parent.create(recursive: true);
-            final uri = Uri.parse(
-              'https://tile.openstreetmap.org/$z/$x/$y.png',
-            );
-            try {
-              final response = await client.get(
-                uri,
-                headers: {HttpHeaders.userAgentHeader: _userAgent},
-              );
-              if (response.statusCode == 200) {
-                await tileFile.writeAsBytes(response.bodyBytes, flush: true);
-              }
-            } catch (_) {
-              // Best-effort cache: keep going when a tile fails.
-            }
+    final provider = PackedVectorTileProvider.shared;
+    for (var z = _minZoom; z <= maxZoom; z++) {
+      final (minX, maxX, minY, maxY) = _tileRangeForBounds(bounds, z);
+      for (var x = minX; x <= maxX; x++) {
+        for (var y = minY; y <= maxY; y++) {
+          try {
+            await provider.saveForOffline(TileIdentity(z, x, y));
+          } catch (_) {
+            // Best-effort: keep going when a tile fails.
           }
         }
       }
-    } finally {
-      client.close();
     }
   }
 
   static Future<void> clearAllTiles() async {
-    final root = await _tileRoot();
-    if (await root.exists()) {
-      await root.delete(recursive: true);
-    }
+    await RouteTileStore.clear();
+    await removeOldPictureTiles();
   }
 
-  static Future<Directory> _tileRoot() async {
-    final docs = await getApplicationDocumentsDirectory();
-    return Directory(p.join(docs.path, 'offline_tiles'));
+  /// Earlier versions saved OpenStreetMap's map pictures here. Their
+  /// servers forbid bulk saving and blocked the app, so some of those
+  /// pictures are just their "Access blocked" notice; nothing reads the
+  /// folder any more.
+  static Future<void> removeOldPictureTiles() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final old = Directory(p.join(docs.path, 'offline_tiles'));
+      if (await old.exists()) await old.delete(recursive: true);
+    } catch (_) {}
   }
 
   static List<LatLng> _normalizedPoints(List<LatLng> points) {

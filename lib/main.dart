@@ -10,6 +10,7 @@ import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/location_service.dart';
 import 'services/moderation_service.dart';
+import 'services/offline_tile_service.dart';
 import 'services/map_style_service.dart';
 import 'services/settings_service.dart';
 import 'config.dart';
@@ -105,6 +106,9 @@ void main() async {
   // Map look (classic or clean) and light or dark appearance, kept on the
   // device; loaded before the first frame so the app opens in its colors.
   await MapStyleService.instance.load();
+  // Saved OpenStreetMap pictures from older versions (some are their
+  // "Access blocked" notice); nothing reads them any more.
+  unawaited(OfflineTileService.removeOldPictureTiles());
 
   runApp(const TransitPHApp());
 }

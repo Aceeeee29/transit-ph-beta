@@ -2,15 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transitph_beta/screens/contribute_screen.dart';
-import 'package:transitph_beta/services/map_style_service.dart';
 
 void main() {
   testWidgets('back in the Map tab leaves Contribute without closing the app '
       'screen', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    // The clean map's tile timers would outlive the test; the base map
-    // doesn't matter here.
-    MapStyleService.instance.look.value = MapLook.classic;
     tester.view.physicalSize = const Size(1080, 2200);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -53,5 +49,8 @@ void main() {
     // Still on the Contribute screen, not popped back to "below".
     expect(find.byType(ContributeScreen), findsOne);
     expect(find.text('below'), findsNothing);
+
+    // Let the vector map's tile timers finish before the test ends.
+    await tester.pump(const Duration(seconds: 5));
   });
 }

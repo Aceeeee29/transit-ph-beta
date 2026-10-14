@@ -824,7 +824,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         _dropdownRow<String>(
                           title: 'Map Style',
-                          subtitle: 'Clean is a calmer, minimal map (beta)',
+                          subtitle:
+                              'Clean is calm and minimal; Classic is colorful',
                           value: _mapLookLabels[styles.look.value]!,
                           items: _mapLookLabels.values.toList(),
                           onChanged: (label) {

@@ -267,8 +267,15 @@ extension _ContributeScreenSections on _ContributeScreenState {
         ),
         onTap: _onMapTap,
         onPositionChanged: (position, hasGesture) {
-          if (hasGesture) {
-            _setUiState(() => _currentZoom = position.zoom);
+          if (!hasGesture) return;
+          // Called every frame of a pan or pinch. Only the pins' size
+          // depends on the zoom, so redraw the screen only when that
+          // visibly changes; rebuilding it every frame made the map lag.
+          _currentZoom = position.zoom;
+          final scale = placePinScaleForZoom(position.zoom);
+          if ((scale - _pinScaleDrawn).abs() >= 0.05 ||
+              (scale == 0) != (_pinScaleDrawn == 0)) {
+            _setUiState(() => _pinScaleDrawn = scale);
           }
         },
       ),

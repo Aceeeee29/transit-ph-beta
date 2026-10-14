@@ -506,9 +506,6 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         ),
       ),
       children: [
-        // Saved tiles first: they show only where live ones can't load.
-        if (_offlineTileTemplate != null)
-          offlineTileLayer(_offlineTileTemplate!),
         const AppBaseMap(),
         // Place pins under the route, so its stops and markers stay on top.
         if (MapTabController.instance.showPins.value)

@@ -183,6 +183,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Zoom slider state ───────────────────────────────────────────────────────
   double _currentZoom = 11.0;
 
+  /// The pin size last drawn; see the map's onPositionChanged.
+  double _pinScaleDrawn = placePinScaleForZoom(11.0);
+
   // ─── Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
@@ -729,13 +732,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       _currentZoom = 15.0;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: TranslatedText('Location found and map locked to that place'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
     return true;
   }
 
@@ -749,12 +745,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
       selectedRegion = null;
       _currentZoom = 15.0;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Showing $name'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   Future<void> _openLocationSearchScreen() async {
@@ -854,12 +844,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
                     ),
               );
               _saveToHistory();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: TranslatedText('Step updated.'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
             },
           ),
     );
@@ -1128,29 +1112,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   void _onSnapToRoadToggled(bool enabled) {
     setState(() => _snapToRoadEnabled = enabled);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: TranslatedText(
-          enabled
-              ? 'Snap to road enabled - routes will follow roads'
-              : 'Snap to road disabled - routes will use straight lines',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   void _togglePins() {
     final pins = MapTabController.instance.showPins;
     pins.value = !pins.value;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: TranslatedText(
-          _showPins ? 'Pins shown on map.' : 'Pins hidden on map.',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   // ─── Route utilities ─────────────────────────────────────────────────────────
