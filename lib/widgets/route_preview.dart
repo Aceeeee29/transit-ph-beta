@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'map/app_base_map.dart';
+import 'map/map_pin_images.dart';
+import 'map/transit_map.dart';
 import '../models/route.dart' as route_model;
 import '../services/route_metrics_service.dart';
 import '../theme/app_colors.dart';
@@ -170,16 +170,13 @@ class RoutePreview extends StatelessWidget {
         children: [
           // ─── Map ─────────────────────────────────────────────────────────
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: _getRouteCenter(),
-                initialZoom: _calculateZoomLevel(),
-              ),
-              children: [
-                const AppBaseMap(),
-                PolylineLayer(polylines: _buildPolylines()),
-                MarkerLayer(markers: _buildMarkers()),
-              ],
+            child: TransitMap(
+              controller: TransitMapController(),
+              initialCenter: _getRouteCenter(),
+              initialZoom: _calculateZoomLevel(),
+              lines: _buildLines(),
+              dots: _buildDots(),
+              icons: _buildIcons(),
             ),
           ),
 
@@ -725,136 +722,66 @@ class RoutePreview extends StatelessWidget {
   }
 
   // ─── Map helpers (functions unchanged) ────────────────────────────────────
-  List<Polyline> _buildPolylines() {
-    List<Polyline> polylines = [];
-
+  /// Each step in its mode's color on a dark edge.
+  List<MapLine> _buildLines() {
+    final lines = <MapLine>[];
     for (int i = 0; i < route.steps.length; i++) {
-      final step = route.steps[i];
-      final color = _getModeColor(step.mode);
-
       final startIdx = (i == 0) ? 0 : route.stepBoundaries[i - 1];
       final endIdx =
           (i < route.stepBoundaries.length)
               ? route.stepBoundaries[i]
               : route.pathPoints.length - 1;
-
-      if (endIdx > startIdx) {
-        final stepPoints = route.pathPoints.sublist(startIdx, endIdx + 1);
-
-        // Add border (background) polyline for better visibility
-        polylines.add(
-          Polyline(
-            points: stepPoints,
-            color: Colors.black.withOpacity(0.5),
-            strokeWidth: 8.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
+      if (endIdx <= startIdx) continue;
+      final stepPoints = route.pathPoints.sublist(startIdx, endIdx + 1);
+      lines
+        ..add(
+          MapLine(
+            stepPoints,
+            color: Colors.black.withValues(alpha: 0.5),
+            width: 8,
+          ),
+        )
+        ..add(
+          MapLine(
+            stepPoints,
+            color: _getModeColor(route.steps[i].mode),
+            width: 6,
           ),
         );
-
-        // Add main polyline on top
-        polylines.add(
-          Polyline(
-            points: stepPoints,
-            color: color,
-            strokeWidth: 6.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
-          ),
-        );
-      }
     }
-
-    return polylines;
+    return lines;
   }
 
-  List<Marker> _buildMarkers() {
-    List<Marker> markers = [];
+  /// The start pin and the end flag.
+  List<MapIcon> _buildIcons() => [
+    if (route.pathPoints.isNotEmpty)
+      MapIcon(
+        route.pathPoints.first,
+        MapPinImages.routeStart,
+        anchorBottom: true,
+      ),
+    if (route.pathPoints.length > 1)
+      MapIcon(route.pathPoints.last, MapPinImages.routeEnd, anchorBottom: true),
+  ];
 
-    // Start marker
-    if (route.pathPoints.isNotEmpty) {
-      markers.add(
-        Marker(
-          point: route.pathPoints.first,
-          child: const Icon(Icons.location_on, color: Colors.green, size: 40),
+  /// Designated stops, so reviewers can check them, and the numbered
+  /// points where one step ends and the next begins.
+  List<MapDot> _buildDots() => [
+    for (final step in route.steps)
+      if (step.usesDesignatedStops)
+        for (final stop in step.stops)
+          MapDot(stop.point, radius: 5, strokeColor: _accent),
+    for (int i = 0; i < route.stepBoundaries.length; i++)
+      if (route.stepBoundaries[i] < route.pathPoints.length)
+        MapDot(
+          route.pathPoints[route.stepBoundaries[i]],
+          radius: 10,
+          color: _surface,
+          strokeColor: _accent,
+          strokeWidth: 2,
+          label: '${i + 1}',
         ),
-      );
-    }
-
-    // End marker
-    if (route.pathPoints.length > 1) {
-      markers.add(
-        Marker(
-          point: route.pathPoints.last,
-          child: const Icon(Icons.flag, color: Colors.red, size: 40),
-        ),
-      );
-    }
-
-    // Designated stops, so reviewers can check them.
-    for (final step in route.steps) {
-      if (!step.usesDesignatedStops) continue;
-      for (final stop in step.stops) {
-        markers.add(
-          Marker(
-            point: stop.point,
-            width: 16,
-            height: 16,
-            child: Tooltip(
-              message: stop.name,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _accent, width: 3),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    // Step boundary markers
-    for (int i = 0; i < route.stepBoundaries.length; i++) {
-      final boundaryIdx = route.stepBoundaries[i];
-      if (boundaryIdx < route.pathPoints.length) {
-        markers.add(
-          Marker(
-            point: route.pathPoints[boundaryIdx],
-            child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: _accent, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withOpacity(0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              width: 24,
-              height: 24,
-              child: Center(
-                child: Text(
-                  '${i + 1}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                    color: _accent,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return markers;
-  }
+  ];
 
   LatLng _getRouteCenter() {
     if (route.pathPoints.isEmpty) {

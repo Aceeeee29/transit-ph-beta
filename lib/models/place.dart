@@ -81,6 +81,10 @@ class Place {
   final String description;
   final String? address;
 
+  /// How prominent OpenStreetMap rates the place (lower is more), for the
+  /// places read from the map (`OsmPlaces`); 0 for our own.
+  final int rank;
+
   const Place({
     required this.id,
     required this.name,
@@ -90,7 +94,11 @@ class Place {
     required this.lng,
     required this.description,
     this.address,
+    this.rank = 0,
   });
 
   bool get isGalaan => categories.contains(PlaceCategory.tourist);
+
+  /// Read from OpenStreetMap, not one of our hand-made places.
+  bool get isFromMap => id.startsWith('osm-');
 }

@@ -40,7 +40,7 @@ void main() {
     expect(notified, 3);
   });
 
-  test('category chips toggle, and All clears them', () {
+  test('category chips toggle; All highlights every one, then none', () {
     controller.toggleCategory(PlaceCategory.school);
     expect(controller.placeCategories.value, {
       PlaceCategory.tourist,
@@ -48,7 +48,9 @@ void main() {
     });
     controller.toggleCategory(PlaceCategory.tourist);
     expect(controller.placeCategories.value, {PlaceCategory.school});
-    controller.clearCategories();
+    controller.toggleAllCategories();
+    expect(controller.placeCategories.value, PlaceCategory.values.toSet());
+    controller.toggleAllCategories();
     expect(controller.placeCategories.value, isEmpty);
   });
 }

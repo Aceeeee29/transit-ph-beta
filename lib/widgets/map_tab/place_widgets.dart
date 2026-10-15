@@ -160,8 +160,9 @@ class PlaceDetailsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final category = place.categories.first;
     final typeLabel = place.categories.map((c) => c.singularLabel).join(', ');
+    // Places read from the map have neither.
     final locationParts = [
-      place.city,
+      if (place.city.isNotEmpty) place.city,
       if (place.address != null) place.address!,
     ];
     return Padding(
@@ -200,21 +201,27 @@ class PlaceDetailsSection extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.place_outlined, color: _textSecondary, size: 14),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        locationParts.join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: _textSecondary, fontSize: 12),
+                if (locationParts.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.place_outlined,
+                        color: _textSecondary,
+                        size: 14,
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          locationParts.join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: _textSecondary, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (place.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   TranslatedText(
@@ -343,7 +350,10 @@ class PlaceListTile extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${place.city} · ${place.categories.map((c) => c.label).join(', ')}',
+                    [
+                      if (place.city.isNotEmpty) place.city,
+                      place.categories.map((c) => c.label).join(', '),
+                    ].join(' · '),
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,

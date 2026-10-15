@@ -53,7 +53,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
             const SizedBox(height: 8),
             PlaceCategoryChips(
               selected: MapTabController.instance.placeCategories.value,
-              onSelectAll: MapTabController.instance.clearCategories,
+              onToggleAll: MapTabController.instance.toggleAllCategories,
               onToggle: MapTabController.instance.toggleCategory,
             ),
           ],
@@ -75,6 +75,13 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
             tooltip: 'Report a problem with this route',
             iconColor: _danger,
             onTap: _showReportDialog,
+          ),
+          MapSideButton(
+            icon: Icons.view_in_ar_rounded,
+            tooltip: _tilted ? 'Flat view' : '3D view',
+            active: _tilted,
+            iconColor: _accent,
+            onTap: _toggleTilt,
           ),
           MapSideButton(
             icon:

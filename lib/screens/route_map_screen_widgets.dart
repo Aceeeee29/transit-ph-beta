@@ -484,44 +484,35 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   }
 
   Widget _buildMapSectionSection(LatLng center) {
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: center,
-        initialZoom: 10.0,
-        minZoom: 5.0,
-        maxZoom: 18.0,
-        onTap: (_, _) => _clearSelectedPlace(),
-        onPositionChanged: (camera, hasGesture) {
-          if (hasGesture && _isAutoFollowEnabled) {
-            _setAutoFollowEnabled(false);
-          }
-          _updatePinScale(camera.zoom);
-        },
-        cameraConstraint: CameraConstraint.contain(
-          bounds: LatLngBounds(
-            const LatLng(4.5, 116.0),
-            const LatLng(21.5, 127.0),
-          ),
-        ),
+    // Place pins sit under the route, its stops and markers; the
+    // traveler's dot on top of everything.
+    return TransitMap(
+      controller: _map,
+      initialCenter: center,
+      initialZoom: 10.0,
+      minZoom: 5.0,
+      maxZoom: 18.0,
+      bounds: (
+        southWest: const LatLng(4.5, 116.0),
+        northEast: const LatLng(21.5, 127.0),
       ),
-      children: [
-        const AppBaseMap(),
-        // Place pins under the route, so its stops and markers stay on top.
-        if (MapTabController.instance.showPins.value)
-          MarkerLayer(
-            markers: placeMarkers(
-              places: _visiblePlaces,
-              scale: _pinScale,
-              selectedId: _selectedPlace?.id,
-              onTap: _onPlaceTapped,
-            ),
-          ),
-        // Markers after the route so the user's arrow sits on top of it.
-        PolylineLayer(polylines: polylines),
-        MarkerLayer(markers: markers),
-        _userLocationLayer,
-      ],
+      places: _mapPlaces,
+      lines: _lines,
+      dots: _dots,
+      icons: _icons,
+      user: _mapUser,
+      onTap: (_) => _clearSelectedPlace(),
+      onPlaceTap: _onPlaceTapped,
+      onUserGesture: () {
+        if (_isAutoFollowEnabled) _setAutoFollowEnabled(false);
+      },
+      onCameraIdle: _onMapCameraIdle,
+      // Below the top bar and the chips.
+      compassMargin: const math.Point(16, 130),
+      attributionMargin: const math.Point(
+        8,
+        _RouteMapScreenState._drawerPeekHeight + 8,
+      ),
     );
   }
 

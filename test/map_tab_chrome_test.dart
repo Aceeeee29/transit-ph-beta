@@ -45,7 +45,7 @@ void main() {
                   const SizedBox(height: 8),
                   PlaceCategoryChips(
                     selected: const {PlaceCategory.tourist},
-                    onSelectAll: () {},
+                    onToggleAll: () {},
                     onToggle: (_) {},
                   ),
                 ],

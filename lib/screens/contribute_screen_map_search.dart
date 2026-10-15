@@ -36,8 +36,7 @@ extension _ContributeScreenMapSearch on _ContributeScreenState {
       _foundPlace = found;
     });
     final zoom = _currentZoom < 16 ? 16.0 : _currentZoom;
-    _mapController.move(LatLng(found.latitude, found.longitude), zoom);
-    _setUiState(() => _currentZoom = zoom);
+    _moveCamera(LatLng(found.latitude, found.longitude), zoom);
     // Its card (with Directions) lives in the drawer.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) MapDrawer.open(_drawerController);

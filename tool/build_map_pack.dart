@@ -3,12 +3,15 @@
 //   assets/map/style_{positron,dark,liberty}.json  (OpenFreeMap styles: clean
 //   day, clean night, and Classic)
 //   assets/map/sprites.json + sprites.png  (Classic's icons, 2x)
+//   assets/map/fonts/<font>/<range>.pbf  (label fonts for the MapLibre map:
+//   Latin, Latin Extended and punctuation; other characters download)
 //   assets/map/camanava.tiles  (every vector tile over CAMANAVA, zoom 8-14;
 //   the maps never zoom out further than that over the region, and wider
 //   views load from the internet)
 //
 // Run from the project root:  dart run tool/build_map_pack.dart
-// Add --styles-only to refresh the styles and icons but keep the tiles.
+// Add --styles-only to refresh the styles, icons and fonts but keep the
+// tiles, or --fonts-only for just the fonts.
 // Re-run now and then to pick up newer OpenStreetMap data.
 //
 // camanava.tiles layout: a 4-byte big-endian header length, the header as
@@ -29,11 +32,20 @@ const minZoom = 8, maxZoom = 14;
 
 const styleBase = 'https://tiles.openfreemap.org/styles';
 
+// The fonts the styles name, and the glyph ranges covering Filipino and
+// English place names. Saved with "_" for spaces (see MapLibreTileServer).
+const fontStacks = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'];
+const glyphRanges = ['0-255', '256-511', '8192-8447'];
+
 Future<void> main(List<String> args) async {
   final stylesOnly = args.contains('--styles-only');
   final client = http.Client();
   try {
     final outDir = Directory('assets/map')..createSync(recursive: true);
+    if (args.contains('--fonts-only')) {
+      await _fetchFonts(client, outDir);
+      return;
+    }
 
     String? tileJsonUrl;
     for (final name in ['positron', 'dark', 'liberty']) {
@@ -46,9 +58,7 @@ Future<void> main(List<String> args) async {
     }
 
     final liberty =
-        jsonDecode(
-              File('${outDir.path}/style_liberty.json').readAsStringSync(),
-            )
+        jsonDecode(File('${outDir.path}/style_liberty.json').readAsStringSync())
             as Map<String, dynamic>;
     final spriteBase = liberty['sprite'] as String;
     for (final ext in ['json', 'png']) {
@@ -56,6 +66,7 @@ Future<void> main(List<String> args) async {
       File('${outDir.path}/sprites.$ext').writeAsBytesSync(body);
       stdout.writeln('sprites.$ext  ${body.length} bytes');
     }
+    await _fetchFonts(client, outDir);
     if (stylesOnly) return;
 
     final tileJson =
@@ -99,6 +110,29 @@ Future<void> main(List<String> args) async {
     );
   } finally {
     client.close();
+  }
+}
+
+Future<void> _fetchFonts(http.Client client, Directory outDir) async {
+  final liberty =
+      jsonDecode(File('${outDir.path}/style_liberty.json').readAsStringSync())
+          as Map<String, dynamic>;
+  final glyphs = liberty['glyphs'] as String;
+  for (final font in fontStacks) {
+    final dir = Directory('${outDir.path}/fonts/${font.replaceAll(' ', '_')}')
+      ..createSync(recursive: true);
+    var total = 0;
+    for (final range in glyphRanges) {
+      final body = await _get(
+        client,
+        glyphs
+            .replaceAll('{fontstack}', Uri.encodeComponent(font))
+            .replaceAll('{range}', range),
+      );
+      File('${dir.path}/$range.pbf').writeAsBytesSync(body);
+      total += body.length;
+    }
+    stdout.writeln('fonts/${font.replaceAll(' ', '_')}  $total bytes');
   }
 }
 

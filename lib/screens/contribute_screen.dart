@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
-import '../widgets/map/app_base_map.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'dart:math' show Point;
 import '../models/route.dart' as route_model;
 import '../models/place.dart';
 import '../models/location_search_result.dart';
@@ -16,7 +16,10 @@ import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';
 import '../services/contribute_route_edit_service.dart';
 import '../services/map_tab_controller.dart';
+import '../services/osm_places.dart';
 import '../data/camanava_places.dart';
+import '../widgets/map/map_pin_images.dart';
+import '../widgets/map/transit_map.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
@@ -42,6 +45,7 @@ part 'contribute_screen_dialogs.dart';
 part 'contribute_screen_map_chrome.dart';
 part 'contribute_screen_map_editor.dart';
 part 'contribute_screen_map_search.dart';
+part 'contribute_screen_maplibre.dart';
 part 'contribute_screen_route_builder.dart';
 
 /// What the Map tab is currently showing. The map itself is shared — only the
@@ -113,7 +117,13 @@ class ContributeScreen extends StatefulWidget {
 
 class _ContributeScreenState extends State<ContributeScreen> {
   final _formKey = GlobalKey<FormState>();
-  final MapController _mapController = MapController();
+
+  /// The map, browsing and drawing (see contribute_screen_maplibre.dart).
+  final _map = TransitMapController();
+  bool _tilted = false;
+
+  /// Our places, then OpenStreetMap's once read.
+  List<Place> _allPlaces = camanavaPlaces;
   final RouteHistoryService _historyService = RouteHistoryService();
 
   final _startLocationController = TextEditingController();
@@ -181,10 +191,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   LatLng? _debugCoord;
 
   // ─── Zoom slider state ───────────────────────────────────────────────────────
-  double _currentZoom = 11.0;
-
-  /// The pin size last drawn; see the map's onPositionChanged.
-  double _pinScaleDrawn = placePinScaleForZoom(11.0);
+  double _currentZoom = CamanavaBounds.initialZoom;
 
   // ─── Color tokens
   static Color get _bg => AppColors.bg;
@@ -287,6 +294,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     MapTabController.instance.showPins.addListener(_onSharedMapState);
     if (_mapMode == MapTabMode.contribute) _checkTutorialStatus();
     _loadPositionIfAllowed();
+    OsmPlaces.all().then((places) {
+      if (mounted) setState(() => _allPlaces = places);
+    });
     if (widget.quickRouteToken != null &&
         widget.quickRouteToken!.trim().isNotEmpty) {
       _loadQuickRouteLink(widget.quickRouteToken!.trim());
@@ -473,13 +483,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _saveToHistory();
     // Show where the example is, between the search bar and the drawer
     // (which the tutorial lowers to its peek as it closes).
-    _mapController.fitCamera(
-      CameraFit.coordinates(
-        coordinates: exampleRoute.pathPoints,
-        padding: const EdgeInsets.fromLTRB(48, 140, 48, _drawerPeekHeight + 48),
-      ),
+    _map.fitPoints(
+      exampleRoute.pathPoints,
+      padding: const EdgeInsets.fromLTRB(48, 140, 48, _drawerPeekHeight + 48),
     );
-    setState(() => _currentZoom = _mapController.camera.zoom);
   }
 
   /// Pin filter or visibility changed (here or in a route view).
@@ -500,7 +507,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   // ─── Map interaction ─────────────────────────────────────────────────────────
 
-  void _onMapTap(TapPosition tapPosition, LatLng point) async {
+  void _onMapTap(LatLng point) async {
     if (_mapMode == MapTabMode.nearby) {
       // Tapping empty map closes an open place, like Google Maps.
       setState(() {
@@ -663,21 +670,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
       if (region == 'Metro Manila') {
         // The whole city, between the search bar and the drawer, whatever
         // the screen's shape.
-        _mapController.fitCamera(
-          CameraFit.bounds(
-            bounds: bounds,
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              120,
-              16,
-              _drawerPeekHeight + 16,
-            ),
-          ),
+        _fitCamera(
+          bounds,
+          const EdgeInsets.fromLTRB(16, 120, 16, _drawerPeekHeight + 16),
         );
-        setState(() {
-          selectedRegion = region;
-          _currentZoom = _mapController.camera.zoom;
-        });
+        setState(() => selectedRegion = region);
         return;
       }
       final center = LatLng(
@@ -706,11 +703,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
           break;
       }
 
-      _mapController.move(center, zoom);
-      setState(() {
-        selectedRegion = region;
-        _currentZoom = zoom;
-      });
+      _moveCamera(center, zoom);
+      setState(() => selectedRegion = region);
     }
   }
 
@@ -725,11 +719,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
       return true;
     }
 
-    _mapController.move(target, 15.0);
+    _moveCamera(target, 15.0);
     setState(() {
       _searchedLocation = target;
       selectedRegion = null;
-      _currentZoom = 15.0;
     });
 
     return true;
@@ -738,12 +731,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void _onLocationPicked(double lat, double lng, String name) {
     final target = LatLng(lat, lng);
     if (!mounted) return;
-    _mapController.move(target, 15.0);
+    _moveCamera(target, 15.0);
     setState(() {
       _searchedLocation = target;
       _lastLocationSearchQuery = name;
       selectedRegion = null;
-      _currentZoom = 15.0;
     });
   }
 
@@ -1225,41 +1217,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
     if (has24x7Leg) return '24/7';
     return 'Schedule varies by step';
-  }
-
-  List<Polyline> get polylines {
-    final result = <Polyline>[];
-    for (int i = 0; i < steps.length; i++) {
-      final step = steps[i];
-      final color = modeColors[step.mode] ?? Colors.blue;
-      final startIdx = (i == 0) ? 0 : stepBoundaries[i - 1];
-      final endIdx =
-          (i < stepBoundaries.length)
-              ? stepBoundaries[i]
-              : pathPoints.length - 1;
-      if (endIdx > startIdx) {
-        final pts = pathPoints.sublist(startIdx, endIdx + 1);
-        result.add(
-          Polyline(
-            points: pts,
-            color: Colors.black.withOpacity(0.5),
-            strokeWidth: 8.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
-          ),
-        );
-        result.add(
-          Polyline(
-            points: pts,
-            color: color,
-            strokeWidth: 6.0,
-            strokeCap: StrokeCap.round,
-            strokeJoin: StrokeJoin.round,
-          ),
-        );
-      }
-    }
-    return result;
   }
 
   int _clampPathIndex(int index) {

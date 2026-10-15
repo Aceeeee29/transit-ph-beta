@@ -84,7 +84,7 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
           const SizedBox(height: 8),
           PlaceCategoryChips(
             selected: _nearbySelected,
-            onSelectAll: MapTabController.instance.clearCategories,
+            onToggleAll: MapTabController.instance.toggleAllCategories,
             onToggle: _toggleNearbyCategory,
           ),
         ],
@@ -98,6 +98,13 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
       bottom: _ContributeScreenState._drawerPeekHeight + 12,
       child: MapSideButtons(
         children: [
+          MapSideButton(
+            icon: Icons.view_in_ar_rounded,
+            tooltip: _tilted ? 'Flat view' : '3D view',
+            active: _tilted,
+            iconColor: _ContributeScreenState._accent,
+            onTap: _toggleTilt,
+          ),
           MapSideButton(
             icon:
                 _showPins
@@ -182,15 +189,18 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
   /// chips, nearest first once we know where you are.
   List<Widget> _nearbyListSection() {
     final from = _nearbyPosition;
-    final places = List<Place>.from(_visibleNearbyPlaces);
+    // Near you: the closest of every place on the map. Otherwise our own
+    // list (OpenStreetMap's run into the thousands).
+    var places = List<Place>.from(
+      from != null ? _visibleMapPlaces : _visibleNearbyPlaces,
+    );
     if (from != null) {
       final here = LatLng(from.latitude, from.longitude);
-      places.sort(
-        (a, b) => kmBetween(
-          here,
-          LatLng(a.lat, a.lng),
-        ).compareTo(kmBetween(here, LatLng(b.lat, b.lng))),
-      );
+      final km = {
+        for (final p in places) p.id: kmBetween(here, LatLng(p.lat, p.lng)),
+      };
+      places.sort((a, b) => km[a.id]!.compareTo(km[b.id]!));
+      places = places.take(40).toList();
     }
     return [
       Padding(

@@ -48,7 +48,8 @@ class MapTabController extends ChangeNotifier {
   /// The page that hosts the Map tab; opening a route pops back to it.
   Route<dynamic>? hostRoute;
 
-  /// Empty means "All", which is how the map opens.
+  /// The highlighted place categories (the chips): their pins show at
+  /// every zoom, the rest only from street level. The map opens with none.
   final ValueNotifier<Set<PlaceCategory>> placeCategories = ValueNotifier(
     const {},
   );
@@ -60,7 +61,13 @@ class MapTabController extends ChangeNotifier {
     placeCategories.value = next;
   }
 
-  void clearCategories() => placeCategories.value = const {};
+  /// "All": highlights every category, or clears them when all already are.
+  void toggleAllCategories() {
+    placeCategories.value =
+        placeCategories.value.length == PlaceCategory.values.length
+            ? const {}
+            : PlaceCategory.values.toSet();
+  }
 
   void showRoute(
     route_model.Route route, {

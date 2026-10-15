@@ -9,6 +9,7 @@ import 'package:vector_tile_renderer/vector_tile_renderer.dart'
     show SpriteIndexReader, ThemeReader;
 
 import 'map_tile_pack.dart';
+import 'map_tile_server.dart';
 
 /// How the base map is drawn.
 enum MapLook {
@@ -164,6 +165,87 @@ class MapStyleService with WidgetsBindingObserver {
       debugPrint('[MapStyle] Could not load the $key map: $e');
       return null;
     }
+  }
+
+  // ─── MapLibre styles ────────────────────────────────────────────────────────
+
+  /// The same looks as [styleFor] for the MapLibre map, as style JSON, with
+  /// its tiles, fonts and icons from [MapTileServer] and 3D buildings.
+  /// [extraLayers] (e.g. the Map tab's pins) go on top, with [extraSources].
+  Future<String> maplibreStyle({
+    required MapLook look,
+    required bool night,
+    Map<String, dynamic> extraSources = const {},
+    List<Map<String, dynamic>> extraLayers = const [],
+  }) async {
+    final classic = !night && look == MapLook.classic;
+    final name = night ? 'dark' : (classic ? 'liberty' : 'positron');
+    final raw =
+        jsonDecode(await rootBundle.loadString('assets/map/style_$name.json'))
+            as Map<String, dynamic>;
+    final prepared =
+        classic ? classicStyle(raw) : simplifyStyle(raw, night: night);
+    return jsonEncode(
+      maplibreStyleFrom(
+        prepared,
+        baseUrl: await MapTileServer.instance.baseUrl(),
+        buildingColor: classic ? null : (night ? '#334156' : '#dde6f1'),
+        extraSources: extraSources,
+        extraLayers: extraLayers,
+      ),
+    );
+  }
+
+  /// [style] pointed at the phone's tile server at [baseUrl]. Liberty has 3D
+  /// buildings already; the clean styles get them in [buildingColor].
+  @visibleForTesting
+  static Map<String, dynamic> maplibreStyleFrom(
+    Map<String, dynamic> style, {
+    required String baseUrl,
+    String? buildingColor,
+    Map<String, dynamic> extraSources = const {},
+    List<Map<String, dynamic>> extraLayers = const [],
+  }) {
+    final layers = [
+      for (final layer in style['layers'] as List)
+        Map<String, dynamic>.from(layer as Map),
+    ];
+    if (buildingColor != null &&
+        !layers.any((l) => l['type'] == 'fill-extrusion')) {
+      final flat = layers.indexWhere((l) => l['source-layer'] == 'building');
+      // Flat from above, so it reads like the 2D map until the map tilts.
+      layers.insert(flat < 0 ? layers.length : flat + 1, {
+        'id': 'building-3d',
+        'type': 'fill-extrusion',
+        'source': 'openmaptiles',
+        'source-layer': 'building',
+        'minzoom': 14,
+        'paint': {
+          'fill-extrusion-color': buildingColor,
+          'fill-extrusion-height': ['get', 'render_height'],
+          'fill-extrusion-base': ['get', 'render_min_height'],
+          'fill-extrusion-opacity': 0.85,
+        },
+      });
+    }
+    return {
+      ...style,
+      'sources': {
+        'openmaptiles': {
+          'type': 'vector',
+          'tiles': ['$baseUrl/tiles/{z}/{x}/{y}.pbf'],
+          'minzoom': 0,
+          // Deeper zooms draw from z14 tiles, like the flutter_map maps.
+          'maxzoom': 14,
+          'attribution':
+              '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors',
+        },
+        ...extraSources,
+      },
+      'glyphs': '$baseUrl/fonts/{fontstack}/{range}.pbf',
+      'sprite': '$baseUrl/sprites/ofm',
+      'layers': [...layers, ...extraLayers],
+    };
   }
 
   static Future<SpriteStyle> _classicIcons() async {

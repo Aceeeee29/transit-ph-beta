@@ -1,0 +1,907 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math' as math;
+import 'dart:math' show Point;
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+
+import '../../models/place.dart';
+import '../../services/map_style_service.dart';
+import '../../theme/app_colors.dart';
+import 'map_pin_images.dart';
+
+part 'transit_map_handles.dart';
+part 'transit_map_layers.dart';
+
+// ─── What goes on the map ───────────────────────────────────────────────────
+
+enum MapLineStyle { solid, dotted, dashed }
+
+/// A line, drawn over the lines before it in the list.
+class MapLine {
+  final List<LatLng> points;
+  final Color color;
+  final double width;
+  final MapLineStyle style;
+
+  const MapLine(
+    this.points, {
+    required this.color,
+    required this.width,
+    this.style = MapLineStyle.solid,
+  });
+}
+
+/// A round marker (a stop, the next target), with an optional number.
+class MapDot {
+  final LatLng point;
+  final double radius;
+  final Color color;
+  final Color strokeColor;
+  final double strokeWidth;
+  final String? label;
+
+  /// Given an id, a tap on it goes to [TransitMap.onMarkerTap].
+  final String? id;
+
+  const MapDot(
+    this.point, {
+    required this.radius,
+    this.color = Colors.white,
+    required this.strokeColor,
+    this.strokeWidth = 3,
+    this.label,
+    this.id,
+  });
+}
+
+/// One of [MapPinImages]' pictures on the map.
+class MapIcon {
+  final LatLng point;
+  final String image;
+
+  /// Pins stand on their point; everything else is centered on it.
+  final bool anchorBottom;
+  final String? label;
+  final String? id;
+
+  const MapIcon(
+    this.point,
+    this.image, {
+    this.anchorBottom = false,
+    this.label,
+    this.id,
+  });
+}
+
+/// A marker the user can drag (the drawing map's route handles).
+class MapHandle {
+  final String id;
+  final LatLng point;
+  final String image;
+  final String? label;
+
+  /// Its size on screen, for how near a touch must land.
+  final double size;
+  final ValueChanged<LatLng> onDragEnd;
+
+  /// Long-press instead of dragging; without it a long press starts a drag.
+  final VoidCallback? onLongPress;
+
+  const MapHandle({
+    required this.id,
+    required this.point,
+    required this.image,
+    required this.size,
+    required this.onDragEnd,
+    this.label,
+    this.onLongPress,
+  });
+}
+
+/// The place pins. Highlighted categories (the chips) show at every zoom,
+/// smaller far out; the rest from street level. The open place shows even
+/// with the pins off.
+class MapPlaces {
+  final List<Place> places;
+  final Set<PlaceCategory> highlighted;
+  final Place? selected;
+
+  const MapPlaces({
+    this.places = const [],
+    this.highlighted = const {},
+    this.selected,
+  });
+}
+
+/// The traveler's dot. It glides from fix to fix instead of jumping.
+class MapUser {
+  final LatLng position;
+  final double accuracyMeters;
+  final double headingDegrees;
+  final double speedMps;
+
+  const MapUser(
+    this.position, {
+    this.accuracyMeters = 0,
+    this.headingDegrees = 0,
+    this.speedMps = 0,
+  });
+
+  /// Below this the device is treated as standing still.
+  static const stillSpeedMps = 0.6;
+
+  /// The heading cone only shows while actually moving; when still, GPS
+  /// heading is noise.
+  static const headingSpeedMps = 1.0;
+}
+
+/// Where the camera is. Zooms are the app's numbers (see [TransitMap]).
+class TransitMapCamera {
+  final LatLng center;
+  final double zoom;
+  final double bearing;
+  final double tilt;
+
+  const TransitMapCamera(
+    this.center,
+    this.zoom, {
+    this.bearing = 0,
+    this.tilt = 0,
+  });
+}
+
+// ─── Camera ─────────────────────────────────────────────────────────────────
+
+/// Moves a [TransitMap]'s camera. Calls made before the map is ready wait
+/// for it.
+class TransitMapController {
+  /// MapLibre's tiles are twice the size of the old map's, so the same view
+  /// is one zoom level lower there.
+  static const zoomOffset = 1.0;
+
+  _TransitMapState? _state;
+  TransitMapCamera? _camera;
+  Future<void> Function()? _pending;
+
+  ml.MapLibreMapController? get _ml => _state?._ml;
+
+  /// Where the camera last settled (or was last sent).
+  TransitMapCamera? get camera => _camera;
+
+  Future<void> moveTo(
+    LatLng center, {
+    double? zoom,
+    double? bearing,
+    double? tilt,
+    Duration duration = const Duration(milliseconds: 600),
+    bool linear = false,
+  }) async {
+    final controller = _ml;
+    final known = _camera;
+    _camera = TransitMapCamera(
+      center,
+      zoom ?? known?.zoom ?? 14,
+      bearing: bearing ?? known?.bearing ?? 0,
+      tilt: tilt ?? known?.tilt ?? 0,
+    );
+    if (controller == null || !(_state?._styleReady ?? false)) {
+      _pending =
+          () => moveTo(
+            center,
+            zoom: zoom,
+            bearing: bearing,
+            tilt: tilt,
+            duration: Duration.zero,
+          );
+      return;
+    }
+    final target = _toMl(center);
+    final ml.CameraUpdate update;
+    if (bearing != null || tilt != null) {
+      final camera = _camera!;
+      update = ml.CameraUpdate.newCameraPosition(
+        ml.CameraPosition(
+          target: target,
+          zoom: camera.zoom - zoomOffset,
+          bearing: camera.bearing,
+          tilt: camera.tilt,
+        ),
+      );
+    } else if (zoom != null) {
+      update = ml.CameraUpdate.newLatLngZoom(target, zoom - zoomOffset);
+    } else {
+      update = ml.CameraUpdate.newLatLng(target);
+    }
+    await _run(update, duration, linear);
+  }
+
+  /// Leans the camera to [tilt] degrees (0 is flat).
+  Future<void> tiltTo(double tilt) async {
+    final known = _camera;
+    if (known != null) {
+      _camera = TransitMapCamera(
+        known.center,
+        known.zoom,
+        bearing: known.bearing,
+        tilt: tilt,
+      );
+    }
+    final controller = _ml;
+    if (controller == null) return;
+    await controller.animateCamera(
+      ml.CameraUpdate.tiltTo(tilt),
+      duration: const Duration(milliseconds: 500),
+    );
+  }
+
+  /// Shows all of [points] inside [padding] (logical pixels), no closer
+  /// than [maxZoom].
+  Future<void> fitPoints(
+    List<LatLng> points, {
+    EdgeInsets padding = const EdgeInsets.all(40),
+    double maxZoom = 17,
+    Duration duration = const Duration(milliseconds: 600),
+  }) async {
+    if (points.isEmpty) return;
+    final state = _state;
+    final controller = _ml;
+    if (state == null || controller == null || !state._styleReady) {
+      _pending =
+          () => fitPoints(
+            points,
+            padding: padding,
+            maxZoom: maxZoom,
+            duration: Duration.zero,
+          );
+      return;
+    }
+    var south = points.first.latitude, north = south;
+    var west = points.first.longitude, east = west;
+    for (final p in points) {
+      south = math.min(south, p.latitude);
+      north = math.max(north, p.latitude);
+      west = math.min(west, p.longitude);
+      east = math.max(east, p.longitude);
+    }
+    if (north - south < 1e-5 && east - west < 1e-5) {
+      return moveTo(points.first, zoom: maxZoom, duration: duration);
+    }
+    final ratio = state._pixelRatio;
+    await _run(
+      ml.CameraUpdate.newLatLngBounds(
+        ml.LatLngBounds(
+          southwest: ml.LatLng(south, west),
+          northeast: ml.LatLng(north, east),
+        ),
+        // MapLibre takes these in screen pixels.
+        left: padding.left * ratio,
+        top: padding.top * ratio,
+        right: padding.right * ratio,
+        bottom: padding.bottom * ratio,
+      ),
+      duration,
+      false,
+    );
+    final position = await controller.queryCameraPosition();
+    if (position != null && position.zoom + zoomOffset > maxZoom) {
+      await controller.moveCamera(ml.CameraUpdate.zoomTo(maxZoom - zoomOffset));
+    }
+    await state._onCameraIdle();
+  }
+
+  Future<void> _run(
+    ml.CameraUpdate update,
+    Duration duration,
+    bool linear,
+  ) async {
+    final controller = _ml;
+    if (controller == null) return;
+    if (duration == Duration.zero) {
+      await controller.moveCamera(update);
+    } else if (linear) {
+      await controller.easeCamera(
+        update,
+        duration: duration,
+        interpolation: ml.CameraAnimationInterpolation.linear,
+      );
+    } else {
+      await controller.animateCamera(update, duration: duration);
+    }
+  }
+
+  /// The map came up: run what was asked before it did.
+  Future<void> _onReady() async {
+    final pending = _pending;
+    _pending = null;
+    await pending?.call();
+  }
+}
+
+ml.LatLng _toMl(LatLng p) => ml.LatLng(p.latitude, p.longitude);
+
+// ─── The map ────────────────────────────────────────────────────────────────
+
+/// The app's map: the base map (clean, classic or night, from the phone's
+/// own tile server) drawn by MapLibre, which pans and zooms smoothly and
+/// can tilt into 3D, with the app's pins, lines and markers over it.
+///
+/// Zoom numbers everywhere in the app are the old map's (flutter_map's);
+/// this widget converts ([TransitMapController.zoomOffset]).
+class TransitMap extends StatefulWidget {
+  final TransitMapController controller;
+  final LatLng initialCenter;
+  final double initialZoom;
+
+  /// Shown whole when the map opens, instead of [initialCenter].
+  final List<LatLng>? initialFit;
+  final EdgeInsets initialFitPadding;
+
+  final double minZoom;
+  final double maxZoom;
+
+  /// Where the camera's center may go.
+  final ({LatLng southWest, LatLng northEast})? bounds;
+
+  final MapPlaces? places;
+  final List<MapLine> lines;
+  final List<MapDot> dots;
+  final List<MapIcon> icons;
+  final List<MapHandle> handles;
+  final MapUser? user;
+
+  /// A tap on the map itself (not on a pin, marker or handle).
+  final ValueChanged<LatLng>? onTap;
+  final ValueChanged<Place>? onPlaceTap;
+  final ValueChanged<String>? onMarkerTap;
+
+  /// The user started panning, zooming or turning the map.
+  final VoidCallback? onUserGesture;
+  final ValueChanged<TransitMapCamera>? onCameraIdle;
+
+  final bool rotateGestures;
+
+  /// Logical pixels from the top right corner.
+  final Point<double> compassMargin;
+
+  /// Logical pixels from the bottom left corner.
+  final Point<double> attributionMargin;
+
+  const TransitMap({
+    super.key,
+    required this.controller,
+    required this.initialCenter,
+    this.initialZoom = 12,
+    this.initialFit,
+    this.initialFitPadding = const EdgeInsets.all(40),
+    this.minZoom = 5,
+    this.maxZoom = 18,
+    this.bounds,
+    this.places,
+    this.lines = const [],
+    this.dots = const [],
+    this.icons = const [],
+    this.handles = const [],
+    this.user,
+    this.onTap,
+    this.onPlaceTap,
+    this.onMarkerTap,
+    this.onUserGesture,
+    this.onCameraIdle,
+    this.rotateGestures = true,
+    this.compassMargin = const Point(16, 16),
+    this.attributionMargin = const Point(8, 8),
+  });
+
+  @override
+  State<TransitMap> createState() => _TransitMapState();
+}
+
+class _TransitMapState extends State<TransitMap>
+    with SingleTickerProviderStateMixin {
+  /// One style per look, shared by every map.
+  static final _styles = <String, Future<String>>{};
+  static Future<Map<String, Uint8List>>? _imageLoad;
+  static Map<String, Uint8List>? _images;
+
+  ml.MapLibreMapController? _ml;
+  String? _styleKey;
+  Future<String>? _style;
+  bool _styleReady = false;
+  bool _opened = false;
+
+  /// What each overlay source last got, so unchanged ones aren't resent.
+  final _sent = <String, int>{};
+  Future<void> _sending = Future.value();
+  bool _sendScheduled = false;
+
+  // ─── Drag handles (transit_map_handles.dart) ──────────────────────────────
+  _Drag? _drag;
+  final _dragAt = ValueNotifier<Offset>(Offset.zero);
+
+  /// Dropped, until the handles are redrawn.
+  MapHandle? _drop;
+  Timer? _dropTimer;
+  MapHandle? _pressed;
+  int? _handlesSeen;
+
+  /// Each handle's spot on screen (logical pixels).
+  final _handleSpots = <String, Offset>{};
+
+  double get _pixelRatio => MediaQuery.devicePixelRatioOf(context);
+
+  /// setState for the extension in the part file.
+  void _update(VoidCallback fn) => setState(fn);
+
+  @override
+  void initState() {
+    super.initState();
+    // The map on a TextureView that Flutter draws in directly. MapLibre's
+    // default SurfaceView can only be shown through a virtual display,
+    // which held panning near 40 fps.
+    ml.MapLibreMap.useHybridComposition = true;
+    widget.controller._state = this;
+    widget.controller._camera ??= TransitMapCamera(
+      widget.initialCenter,
+      widget.initialZoom,
+    );
+    _glide = AnimationController(vsync: this, duration: _glideTime)
+      ..addListener(_onGlideTick);
+    _glideTo = widget.user?.position;
+    _handlesSeen = _handlesKey(widget.handles);
+  }
+
+  @override
+  void didUpdateWidget(TransitMap old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      if (old.controller._state == this) old.controller._state = null;
+      widget.controller._state = this;
+    }
+    _onUserChanged(old.user);
+    _onHandlesChanged();
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller._state == this) widget.controller._state = null;
+    _glide.dispose();
+    _dragAt.dispose();
+    _dropTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Widget tests have no MapLibre (a native view) and no tile server: a
+  /// blank map stands in.
+  static final _inTests =
+      !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
+  @override
+  Widget build(BuildContext context) {
+    if (_inTests)
+      return SizedBox.expand(child: ColoredBox(color: AppColors.bg));
+    final styles = MapStyleService.instance;
+    return ListenableBuilder(
+      listenable: styles.changes,
+      builder: (context, _) {
+        final look = styles.look.value;
+        final night = styles.isDark.value;
+        final key = '${look.name}-$night';
+        if (key != _styleKey) {
+          _styleKey = key;
+          _styleReady = false;
+          _sent.clear();
+          _style =
+              _styles[key] ??= styles.maplibreStyle(
+                look: look,
+                night: night,
+                extraSources: _Layers.sources(),
+                extraLayers: _Layers.layers(night: night),
+              );
+        }
+        return FutureBuilder<String>(
+          future: _style,
+          builder: (context, snapshot) {
+            final style = snapshot.data;
+            if (style == null)
+              return SizedBox.expand(child: ColoredBox(color: AppColors.bg));
+            _scheduleSend();
+            return Listener(
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerEnd,
+              onPointerCancel: _onPointerEnd,
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _buildMap(style)),
+                  if (widget.handles.isNotEmpty || _drag != null)
+                    Positioned.fill(child: _buildHandleLayer()),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMap(String style) {
+    final camera = widget.controller._camera;
+    final bounds = widget.bounds;
+    return ml.MapLibreMap(
+      styleString: style,
+      initialCameraPosition: ml.CameraPosition(
+        target: _toMl(camera?.center ?? widget.initialCenter),
+        zoom:
+            (camera?.zoom ?? widget.initialZoom) -
+            TransitMapController.zoomOffset,
+        bearing: camera?.bearing ?? 0,
+        tilt: camera?.tilt ?? 0,
+      ),
+      minMaxZoomPreference: ml.MinMaxZoomPreference(
+        widget.minZoom - TransitMapController.zoomOffset,
+        widget.maxZoom - TransitMapController.zoomOffset,
+      ),
+      cameraTargetBounds:
+          bounds == null
+              ? ml.CameraTargetBounds.unbounded
+              : ml.CameraTargetBounds(
+                ml.LatLngBounds(
+                  southwest: _toMl(bounds.southWest),
+                  northeast: _toMl(bounds.northEast),
+                ),
+              ),
+      rotateGesturesEnabled: widget.rotateGestures,
+      compassEnabled: true,
+      compassViewPosition: ml.CompassViewPosition.topRight,
+      // Logical pixels: the plugin scales these itself.
+      compassViewMargins: widget.compassMargin,
+      attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+      attributionButtonMargins: widget.attributionMargin,
+      onMapCreated: (controller) => _ml = controller,
+      onStyleLoadedCallback: _onStyleLoaded,
+      onMapClick: _onMapClick,
+      onCameraIdle: _onCameraIdle,
+    );
+  }
+
+  Future<void> _onStyleLoaded() async {
+    final controller = _ml;
+    if (controller == null) return;
+    final images =
+        _images ??= await (_imageLoad ??= MapPinImages.all(_pixelRatio));
+    for (final MapEntry(:key, :value) in images.entries) {
+      await controller.addImage(key, value);
+    }
+    if (!mounted) return;
+    _styleReady = true;
+    _sent.clear();
+    _sendUser(force: true);
+    _scheduleSend();
+    if (!_opened) {
+      _opened = true;
+      final fit = widget.initialFit;
+      if (fit != null && fit.isNotEmpty) {
+        await widget.controller.fitPoints(
+          fit,
+          padding: widget.initialFitPadding,
+          duration: Duration.zero,
+        );
+      }
+    }
+    await widget.controller._onReady();
+    await _onCameraIdle();
+  }
+
+  Future<void> _onCameraIdle() async {
+    final position = await _ml?.queryCameraPosition();
+    if (position == null || !mounted) return;
+    final camera = TransitMapCamera(
+      LatLng(position.target.latitude, position.target.longitude),
+      position.zoom + TransitMapController.zoomOffset,
+      bearing: position.bearing,
+      tilt: position.tilt,
+    );
+    widget.controller._camera = camera;
+    widget.onCameraIdle?.call(camera);
+    _refreshHandleSpots();
+  }
+
+  // ─── Taps and gestures ────────────────────────────────────────────────────
+
+  /// A tap: a marker or pin under the finger (with some room around the
+  /// small ones), else the map itself.
+  Future<void> _onMapClick(Point<double> at, ml.LatLng coordinates) async {
+    final controller = _ml;
+    if (controller == null) return;
+    Future<Object?> idAt(List<String> layers, double reach) async {
+      final hits = await controller.queryRenderedFeaturesInRect(
+        Rect.fromCenter(
+          center: Offset(at.x, at.y),
+          width: reach * _pixelRatio,
+          height: reach * _pixelRatio,
+        ),
+        layers,
+        null,
+      );
+      for (final hit in hits) {
+        final id = ((hit as Map)['properties'] as Map?)?['id'];
+        if (id != null) return id;
+      }
+      return null;
+    }
+
+    if (widget.onMarkerTap != null) {
+      final id = await idAt([_Layers.iconLayer, _Layers.dotLayer], 16);
+      if (!mounted) return;
+      if (id is String) {
+        widget.onMarkerTap!(id);
+        return;
+      }
+    }
+    final places = widget.places;
+    if (places != null && widget.onPlaceTap != null) {
+      final id = await idAt(_Layers.tappablePlaces, 20);
+      if (!mounted) return;
+      final place =
+          places.selected?.id == id
+              ? places.selected
+              : places.places.where((p) => p.id == id).firstOrNull;
+      if (place != null) {
+        widget.onPlaceTap!(place);
+        return;
+      }
+    }
+    widget.onTap?.call(LatLng(coordinates.latitude, coordinates.longitude));
+  }
+
+  final _pointersDown = <int, Offset>{};
+  bool _gestureReported = false;
+  bool _touchOnHandle = false;
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_pointersDown.isEmpty) {
+      _gestureReported = false;
+      _touchOnHandle = _handleAt(event.localPosition) != null;
+    }
+    _pointersDown[event.pointer] = event.localPosition;
+    if (_pointersDown.length > 1) _reportGesture();
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    final down = _pointersDown[event.pointer];
+    if (down == null) return;
+    if ((event.localPosition - down).distance > 8) _reportGesture();
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    _pointersDown.remove(event.pointer);
+  }
+
+  /// Panning, pinching or turning the map, not dragging a handle.
+  void _reportGesture() {
+    if (_gestureReported || _touchOnHandle || _drag != null) return;
+    _gestureReported = true;
+    // Handles move on screen with the map: found again once it settles.
+    _handleSpots.clear();
+    widget.onUserGesture?.call();
+  }
+
+  // ─── Sending the overlays ─────────────────────────────────────────────────
+
+  void _scheduleSend() {
+    if (!_styleReady || _sendScheduled) return;
+    _sendScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendScheduled = false;
+      if (mounted) _sendChanged();
+    });
+  }
+
+  /// Queued one after another, so a later update never lands first.
+  void _send(String source, int key, Map<String, dynamic> Function() data) {
+    if (_sent[source] == key) return;
+    _sent[source] = key;
+    final controller = _ml;
+    if (controller == null) return;
+    final json = data();
+    _sending = _sending
+        .then((_) => controller.setGeoJsonSource(source, json))
+        .catchError((Object e) => debugPrint('[TransitMap] $source: $e'));
+  }
+
+  void _sendChanged() {
+    if (!_styleReady) return;
+    final places = widget.places;
+    final shown = places?.places ?? const <Place>[];
+    final highlighted = places?.highlighted ?? const <PlaceCategory>{};
+    final selected = places?.selected;
+    _send(
+      _Layers.places,
+      Object.hash(
+        Object.hashAll(shown.map((p) => p.id)),
+        Object.hashAllUnordered(highlighted),
+        selected?.id,
+      ),
+      () => _Layers.collection([
+        for (final place in shown)
+          if (place.id != selected?.id)
+            _Layers.placeFeature(
+              place,
+              highlighted: place.categories.any(highlighted.contains),
+            ),
+      ]),
+    );
+    _send(
+      _Layers.selected,
+      Object.hash(selected?.id, selected?.lat, selected?.lng),
+      () => _Layers.collection([
+        if (selected != null)
+          _Layers.placeFeature(selected, highlighted: true, selected: true),
+      ]),
+    );
+    _send(
+      _Layers.lines,
+      Object.hashAll(
+        widget.lines.map(
+          (l) =>
+              Object.hash(l.color, l.width, l.style, Object.hashAll(l.points)),
+        ),
+      ),
+      () => _Layers.lineFeatures(widget.lines),
+    );
+    _send(
+      _Layers.dots,
+      Object.hashAll(
+        widget.dots.map(
+          (d) => Object.hash(
+            d.point,
+            d.radius,
+            d.color,
+            d.strokeColor,
+            d.strokeWidth,
+            d.label,
+            d.id,
+          ),
+        ),
+      ),
+      () => _Layers.dotFeatures(widget.dots),
+    );
+    _send(
+      _Layers.icons,
+      Object.hashAll(
+        widget.icons.map(
+          (i) => Object.hash(i.point, i.image, i.anchorBottom, i.label, i.id),
+        ),
+      ),
+      () => _Layers.iconFeatures(widget.icons),
+    );
+    final hidden = _drag?.handle.id ?? _drop?.id;
+    _send(
+      _Layers.handles,
+      Object.hash(_handlesKey(widget.handles), hidden),
+      () => _Layers.handleFeatures(widget.handles, hiddenId: hidden),
+    );
+  }
+
+  // ─── The traveler's dot ───────────────────────────────────────────────────
+
+  /// About one GPS interval, linear: each glide ends as the next fix
+  /// arrives, so the dot moves continuously instead of hop-and-stop.
+  static const _glideTime = Duration(milliseconds: 900);
+
+  /// Further than this is a real jump (e.g. resuming after a gap): no glide.
+  static const _snapMeters = 150.0;
+  static const _distance = Distance();
+
+  late final AnimationController _glide;
+  LatLng? _glideFrom;
+  LatLng? _glideTo;
+  DateTime _userSentAt = DateTime(0);
+  bool _userSending = false;
+  bool _userResend = false;
+
+  LatLng? get _userShown {
+    final to = _glideTo;
+    final from = _glideFrom;
+    if (to == null) return null;
+    if (from == null || !_glide.isAnimating) return to;
+    final t = _glide.value;
+    return LatLng(
+      from.latitude + (to.latitude - from.latitude) * t,
+      from.longitude + (to.longitude - from.longitude) * t,
+    );
+  }
+
+  void _onUserChanged(MapUser? old) {
+    final user = widget.user;
+    final next = user?.position;
+    if (next == null) {
+      _glide.stop();
+      _glideFrom = null;
+      _glideTo = null;
+      _sendUser(force: true);
+      return;
+    }
+    final shown = _userShown;
+    if (shown == null) {
+      _glideTo = next;
+      _sendUser(force: true);
+      return;
+    }
+    final moved = _distance.as(LengthUnit.Meter, shown, next);
+    if (moved == 0) {
+      // Same spot; the heading or accuracy may still have changed.
+      if (old?.headingDegrees != user!.headingDegrees ||
+          old?.accuracyMeters != user.accuracyMeters ||
+          old?.speedMps != user.speedMps) {
+        _sendUser(force: true);
+      }
+      return;
+    }
+    // Standing still: GPS wanders a few metres between fixes; hold the dot
+    // unless the fix moved further than its own accuracy suggests.
+    final stillDeadband = math.max(4.0, user!.accuracyMeters * 0.5);
+    if (user.speedMps < MapUser.stillSpeedMps && moved < stillDeadband) {
+      return;
+    }
+    if (moved > _snapMeters) {
+      _glide.stop();
+      _glideFrom = null;
+      _glideTo = next;
+      _sendUser(force: true);
+      return;
+    }
+    _glideFrom = shown;
+    _glideTo = next;
+    _glide.forward(from: 0);
+  }
+
+  void _onGlideTick() {
+    _sendUser(force: _glide.isCompleted);
+  }
+
+  /// About 30 times a second while gliding: each is a message to the map.
+  /// One at a time; one asked for meanwhile goes when it's done, with the
+  /// dot where it is by then.
+  void _sendUser({bool force = false}) {
+    final controller = _ml;
+    if (controller == null || !_styleReady) return;
+    if (_userSending) {
+      _userResend = true;
+      return;
+    }
+    final now = DateTime.now();
+    if (!force && now.difference(_userSentAt).inMilliseconds < 33) return;
+    _userSentAt = now;
+    final user = widget.user;
+    final at = _userShown;
+    final json =
+        user == null || at == null
+            ? _Layers.collection(const [])
+            : _Layers.userFeatures(
+              at,
+              accuracyMeters: user.accuracyMeters,
+              headingDegrees:
+                  user.speedMps >= MapUser.headingSpeedMps
+                      ? user.headingDegrees
+                      : null,
+            );
+    _userSending = true;
+    controller
+        .setGeoJsonSource(_Layers.user, json)
+        .catchError((Object e) => debugPrint('[TransitMap] user: $e'))
+        .whenComplete(() {
+          _userSending = false;
+          if (_userResend && mounted) {
+            _userResend = false;
+            _sendUser(force: true);
+          }
+        });
+  }
+}

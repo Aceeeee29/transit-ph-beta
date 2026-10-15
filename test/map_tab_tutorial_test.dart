@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:transitph_beta/widgets/map/transit_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transitph_beta/screens/contribute_screen.dart';
@@ -55,7 +55,7 @@ void main() {
     final center = tester.getCenter(find.byType(ContributeScreen));
     final result = HitTestResult();
     WidgetsBinding.instance.hitTestInView(result, center, tester.view.viewId);
-    final map = tester.renderObject(find.byType(FlutterMap));
+    final map = tester.renderObject(find.byType(TransitMap));
     expect(result.path.any((entry) => entry.target == map), isTrue);
   });
 

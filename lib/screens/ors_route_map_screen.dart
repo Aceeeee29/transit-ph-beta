@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import '../widgets/map/app_base_map.dart';
+import 'dart:math' as math;
+import '../widgets/map/map_pin_images.dart';
+import '../widgets/map/transit_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
@@ -22,7 +23,7 @@ import '../widgets/route_map/follow_guidance_card.dart';
 import '../widgets/route_map/follow_route_layers.dart';
 import '../widgets/route_map/follow_simulator_sheet.dart';
 import '../widgets/route_map/ride_correction_flow.dart';
-import '../widgets/route_map/user_location_layer.dart';
+import '../services/osm_places.dart';
 import '../widgets/translated_text.dart';
 import '../data/camanava_places.dart';
 import '../models/place.dart';
@@ -59,10 +60,14 @@ class OrsRouteMapScreen extends StatefulWidget {
   State<OrsRouteMapScreen> createState() => _OrsRouteMapScreenState();
 }
 
-// FIX: Added SingleTickerProviderStateMixin for smooth camera animation
-class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
-    with SingleTickerProviderStateMixin {
-  final MapController _mapController = MapController();
+class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
+  final _map = TransitMapController();
+
+  /// Leaning into 3D: on by itself while following, or by the 2D/3D button.
+  bool _tilted = false;
+
+  /// Our places, then OpenStreetMap's once read.
+  List<Place> _allPlaces = camanavaPlaces;
   StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
   LatLng? _displayPosition;
@@ -80,19 +85,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   final DraggableScrollableController _drawerController =
       DraggableScrollableController();
   Place? _selectedPlace;
-  double _pinScale = 0;
   // Taller than other route views: the header also credits the guide.
   static const double _drawerPeekHeight = 100.0;
-
-  // FIX: Smooth camera animation fields
-  late final AnimationController _cameraAnimController;
-  late final CurvedAnimation _cameraAnim;
-  LatLng? _animStartCenter;
-  double _animStartZoom = 12.0;
-  double _animStartRotation = 0.0;
-  LatLng? _animTargetCenter;
-  double _animTargetZoom = 12.0;
-  double _animTargetRotation = 0.0;
 
   static const _cacheMode = 'Auto';
 
@@ -100,29 +94,20 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   void initState() {
     super.initState();
 
-    // FIX: Initialise animation controller for buttery-smooth camera moves
-    _cameraAnimController = AnimationController(
-      vsync: this,
-      // About one GPS interval, linear, so back-to-back follow moves blend
-      // into continuous motion instead of stop-start hops.
-      duration: const Duration(milliseconds: 900),
-    );
-    _cameraAnim = CurvedAnimation(
-      parent: _cameraAnimController,
-      curve: Curves.linear,
-    );
-    _cameraAnimController.addListener(_onCameraAnimTick);
-
     final navigation = ActiveNavigationService.instance;
     navigation.addListener(_onNavigationSessionChanged);
     navigation.followUpdates.addListener(_onNavigationPosition);
     if (_isNavigationStarted) {
       _isAutoFollowEnabled = true;
+      _tilted = true;
       // Reopening a session that paused itself for being idle resumes it.
       navigation.resumeTracking();
     }
     MapTabController.instance.placeCategories.addListener(_onSharedMapState);
     MapTabController.instance.showPins.addListener(_onSharedMapState);
+    OsmPlaces.all().then((places) {
+      if (mounted) setState(() => _allPlaces = places);
+    });
 
     _initLocation();
     _loadFareProfile();
@@ -145,51 +130,39 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     });
   }
 
-  // FIX: Camera animation tick — interpolates lat, lng, zoom, and bearing
-  void _onCameraAnimTick() {
-    if (_animStartCenter == null || _animTargetCenter == null) return;
-    final t = _cameraAnim.value;
+  /// How far the camera leans in 3D, in degrees.
+  static const _tilt3d = 55.0;
 
-    final lat = _lerpDouble(
-      _animStartCenter!.latitude,
-      _animTargetCenter!.latitude,
-      t,
-    );
-    final lng = _lerpDouble(
-      _animStartCenter!.longitude,
-      _animTargetCenter!.longitude,
-      t,
-    );
-    final zoom = _lerpDouble(_animStartZoom, _animTargetZoom, t);
-    final rotation = _lerpRotation(_animStartRotation, _animTargetRotation, t);
-
-    _mapController.moveAndRotate(LatLng(lat, lng), zoom, rotation);
-  }
-
-  double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
-
-  // FIX: Shortest-path rotation lerp — handles wrap-around (e.g. 350° → 10°)
-  double _lerpRotation(double a, double b, double t) {
-    final diff = (b - a + 540) % 360 - 180;
-    return (a + diff * t) % 360;
-  }
-
-  // FIX: Smooth animated camera move with bearing support
+  /// Moves the camera to [target], turned so [bearing] is up. About one GPS
+  /// interval at a constant speed, so back-to-back follow moves blend into
+  /// continuous motion instead of stop-start hops.
   void _smoothMoveCamera(
     LatLng target, {
     required double zoom,
-    double rotation = 0,
+    double bearing = 0,
   }) {
-    _animStartCenter = _mapController.camera.center;
-    _animStartZoom = _mapController.camera.zoom;
-    _animStartRotation = _mapController.camera.rotation;
-    _animTargetCenter = target;
-    _animTargetZoom = zoom;
-    _animTargetRotation = rotation;
+    _map.moveTo(
+      target,
+      zoom: zoom,
+      bearing: bearing,
+      tilt: _tilted ? _tilt3d : 0,
+      duration: const Duration(milliseconds: 900),
+      linear: true,
+    );
+  }
 
-    _cameraAnimController.stop();
-    _cameraAnimController.reset();
-    _cameraAnimController.forward();
+  /// The 2D/3D button.
+  void _toggleTilt() {
+    setState(() => _tilted = !_tilted);
+    _map.tiltTo(_tilted ? _tilt3d : 0);
+  }
+
+  /// Keeps the 2D/3D button in step with a tilt by hand. Following sets
+  /// the tilt itself, and a gesture stops following first.
+  void _onMapCameraIdle(TransitMapCamera camera) {
+    if (_isNavigationStarted && _isAutoFollowEnabled) return;
+    final tilted = camera.tilt > 5;
+    if (tilted != _tilted && mounted) setState(() => _tilted = tilted);
   }
 
   Future<void> _loadDownloadState() async {
@@ -367,11 +340,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     _lastCameraMoveAt = now;
     _lastCameraTarget = target;
 
-    final targetZoom = _followZoom;
-    // Negate heading: rotating the map -heading° puts travel direction at top
-    final targetRotation = -heading;
-
-    _smoothMoveCamera(target, zoom: targetZoom, rotation: targetRotation);
+    // Turned so the travel direction is up.
+    _smoothMoveCamera(target, zoom: _followZoom, bearing: heading);
   }
 
   double _normalizeHeading(double heading) {
@@ -388,8 +358,6 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
     _drawerController.dispose();
-    _cameraAnim.dispose();
-    _cameraAnimController.dispose();
     _positionSubscription?.cancel();
     super.dispose();
   }
@@ -401,8 +369,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       (points.first.latitude + points.last.latitude) / 2,
       (points.first.longitude + points.last.longitude) / 2,
     );
-    // FIX: Smooth animated move, reset bearing to north when fitting route
-    _smoothMoveCamera(center, zoom: 13.0, rotation: 0);
+    _smoothMoveCamera(center, zoom: 13.0);
   }
 
   void _centerOnMe() {
@@ -410,11 +377,10 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     if (_isNavigationStarted && !_isAutoFollowEnabled) {
       setState(() => _isAutoFollowEnabled = true);
     }
-    // FIX: Smooth move + apply current heading as bearing
     _smoothMoveCamera(
       _displayPosition!,
       zoom: _followZoom,
-      rotation: -_displayHeading,
+      bearing: _displayHeading,
     );
   }
 
@@ -429,6 +395,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     // The session's stream takes over from the preview stream.
     _stopLocationTracking();
     _isAutoFollowEnabled = true;
+    // Following leans the map into 3D, the road ahead in view.
+    _tilted = true;
     ActiveNavigationService.instance.start(
       FollowTarget.generated(
         widget.result,
@@ -488,9 +456,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     ActiveNavigationService.instance.stop();
     setState(() {
       _isAutoFollowEnabled = false;
+      _tilted = false;
       final position = _currentPosition;
       if (position != null) _displayPosition = _rawLatLng(position);
     });
+    // Flat and north up again.
+    final here = _displayPosition ?? _map.camera?.center;
+    if (here != null) _map.moveTo(here, bearing: 0, tilt: 0);
     _startLocationTracking();
   }
 
@@ -523,7 +495,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
 
   /// The route (travelled part grey while following) plus, when the
   /// traveler is off it, the dashed temporary path back to it.
-  List<Polyline> get _polylines {
+  List<MapLine> get _lines {
     return [
       ...FollowRouteLayers.routeLines(
         path: widget.result.polyline,
@@ -543,93 +515,41 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
     ];
   }
 
-  List<Marker> get _markers {
-    final markers = <Marker>[];
+  /// Round start and end badges.
+  List<MapIcon> get _icons {
     final points = widget.result.polyline;
+    return [
+      if (points.isNotEmpty) MapIcon(points.first, MapPinImages.badgeStart),
+      if (points.length > 1) MapIcon(points.last, MapPinImages.badgeEnd),
+    ];
+  }
 
-    if (points.isNotEmpty) {
-      markers.add(
-        Marker(
-          point: points.first,
-          width: 44,
-          height: 44,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.green.shade600,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.my_location, color: Colors.white, size: 22),
-          ),
-        ),
-      );
-    }
-
-    if (points.length > 1) {
-      markers.add(
-        Marker(
-          point: points.last,
-          width: 44,
-          height: 44,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.red.shade600,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.flag, color: Colors.white, size: 22),
-          ),
-        ),
-      );
-    }
-
-    final targetMarker = FollowRouteLayers.targetMarker(_guidance);
-    if (targetMarker != null) markers.add(targetMarker);
-
-    return markers;
+  /// The next point to reach while following.
+  List<MapDot> get _dots {
+    final target = FollowRouteLayers.targetDot(_guidance);
+    return [if (target != null) target];
   }
 
   /// The traveler's dot, drawn above every other layer.
-  Widget get _userLocationLayer => UserLocationLayer(
-    position: _displayPosition,
-    accuracyMeters: _currentPosition?.accuracy ?? 0,
-    headingDegrees: _displayHeading,
-    speedMps: _currentPosition?.speed ?? 0,
-  );
+  MapUser? get _mapUser {
+    final at = _displayPosition;
+    if (at == null) return null;
+    return MapUser(
+      at,
+      accuracyMeters: _currentPosition?.accuracy ?? 0,
+      headingDegrees: _displayHeading,
+      speedMps: _currentPosition?.speed ?? 0,
+    );
+  }
 
   // ─── Map-tab chrome ────────────────────────────────────────────────────────
 
-  List<Place> get _visiblePlaces {
-    final categories = MapTabController.instance.placeCategories.value;
-    if (categories.isEmpty) return camanavaPlaces;
-    return camanavaPlaces
-        .where((p) => p.categories.any(categories.contains))
-        .toList();
-  }
-
-  /// Rebuilds only when the pins' size visibly changes, not on every
-  /// camera frame while following.
-  void _updatePinScale(double zoom) {
-    final scale = placePinScaleForZoom(zoom);
-    if ((scale - _pinScale).abs() < 0.05 && (scale == 0) == (_pinScale == 0)) {
-      return;
-    }
-    setState(() => _pinScale = scale);
-  }
+  /// The place pins: every place, the chips' categories highlighted.
+  MapPlaces get _mapPlaces => MapPlaces(
+    places: MapTabController.instance.showPins.value ? _allPlaces : const [],
+    highlighted: MapTabController.instance.placeCategories.value,
+    selected: _selectedPlace,
+  );
 
   void _onPlaceTapped(Place place) {
     setState(() => _selectedPlace = place);
@@ -689,43 +609,34 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
   }
 
   Widget _buildMap() {
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: _mapCenter,
-        initialZoom: 12.0,
-        minZoom: 5.0,
-        maxZoom: 18.0,
-        onTap: (_, _) => _clearSelectedPlace(),
-        onPositionChanged: (camera, hasGesture) {
-          if (hasGesture && _isAutoFollowEnabled) {
-            setState(() => _isAutoFollowEnabled = false);
-          }
-          _updatePinScale(camera.zoom);
-        },
-        cameraConstraint: CameraConstraint.contain(
-          bounds: LatLngBounds(
-            const LatLng(4.5, 116.0),
-            const LatLng(21.5, 127.0),
-          ),
-        ),
+    // Place pins sit under the route and its markers; the traveler's dot
+    // on top of everything.
+    return TransitMap(
+      controller: _map,
+      initialCenter: _mapCenter,
+      initialZoom: 12.0,
+      minZoom: 5.0,
+      maxZoom: 18.0,
+      bounds: (
+        southWest: const LatLng(4.5, 116.0),
+        northEast: const LatLng(21.5, 127.0),
       ),
-      children: [
-        const AppBaseMap(),
-        // Place pins under the route, so its markers stay on top.
-        if (MapTabController.instance.showPins.value)
-          MarkerLayer(
-            markers: placeMarkers(
-              places: _visiblePlaces,
-              scale: _pinScale,
-              selectedId: _selectedPlace?.id,
-              onTap: _onPlaceTapped,
-            ),
-          ),
-        PolylineLayer(polylines: _polylines),
-        MarkerLayer(markers: _markers),
-        _userLocationLayer,
-      ],
+      places: _mapPlaces,
+      lines: _lines,
+      dots: _dots,
+      icons: _icons,
+      user: _mapUser,
+      onTap: (_) => _clearSelectedPlace(),
+      onPlaceTap: _onPlaceTapped,
+      onUserGesture: () {
+        if (_isAutoFollowEnabled) {
+          setState(() => _isAutoFollowEnabled = false);
+        }
+      },
+      onCameraIdle: _onMapCameraIdle,
+      // Below the top bar and the chips.
+      compassMargin: const math.Point(16, 130),
+      attributionMargin: const math.Point(8, _drawerPeekHeight + 8),
     );
   }
 
@@ -772,7 +683,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
             const SizedBox(height: 8),
             PlaceCategoryChips(
               selected: MapTabController.instance.placeCategories.value,
-              onSelectAll: MapTabController.instance.clearCategories,
+              onToggleAll: MapTabController.instance.toggleAllCategories,
               onToggle: MapTabController.instance.toggleCategory,
             ),
           ],
@@ -790,6 +701,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen>
       bottom: _drawerPeekHeight + 12,
       child: MapSideButtons(
         children: [
+          MapSideButton(
+            icon: Icons.view_in_ar_rounded,
+            tooltip: _tilted ? 'Flat view' : '3D view',
+            active: _tilted,
+            iconColor: accent,
+            onTap: _toggleTilt,
+          ),
           MapSideButton(
             icon:
                 pins.value

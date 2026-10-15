@@ -245,134 +245,6 @@ extension _ContributeScreenSections on _ContributeScreenState {
     );
   }
 
-  Widget _buildMapLayerSection() {
-    final editControls = _stepEditControls;
-    final isNearby = _mapMode == MapTabMode.nearby;
-
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: CamanavaBounds.center,
-        initialZoom: CamanavaBounds.initialZoom,
-        minZoom: 10.0,
-        maxZoom: 18.0,
-        // Only the center is kept in the area: holding the whole screen
-        // inside it blocked zooming out far enough to show all of Metro
-        // Manila.
-        cameraConstraint: CameraConstraint.containCenter(
-          bounds: LatLngBounds(
-            const LatLng(14.38, 120.82),
-            const LatLng(14.95, 121.20),
-          ),
-        ),
-        onTap: _onMapTap,
-        onPositionChanged: (position, hasGesture) {
-          if (!hasGesture) return;
-          // Called every frame of a pan or pinch. Only the pins' size
-          // depends on the zoom, so redraw the screen only when that
-          // visibly changes; rebuilding it every frame made the map lag.
-          _currentZoom = position.zoom;
-          final scale = placePinScaleForZoom(position.zoom);
-          if ((scale - _pinScaleDrawn).abs() >= 0.05 ||
-              (scale == 0) != (_pinScaleDrawn == 0)) {
-            _setUiState(() => _pinScaleDrawn = scale);
-          }
-        },
-      ),
-      children: [
-        const AppBaseMap(),
-        // Place pins in every mode, under the route so its handles win
-        // taps. Small, so drawing near one rarely hits it by accident.
-        if (_showPins)
-          MarkerLayer(
-            markers: placeMarkers(
-              places: _visibleNearbyPlaces,
-              scale: placePinScaleForZoom(_currentZoom),
-              selectedId: _nearbySelectedPlace?.id,
-              onTap: _onNearbyPlaceTapped,
-            ),
-          ),
-        // A place found with the search bar.
-        if (isNearby && _foundPlace != null)
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(_foundPlace!.latitude, _foundPlace!.longitude),
-                width: 44,
-                height: 44,
-                alignment: Alignment.topCenter,
-                child: const Icon(Icons.place, color: Colors.red, size: 44),
-              ),
-            ],
-          ),
-        if (!isNearby) ...[
-          // PolygonLayer(polygons: _regionBoundaryPolygons), // TODO: re-enable once real boundary data is added
-          PolylineLayer(polylines: polylines),
-          MarkerLayer(
-            markers: [
-              if (_showPins && pathPoints.isNotEmpty)
-                Marker(
-                  point: pathPoints.first,
-                  child: const Icon(
-                    Icons.location_on,
-                    color: Colors.green,
-                    size: 40,
-                  ),
-                ),
-              if (_showPins && pathPoints.length > 1)
-                Marker(
-                  point: pathPoints.last,
-                  child: const Icon(Icons.flag, color: Colors.red, size: 40),
-                ),
-              if (_showPins && _searchedLocation != null)
-                Marker(
-                  point: _searchedLocation!,
-                  child: const Icon(
-                    Icons.my_location_rounded,
-                    color: _accent,
-                    size: 34,
-                  ),
-                ),
-            ],
-          ),
-          // Handles are always on, while drawing and after Finish, so any
-          // step's line can be fixed at any time.
-          if ((selectionMode == 'done' && steps.isNotEmpty) ||
-              (selectionMode == 'step' && _stepCount > 0))
-            DraggableStepMarkersLayer(
-              boundaryWaypoints: editControls.boundaryWaypoints,
-              bodyHandles: editControls.bodyHandles,
-              insertHandles: editControls.insertHandles,
-              onBoundaryDragEnd: _onBoundaryWaypointDragEnd,
-              onBodyDragEnd: _onBodyHandleDragEnd,
-              onBodyLongPress: _onViaPointLongPress,
-              onInsertDragEnd: _onInsertHandleDragEnd,
-              accent: _accent,
-            ),
-        ],
-        MarkerLayer(
-          markers: [
-            if (_nearbyPosition != null)
-              Marker(
-                point: LatLng(
-                  _nearbyPosition!.latitude,
-                  _nearbyPosition!.longitude,
-                ),
-                width: 24,
-                height: 24,
-                child: const IgnorePointer(child: _NearbyUserPin()),
-              ),
-            if (isNearby && _debugCoord != null)
-              Marker(
-                point: _debugCoord!,
-                child: const Icon(Icons.add, color: _accent, size: 40),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
   /// Distance · time · fare of what's drawn so far, e.g. "1.2 km · 14 min ·
   /// ₱14". Road-measured numbers once every step has them.
   String _routeMetricsLine() {
@@ -1022,8 +894,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
   void _centerOnNearbyPlace(Place place) {
     _onNearbyPlaceTapped(place);
     final zoom = _currentZoom < 15 ? 15.0 : _currentZoom;
-    _mapController.move(LatLng(place.lat, place.lng), zoom);
-    _setUiState(() => _currentZoom = zoom);
+    _moveCamera(LatLng(place.lat, place.lng), zoom);
   }
 
   /// The GPS button: get a fresh fix, then center on it.
@@ -1032,9 +903,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     await _tryGetNearbyLocation();
     final position = _nearbyPosition;
     if (!mounted || position == null) return;
-    const zoom = 16.0;
-    _mapController.move(LatLng(position.latitude, position.longitude), zoom);
-    _setUiState(() => _currentZoom = zoom);
+    _moveCamera(LatLng(position.latitude, position.longitude), 16.0);
   }
 
   Widget _buildNearbyDebugCoordChip() {
@@ -1093,25 +962,6 @@ extension _ContributeScreenSections on _ContributeScreenState {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Where you are, as the familiar blue dot.
-class _NearbyUserPin extends StatelessWidget {
-  const _NearbyUserPin();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A73E8),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 6)],
       ),
     );
   }

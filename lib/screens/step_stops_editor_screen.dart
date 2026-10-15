@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import '../widgets/map/app_base_map.dart';
+import '../widgets/map/transit_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/camanava_places.dart';
@@ -44,6 +43,7 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
   late final RouteFollowEngine _line = RouteFollowEngine(widget.path);
   late List<route_model.RouteStop> _stops = _sorted(widget.initialStops);
   bool _isSuggesting = false;
+  final _map = TransitMapController();
 
   double _alongOf(route_model.RouteStop stop) =>
       _line.nearestInRange(stop.point, 0, _line.totalMeters)?.along ?? 0;
@@ -55,7 +55,7 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
     (s) => _distance.as(LengthUnit.Meter, s.point, point) < _sameStopMeters,
   );
 
-  void _onMapTap(TapPosition _, LatLng tapped) {
+  void _onMapTap(LatLng tapped) {
     final match = _line.nearestInRange(tapped, 0, _line.totalMeters);
     if (match == null || match.distance > _tapToLineMeters) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -149,7 +149,6 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bounds = LatLngBounds.fromPoints(widget.path);
     return Scaffold(
       appBar: AppBar(
         title: TranslatedText('${widget.mode} stops'),
@@ -181,49 +180,37 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
             ),
           ),
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCameraFit: CameraFit.bounds(
-                  bounds: bounds,
-                  padding: const EdgeInsets.all(40),
-                ),
-                onTap: _onMapTap,
-              ),
-              children: [
-                const AppBaseMap(),
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: widget.path,
-                      color: Colors.black,
-                      strokeWidth: 8,
-                    ),
-                    Polyline(
-                      points: widget.path,
-                      color: widget.color,
-                      strokeWidth: 6,
-                    ),
-                  ],
-                ),
-                MarkerLayer(
-                  markers: [
-                    for (var i = 0; i < _stops.length; i++)
-                      Marker(
-                        point: _stops[i].point,
-                        width: 30,
-                        height: 30,
-                        child: GestureDetector(
-                          onTap: () => _editStop(_stops[i]),
-                          child: _StopDot(
-                            number: i + 1,
-                            color: widget.color,
-                            stop: _stops[i],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+            child: TransitMap(
+              controller: _map,
+              initialCenter: widget.path.first,
+              initialFit: widget.path,
+              lines: [
+                MapLine(widget.path, color: Colors.black, width: 8),
+                MapLine(widget.path, color: widget.color, width: 6),
               ],
+              // Grey ring: a stop where passengers can't board, only get
+              // off (or the reverse) — still shown, just marked as
+              // restricted.
+              dots: [
+                for (var i = 0; i < _stops.length; i++)
+                  MapDot(
+                    _stops[i].point,
+                    radius: 12,
+                    strokeColor:
+                        !_stops[i].pickup || !_stops[i].dropoff
+                            ? AppColors.textSecondary
+                            : widget.color,
+                    label: '${i + 1}',
+                    id: '$i',
+                  ),
+              ],
+              onTap: _onMapTap,
+              onMarkerTap: (id) {
+                final index = int.tryParse(id);
+                if (index != null && index < _stops.length) {
+                  _editStop(_stops[index]);
+                }
+              },
             ),
           ),
           SafeArea(
@@ -249,41 +236,6 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StopDot extends StatelessWidget {
-  final int number;
-  final Color color;
-  final route_model.RouteStop stop;
-
-  const _StopDot({
-    required this.number,
-    required this.color,
-    required this.stop,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Grey border: a stop where passengers can't board, only get off (or
-    // the reverse) — still shown, just marked as restricted.
-    final restricted = !stop.pickup || !stop.dropoff;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: restricted ? AppColors.textSecondary : color,
-          width: 3,
-        ),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        '$number',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
       ),
     );
   }

@@ -6,16 +6,17 @@ import '../translated_text.dart';
 import '../../theme/app_colors.dart';
 
 /// The always-visible row of place-category chips under the search bar.
-/// No selection means "All".
+/// Selected chips are highlighted on the map; none is how it opens, and
+/// "All" selects (or clears) every category.
 class PlaceCategoryChips extends StatelessWidget {
   final Set<PlaceCategory> selected;
-  final VoidCallback onSelectAll;
+  final VoidCallback onToggleAll;
   final ValueChanged<PlaceCategory> onToggle;
 
   const PlaceCategoryChips({
     super.key,
     required this.selected,
-    required this.onSelectAll,
+    required this.onToggleAll,
     required this.onToggle,
   });
 
@@ -35,8 +36,8 @@ class PlaceCategoryChips extends StatelessWidget {
             label: 'All',
             icon: Icons.apps,
             color: placeNeutralColor,
-            isSelected: selected.isEmpty,
-            onTap: onSelectAll,
+            isSelected: selected.length == PlaceCategory.values.length,
+            onTap: onToggleAll,
           ),
           for (final category in PlaceCategory.values) ...[
             const SizedBox(width: 8),

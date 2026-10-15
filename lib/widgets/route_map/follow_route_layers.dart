@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../services/route_follow_engine.dart';
 import '../../services/route_follow_guidance.dart';
+import '../map/transit_map.dart';
 
 /// Map layers shared by the screens that follow a route.
 class FollowRouteLayers {
@@ -11,10 +11,10 @@ class FollowRouteLayers {
   static final travelledOutline = Colors.grey.shade600;
   static const connectorColor = Color(0xFF0B8FD6);
 
-  /// The route, one polyline pair per step range. While following, the part
+  /// The route, one line pair per step range. While following, the part
   /// already travelled is grey and the rest keeps its colour, split exactly
   /// at the traveler's progress point.
-  static List<Polyline> routeLines({
+  static List<MapLine> routeLines({
     required List<LatLng> path,
     required List<({int start, int end, Color color})> ranges,
     required RouteFollowSnapshot? snapshot,
@@ -24,30 +24,18 @@ class FollowRouteLayers {
   }) {
     if (path.length < 2) return const [];
 
-    List<Polyline> line(List<LatLng> pts, Color fill, Color edge) {
+    List<MapLine> line(List<LatLng> pts, Color fill, Color edge) {
       if (pts.length < 2) return const [];
       return [
-        Polyline(
-          points: pts,
-          color: edge,
-          strokeWidth: outlineWidth,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
-        Polyline(
-          points: pts,
-          color: fill,
-          strokeWidth: fillWidth,
-          strokeCap: StrokeCap.round,
-          strokeJoin: StrokeJoin.round,
-        ),
+        MapLine(pts, color: edge, width: outlineWidth),
+        MapLine(pts, color: fill, width: fillWidth),
       ];
     }
 
     final last = path.length - 1;
     final splitSegment = snapshot?.progressSegment ?? -1;
-    final travelled = <Polyline>[];
-    final remaining = <Polyline>[];
+    final travelled = <MapLine>[];
+    final remaining = <MapLine>[];
 
     for (final range in ranges) {
       final start = range.start.clamp(0, last);
@@ -89,23 +77,17 @@ class FollowRouteLayers {
     return snapshot.hasArrived || snapshot.progressSegment >= range.end;
   }
 
-  /// Dashed temporary path to the boarding/rejoin point. It is only a way
+  /// Dotted temporary path to the boarding/rejoin point. It is only a way
   /// back to the route and never part of it.
-  static List<Polyline> connectorLines(List<LatLng>? connector) {
+  static List<MapLine> connectorLines(List<LatLng>? connector) {
     if (connector == null || connector.length < 2) return const [];
     return [
-      Polyline(
-        points: connector,
-        color: Colors.white,
-        strokeWidth: 7.0,
-        strokeCap: StrokeCap.round,
-      ),
-      Polyline(
-        points: connector,
+      MapLine(connector, color: Colors.white, width: 7.0),
+      MapLine(
+        connector,
         color: connectorColor,
-        strokeWidth: 4.0,
-        strokeCap: StrokeCap.round,
-        pattern: const StrokePattern.dotted(spacingFactor: 1.6),
+        width: 4.0,
+        style: MapLineStyle.dotted,
       ),
     ];
   }
@@ -114,48 +96,28 @@ class FollowRouteLayers {
 
   /// The path the vehicle is actually taking while off the route. Shown
   /// as it goes; afterwards the rider can offer it as a correction.
-  static List<Polyline> detourLines(List<LatLng>? detour) {
+  static List<MapLine> detourLines(List<LatLng>? detour) {
     if (detour == null || detour.length < 2) return const [];
     return [
-      Polyline(
-        points: detour,
-        color: Colors.white,
-        strokeWidth: 7.0,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-      ),
-      Polyline(
-        points: detour,
+      MapLine(detour, color: Colors.white, width: 7.0),
+      MapLine(
+        detour,
         color: detourColor,
-        strokeWidth: 4.5,
-        strokeCap: StrokeCap.round,
-        strokeJoin: StrokeJoin.round,
-        pattern: StrokePattern.dashed(segments: const [12, 8]),
+        width: 4.5,
+        style: MapLineStyle.dashed,
       ),
     ];
   }
 
-  static Marker? targetMarker(FollowGuidance guidance) {
+  /// The next point to reach: a white ring in the connector's blue.
+  static MapDot? targetDot(FollowGuidance guidance) {
     final target = guidance.target;
     if (target == null) return null;
-    return Marker(
-      point: target,
-      width: 26,
-      height: 26,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: connectorColor, width: 4),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-      ),
+    return MapDot(
+      target,
+      radius: 9,
+      strokeColor: connectorColor,
+      strokeWidth: 4,
     );
   }
 }
