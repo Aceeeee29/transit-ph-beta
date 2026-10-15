@@ -115,21 +115,25 @@ class _VerifiedTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final green = AppColors.isDark ? AppColors.tintText(Colors.green) : _green;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0xFFE6F5EC),
+        color:
+            AppColors.isDark
+                ? AppColors.tint(Colors.green)
+                : const Color(0xFFE6F5EC),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.verified_rounded, size: 12, color: _green),
-          SizedBox(width: 4),
+          Icon(Icons.verified_rounded, size: 12, color: green),
+          const SizedBox(width: 4),
           Text(
             'Most rider-verified',
             style: TextStyle(
-              color: _green,
+              color: green,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),

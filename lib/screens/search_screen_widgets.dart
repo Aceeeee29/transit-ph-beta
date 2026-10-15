@@ -431,21 +431,34 @@ class _GeneratedRouteCaution extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF6E5),
+        color:
+            AppColors.isDark
+                ? AppColors.tint(Colors.amber)
+                : const Color(0xFFFFF6E5),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFB7791F)),
-          SizedBox(width: 10),
+          Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color:
+                AppColors.isDark
+                    ? Colors.amber.shade300
+                    : const Color(0xFFB7791F),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Generated automatically, so these may be inaccurate: transit '
               'data is limited and can be outdated. Jeep, bus, train and '
               'walking only. Times and fares are estimates.',
               style: TextStyle(
-                color: Color(0xFF7A5414),
+                color:
+                    AppColors.isDark
+                        ? AppColors.tintText(Colors.amber)
+                        : const Color(0xFF7A5414),
                 fontSize: 13,
                 height: 1.35,
               ),
