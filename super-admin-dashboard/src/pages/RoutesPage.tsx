@@ -1,10 +1,15 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { Suspense, lazy, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteRoute, getRoutes, updateRouteStatus } from '@/lib/firestoreApi'
 import { useAuth } from '@/hooks/useAuth'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { CheckCircle, MapPin, Route, Search, ThumbsDown, ThumbsUp, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle, MapPin, Route, Search, ThumbsDown, ThumbsUp, Trash2, X, XCircle } from 'lucide-react'
 import type { RouteItem } from '@/types/models'
+
+// The map library is large: loaded when a preview first opens.
+const RoutePreviewMap = lazy(() =>
+  import('@/components/RoutePreviewMap').then((m) => ({ default: m.RoutePreviewMap })),
+)
 
 const PAGE_SIZE = 12
 
@@ -136,31 +141,47 @@ export function RoutesPage() {
   const reject = useMutation({ mutationFn: (id: string) => deleteRoute(id), onSuccess: refresh })
   const remove = useMutation({ mutationFn: (id: string) => deleteRoute(id), onSuccess: refresh })
 
-  const bulkUpdate = async (status: 'approved' | 'rejected') => {
-    if (status === 'approved') {
-      await Promise.all(selectedIds.map((id) => updateRouteStatus(id, status, user?.uid ?? '')))
-    } else {
-      await Promise.all(selectedIds.map((id) => deleteRoute(id)))
-    }
-    setSelectedIds([])
-    refresh()
-  }
-
   const toggleAll = (checked: boolean) => {
     setSelectedIds(checked ? paginated.map((r) => r.id) : [])
   }
 
   const allChecked = paginated.length > 0 && paginated.every((r) => selectedIds.includes(r.id))
+  // Only the checked routes the filters still show.
   const selectedRoutes = useMemo(
     () => list.filter((r) => selectedIds.includes(r.id)),
     [list, selectedIds],
   )
-  const hasApprovedInSelection = selectedRoutes.some((r) => r.status === 'approved')
-  const disableBulkActions = !selectedIds.length || hasApprovedInSelection
+  // Approve and Reject apply to the ones not approved yet; Delete to all.
+  const reviewable = selectedRoutes.filter((r) => r.status !== 'approved')
+  const [bulkBusy, setBulkBusy] = useState(false)
 
-  const guardedBulkUpdate = (status: 'approved' | 'rejected') => {
-    if (disableBulkActions) return
-    return bulkUpdate(status)
+  const runBulk = async (routes: RouteItem[], action: (id: string) => Promise<unknown>) => {
+    setBulkBusy(true)
+    try {
+      const results = await Promise.allSettled(routes.map((r) => action(r.id)))
+      const failed = results.filter((r) => r.status === 'rejected').length
+      if (failed) alert(`${failed} of ${routes.length} routes couldn't be updated. Try again.`)
+      setSelectedIds([])
+    } finally {
+      setBulkBusy(false)
+      refresh()
+    }
+  }
+
+  const bulkApprove = () =>
+    runBulk(reviewable, (id) => updateRouteStatus(id, 'approved', user?.uid ?? ''))
+
+  // Rejecting a route that isn't approved deletes it, as on each row.
+  const bulkReject = () => {
+    const n = reviewable.length
+    if (!confirm(`Reject and delete ${n} pending route${n === 1 ? '' : 's'}?`)) return
+    return runBulk(reviewable, deleteRoute)
+  }
+
+  const bulkDelete = () => {
+    const n = selectedRoutes.length
+    if (!confirm(`Delete ${n} route${n === 1 ? '' : 's'} permanently? This can't be undone.`)) return
+    return runBulk(selectedRoutes, deleteRoute)
   }
 
   return (
@@ -199,15 +220,37 @@ export function RoutesPage() {
             <option value="rejected">Rejected</option>
           </select>
         </div>
-        <div className="toolbar-actions">
-          <button className="btn btn-sm btn-success" disabled={disableBulkActions} onClick={() => guardedBulkUpdate('approved')}>
-            <CheckCircle size={13} /> Bulk Approve ({selectedIds.length})
-          </button>
-          <button className="btn btn-sm btn-danger" disabled={disableBulkActions} onClick={() => guardedBulkUpdate('rejected')}>
-            <XCircle size={13} /> Bulk Reject
-          </button>
-        </div>
       </div>
+
+      {selectedRoutes.length > 0 ? (
+        <div className="selection-bar">
+          <span className="selection-count">{selectedRoutes.length} selected</span>
+          <div className="toolbar-actions">
+            <button
+              className="btn btn-sm btn-success"
+              disabled={bulkBusy || !reviewable.length}
+              title={reviewable.length ? undefined : 'All selected routes are already approved'}
+              onClick={bulkApprove}
+            >
+              <CheckCircle size={13} /> Approve ({reviewable.length})
+            </button>
+            <button
+              className="btn btn-sm btn-outline"
+              disabled={bulkBusy || !reviewable.length}
+              title={reviewable.length ? undefined : 'All selected routes are already approved'}
+              onClick={bulkReject}
+            >
+              <XCircle size={13} /> Reject ({reviewable.length})
+            </button>
+            <button className="btn btn-sm btn-danger" disabled={bulkBusy} onClick={bulkDelete}>
+              <Trash2 size={13} /> Delete ({selectedRoutes.length})
+            </button>
+            <button className="btn btn-sm btn-outline" disabled={bulkBusy} onClick={() => setSelectedIds([])}>
+              <X size={13} /> Clear
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="table-wrap">
@@ -308,7 +351,7 @@ export function RoutesPage() {
                           <button className="btn btn-sm btn-danger" onClick={() => reject.mutate(r.id)}>Reject</button>
                         </>
                       ) : null}
-                      <button className="btn btn-sm btn-outline" data-confirm-skip="true" onClick={() => setPreview(r)}>Preview</button>
+                      <button className="btn btn-sm btn-outline" onClick={() => setPreview(r)}>Preview</button>
                       {r.status === 'approved' ? (
                         <button
                           className="btn btn-sm btn-danger btn-icon"
@@ -352,6 +395,9 @@ export function RoutesPage() {
                 <StatusBadge status={preview.status} />
                 {preview.status === 'pending' && preview.isEdited ? <EditedBadge editCount={preview.editCount} /> : null}
               </div>
+              <Suspense fallback={<div className="route-preview-map route-preview-map-empty">Loading map…</div>}>
+                <RoutePreviewMap route={preview} />
+              </Suspense>
               {[
                 ['Trust', `${computeRouteTrust(preview).total}/100 (${computeRouteTrust(preview).label})`],
                 [

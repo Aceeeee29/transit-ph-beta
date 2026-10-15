@@ -21,15 +21,36 @@ class AnnouncementDialog {
   }
 }
 
+/// The latest announcement: its type's icon, the title, when it was sent,
+/// the message, then "Got it" (closes it for now) and "Don't show again".
 class _AnnouncementAlertDialog extends StatelessWidget {
   const _AnnouncementAlertDialog({required this.announcement});
 
   final Announcement announcement;
 
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final accent = _accentFor(announcement.type);
-    final icon = _iconFor(announcement.type);
+    final sent = announcement.scheduledAt ?? announcement.createdAt;
+    final subtitle = [
+      _labelFor(announcement.type),
+      if (sent != null) '${_months[sent.month - 1]} ${sent.day}',
+    ].join(' · ');
 
     Future<void> dismissPermanentlyAndClose() async {
       await AnnouncementService.dismissForCurrentUser(announcement.id);
@@ -44,65 +65,103 @@ class _AnnouncementAlertDialog extends StatelessWidget {
       }
     }
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      title: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _iconFor(announcement.type),
+                    color: accent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        announcement.title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            child: Icon(icon, color: accent, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              announcement.title,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-                height: 1.2,
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(
+                  announcement.message,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: AppColors.textPrimary,
+                    height: 1.45,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Text(
-          announcement.message,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFF30435F),
-            height: 1.45,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: dismissPermanentlyAndClose,
-          child: const Text('Dismiss'),
-        ),
-        ElevatedButton.icon(
-          onPressed: closeForNow,
-          icon: const Icon(Icons.check_circle_outline, size: 18),
-          label: const Text('Got it'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(95, 30),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: closeForNow,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Got it'),
             ),
-          ),
+            TextButton(
+              onPressed: dismissPermanentlyAndClose,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSecondary,
+                textStyle: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              child: const Text("Don't show again"),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -111,9 +170,9 @@ class _AnnouncementAlertDialog extends StatelessWidget {
       case AnnouncementType.critical:
         return const Color(0xFFE05C6A);
       case AnnouncementType.warning:
-        return const Color(0xFFFFB547);
+        return const Color(0xFFF2A33A);
       case AnnouncementType.info:
-        return const Color(0xFF0B8FD6);
+        return AppColors.accent;
     }
   }
 
@@ -125,6 +184,17 @@ class _AnnouncementAlertDialog extends StatelessWidget {
         return Icons.info_outline_rounded;
       case AnnouncementType.info:
         return Icons.campaign_rounded;
+    }
+  }
+
+  static String _labelFor(AnnouncementType type) {
+    switch (type) {
+      case AnnouncementType.critical:
+        return 'Important';
+      case AnnouncementType.warning:
+        return 'Heads up';
+      case AnnouncementType.info:
+        return 'Announcement';
     }
   }
 }

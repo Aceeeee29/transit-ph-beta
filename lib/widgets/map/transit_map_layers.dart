@@ -2,7 +2,7 @@ part of 'transit_map.dart';
 
 /// The sources and layers [TransitMap] adds over the base map, bottom to
 /// top: place pins, route lines, dots, icons, drag handles, the open
-/// place, then the traveler's dot over everything.
+/// place, then the traveler's arrow (or dot) over everything.
 class _Layers {
   _Layers._();
 
@@ -205,7 +205,9 @@ class _Layers {
         },
         'paint': labelPaint,
       },
-      // The traveler: how sure the fix is, which way they're heading, the dot.
+      // The traveler: how sure the fix is, then an arrow pointing where
+      // they face (or a dot while that isn't known), both lying on the
+      // map so they tilt with it in 3D.
       {
         'id': '$user-accuracy',
         'type': 'circle',
@@ -227,30 +229,33 @@ class _Layers {
               4194304,
             ],
           ],
-          'circle-color': 'rgba(11,143,214,0.12)',
-          'circle-stroke-color': 'rgba(11,143,214,0.3)',
+          'circle-color': 'rgba(11,143,214,0.08)',
+          'circle-stroke-color': 'rgba(11,143,214,0.2)',
           'circle-stroke-width': 1,
           'circle-pitch-alignment': 'map',
         },
       },
-      {
-        'id': '$user-heading',
-        'type': 'symbol',
-        'source': user,
-        'filter': [
-          '==',
-          ['get', 'kind'],
-          'heading',
-        ],
-        'layout': {
-          'icon-image': MapPinImages.headingCone,
-          'icon-rotate': ['get', 'heading'],
-          'icon-rotation-alignment': 'map',
-          'icon-pitch-alignment': 'map',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
+      // The arrow is a solid: a low white rim under a raised blue arrow,
+      // lit like the 3D buildings (flat from straight above).
+      for (final (kind, color) in [
+        ('arrow-rim', '#ffffff'),
+        ('arrow', '#0B8FD6'),
+      ])
+        {
+          'id': '$user-$kind',
+          'type': 'fill-extrusion',
+          'source': user,
+          'filter': [
+            '==',
+            ['get', 'kind'],
+            kind,
+          ],
+          'paint': {
+            'fill-extrusion-color': color,
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': 0,
+          },
         },
-      },
       {
         'id': '$user-dot',
         'type': 'symbol',
@@ -262,6 +267,7 @@ class _Layers {
         ],
         'layout': {
           'icon-image': MapPinImages.userDot,
+          'icon-pitch-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
@@ -356,24 +362,76 @@ class _Layers {
         }),
   ]);
 
-  /// The traveler at [at]: the accuracy circle, the heading cone while
-  /// moving, and the dot.
+  /// The traveler at [at]: the accuracy circle, and the arrow pointing
+  /// where they face (the dot while that isn't known).
+  ///
+  /// The arrow is built in meters, so it's sized for MapLibre [zoom] (about
+  /// [arrowPixels] long on screen) and redrawn when the zoom settles.
   static Map<String, dynamic> userFeatures(
     LatLng at, {
     required double accuracyMeters,
     required double? headingDegrees,
+    required double zoom,
   }) {
     // Meters per pixel at zoom 0 on MapLibre's 512-pixel world.
     final metersPerPixelZ0 =
         40075016.686 * math.cos(at.latitude * math.pi / 180) / 512;
+    final length = arrowPixels * metersPerPixelZ0 / math.pow(2, zoom);
     return collection([
       point(at, {
         'kind': 'accuracy',
         'r0': accuracyMeters.clamp(5.0, 60.0) / metersPerPixelZ0,
       }),
-      if (headingDegrees != null)
-        point(at, {'kind': 'heading', 'heading': headingDegrees}),
-      point(at, {'kind': 'dot'}),
+      if (headingDegrees != null) ...[
+        _arrow(at, headingDegrees, length * 1.3, 'arrow-rim', length * 0.08),
+        _arrow(at, headingDegrees, length, 'arrow', length * 0.2),
+      ] else
+        point(at, {'kind': 'dot'}),
     ]);
+  }
+
+  /// The arrow's length on screen, in logical pixels.
+  static const arrowPixels = 26.0;
+
+  /// A navigation arrow [length] meters long around [at], pointing to
+  /// [heading] (degrees from north), standing [height] meters tall.
+  static Map<String, dynamic> _arrow(
+    LatLng at,
+    double heading,
+    double length,
+    String kind,
+    double height,
+  ) {
+    final width = length * 0.82;
+    final h = heading * math.pi / 180;
+    final metersPerLat = 111320.0;
+    final metersPerLng = 111320.0 * math.cos(at.latitude * math.pi / 180);
+    // Across and along the arrow (meters), turned to [heading].
+    List<double> corner(double across, double along) {
+      final east = across * math.cos(h) + along * math.sin(h);
+      final north = -across * math.sin(h) + along * math.cos(h);
+      return [
+        at.longitude + east / metersPerLng,
+        at.latitude + north / metersPerLat,
+      ];
+    }
+
+    final tip = corner(0, length / 2);
+    return {
+      'type': 'Feature',
+      'properties': {'kind': kind, 'height': height},
+      'geometry': {
+        'type': 'Polygon',
+        'coordinates': [
+          [
+            tip,
+            corner(width / 2, -length / 2),
+            corner(0, -length * 0.22),
+            corner(-width / 2, -length / 2),
+            tip,
+          ],
+        ],
+      },
+    };
   }
 }

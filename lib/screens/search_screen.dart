@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import 'package:geocoding/geocoding.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
@@ -273,51 +272,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (response.statusCode == 200) {
         final results = jsonDecode(response.body) as List;
-        if (results.isNotEmpty) {
-          Map<String, dynamic>? best;
-          for (final r in results.cast<Map<String, dynamic>>()) {
-            final lat = double.tryParse(r['lat'] as String? ?? '') ?? 0;
-            final lng = double.tryParse(r['lon'] as String? ?? '') ?? 0;
-            if (lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0) {
-              best = r;
-              break;
-            }
+        for (final r in results.cast<Map<String, dynamic>>()) {
+          final lat = double.tryParse(r['lat'] as String? ?? '');
+          final lng = double.tryParse(r['lon'] as String? ?? '');
+          if (lat != null && lng != null && _inPhilippines(lat, lng)) {
+            return LatLng(lat, lng);
           }
-          best ??= results.first as Map<String, dynamic>;
-          final lat = double.parse(best['lat'] as String);
-          final lng = double.parse(best['lon'] as String);
-          return LatLng(lat, lng);
         }
       }
     } catch (e) {
       debugPrint('[Geocoding] Nominatim error for "$query": $e');
     }
 
-    try {
-      final locations = await locationFromAddress(
-        query,
-      ).timeout(const Duration(seconds: 6));
-      if (locations.isNotEmpty) {
-        final phLocations =
-            locations
-                .where(
-                  (l) =>
-                      l.latitude >= 4.5 &&
-                      l.latitude <= 21.5 &&
-                      l.longitude >= 116.0 &&
-                      l.longitude <= 127.0,
-                )
-                .toList();
-        final loc =
-            phLocations.isNotEmpty ? phLocations.first : locations.first;
-        return LatLng(loc.latitude, loc.longitude);
-      }
-    } catch (e) {
-      debugPrint('[Geocoding] Fallback error for "$query": $e');
-    }
-
+    // The phone's geocoder searches the whole world: "253 Galicia Obando"
+    // came back in Galicia, Spain. Only a place in the Philippines will do.
+    final place = await LocationService.getCoordinatesFromAddress(query);
+    if (place != null) return LatLng(place.latitude, place.longitude);
     return null;
   }
+
+  static bool _inPhilippines(double lat, double lng) =>
+      lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0;
 
   // ─── Search logic ─────────────────────────────────────────────────────────
 

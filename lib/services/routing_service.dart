@@ -37,6 +37,13 @@ class RoutingService {
   // OSRM public demo server — free, no API key needed
   static const _osrmBase = 'https://router.project-osrm.org/route/v1';
 
+  /// The demo server routes cars only (a "foot" request comes back as a car
+  /// route, along one-way streets at car speed). Walks go to FOSSGIS's
+  /// walking server, also free and keyless; it names every profile
+  /// "driving" in the URL.
+  static const _osrmFootBase =
+      'https://routing.openstreetmap.de/routed-foot/route/v1/driving';
+
   // ── Public API ───────────────────────────────────────────────────────────────
 
   /// Full GTFS-backed routing for the navigation screen.
@@ -255,6 +262,8 @@ class RoutingService {
         return RouteOptimizationMode.budget;
       case 'fastest':
         return RouteOptimizationMode.fastest;
+      case 'community':
+        return RouteOptimizationMode.community;
       default:
         return RouteOptimizationMode.balanced;
     }
@@ -703,22 +712,42 @@ class RoutingService {
   static const _maxOsrmWaypoints = 25;
 
   /// Road-snaps a path that must pass through [waypoints] in order.
+  /// Walks try the walking server first, then the demo server (a car
+  /// route, but along streets), before a caller falls back to a straight
+  /// line. The walking server didn't answer within 8 s on one home wifi.
   static Future<List<LatLng>?> _osrmRoute(
     List<LatLng> waypoints,
-    String profile,
-  ) async {
+    String profile, {
+    String? base,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (profile == 'foot' && base == null) {
+      return await _osrmRoute(
+            waypoints,
+            profile,
+            base: _osrmFootBase,
+            timeout: const Duration(seconds: 5),
+          ) ??
+          await _osrmRoute(waypoints, profile, base: '$_osrmBase/foot');
+    }
     if (waypoints.length < 2) return null;
     final from = waypoints.first;
     final to = waypoints.last;
     final via = _sampleWaypoints(waypoints, _maxOsrmWaypoints);
     try {
       final coords = via.map((p) => '${p.longitude},${p.latitude}').join(';');
+      base ??= '$_osrmBase/$profile';
       final uri = Uri.parse(
-        '$_osrmBase/$profile/$coords?overview=full&geometries=geojson'
+        '$base/$coords?overview=full&geometries=geojson'
         '${via.length > 2 ? '&continue_straight=true' : ''}',
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      final response = await http
+          .get(
+            uri,
+            headers: {'User-Agent': 'TransitPH/1.0 (transit-routing-app)'},
+          )
+          .timeout(timeout);
 
       if (response.statusCode != 200) return null;
 

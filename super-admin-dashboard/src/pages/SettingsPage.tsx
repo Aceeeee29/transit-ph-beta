@@ -131,7 +131,17 @@ export function SettingsPage() {
             <button
               className="btn btn-primary"
               disabled={!isDirty || save.isPending}
-              onClick={() => save.mutate(model)}
+              onClick={() => {
+                // A new version or force update prompts every user of the app.
+                const reachesUsers =
+                  model.latest_version !== data?.latest_version ||
+                  model.force_update !== data?.force_update
+                if (reachesUsers && !confirm(
+                  `Every user will be asked to update to ${model.latest_version}` +
+                  `${model.force_update ? ' (forced)' : ''}. Is that APK already live?`,
+                )) return
+                save.mutate(model)
+              }}
             >
               {save.isPending ? 'Saving...' : 'Save Configuration'}
             </button>

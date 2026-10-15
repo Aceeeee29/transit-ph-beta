@@ -57,6 +57,15 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
         southWest: const LatLng(14.38, 120.82),
         northEast: const LatLng(14.95, 121.20),
       ),
+      // Zooming out stops once Metro Manila fills the map between the
+      // search bar and the drawer, and the map doesn't pan away from it.
+      keepInside: TransitMap.metroManila,
+      keepInsidePadding: const EdgeInsets.fromLTRB(
+        16,
+        120,
+        16,
+        _ContributeScreenState._drawerPeekHeight + 16,
+      ),
       places: MapPlaces(
         places: _showPins ? _allPlaces : const [],
         highlighted: _nearbySelected,

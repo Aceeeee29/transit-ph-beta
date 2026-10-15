@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'dart:math' show Point;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:latlong2/latlong.dart';
@@ -119,26 +119,26 @@ class MapPlaces {
   });
 }
 
-/// The traveler's dot. It glides from fix to fix instead of jumping.
+/// The traveler: an arrow lying on the map that points where they face, or
+/// a dot while that isn't known. It glides from fix to fix instead of
+/// jumping.
 class MapUser {
   final LatLng position;
   final double accuracyMeters;
-  final double headingDegrees;
+
+  /// Where they face, in degrees from north; null shows the dot.
+  final double? headingDegrees;
   final double speedMps;
 
   const MapUser(
     this.position, {
     this.accuracyMeters = 0,
-    this.headingDegrees = 0,
+    this.headingDegrees,
     this.speedMps = 0,
   });
 
   /// Below this the device is treated as standing still.
   static const stillSpeedMps = 0.6;
-
-  /// The heading cone only shows while actually moving; when still, GPS
-  /// heading is noise.
-  static const headingSpeedMps = 1.0;
 }
 
 /// Where the camera is. Zooms are the app's numbers (see [TransitMap]).
@@ -182,6 +182,7 @@ class TransitMapController {
     Duration duration = const Duration(milliseconds: 600),
     bool linear = false,
   }) async {
+    _followTarget = null;
     final controller = _ml;
     final known = _camera;
     _camera = TransitMapCamera(
@@ -201,7 +202,13 @@ class TransitMapController {
           );
       return;
     }
-    final target = _toMl(center);
+    final state = _state!;
+    final inside = state._insideCenter(
+      center,
+      (zoom ?? known?.zoom ?? 14) - zoomOffset,
+    );
+    await state._openLimitsForMove();
+    final target = _toMl(inside);
     final ml.CameraUpdate update;
     if (bearing != null || tilt != null) {
       final camera = _camera!;
@@ -220,6 +227,57 @@ class TransitMapController {
     }
     await _run(update, duration, linear);
   }
+
+  /// Following the traveler: glides to [target] over [duration] at a
+  /// constant speed, so back-to-back calls (one per GPS fix) blend into
+  /// continuous motion. [turnTo] can turn the camera on the way.
+  Future<void> follow(
+    LatLng target, {
+    required double zoom,
+    required double bearing,
+    required double tilt,
+    Duration duration = const Duration(milliseconds: 900),
+  }) async {
+    final moving = moveTo(
+      target,
+      zoom: zoom,
+      bearing: bearing,
+      tilt: tilt,
+      duration: duration,
+      linear: true,
+    );
+    // After moveTo has started (it forgets the last follow).
+    _followTarget = target;
+    _followEnds = DateTime.now().add(duration);
+    await moving;
+  }
+
+  /// Turns the camera to [bearing] while following, without breaking the
+  /// glide to the last [follow] target: the same target, in the time left
+  /// (a new camera move replaces the one under way).
+  Future<void> turnTo(double bearing) async {
+    final known = _camera;
+    final target = _followTarget ?? known?.center;
+    if (known == null || target == null) return;
+    final left = _followEnds.difference(DateTime.now());
+    const shortest = Duration(milliseconds: 250);
+    final followTarget = _followTarget;
+    final followEnds = _followEnds;
+    final moving = moveTo(
+      target,
+      zoom: known.zoom,
+      bearing: bearing,
+      tilt: known.tilt,
+      duration: left > shortest ? left : shortest,
+      linear: true,
+    );
+    _followTarget = followTarget;
+    _followEnds = followEnds;
+    await moving;
+  }
+
+  LatLng? _followTarget;
+  DateTime _followEnds = DateTime(0);
 
   /// Leans the camera to [tilt] degrees (0 is flat).
   Future<void> tiltTo(double tilt) async {
@@ -272,6 +330,7 @@ class TransitMapController {
     if (north - south < 1e-5 && east - west < 1e-5) {
       return moveTo(points.first, zoom: maxZoom, duration: duration);
     }
+    await state._openLimitsForMove();
     final ratio = state._pixelRatio;
     await _run(
       ml.CameraUpdate.newLatLngBounds(
@@ -348,6 +407,38 @@ class TransitMap extends StatefulWidget {
   /// Where the camera's center may go.
   final ({LatLng southWest, LatLng northEast})? bounds;
 
+  /// The view between [keepInsidePadding]'s edges stays within this area:
+  /// zooming out stops once the area fills the view, and the map doesn't
+  /// pan off it (a pan that ends outside glides back).
+  final ({LatLng southWest, LatLng northEast})? keepInside;
+  final EdgeInsets keepInsidePadding;
+
+  /// Metro Manila, the area the maps keep to.
+  static const metroManila = (
+    southWest: LatLng(14.34, 120.91),
+    northEast: LatLng(14.79, 121.14),
+  );
+
+  /// [area] grown to take in [points] too, with a little room around the
+  /// ones outside it (a route that leaves Metro Manila, the traveler
+  /// elsewhere).
+  static ({LatLng southWest, LatLng northEast}) areaWith(
+    ({LatLng southWest, LatLng northEast}) area,
+    Iterable<LatLng?> points,
+  ) {
+    const room = 0.01;
+    var south = area.southWest.latitude, north = area.northEast.latitude;
+    var west = area.southWest.longitude, east = area.northEast.longitude;
+    for (final p in points) {
+      if (p == null) continue;
+      south = math.min(south, p.latitude - room);
+      north = math.max(north, p.latitude + room);
+      west = math.min(west, p.longitude - room);
+      east = math.max(east, p.longitude + room);
+    }
+    return (southWest: LatLng(south, west), northEast: LatLng(north, east));
+  }
+
   final MapPlaces? places;
   final List<MapLine> lines;
   final List<MapDot> dots;
@@ -359,6 +450,11 @@ class TransitMap extends StatefulWidget {
   final ValueChanged<LatLng>? onTap;
   final ValueChanged<Place>? onPlaceTap;
   final ValueChanged<String>? onMarkerTap;
+
+  /// Where the traveler faces, as it changes (a smoothed compass): turns
+  /// [user]'s arrow without rebuilding the screen. Overrides
+  /// [MapUser.headingDegrees] when it has a value.
+  final ValueListenable<double?>? userHeading;
 
   /// The user started panning, zooming or turning the map.
   final VoidCallback? onUserGesture;
@@ -382,12 +478,15 @@ class TransitMap extends StatefulWidget {
     this.minZoom = 5,
     this.maxZoom = 18,
     this.bounds,
+    this.keepInside,
+    this.keepInsidePadding = EdgeInsets.zero,
     this.places,
     this.lines = const [],
     this.dots = const [],
     this.icons = const [],
     this.handles = const [],
     this.user,
+    this.userHeading,
     this.onTap,
     this.onPlaceTap,
     this.onMarkerTap,
@@ -454,6 +553,7 @@ class _TransitMapState extends State<TransitMap>
       ..addListener(_onGlideTick);
     _glideTo = widget.user?.position;
     _handlesSeen = _handlesKey(widget.handles);
+    widget.userHeading?.addListener(_onUserHeading);
   }
 
   @override
@@ -463,6 +563,10 @@ class _TransitMapState extends State<TransitMap>
       if (old.controller._state == this) old.controller._state = null;
       widget.controller._state = this;
     }
+    if (old.userHeading != widget.userHeading) {
+      old.userHeading?.removeListener(_onUserHeading);
+      widget.userHeading?.addListener(_onUserHeading);
+    }
     _onUserChanged(old.user);
     _onHandlesChanged();
   }
@@ -470,9 +574,11 @@ class _TransitMapState extends State<TransitMap>
   @override
   void dispose() {
     if (widget.controller._state == this) widget.controller._state = null;
+    widget.userHeading?.removeListener(_onUserHeading);
     _glide.dispose();
     _dragAt.dispose();
     _dropTimer?.cancel();
+    _userLater?.cancel();
     super.dispose();
   }
 
@@ -483,8 +589,18 @@ class _TransitMapState extends State<TransitMap>
 
   @override
   Widget build(BuildContext context) {
-    if (_inTests)
+    if (_inTests) {
       return SizedBox.expand(child: ColoredBox(color: AppColors.bg));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewSize = constraints.biggest;
+        return _buildStyled();
+      },
+    );
+  }
+
+  Widget _buildStyled() {
     final styles = MapStyleService.instance;
     return ListenableBuilder(
       listenable: styles.changes,
@@ -508,8 +624,9 @@ class _TransitMapState extends State<TransitMap>
           future: _style,
           builder: (context, snapshot) {
             final style = snapshot.data;
-            if (style == null)
+            if (style == null) {
               return SizedBox.expand(child: ColoredBox(color: AppColors.bg));
+            }
             _scheduleSend();
             return Listener(
               onPointerDown: _onPointerDown,
@@ -533,6 +650,15 @@ class _TransitMapState extends State<TransitMap>
   Widget _buildMap(String style) {
     final camera = widget.controller._camera;
     final bounds = widget.bounds;
+    final insideMinZoom = _insideMinZoom;
+    final centerLimits =
+        _insideLimits ??
+        (bounds == null
+            ? null
+            : ml.LatLngBounds(
+              southwest: _toMl(bounds.southWest),
+              northeast: _toMl(bounds.northEast),
+            ));
     return ml.MapLibreMap(
       styleString: style,
       initialCameraPosition: ml.CameraPosition(
@@ -544,18 +670,16 @@ class _TransitMapState extends State<TransitMap>
         tilt: camera?.tilt ?? 0,
       ),
       minMaxZoomPreference: ml.MinMaxZoomPreference(
-        widget.minZoom - TransitMapController.zoomOffset,
+        math.max(
+          widget.minZoom - TransitMapController.zoomOffset,
+          insideMinZoom ?? double.negativeInfinity,
+        ),
         widget.maxZoom - TransitMapController.zoomOffset,
       ),
       cameraTargetBounds:
-          bounds == null
+          centerLimits == null
               ? ml.CameraTargetBounds.unbounded
-              : ml.CameraTargetBounds(
-                ml.LatLngBounds(
-                  southwest: _toMl(bounds.southWest),
-                  northeast: _toMl(bounds.northEast),
-                ),
-              ),
+              : ml.CameraTargetBounds(centerLimits),
       rotateGesturesEnabled: widget.rotateGestures,
       compassEnabled: true,
       compassViewPosition: ml.CompassViewPosition.topRight,
@@ -567,6 +691,9 @@ class _TransitMapState extends State<TransitMap>
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _onMapClick,
       onCameraIdle: _onCameraIdle,
+      // Camera moves reach Dart only where the arrow needs them.
+      trackCameraPosition: widget.userHeading != null,
+      onCameraMove: _onCameraMove,
     );
   }
 
@@ -608,8 +735,143 @@ class _TransitMapState extends State<TransitMap>
       tilt: position.tilt,
     );
     widget.controller._camera = camera;
+    _liveZoom = position.zoom;
     widget.onCameraIdle?.call(camera);
     _refreshHandleSpots();
+    _keepViewInside(position);
+    // The arrow is sized in meters for the zoom it was drawn at.
+    _sendUser(force: true);
+  }
+
+  // ─── Keeping the view inside an area ──────────────────────────────────────
+
+  Size _viewSize = Size.zero;
+
+  /// Where the center may go at the zoom the camera last settled at.
+  ml.LatLngBounds? _insideLimits;
+
+  /// The part of the map the area must fill: inside the padding.
+  Size? get _insideView {
+    if (widget.keepInside == null || _viewSize.isEmpty) return null;
+    final view = widget.keepInsidePadding.deflateSize(_viewSize);
+    return view.isEmpty ? null : view;
+  }
+
+  /// Mercator y in degrees, so it scales like longitude on the map.
+  static double _mercatorY(double lat) =>
+      math.log(math.tan(math.pi / 4 + lat * math.pi / 360)) * 180 / math.pi;
+
+  static double _latitudeOf(double y) =>
+      math.atan(_sinh(y * math.pi / 180)) * 180 / math.pi;
+
+  static double _sinh(double x) => (math.exp(x) - math.exp(-x)) / 2;
+
+  /// Degrees across [pixels] at MapLibre [zoom] (512-pixel tiles).
+  static double _degreesAcross(double pixels, double zoom) =>
+      pixels * 360 / (512 * math.pow(2, zoom));
+
+  /// Lowest MapLibre zoom: [TransitMap.keepInside] fills the view across
+  /// and top to bottom, so nothing outside it shows (its far ends are
+  /// reached by panning).
+  double? get _insideMinZoom {
+    final area = widget.keepInside;
+    final view = _insideView;
+    if (area == null || view == null) return null;
+    final lngSpan = area.northEast.longitude - area.southWest.longitude;
+    final ySpan =
+        _mercatorY(area.northEast.latitude) -
+        _mercatorY(area.southWest.latitude);
+    double fit(double pixels, double span) =>
+        math.log(pixels * 360 / (512 * span)) / math.ln2;
+    return math.max(fit(view.width, lngSpan), fit(view.height, ySpan));
+  }
+
+  /// Where the center may go at MapLibre [zoom] for the view to stay in
+  /// the area; on an axis where the view is wider, the middle.
+  ml.LatLngBounds? _centerLimitsAt(double zoom) {
+    final area = widget.keepInside;
+    final view = _insideView;
+    if (area == null || view == null) return null;
+    final halfLng = _degreesAcross(view.width / 2, zoom);
+    final halfY = _degreesAcross(view.height / 2, zoom);
+    var west = area.southWest.longitude + halfLng;
+    var east = area.northEast.longitude - halfLng;
+    if (west > east) west = east = (west + east) / 2;
+    var south = _mercatorY(area.southWest.latitude) + halfY;
+    var north = _mercatorY(area.northEast.latitude) - halfY;
+    if (south > north) south = north = (south + north) / 2;
+    return ml.LatLngBounds(
+      southwest: ml.LatLng(_latitudeOf(south), west),
+      northeast: ml.LatLng(_latitudeOf(north), east),
+    );
+  }
+
+  /// Once the camera settles: back inside if the view ended up past the
+  /// area (zooming out widens it), then the center's limits for this zoom.
+  void _keepViewInside(ml.CameraPosition position) {
+    final limits = _centerLimitsAt(position.zoom);
+    if (limits == null) return;
+    final center = position.target;
+    final lat = center.latitude.clamp(
+      limits.southwest.latitude,
+      limits.northeast.latitude,
+    );
+    final lng = center.longitude.clamp(
+      limits.southwest.longitude,
+      limits.northeast.longitude,
+    );
+    if ((lat - center.latitude).abs() > 1e-7 ||
+        (lng - center.longitude).abs() > 1e-7) {
+      // The next settle sets the limits.
+      _ml?.animateCamera(
+        ml.CameraUpdate.newLatLng(ml.LatLng(lat, lng)),
+        duration: const Duration(milliseconds: 250),
+      );
+      return;
+    }
+    if (_sameBounds(_insideLimits, limits)) return;
+    setState(() => _insideLimits = limits);
+  }
+
+  static bool _sameBounds(ml.LatLngBounds? a, ml.LatLngBounds? b) =>
+      a != null &&
+      b != null &&
+      a.southwest == b.southwest &&
+      a.northeast == b.northeast;
+
+  /// Before a camera move by the app (a region, a search result): the
+  /// limits are for the zoom the camera settled at, and would hold the
+  /// move back (from all of Metro Manila, the center can't leave its
+  /// middle). They open to the whole area for the move, and tighten again
+  /// once it settles.
+  Future<void> _openLimitsForMove() async {
+    if (widget.keepInside == null) return;
+    final open = _centerLimitsAt(
+      widget.maxZoom - TransitMapController.zoomOffset,
+    );
+    if (open == null || _sameBounds(_insideLimits, open)) return;
+    setState(() => _insideLimits = open);
+    // The map gets the new limits during the frame, before the move.
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  /// [center] moved just enough for the view at MapLibre [zoom] to stay in
+  /// [TransitMap.keepInside].
+  LatLng _insideCenter(LatLng center, double zoom) {
+    final limits = _centerLimitsAt(
+      math.max(zoom, _insideMinZoom ?? double.negativeInfinity),
+    );
+    if (limits == null) return center;
+    return LatLng(
+      center.latitude.clamp(
+        limits.southwest.latitude,
+        limits.northeast.latitude,
+      ),
+      center.longitude.clamp(
+        limits.southwest.longitude,
+        limits.northeast.longitude,
+      ),
+    );
   }
 
   // ─── Taps and gestures ────────────────────────────────────────────────────
@@ -805,6 +1067,22 @@ class _TransitMapState extends State<TransitMap>
   DateTime _userSentAt = DateTime(0);
   bool _userSending = false;
   bool _userResend = false;
+  Timer? _userLater;
+
+  void _onUserHeading() => _sendUser();
+
+  /// MapLibre zoom as the camera moves (screens with an arrow only), and
+  /// the zoom the arrow was last drawn for.
+  double? _liveZoom;
+  double? _arrowZoom;
+
+  /// The arrow is built in meters: while zooming it's redrawn as it goes,
+  /// so it doesn't swell up (or shrink away) until the zoom settles.
+  void _onCameraMove(ml.CameraPosition position) {
+    _liveZoom = position.zoom;
+    final drawn = _arrowZoom;
+    if (drawn != null && (position.zoom - drawn).abs() > 0.03) _sendUser();
+  }
 
   LatLng? get _userShown {
     final to = _glideTo;
@@ -877,20 +1155,34 @@ class _TransitMapState extends State<TransitMap>
       return;
     }
     final now = DateTime.now();
-    if (!force && now.difference(_userSentAt).inMilliseconds < 33) return;
+    final wait = 33 - now.difference(_userSentAt).inMilliseconds;
+    if (!force && wait > 0) {
+      // Too soon: the latest goes a moment later, so the last turn of
+      // the arrow isn't dropped.
+      _userLater ??= Timer(Duration(milliseconds: wait), () {
+        _userLater = null;
+        if (mounted) _sendUser(force: true);
+      });
+      return;
+    }
+    _userLater?.cancel();
+    _userLater = null;
     _userSentAt = now;
     final user = widget.user;
     final at = _userShown;
+    final zoom =
+        _liveZoom ??
+        (widget.controller._camera?.zoom ?? 15) -
+            TransitMapController.zoomOffset;
+    _arrowZoom = zoom;
     final json =
         user == null || at == null
             ? _Layers.collection(const [])
             : _Layers.userFeatures(
               at,
               accuracyMeters: user.accuracyMeters,
-              headingDegrees:
-                  user.speedMps >= MapUser.headingSpeedMps
-                      ? user.headingDegrees
-                      : null,
+              headingDegrees: widget.userHeading?.value ?? user.headingDegrees,
+              zoom: zoom,
             );
     _userSending = true;
     controller

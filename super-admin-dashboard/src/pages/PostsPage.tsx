@@ -94,7 +94,6 @@ export function PostsPage() {
           <button
             type="button"
             className={`btn btn-sm ${activeTab === 'reported' ? 'btn-primary' : 'btn-outline'}`}
-            data-confirm-skip="true"
             onClick={() => setActiveTab('reported')}
           >
             Reported ({reportedPosts.length})
@@ -102,7 +101,6 @@ export function PostsPage() {
           <button
             type="button"
             className={`btn btn-sm ${activeTab === 'all' ? 'btn-primary' : 'btn-outline'}`}
-            data-confirm-skip="true"
             onClick={() => setActiveTab('all')}
           >
             All Posts ({posts.length})
@@ -204,7 +202,6 @@ export function PostsPage() {
                       <div className="action-group">
                         <button
                           className="btn btn-sm btn-outline"
-                          data-confirm-skip="true"
                           onClick={() => setPreview(p)}
                         >
                           View

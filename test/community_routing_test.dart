@@ -89,8 +89,10 @@ void main() {
 
       // Its geometry must run Monumento → VGC, i.e. already reversed.
       final path = legs[1].communityPath!;
-      expect(distance.as(LengthUnit.Meter, path.first, nearMonumento),
-          lessThan(400));
+      expect(
+        distance.as(LengthUnit.Meter, path.first, nearMonumento),
+        lessThan(400),
+      );
       expect(distance.as(LengthUnit.Meter, path.last, vgcArea), lessThan(400));
     });
 
@@ -128,19 +130,54 @@ void main() {
       expect(alternatives, isNotEmpty);
       final label = alternatives.first.result.plan.legs.single.communityLabel!;
       expect(label, contains('get off at the stop near'));
-      expect(label, matches(RegExp('SM City Grand Central|Bonifacio Monument')));
+      expect(
+        label,
+        matches(RegExp('SM City Grand Central|Bonifacio Monument')),
+      );
     });
 
-    test('no route when community routes do not reach the destination',
-        () async {
+    test('chains three contributed routes', () async {
+      const valenzuela = LatLng(14.6950, 120.9650);
       final alternatives =
           await SupabaseRouteService.planWithCommunityRoutesOnly(
-            origin: const LatLng(14.6204, 120.9903),
-            destination: const LatLng(14.7154, 120.9853),
-            communityRoutes: [stiToMonumento],
+            origin: const LatLng(14.6952, 120.9648),
+            destination: const LatLng(14.6198, 120.9902),
+            communityRoutes: [
+              jeepRoute('v', 'Valenzuela', 'VGC Canumay', valenzuela, vgcArea),
+              jeepRoute(
+                'w',
+                'VGC Canumay',
+                'Monumento',
+                vgcArea,
+                nearMonumento,
+              ),
+              jeepRoute('x', 'Monumento', 'STI Caloocan', monumento, stiArea),
+            ],
           );
-      expect(alternatives, isEmpty);
+
+      expect(alternatives, isNotEmpty);
+      final labels = [
+        for (final leg in alternatives.first.result.plan.legs)
+          leg.communityLabel,
+      ];
+      expect(labels, hasLength(3));
+      expect(labels[0], contains('Valenzuela → VGC Canumay'));
+      expect(labels[1], contains('VGC Canumay → Monumento'));
+      expect(labels[2], contains('Monumento → STI Caloocan'));
     });
+
+    test(
+      'no route when community routes do not reach the destination',
+      () async {
+        final alternatives =
+            await SupabaseRouteService.planWithCommunityRoutesOnly(
+              origin: const LatLng(14.6204, 120.9903),
+              destination: const LatLng(14.7154, 120.9853),
+              communityRoutes: [stiToMonumento],
+            );
+        expect(alternatives, isEmpty);
+      },
+    );
   });
 
   group('CommunityRoute.fromRoute', () {
@@ -169,9 +206,10 @@ void main() {
     }
 
     test('splits the drawn path into steps at the step boundaries', () {
-      final community = CommunityRoute.fromRoute(
-        route(status: route_model.RouteApprovalStatus.approved),
-      )!;
+      final community =
+          CommunityRoute.fromRoute(
+            route(status: route_model.RouteApprovalStatus.approved),
+          )!;
       expect(community.steps, hasLength(2));
       expect(community.steps[0].path, hasLength(3)); // indices 0..2
       expect(community.steps[1].path, hasLength(4)); // indices 2..5

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -10,8 +9,8 @@ import '../map_tab/place_widgets.dart';
 /// The pictures on the MapLibre map (MapLibre can't show widgets on the
 /// map itself): the same neutral place pins as [PlacePin], route start and
 /// end markers, the drawing map's handles, the red pin of a searched place
-/// and the blue "you are here" dot with its heading cone. Drawn at the
-/// screen's [pixelRatio], so MapLibre shows them at their logical size.
+/// and the traveler's blue dot (the arrow is a 3D shape instead). Drawn at
+/// the screen's [pixelRatio], so MapLibre shows them at their logical size.
 class MapPinImages {
   MapPinImages._();
 
@@ -23,7 +22,6 @@ class MapPinImages {
 
   static const foundPin = 'tph-found';
   static const userDot = 'tph-me';
-  static const headingCone = 'tph-heading';
   static const coordMark = 'tph-coord';
 
   /// A drawn route's start (green pin) and end (red flag).
@@ -60,7 +58,6 @@ class MapPinImages {
       foundPin: await _icon(Icons.place, Colors.red, 44, pixelRatio),
       coordMark: await _icon(Icons.add, _blue, 40, pixelRatio),
       userDot: await _userDot(pixelRatio),
-      headingCone: await _headingCone(pixelRatio),
       routeStart: await _icon(Icons.location_on, Colors.green, 40, pixelRatio),
       routeEnd: await _icon(Icons.flag, Colors.red, 40, pixelRatio),
       badgeStart: await _badge(
@@ -136,33 +133,6 @@ class MapPinImages {
           ..strokeWidth = 1.6,
       );
       _paintIcon(canvas, Icons.add_rounded, _blue, 11, center);
-    });
-  }
-
-  /// A soft wedge pointing up (north before rotation) from the center.
-  static Future<Uint8List> _headingCone(double pixelRatio) {
-    const size = 56.0;
-    return _draw(size, pixelRatio, (canvas) {
-      const center = Offset(size / 2, size / 2);
-      const radius = size / 2;
-      const halfAngle = 0.45;
-      final path =
-          Path()
-            ..moveTo(center.dx, center.dy)
-            ..arcTo(
-              Rect.fromCircle(center: center, radius: radius),
-              -math.pi / 2 - halfAngle,
-              halfAngle * 2,
-              false,
-            )
-            ..close();
-      canvas.drawPath(
-        path,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [_blue.withValues(alpha: 0.45), _blue.withValues(alpha: 0)],
-          ).createShader(Rect.fromCircle(center: center, radius: radius)),
-      );
     });
   }
 

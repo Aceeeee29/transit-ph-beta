@@ -172,7 +172,10 @@ class DijkstraTripPlanResult {
   });
 }
 
-enum RouteOptimizationMode { budget, fastest, balanced }
+/// [community]: balanced, but riding on rider-contributed routes wherever
+/// one is within a 20-minute walk, so a nearby rider route is always among
+/// the options even when the transit feed has a cheaper ride.
+enum RouteOptimizationMode { budget, fastest, balanced, community }
 
 class DijkstraRouteAlternative {
   final DijkstraTripPlanResult result;
@@ -388,6 +391,37 @@ class SupabaseRouteService {
   static const _transferBasePenaltySec = 90.0;
   static const _maxAccessWalkKm = 2.4;
   static const _boardingPenaltySec = 180.0;
+
+  /// Walks follow streets around blocks and houses: about this much longer
+  /// than the straight line.
+  static const _walkRoadFactor = 1.3;
+
+  /// Walking further than this (by road) counts double when weighing
+  /// routes, so a ride that comes closer wins over a long walk to the next
+  /// one (a tricycle 300 m away to the jeep, rather than 1 km on foot).
+  static const _easyWalkMeters = 400.0;
+
+  /// The community search walks to a rider route only this far (20 minutes
+  /// on foot, by road), at either end.
+  static const _communityMaxWalkMeters = 20 / 60 * _walkSpeedKmh * 1000;
+
+  /// A walk of [straightKm] as the crow flies, measured by road.
+  static _GraphEdge _walkEdge(
+    String from,
+    String to,
+    double straightKm, {
+    double extraSec = 0,
+  }) {
+    final roadKm = straightKm * _walkRoadFactor;
+    return _GraphEdge(
+      from: from,
+      to: to,
+      costSeconds: roadKm / _walkSpeedKmh * 3600 + extraSec,
+      distanceMeters: roadKm * 1000.0,
+      isWalk: true,
+    );
+  }
+
   static const _maxRideStopsSpan = 30;
 
   static const _inFilterChunk = 250;
@@ -701,6 +735,7 @@ class SupabaseRouteService {
       final edges = adjacency[current.node] ?? const <_GraphEdge>[];
       for (final edge in edges) {
         final edgeWeight = _edgeWeight(edge, optimizationMode);
+        if (edgeWeight.isInfinite) continue;
         final penalty =
             edgePenalties == null
                 ? 0.0
@@ -743,7 +778,19 @@ class SupabaseRouteService {
   static double _baseEdgeWeight(_GraphEdge edge, RouteOptimizationMode mode) {
     switch (mode) {
       case RouteOptimizationMode.balanced:
-        return edge.costSeconds;
+        return edge.isWalk ? _walkWeight(edge) : edge.costSeconds;
+      case RouteOptimizationMode.community:
+        if (edge.isWalk) {
+          final access = edge.from == _originNode || edge.to == _destNode;
+          if (access && edge.distanceMeters > _communityMaxWalkMeters) {
+            return double.infinity;
+          }
+          return _walkWeight(edge);
+        }
+        // Transit-feed rides only where no rider route goes.
+        return edge.routeId == 'COMMUNITY'
+            ? edge.costSeconds
+            : edge.costSeconds * 3.0;
       case RouteOptimizationMode.fastest:
         return edge.isWalk ? edge.costSeconds * 3.0 : edge.costSeconds * 0.5;
       case RouteOptimizationMode.budget:
@@ -756,6 +803,13 @@ class SupabaseRouteService {
   }
 
   static final _budgetEdgeWeights = Expando<double>('budgetEdgeWeight');
+
+  /// A walk's time, the part past [_easyWalkMeters] counted twice.
+  static double _walkWeight(_GraphEdge edge) {
+    final past = edge.distanceMeters - _easyWalkMeters;
+    if (past <= 0) return edge.costSeconds;
+    return edge.costSeconds + past / 1000 / _walkSpeedKmh * 3600;
+  }
 
   static double _budgetEdgeWeight(_GraphEdge edge) {
     final inferredMode =
@@ -842,25 +896,8 @@ class SupabaseRouteService {
         final dKm = _haversineKm(aPt, bPt);
         if (dKm > _transferRadiusKm) continue;
 
-        final walkSec = (dKm / _walkSpeedKmh) * 3600 + _transferBasePenaltySec;
-        addEdge(
-          _GraphEdge(
-            from: aId,
-            to: bId,
-            costSeconds: walkSec,
-            distanceMeters: dKm * 1000.0,
-            isWalk: true,
-          ),
-        );
-        addEdge(
-          _GraphEdge(
-            from: bId,
-            to: aId,
-            costSeconds: walkSec,
-            distanceMeters: dKm * 1000.0,
-            isWalk: true,
-          ),
-        );
+        addEdge(_walkEdge(aId, bId, dKm, extraSec: _transferBasePenaltySec));
+        addEdge(_walkEdge(bId, aId, dKm, extraSec: _transferBasePenaltySec));
       }
     }
 
@@ -884,28 +921,12 @@ class SupabaseRouteService {
 
       final walkInKm = _haversineKm(origin, pt);
       if (walkInKm <= _maxAccessWalkKm || originCandidateIds.contains(stopId)) {
-        addEdge(
-          _GraphEdge(
-            from: _originNode,
-            to: stopId,
-            costSeconds: (walkInKm / _walkSpeedKmh) * 3600,
-            distanceMeters: walkInKm * 1000.0,
-            isWalk: true,
-          ),
-        );
+        addEdge(_walkEdge(_originNode, stopId, walkInKm));
       }
 
       final walkOutKm = _haversineKm(pt, destination);
       if (walkOutKm <= _maxAccessWalkKm || destCandidateIds.contains(stopId)) {
-        addEdge(
-          _GraphEdge(
-            from: stopId,
-            to: _destNode,
-            costSeconds: (walkOutKm / _walkSpeedKmh) * 3600,
-            distanceMeters: walkOutKm * 1000.0,
-            isWalk: true,
-          ),
-        );
+        addEdge(_walkEdge(stopId, _destNode, walkOutKm));
       }
     }
 
@@ -1500,6 +1521,9 @@ class SupabaseRouteService {
         RouteOptimizationMode.budget => budgetScore,
         RouteOptimizationMode.fastest => fastestScore,
         RouteOptimizationMode.balanced => balancedScore,
+        // Most riding on rider routes first.
+        RouteOptimizationMode.community =>
+          balancedScore - riderRouteShare(results[i]),
       };
 
       out.add(

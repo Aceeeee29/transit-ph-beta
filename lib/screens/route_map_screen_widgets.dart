@@ -496,11 +496,24 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         southWest: const LatLng(4.5, 116.0),
         northEast: const LatLng(21.5, 127.0),
       ),
+      // Zooming out stops at Metro Manila (with all of the route and the
+      // traveler), as on the Map tab.
+      keepInside: TransitMap.areaWith(TransitMap.metroManila, [
+        ..._pathPoints,
+        _displayPosition,
+      ]),
+      keepInsidePadding: const EdgeInsets.fromLTRB(
+        16,
+        120,
+        16,
+        _RouteMapScreenState._drawerPeekHeight + 16,
+      ),
       places: _mapPlaces,
       lines: _lines,
       dots: _dots,
       icons: _icons,
       user: _mapUser,
+      userHeading: _facing,
       onTap: (_) => _clearSelectedPlace(),
       onPlaceTap: _onPlaceTapped,
       onUserGesture: () {

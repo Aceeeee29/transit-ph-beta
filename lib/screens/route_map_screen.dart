@@ -27,6 +27,7 @@ import '../widgets/route_map/follow_route_layers.dart';
 import '../widgets/route_map/follow_simulator_sheet.dart';
 import '../widgets/route_map/ride_correction_flow.dart';
 import '../services/osm_places.dart';
+import '../services/facing.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
@@ -80,6 +81,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   Position? _currentPosition;
   LatLng? _displayPosition;
   double _displayHeading = 0;
+
+  /// Which way the traveler faces; turns the arrow and, while following,
+  /// the map.
+  final _facing = Facing();
+  DateTime _lastTurnAt = DateTime(0);
   LatLng? _lastCameraTarget;
   DateTime? _lastCameraMoveAt;
   bool _isAutoFollowEnabled = false;
@@ -156,6 +162,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
     MapTabController.instance.placeCategories.addListener(_onSharedMapState);
     MapTabController.instance.showPins.addListener(_onSharedMapState);
+    _facing
+      ..start()
+      ..addListener(_onFacingChanged);
     OsmPlaces.all().then((places) {
       if (mounted) setState(() => _allPlaces = places);
     });
@@ -182,14 +191,36 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     required double zoom,
     double bearing = 0,
   }) {
-    _map.moveTo(
+    _map.follow(
       target,
       zoom: zoom,
       bearing: bearing,
       tilt: _tilted ? _tilt3d : 0,
-      duration: const Duration(milliseconds: 900),
-      linear: true,
     );
+  }
+
+  /// Where the traveler faces (compass on foot, road on a ride); the last
+  /// GPS direction until the compass reports.
+  double get _heading => _facing.value ?? _displayHeading;
+
+  /// Turning on the spot turns the map too while following, a few times a
+  /// second at most.
+  void _onFacingChanged() {
+    final heading = _facing.value;
+    if (heading == null ||
+        !_isNavigationStarted ||
+        !_isAutoFollowEnabled ||
+        _hasArrived) {
+      return;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastTurnAt).inMilliseconds < 200) return;
+    final bearing = _map.camera?.bearing;
+    if (bearing != null && Facing.difference(bearing, heading).abs() < 4) {
+      return;
+    }
+    _lastTurnAt = now;
+    _map.turnTo(heading);
   }
 
   /// The 2D/3D button.
@@ -552,7 +583,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final display = _followSnapshot?.displayPosition ?? _rawLatLng(position);
     setState(() => _applyPosition(position, display));
     if (_isAutoFollowEnabled && !_hasArrived) {
-      _maybeMoveCamera(display, heading: _displayHeading);
+      _maybeMoveCamera(display, heading: _heading);
     }
   }
 
@@ -567,6 +598,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   void _applyPosition(Position position, LatLng display) {
     _currentPosition = position;
     _displayPosition = display;
+    _facing.onFix(position);
     // GPS heading is noise when barely moving (often reported as 0, which
     // spun the map north); keep the last good heading until moving again.
     if (position.speed >= _minHeadingSpeedMps) {
@@ -790,11 +822,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     if (_isNavigationStarted && !_isAutoFollowEnabled) {
       setState(() => _isAutoFollowEnabled = true);
     }
-    _smoothMoveCamera(
-      _displayPosition!,
-      zoom: _followZoom,
-      bearing: _displayHeading,
-    );
+    _smoothMoveCamera(_displayPosition!, zoom: _followZoom, bearing: _heading);
   }
 
   void _startNavigation() {
@@ -941,6 +969,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
     _drawerController.dispose();
+    _facing.dispose();
     _positionSubscription?.cancel();
     super.dispose();
   }
@@ -1279,15 +1308,18 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     return 'Board or get off anywhere along the route';
   }
 
-  /// The traveler's dot, drawn above every other layer.
+  /// The traveler's arrow, drawn above every other layer. It turns with
+  /// [_facing]; without a compass, with the GPS direction while moving
+  /// (a dot when standing).
   MapUser? get _mapUser {
     final at = _displayPosition;
     if (at == null) return null;
+    final speed = _currentPosition?.speed ?? 0;
     return MapUser(
       at,
       accuracyMeters: _currentPosition?.accuracy ?? 0,
-      headingDegrees: _displayHeading,
-      speedMps: _currentPosition?.speed ?? 0,
+      headingDegrees: speed >= _minHeadingSpeedMps ? _displayHeading : null,
+      speedMps: speed,
     );
   }
 

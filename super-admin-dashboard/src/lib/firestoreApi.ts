@@ -30,6 +30,7 @@ import type {
   FeedbackItem,
   PostItem,
   RouteItem,
+  RouteStopItem,
   UserRole,
 } from '@/types/models'
 
@@ -301,7 +302,14 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
           instruction: typeof s?.instruction === 'string' ? s.instruction : '',
           details: typeof s?.details === 'string' ? s.details : undefined,
           actualFare: typeof s?.actualFare === 'number' ? s.actualFare : undefined,
+          // Like the app: trains, and steps set to designated stops.
+          stops:
+            s?.mode === 'Train' || s?.boarding === 'designated' ? toLatLngs(s?.stops) : undefined,
         }))
+      : [],
+    pathPoints: toLatLngs(data.pathPoints),
+    stepBoundaries: Array.isArray(data.stepBoundaries)
+      ? data.stepBoundaries.filter((b: unknown): b is number => typeof b === 'number')
       : [],
     transportModes: Array.isArray(data.steps)
       ? Array.from(
@@ -317,6 +325,16 @@ function mapRouteDoc(d: QueryDocumentSnapshot<DocumentData>): RouteItem {
     distance: typeof data.distance === 'string' ? data.distance : undefined,
     distanceMeters: typeof data.distanceMeters === 'number' ? data.distanceMeters : undefined,
   }
+}
+
+/** `[{lat, lng, name?}]` as saved by the app; anything else is skipped. */
+function toLatLngs(value: unknown): RouteStopItem[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((p: unknown) => {
+    const point = p as Record<string, unknown> | null
+    if (typeof point?.lat !== 'number' || typeof point?.lng !== 'number') return []
+    return [{ lat: point.lat, lng: point.lng, name: typeof point.name === 'string' ? point.name : undefined }]
+  })
 }
 
 function toNonEmptyString(value: unknown): string | null {

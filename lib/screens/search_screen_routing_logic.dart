@@ -123,6 +123,16 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             maxAlternatives: 8,
             communityRoutes: communityRoutes,
           ),
+          // A rider route within a 20-minute walk (either end) is always
+          // among the options, even when the transit feed rides cheaper.
+          if (communityRoutes.isNotEmpty)
+            RoutingService.getRouteAlternatives(
+              origin: origin,
+              destination: destLatLng,
+              optimization: 'community',
+              maxAlternatives: 3,
+              communityRoutes: communityRoutes,
+            ),
         ]);
         if (_isStaleRouteRequest(requestId)) return;
 
@@ -237,11 +247,17 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         // distance) comes first (and is the one shown on open).
         double riderShare(DijkstraRouteAlternative alt) =>
             SupabaseRouteService.riderRouteShare(alt.result);
+        // Ties: the one with less walking (a tricycle to the jeep beats
+        // walking 1 km to it).
         DijkstraRouteAlternative? mostCommunity;
         for (final alt in merged) {
           final share = riderShare(alt);
-          if (share > 0 &&
-              (mostCommunity == null || share > riderShare(mostCommunity))) {
+          if (share <= 0) continue;
+          final best = mostCommunity;
+          if (best == null ||
+              share > riderShare(best) ||
+              (share == riderShare(best) &&
+                  alt.totalWalkKm < best.totalWalkKm)) {
             mostCommunity = alt;
           }
         }

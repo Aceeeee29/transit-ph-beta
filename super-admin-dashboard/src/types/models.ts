@@ -53,6 +53,18 @@ export interface RouteItem {
   price?: string
   distance?: string
   distanceMeters?: number
+  /** The drawn line, and where each step ends on it (indexes). */
+  pathPoints?: LatLngItem[]
+  stepBoundaries?: number[]
+}
+
+export interface LatLngItem {
+  lat: number
+  lng: number
+}
+
+export interface RouteStopItem extends LatLngItem {
+  name?: string
 }
 
 export interface RouteStepItem {
@@ -60,6 +72,8 @@ export interface RouteStepItem {
   instruction: string
   details?: string
   actualFare?: number
+  /** Designated stops, for steps that only board at them. */
+  stops?: RouteStopItem[]
 }
 
 export interface PostItem {

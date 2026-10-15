@@ -405,6 +405,24 @@ a { color: inherit; text-decoration: none; }
   margin-left: auto;
 }
 
+/* Shown while table rows are checked: actions for all of them. */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+
+.selection-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 /* ── TABLE ────────────────────────────────────────────────────────────────── */
 .table-wrap {
   overflow-x: auto;
@@ -1115,4 +1133,22 @@ label {
 @media (max-width: 480px) {
   .grid-stats { grid-template-columns: 1fr; }
   .login-card { padding: 24px 20px; }
+}
+/* Route preview map (Routes > Preview) */
+.route-preview-map {
+  height: 300px;
+  margin: 12px 0 4px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+}
+
+.route-preview-map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  background: var(--surface-alt);
 }

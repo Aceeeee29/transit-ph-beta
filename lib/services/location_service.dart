@@ -120,24 +120,35 @@ class LocationService {
     );
   }
 
-  /// Forward geocode a location name into coordinates
+  /// Forward geocode a location name into coordinates in the Philippines:
+  /// the phone's geocoder searches the whole world ("253 Galicia Obando"
+  /// came back in Galicia, Spain), so places elsewhere are skipped, and the
+  /// name is tried again with ", Philippines" when nothing here matched.
   static Future<Location?> getCoordinatesFromAddress(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       return null;
     }
 
-    try {
-      final matches = await locationFromAddress(
-        trimmed,
-      ).timeout(const Duration(seconds: 6));
-      if (matches.isEmpty) {
-        return null;
+    bool inPhilippines(Location l) =>
+        l.latitude >= 4.5 &&
+        l.latitude <= 21.5 &&
+        l.longitude >= 116.0 &&
+        l.longitude <= 127.0;
+
+    for (final attempt in [trimmed, '$trimmed, Philippines']) {
+      try {
+        final matches = await locationFromAddress(
+          attempt,
+        ).timeout(const Duration(seconds: 6));
+        for (final match in matches) {
+          if (inPhilippines(match)) return match;
+        }
+      } catch (e) {
+        debugPrint('[Geocoding] Phone geocoder error for "$attempt": $e');
       }
-      return matches.first;
-    } catch (e) {
-      return null;
     }
+    return null;
   }
 
   /// Check if it's rush hour (7-9 AM or 5-7 PM)

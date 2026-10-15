@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show HttpOverrides;
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
+import 'services/ipv4_first_http.dart';
 import 'services/location_service.dart';
 import 'services/moderation_service.dart';
 import 'services/offline_tile_service.dart';
@@ -82,6 +84,10 @@ ThemeData buildTheme({bool dark = false}) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Before anything goes online: IPv4 where a server has it, so a
+  // connection with broken IPv6 doesn't hang every request.
+  if (!kIsWeb) HttpOverrides.global = Ipv4FirstHttpOverrides();
 
   // Load .env first — everything else depends on it
   await dotenv.load();

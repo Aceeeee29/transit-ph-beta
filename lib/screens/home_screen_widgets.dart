@@ -217,7 +217,7 @@ extension _HomeScreenSections on _HomeScreenState {
             children: [
               Flexible(
                 child: TranslatedText(
-                  '🏷️ Routes Matching Your Tags',
+                  'Matching Routes',
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                   style: TextStyle(
@@ -280,17 +280,17 @@ extension _HomeScreenSections on _HomeScreenState {
         ],
         if (_recommendations['rushHourAlternatives']?.isNotEmpty == true)
           _buildRecommendationSection(
-            '🚗 Rush Hour Alternatives',
+            'Rush Hour Alternatives',
             _recommendations['rushHourAlternatives']!,
           ),
         if (_recommendations['forYou']?.isNotEmpty == true)
           _buildRecommendationSection(
-            '⭐ Recommended for You',
+            'Recommended for You',
             _recommendations['forYou']!,
           ),
         if (_recommendations['popular']?.isNotEmpty == true)
           _buildRecommendationSection(
-            '🔥 Popular Routes',
+            'Popular Routes',
             _recommendations['popular']!,
           ),
       ],
