@@ -242,7 +242,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           controller: widget.startLocationController,
           style: TextStyle(color: _textPrimary, fontSize: 13),
           decoration: _buildInputDecoration(
-            label: 'Starting Location (tap map to select or type)',
+            label: 'Starting Location (e.g. SM City Grand Central)',
           ),
         ),
         const SizedBox(height: 16),
@@ -250,7 +250,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           controller: widget.endLocationController,
           style: TextStyle(color: _textPrimary, fontSize: 13),
           decoration: _buildInputDecoration(
-            label: 'End Location (tap map to select or type)',
+            label: 'End Location (e.g. Malabon City Hall)',
           ),
         ),
       ],

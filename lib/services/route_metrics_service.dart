@@ -34,7 +34,7 @@ class RouteMetricsService {
     }
 
     double totalDistance = 0;
-    final Distance distanceCalculator = Distance();
+    final Distance distanceCalculator = const Distance(roundResult: false);
 
     for (int i = 0; i < points.length - 1; i++) {
       final point1 = points[i];
@@ -55,7 +55,7 @@ class RouteMetricsService {
     if (points.length < 2 || modes.isEmpty) return 0;
 
     double totalMinutes = 0;
-    final Distance distanceCalculator = const Distance();
+    final Distance distanceCalculator = const Distance(roundResult: false);
 
     // Calculate ETA for each step
     for (int i = 0; i < modes.length; i++) {
@@ -235,7 +235,7 @@ class RouteMetricsService {
     if (points.length < 2 || modes.isEmpty) return 'PHP 0';
 
     double totalFare = 0;
-    final Distance distanceCalculator = const Distance();
+    final Distance distanceCalculator = const Distance(roundResult: false);
 
     // Calculate fare for each step
     for (int i = 0; i < modes.length; i++) {
@@ -286,7 +286,7 @@ class RouteMetricsService {
     if (points.length < 2 || modes.isEmpty) return 0.0;
 
     double totalCo2Saved = 0;
-    final Distance distanceCalculator = const Distance();
+    final Distance distanceCalculator = const Distance(roundResult: false);
 
     // Calculate CO2 for each step
     for (int i = 0; i < modes.length; i++) {

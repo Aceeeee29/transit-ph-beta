@@ -2,7 +2,7 @@ import 'package:latlong2/latlong.dart';
 
 /// Great-circle (Haversine) distance in kilometers between two coordinates.
 double kmBetween(LatLng a, LatLng b) {
-  return const Distance().as(LengthUnit.Kilometer, a, b);
+  return const Distance(roundResult: false).as(LengthUnit.Kilometer, a, b);
 }
 
 /// Human-readable distance label, e.g. `500 m`, `1.2 km`, `3.5 km`.

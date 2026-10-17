@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.30 — October 17, 2026
+
+- Fixed routes drawn in Contribute showing "0 m · 0 min": distance, time
+  and fare now come from the actual line, and routes you submit save
+  their real distance
+- Distances to places and per-step distances and fares on a route are
+  exact instead of rounded to whole kilometers
+- While following a route, finished steps are crossed out and marked
+  "Done", on generated routes too
+- Contribute no longer fills in the start and end locations from the map:
+  type them yourself in Basic Info (both are needed to submit)
+
 ## v1.0.29 — October 17, 2026
 
 - Far from a route when you press Start? The app offers to find a way to

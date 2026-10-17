@@ -11,7 +11,7 @@ extension _RouteMapScreenWayToStart on _RouteMapScreenState {
   /// (opened instead) or closed the question.
   Future<bool> _offerWayToStartSection(LatLng here) async {
     if (_pathPoints.length < 2) return false;
-    const distance = Distance();
+    const distance = Distance(roundResult: false);
     final nearest = _pathPoints
         .map((p) => distance.as(LengthUnit.Meter, here, p))
         .reduce(math.min);

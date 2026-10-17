@@ -18,12 +18,18 @@ void main() {
       // 6 km jeepney: ₱14 + 2 km × ₱1.94.
       expect(PhFareCalculator.compute('Jeepney', 6000), closeTo(17.88, 0.001));
       // Buses over 10 km switch to the aircon rate.
-      expect(PhFareCalculator.compute('Bus', 12000), closeTo(18 + 7 * 3.18, 0.001));
+      expect(
+        PhFareCalculator.compute('Bus', 12000),
+        closeTo(18 + 7 * 3.18, 0.001),
+      );
     });
 
     test('train fares stay within the LRT/MRT range', () {
       expect(PhFareCalculator.compute('Train', 500), PhFareCalculator.trainMin);
-      expect(PhFareCalculator.compute('Train', 40000), PhFareCalculator.trainMax);
+      expect(
+        PhFareCalculator.compute('Train', 40000),
+        PhFareCalculator.trainMax,
+      );
     });
 
     test('mode names match regardless of case', () {
@@ -42,6 +48,34 @@ void main() {
     });
   });
 
+  group('drawn line metrics', () {
+    // A 3 km road line drawn as 300 points about 10 m apart, like a snapped
+    // contribution. Each piece is far under 1 km, so rounding every piece
+    // to whole kilometres used to make the line measure 0 m.
+    final line = [
+      for (var i = 0; i <= 300; i++) LatLng(14.65 + i * 0.00009, 120.95),
+    ];
+
+    test('distance adds up short pieces', () {
+      expect(
+        RouteMetricsService.calculateRouteDistance(line),
+        closeTo(3.0, 0.05),
+      );
+    });
+
+    test('ETA and fare use the real length', () {
+      // Tricycle at 15 km/h: 3 km is about 12 min, ₱16 + 1 km × ₱5.33.
+      expect(
+        RouteMetricsService.calculateEta(line, ['Tricycle'], [300]),
+        inInclusiveRange(11, 13),
+      );
+      expect(
+        RouteMetricsService.calculateFareEstimate(line, ['Tricycle'], [300]),
+        'PHP 21',
+      );
+    });
+  });
+
   group('stops between board and alight', () {
     final stops = {
       for (var i = 0; i < 6; i++)
@@ -51,16 +85,27 @@ void main() {
     const sequence = ['s0', 's1', 's2', 's3', 's4', 's5'];
 
     test('returns only the stops strictly between the two', () {
-      final via = SupabaseRouteService.viaStopPoints(sequence, 's1', 's4', stops);
+      final via = SupabaseRouteService.viaStopPoints(
+        sequence,
+        's1',
+        's4',
+        stops,
+      );
       expect(via, [at(2), at(3)]);
     });
 
     test('adjacent stops have nothing in between', () {
-      expect(SupabaseRouteService.viaStopPoints(sequence, 's2', 's3', stops), isEmpty);
+      expect(
+        SupabaseRouteService.viaStopPoints(sequence, 's2', 's3', stops),
+        isEmpty,
+      );
     });
 
     test('alighting before boarding yields nothing', () {
-      expect(SupabaseRouteService.viaStopPoints(sequence, 's4', 's1', stops), isEmpty);
+      expect(
+        SupabaseRouteService.viaStopPoints(sequence, 's4', 's1', stops),
+        isEmpty,
+      );
     });
 
     test('loop trips use the first alight after boarding', () {
@@ -70,7 +115,10 @@ void main() {
     });
 
     test('unknown trips yield nothing', () {
-      expect(SupabaseRouteService.viaStopPoints(null, 's0', 's5', stops), isEmpty);
+      expect(
+        SupabaseRouteService.viaStopPoints(null, 's0', 's5', stops),
+        isEmpty,
+      );
     });
   });
 }

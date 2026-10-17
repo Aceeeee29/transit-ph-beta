@@ -242,10 +242,8 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
   double? _distanceToPlace(Place place) {
     final here = _displayPosition;
     if (here == null) return null;
-    return const Distance().as(
-      LengthUnit.Kilometer,
-      here,
-      LatLng(place.lat, place.lng),
-    );
+    return const Distance(
+      roundResult: false,
+    ).as(LengthUnit.Kilometer, here, LatLng(place.lat, place.lng));
   }
 }

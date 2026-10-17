@@ -13,7 +13,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     double totalDurS = 0;
     double totalDistKm = 0;
     double totalFare = 0;
-    final Distance distCalc = const Distance();
+    final Distance distCalc = const Distance(roundResult: false);
 
     for (int i = 0; i < steps.length; i++) {
       final orsDistM = i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
@@ -160,6 +160,20 @@ extension _ContributeScreenSections on _ContributeScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: TranslatedText('Need at least start and end points on map'),
+        ),
+      );
+      return;
+    }
+
+    // Typed by the rider, never filled in for them: a street address from
+    // the map is rarely the name riders use for a terminal or landmark.
+    if (_startLocationController.text.trim().isEmpty ||
+        _endLocationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TranslatedText(
+            'Type the starting and end locations in Basic Info first.',
+          ),
         ),
       );
       return;

@@ -15,6 +15,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final isCompleted = _isStepCompleted(idx);
     final modeColor =
         isCompleted ? _textSecondary : (modeColors[step.mode] ?? _accent);
+    final instructionStyle = TextStyle(
+      fontSize: 13,
+      color: _textPrimary,
+      height: 1.4,
+    );
     final stepSchedule = _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
@@ -87,22 +92,29 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      step.mode,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: modeColor,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          step.mode,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: modeColor,
+                          ),
+                        ),
+                        if (isCompleted) ...[
+                          const SizedBox(width: 6),
+                          const StepDoneLabel(),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
                       step.instruction,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _textPrimary,
-                        height: 1.4,
-                      ),
+                      style:
+                          isCompleted
+                              ? StepDoneLabel.strike(instructionStyle)
+                              : instructionStyle,
                     ),
                     if (step.details.isNotEmpty) ...[
                       const SizedBox(height: 4),

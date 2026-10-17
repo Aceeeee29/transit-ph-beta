@@ -45,6 +45,7 @@ import '../widgets/map_tab/map_side_button.dart';
 import '../widgets/map_tab/place_category_chips.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
+import '../widgets/route_map/step_done_label.dart';
 import '../theme/app_colors.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_data.dart';
@@ -1071,7 +1072,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             : _pathPoints.length - 1;
 
     if (endIdx <= startIdx) return 0.0;
-    final distance = const Distance();
+    final distance = const Distance(roundResult: false);
     double total = 0.0;
     for (int i = startIdx; i < endIdx && i + 1 < _pathPoints.length; i++) {
       total += distance.as(

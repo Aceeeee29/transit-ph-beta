@@ -524,17 +524,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
         selectionMode = 'step';
       });
       _saveToHistory();
-      if (_startLocationController.text.isEmpty) {
-        final name = await LocationService.getAddressFromCoordinates(
-          point.latitude,
-          point.longitude,
-        );
-        if (mounted && _startLocationController.text.isEmpty) {
-          _startLocationController.text =
-              name ??
-              '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
-        }
-      }
     } else if (selectionMode == 'step') {
       if (pathPoints.isEmpty || _isPlacingStep) return;
       _isPlacingStep = true;
@@ -798,20 +787,6 @@ class _ContributeScreenState extends State<ContributeScreen> {
     if (!mounted || !shouldFinish) return;
 
     setState(() => selectionMode = 'done');
-    if (_endLocationController.text.isEmpty && pathPoints.isNotEmpty) {
-      final last = pathPoints.last;
-      final name = await LocationService.getAddressFromCoordinates(
-        last.latitude,
-        last.longitude,
-      );
-      if (mounted && _endLocationController.text.isEmpty) {
-        setState(() {
-          _endLocationController.text =
-              name ??
-              '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}';
-        });
-      }
-    }
   }
 
   void _showEditStepDialog(int index) {

@@ -37,6 +37,7 @@ import '../widgets/map_tab/map_side_button.dart';
 import '../widgets/map_tab/place_category_chips.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
+import '../widgets/route_map/step_done_label.dart';
 import '../theme/app_colors.dart';
 
 /// Displays an ORS-generated route on an interactive map.
@@ -623,11 +624,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   double? _distanceToPlace(Place place) {
     final here = _displayPosition;
     if (here == null) return null;
-    return const Distance().as(
-      LengthUnit.Kilometer,
-      here,
-      LatLng(place.lat, place.lng),
-    );
+    return const Distance(
+      roundResult: false,
+    ).as(LengthUnit.Kilometer, here, LatLng(place.lat, place.lng));
   }
 
   @override
@@ -909,7 +908,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         else
           for (var i = 0; i < widget.result.steps.length; i++) ...[
             if (i > 0) const Divider(height: 1, indent: 56),
-            _buildStepTile(widget.result.steps[i]),
+            _buildStepTile(widget.result.steps[i], _isStepCompleted(i)),
           ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -962,9 +961,19 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     );
   }
 
-  Widget _buildStepTile(OrsStep step) {
-    final modeColor = _modeColor(step.suggestedMode);
-    return ListTile(
+  /// Whether the traveler has passed the end of step [index] while
+  /// following (the same test that greys its part of the line).
+  bool _isStepCompleted(int index) {
+    final ranges = _stepRanges;
+    if (ranges.length != widget.result.steps.length) return false;
+    return FollowRouteLayers.isRangeCompleted(ranges[index], _followSnapshot);
+  }
+
+  Widget _buildStepTile(OrsStep step, bool isCompleted) {
+    final modeColor =
+        isCompleted ? AppColors.textSecondary : _modeColor(step.suggestedMode);
+    const instructionStyle = TextStyle(fontSize: 13);
+    final tile = ListTile(
       dense: true,
       leading: Container(
         width: 30,
@@ -974,7 +983,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
           shape: BoxShape.circle,
           border: Border.all(color: modeColor, width: 1.5),
         ),
-        child: Icon(_modeIcon(step.suggestedMode), size: 16, color: modeColor),
+        child: Icon(
+          isCompleted ? Icons.check_rounded : _modeIcon(step.suggestedMode),
+          size: 16,
+          color: modeColor,
+        ),
       ),
       title: Row(
         children: [
@@ -998,7 +1011,17 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(step.instruction, style: const TextStyle(fontSize: 13)),
+                Text(
+                  step.instruction,
+                  style:
+                      isCompleted
+                          ? StepDoneLabel.strike(instructionStyle)
+                          : instructionStyle,
+                ),
+                if (isCompleted) ...[
+                  const SizedBox(height: 3),
+                  const StepDoneLabel(),
+                ],
                 if (step.isCommunity) ...[
                   const SizedBox(height: 3),
                   const CommunityRouteBadge(),
@@ -1028,6 +1051,11 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ),
         ],
       ),
+    );
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 250),
+      opacity: isCompleted ? 0.5 : 1.0,
+      child: tile,
     );
   }
 
