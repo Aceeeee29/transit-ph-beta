@@ -131,7 +131,7 @@ class _VerifiedTag extends StatelessWidget {
           Icon(Icons.verified_rounded, size: 12, color: green),
           const SizedBox(width: 4),
           Text(
-            'Most rider-verified',
+            'Rider-verified',
             style: TextStyle(
               color: green,
               fontSize: 11,

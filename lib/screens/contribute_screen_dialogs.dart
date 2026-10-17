@@ -96,7 +96,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
             const SizedBox(height: 16),
             TranslatedText(
               isEdit
-                  ? 'Route Updated'
+                  ? 'Edit Sent for Review'
                   : (quickCreateMode
                       ? 'Quick Route Created'
                       : 'Pending Review'),
@@ -112,7 +112,7 @@ class _SubmitSuccessDialog extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: TranslatedText(
                 isEdit
-                    ? 'Your route has been updated successfully.'
+                    ? 'A moderator will review your changes. Until they approve them, the route is hidden from other riders.'
                     : (quickCreateMode
                         ? 'This temporary route is now available via quick link and expires automatically in 24 hours.'
                         : 'Your route has been submitted and is awaiting moderator approval. It will appear publicly once approved.'),

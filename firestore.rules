@@ -313,6 +313,23 @@ service cloud.firestore {
       );
     }
 
+    // ── ROUTE REPORTS ─────────────────────────────────────────────────────────
+    // Shown on every route on the same road, so every rider reads them.
+    // A rider files one as themselves, for at most a day; only staff keep
+    // one longer or remove it.
+    match /route_reports/{reportId} {
+      allow read: if isAuth();
+      allow create: if isAuth() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.kept == false &&
+        request.resource.data.type is string &&
+        request.resource.data.path is list &&
+        request.resource.data.path.size() <= 300 &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt < request.time + duration.value(25, 'h');
+      allow update, delete: if isStaff();
+    }
+
     // ── FEEDBACKS (reports) ───────────────────────────────────────────────────
     match /feedbacks/{feedbackId} {
       allow create: if isAuth();

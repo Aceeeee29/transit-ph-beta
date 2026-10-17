@@ -10,6 +10,7 @@
 // the previous LTFRB rates (e.g. jeepney ₱13 → ₱14 is +7.7%, so ₱1.80/km →
 // ₱1.94/km). LRT/MRT fares are unchanged.
 // =============================================================================
+import '../models/ors_route_result.dart';
 
 /// [base] covers the first [baseKm] kilometres; every km after that adds
 /// [perKm]. [typicalKm] is the long end of an everyday CAMANAVA ride on this
@@ -47,12 +48,39 @@ class PhFareCalculator {
   static double discountedFare(double fare) =>
       fare <= 0 ? fare : (fare * studentDiscount).ceilToDouble();
 
-  /// A trip's estimated fare as riders see it, e.g. "₱14–18": a range,
+  /// The 20% discount is given on jeepneys and buses only (EDSA Carousel
+  /// included); tricycles, trains, FX/vans and ferries charge everyone the
+  /// same.
+  static bool givesDiscount(String mode) {
+    final m = mode.toLowerCase();
+    return m.contains('jeep') || m.contains('bus') || m.contains('carousel');
+  }
+
+  /// A ride's fare on [mode], discounted when [discount] and [mode] gives
+  /// the discount.
+  static double rideFare(double fare, String mode, {required bool discount}) =>
+      discount && givesDiscount(mode) ? discountedFare(fare) : fare;
+
+  /// A generated trip's fare, with the discount on its jeepney and bus
+  /// rides when [discount].
+  static double tripFare(OrsRouteResult trip, {required bool discount}) {
+    final base = trip.baseFarePhp;
+    if (!discount) return base;
+    var off = 0.0;
+    for (final step in trip.steps) {
+      if (step.estimatedFare <= 0) continue;
+      off +=
+          step.estimatedFare -
+          rideFare(step.estimatedFare, step.suggestedMode, discount: true);
+    }
+    return base - off < 0 ? 0 : base - off;
+  }
+
+  /// A trip's estimated [fare] as riders see it, e.g. "₱14–18": a range,
   /// since the real fare depends on where you board and get off.
-  static String tripEstimateLabel(double baseFare, {bool student = false}) {
-    if (!baseFare.isFinite) return '₱—';
-    if (baseFare <= 0) return 'Free';
-    final fare = student ? discountedFare(baseFare) : baseFare;
+  static String tripEstimateLabel(double fare) {
+    if (!fare.isFinite) return '₱—';
+    if (fare <= 0) return 'Free';
     return '₱${(fare * 0.9).round()}–${(fare * 1.15).round()}';
   }
 

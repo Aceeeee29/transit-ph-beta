@@ -20,7 +20,10 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final isTransport = step.mode != 'Walk';
     final estimatedFare = isTransport ? _estimateStepFare(idx, step) : 0.0;
     final baseFareValue = step.actualFare ?? estimatedFare;
-    final fareValue = _applyFareDiscount(baseFareValue);
+    final fareValue = _applyFareDiscount(baseFareValue, step.mode);
+    // Only jeepneys and buses give the discount.
+    final showsDiscount =
+        _isDiscountFareEnabled && PhFareCalculator.givesDiscount(step.mode);
     final fareProfileLabel = FareDiscountToggle.defaultLabel;
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 250),
@@ -210,11 +213,12 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
                           border: Border.all(color: const Color(0xFFB9E4C6)),
                         ),
                         // The regular fare is always shown; the discounted
-                        // one is added when the discount toggle is on.
+                        // one is added when the discount toggle is on and
+                        // the ride gives it.
                         child: Text(
                           'Fare: PHP ${baseFareValue.toStringAsFixed(0)} '
                           '(${step.actualFare != null ? 'actual' : 'estimated'})'
-                          '${_isDiscountFareEnabled ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}',
+                          '${showsDiscount ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,

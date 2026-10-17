@@ -925,9 +925,9 @@ class _SearchScreenState extends State<SearchScreen> {
         : '${km.toStringAsFixed(1)} km walk';
   }
 
-  /// A generated option's fare, worded as on its route page.
-  String _tripFareLabel(double baseFare) =>
-      PhFareCalculator.tripEstimateLabel(baseFare, student: _studentFare);
+  /// A generated option's [fare] (already discounted where it applies),
+  /// worded as on its route page.
+  String _tripFareLabel(double fare) => PhFareCalculator.tripEstimateLabel(fare);
 
   static String _fareLabel(double fare) {
     if (!fare.isFinite) return '₱—';

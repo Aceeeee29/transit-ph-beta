@@ -148,6 +148,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
           ),
           Divider(height: 1, color: _border),
         ],
+        RouteReportBanner(reports: _sharedReports, routeId: widget.route.id),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Wrap(

@@ -4,12 +4,15 @@ import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
+import '../models/route_issue_report.dart';
+import '../services/route_report_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../widgets/route_preview.dart';
 import 'contribute_screen.dart';
 import '../theme/app_colors.dart';
 part 'moderator_screen_route_cards.dart';
+part 'moderator_screen_route_reports.dart';
 part 'moderator_screen_user_management.dart';
 
 class ModeratorScreen extends StatefulWidget {
@@ -45,7 +48,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _postsNotifier = ModerationService.postsNotifier;
     _routesNotifier = ModerationService.pendingRoutesNotifier;
     _postsNotifier.addListener(_onDataChanged);
@@ -210,6 +213,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             _tabWithBadge('Posts', pendingPostsCount),
             const Tab(text: 'Users'),
             const Tab(text: 'Feedback'),
+            const Tab(text: 'Reports'),
           ],
         ),
       ),
@@ -221,6 +225,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
           _buildPendingPostsTab(),
           _buildUsersTab(),
           _buildFeedbacksTab(),
+          _buildRouteReportsTabSection(),
         ],
       ),
     );

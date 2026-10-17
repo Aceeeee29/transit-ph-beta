@@ -81,6 +81,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'reply' => Icons.reply_rounded,
     'route_approved' => Icons.route_rounded,
     'route_rejected' => Icons.route_rounded,
+    'route_reported' => Icons.report_problem_outlined,
     _ => Icons.notifications_rounded,
   };
 
@@ -91,6 +92,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'reply' => const Color(0xFF9B7FE8),
     'route_approved' => const Color(0xFF2EA56E),
     'route_rejected' => _danger,
+    'route_reported' => const Color(0xFFB7791F),
     _ => _textSecondary,
   };
 
@@ -101,6 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'reply' => 'Reply',
     'route_approved' => 'Route Approved',
     'route_rejected' => 'Route Rejected',
+    'route_reported' => 'Route Reported',
     _ => 'Notification',
   };
 
@@ -121,7 +124,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'reply',
   };
 
-  static const _routeNotificationTypes = {'route_approved', 'route_rejected'};
+  static const _routeNotificationTypes = {
+    'route_approved',
+    'route_rejected',
+    'route_reported',
+  };
 
   bool _isNavigable(NotificationModel n) {
     if (_postNotificationTypes.contains(n.type)) {

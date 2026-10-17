@@ -6,16 +6,18 @@ import '../widgets/map/map_pin_images.dart';
 import '../widgets/map/transit_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
 import '../models/route.dart' as route_model;
 import '../services/fare_matrix.dart';
 import '../services/gamification_service.dart';
+import '../models/route_issue_report.dart';
 import '../services/route_metrics_service.dart';
+import '../services/route_report_service.dart';
+import '../services/routing_service.dart';
+import '../services/supabase_route_service.dart' show CommunityRoute;
+import '../services/trip_joiner.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
 import '../services/offline_tile_service.dart';
@@ -31,6 +33,7 @@ import '../services/facing.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
+import '../widgets/route_map/route_report_banner.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 import '../widgets/translated_text.dart';
 import '../widgets/location_permission_notice.dart';
@@ -46,6 +49,7 @@ import '../theme/app_colors.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_data.dart';
 part 'route_map_screen_chrome.dart';
+part 'route_map_screen_way_to_start.dart';
 
 class RouteMapScreen extends StatefulWidget {
   final route_model.Route route;
@@ -91,6 +95,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _isAutoFollowEnabled = false;
   bool _isFinishingRoute = false;
   List<route_model.Report> _routeReports = [];
+
+  /// Riders' reports on this route's road, from any route on it.
+  List<RouteIssueReport> _sharedReports = const [];
   List<String> _pendingNotifications = [];
   bool _showNotificationOverlay = false;
   bool? _userVote;
@@ -647,10 +654,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     await _loadReportsSection();
   }
 
-  Future<void> _saveReports() async {
-    await _saveReportsSection();
-  }
-
   void _generatePathPoints() {
     if (widget.route.pathPoints.isNotEmpty) {
       _pathPoints = List.from(widget.route.pathPoints);
@@ -789,14 +792,31 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
+  /// Shared with every rider: the report shows on all routes on this road,
+  /// and their contributors are told.
   void _submitReport(String type, String description) async {
-    final report = route_model.Report(
-      type: type,
-      description: description.isNotEmpty ? description : null,
-      timestamp: DateTime.now(),
-    );
-    _routeReports.add(report);
-    await _saveReports();
+    try {
+      await RouteReportService.submit(
+        routeId: widget.route.id,
+        routeLabel:
+            '${widget.route.startLocation} → ${widget.route.endLocation}',
+        path: _pathPoints,
+        type: type,
+        description: description.isNotEmpty ? description : null,
+      );
+    } catch (e) {
+      debugPrint('[RouteReports] Submit failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't send the report. Check your connection."),
+          ),
+        );
+      }
+      return;
+    }
+    await _loadReportsSection();
+    if (!mounted) return;
 
     final user = await GamificationService.loadUser();
     final unlockedItems = await GamificationService.incrementReportsSubmitted(
@@ -811,9 +831,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
     setState(() {});
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Report submitted!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report sent. Riders on this road will see it.'),
+        ),
+      );
     }
   }
 
@@ -825,13 +847,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _smoothMoveCamera(_displayPosition!, zoom: _followZoom, bearing: _heading);
   }
 
-  void _startNavigation() {
-    if (_displayPosition == null) {
+  Future<void> _startNavigation() async {
+    final here = _displayPosition;
+    if (here == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Waiting for live location...')),
       );
       return;
     }
+    // Far from the route: offer a way to its start first.
+    if (await _offerWayToStartSection(here) || !mounted) return;
 
     // The session's stream takes over from the preview stream.
     _stopLocationTracking();
@@ -1013,9 +1038,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   bool _isStudentCategory(String category) =>
       category.replaceAll('_', ' ') == 'student';
 
-  /// Per ride: the discount rounds each fare up to the next peso.
-  double _applyFareDiscount(double fare) =>
-      _isDiscountFareEnabled ? PhFareCalculator.discountedFare(fare) : fare;
+  /// Per ride, on jeepneys and buses only: the discount rounds each fare up
+  /// to the next peso.
+  double _applyFareDiscount(double fare, String mode) =>
+      PhFareCalculator.rideFare(fare, mode, discount: _isDiscountFareEnabled);
 
   void _setDiscountEnabled(bool value) {
     setState(() {
@@ -1066,19 +1092,30 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       _routeFareTotal(discounted: _isDiscountFareEnabled);
 
   double _routeFareTotal({required bool discounted}) {
-    double fare(double regular) =>
-        discounted ? PhFareCalculator.discountedFare(regular) : regular;
     double total = 0.0;
     for (int i = 0; i < widget.route.steps.length; i++) {
       final step = widget.route.steps[i];
       if (step.mode == 'Walk') continue;
       final baseFare = step.actualFare ?? _estimateStepFare(i, step);
-      total += fare(baseFare);
+      total += PhFareCalculator.rideFare(
+        baseFare,
+        step.mode,
+        discount: discounted,
+      );
     }
 
     if (total <= 0) {
       final parsed = _parseFareAmount(widget.route.price);
-      if (parsed != null) total = fare(parsed);
+      // Only a total was saved: discounted when every ride gives it.
+      final allDiscounted = widget.route.steps
+          .where((s) => s.mode != 'Walk')
+          .every((s) => PhFareCalculator.givesDiscount(s.mode));
+      if (parsed != null) {
+        total =
+            discounted && allDiscounted
+                ? PhFareCalculator.discountedFare(parsed)
+                : parsed;
+      }
     }
 
     return total;

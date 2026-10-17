@@ -193,18 +193,28 @@ extension _ContributeScreenSections on _ContributeScreenState {
       }
 
       if (!mounted) return;
+      final isEdit = widget.routeToEdit != null;
+      // An editor its opener already closed (the moderator's) is done.
+      if (isEdit && !(ModalRoute.of(context)?.isCurrent ?? true)) return;
 
       await showDialog(
         context: context,
         builder:
             (_) =>
-                widget.routeToEdit != null
+                isEdit
                     ? const _SubmitSuccessDialog(isEdit: true)
                     : _SubmitSuccessDialog(
                       isEdit: false,
                       quickCreateMode: _isQuickCreateMode,
                     ),
       );
+
+      // An edit is done once it's sent for review: back to where it was
+      // opened from.
+      if (isEdit) {
+        if (mounted) await Navigator.of(context).maybePop();
+        return;
+      }
 
       if (widget.routeToEdit == null) {
         await _bumpContributionStats();

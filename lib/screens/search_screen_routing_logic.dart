@@ -263,12 +263,21 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         }
         addLabeled('Community', mostCommunity);
 
+        // Equally rider-verified options: less walking first (a tricycle to
+        // the jeep beats walking 1.3 km to it).
         final order = List<int>.generate(selected.length, (i) => i)
           ..sort((a, b) {
-            final byShare = riderShare(
-              selected[b],
-            ).compareTo(riderShare(selected[a]));
-            return byShare != 0 ? byShare : a.compareTo(b);
+            final shareA = riderShare(selected[a]);
+            final shareB = riderShare(selected[b]);
+            final byShare = shareB.compareTo(shareA);
+            if (byShare != 0) return byShare;
+            if (shareA >= 0.5) {
+              final byWalk = selected[a].totalWalkKm.compareTo(
+                selected[b].totalWalkKm,
+              );
+              if (byWalk != 0) return byWalk;
+            }
+            return a.compareTo(b);
           });
         alternatives = [for (final i in order) selected[i]];
         labelsByIndex = {

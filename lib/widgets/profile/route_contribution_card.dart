@@ -169,19 +169,12 @@ class _CardHeader extends StatelessWidget {
             MaterialPageRoute(
               builder:
                   (_) => ContributeScreen(
-                    onRouteSubmitted: (updatedRoute) async {
-                      try {
-                        await RouteService.updateRoute(updatedRoute);
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Route updated!')),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Failed to update route: $e')),
-                        );
-                      }
-                    },
+                    // Saving only: the editor confirms and closes itself.
+                    // (This card can be gone by then: an edited route goes
+                    // back to pending, which rebuilds the list, and using
+                    // its context failed with "Null check operator used on
+                    // a null value".)
+                    onRouteSubmitted: RouteService.updateRoute,
                     routeToEdit: route,
                     contributorId: userEmail,
                   ),

@@ -7,6 +7,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import '../models/ors_route_result.dart';
+import '../models/route_issue_report.dart';
+import '../services/route_report_service.dart';
+import '../widgets/route_map/route_report_banner.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/active_navigation_service.dart';
 import '../services/fare_matrix.dart';
@@ -121,7 +124,15 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     _initLocation();
     _loadFareProfile();
     _loadDownloadState();
+    RouteReportService.affecting(widget.result.polyline).then((reports) {
+      if (mounted && reports.isNotEmpty) {
+        setState(() => _roadReports = reports);
+      }
+    });
   }
+
+  /// Riders' reports on the roads this trip rides.
+  List<RouteIssueReport> _roadReports = const [];
 
   Future<void> _loadFareProfile() async {
     final student = await FareProfileService.isStudent();
@@ -129,8 +140,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     setState(() => _isDiscountFareEnabled = true);
   }
 
-  double _applyFareDiscount(double fare) =>
-      _isDiscountFareEnabled ? PhFareCalculator.discountedFare(fare) : fare;
+  /// Jeepney and bus rides only.
+  double _applyFareDiscount(double fare, String mode) =>
+      PhFareCalculator.rideFare(fare, mode, discount: _isDiscountFareEnabled);
 
   void _setDiscountEnabled(bool value) {
     setState(() {
@@ -829,6 +841,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
           ),
           const Divider(height: 1),
         ],
+        RouteReportBanner(reports: _roadReports),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Wrap(
@@ -1006,7 +1019,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             ),
           if (step.estimatedFare > 0)
             Text(
-              '₱${_applyFareDiscount(step.estimatedFare).toStringAsFixed(0)}',
+              '₱${_applyFareDiscount(step.estimatedFare, step.suggestedMode).toStringAsFixed(0)}',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -1024,8 +1037,10 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
   String _totalFareLabel() {
     final label = PhFareCalculator.tripEstimateLabel(
-      widget.result.baseFarePhp,
-      student: _isDiscountFareEnabled,
+      PhFareCalculator.tripFare(
+        widget.result,
+        discount: _isDiscountFareEnabled,
+      ),
     );
     return label == 'Free' ? label : '$label est.';
   }

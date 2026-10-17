@@ -6,6 +6,7 @@ import '../data/camanava_places.dart';
 import '../models/route.dart' as route_model;
 import 'route_follow_engine.dart';
 import 'transport_mode_inference.dart';
+import 'walk_distances.dart';
 
 /// A single vehicle ride between two stops.
 class TransitLeg {
@@ -405,21 +406,82 @@ class SupabaseRouteService {
   /// on foot, by road), at either end.
   static const _communityMaxWalkMeters = 20 / 60 * _walkSpeedKmh * 1000;
 
-  /// A walk of [straightKm] as the crow flies, measured by road.
+  /// A walk of [straightKm] as the crow flies, estimated by road.
   static _GraphEdge _walkEdge(
     String from,
     String to,
     double straightKm, {
     double extraSec = 0,
+  }) => _walkEdgeByRoad(
+    from,
+    to,
+    straightKm * _walkRoadFactor * 1000,
+    extraSec: extraSec,
+  );
+
+  /// A walk of [roadMeters] along the streets.
+  static _GraphEdge _walkEdgeByRoad(
+    String from,
+    String to,
+    double roadMeters, {
+    double extraSec = 0,
   }) {
-    final roadKm = straightKm * _walkRoadFactor;
     return _GraphEdge(
       from: from,
       to: to,
-      costSeconds: roadKm / _walkSpeedKmh * 3600 + extraSec,
-      distanceMeters: roadKm * 1000.0,
+      costSeconds: roadMeters / 1000 / _walkSpeedKmh * 3600 + extraSec,
+      distanceMeters: roadMeters,
       isWalk: true,
     );
+  }
+
+  /// Stops measured at each end of a trip.
+  static const _measuredStopsPerEnd = 100;
+
+  /// Real walking meters from [origin] to its nearest stops and from
+  /// [destination]'s nearest stops to it (up to [_measuredStopsPerEnd] each,
+  /// within walking range), by stop id, in one request. Empty when the
+  /// walking server can't be reached.
+  static Future<({Map<String, double> toStops, Map<String, double> fromStops})>
+  _measuredWalks(
+    LatLng origin,
+    LatLng destination,
+    List<Map<String, dynamic>> stops,
+  ) async {
+    List<({String id, LatLng at})> nearest(LatLng point) {
+      final near = <({String id, LatLng at, double km})>[];
+      for (final stop in stops) {
+        final at = LatLng(
+          (stop['stop_lat'] as num).toDouble(),
+          (stop['stop_lon'] as num).toDouble(),
+        );
+        final km = _haversineKm(point, at);
+        if (km <= _maxAccessWalkKm) {
+          near.add((id: stop['stop_id'].toString(), at: at, km: km));
+        }
+      }
+      near.sort((a, b) => a.km.compareTo(b.km));
+      return [
+        for (final s in near.take(_measuredStopsPerEnd)) (id: s.id, at: s.at),
+      ];
+    }
+
+    // Both ends in one request: the server answers about one per 10 s.
+    final targets = {
+      for (final s in [...nearest(origin), ...nearest(destination)]) s.id: s.at,
+    };
+    final ids = targets.keys.toList();
+    final rows = await WalkDistances.table([
+      origin,
+      destination,
+    ], targets.values.toList());
+    // Walking is about the same either way, so the destination's row
+    // stands for stop → destination.
+    Map<String, double> byId(List<double?> row) => {
+      for (var i = 0; i < ids.length; i++)
+        if (row[i] case final m?) ids[i]: m,
+    };
+    return (toStops: byId(rows[0]), fromStops: byId(rows[1]));
   }
 
   static const _maxRideStopsSpan = 30;
@@ -547,6 +609,7 @@ class SupabaseRouteService {
       allowFerry: false,
       communityRoutes: communityRoutes,
       includeGtfs: false,
+      measureWalks: false,
     );
     if (context == null) return const [];
     final results = _runDijkstraAlternatives(
@@ -832,6 +895,8 @@ class SupabaseRouteService {
     required bool allowFerry,
     List<CommunityRoute> communityRoutes = const [],
     bool includeGtfs = true,
+    // Off in tests (no network).
+    bool measureWalks = true,
   }) async {
     final corridorStops =
         includeGtfs
@@ -912,6 +977,16 @@ class SupabaseRouteService {
             .whereType<String>()
             .toSet();
 
+    // The walks to the nearest stops at each end, along the streets: the
+    // straight line can be a quarter of the real walk.
+    final measured =
+        measureWalks
+            ? await _measuredWalks(origin, destination, stopList)
+            : (toStops: <String, double>{}, fromStops: <String, double>{});
+    final walkInRoad = measured.toStops;
+    final walkOutRoad = measured.fromStops;
+    const maxRoadMeters = _maxAccessWalkKm * _walkRoadFactor * 1000;
+
     for (final stop in stopList) {
       final stopId = stop['stop_id'].toString();
       final pt = LatLng(
@@ -919,13 +994,25 @@ class SupabaseRouteService {
         (stop['stop_lon'] as num).toDouble(),
       );
 
+      final roadIn = walkInRoad[stopId];
       final walkInKm = _haversineKm(origin, pt);
-      if (walkInKm <= _maxAccessWalkKm || originCandidateIds.contains(stopId)) {
+      if (roadIn != null) {
+        if (roadIn <= maxRoadMeters || originCandidateIds.contains(stopId)) {
+          addEdge(_walkEdgeByRoad(_originNode, stopId, roadIn));
+        }
+      } else if (walkInKm <= _maxAccessWalkKm ||
+          originCandidateIds.contains(stopId)) {
         addEdge(_walkEdge(_originNode, stopId, walkInKm));
       }
 
+      final roadOut = walkOutRoad[stopId];
       final walkOutKm = _haversineKm(pt, destination);
-      if (walkOutKm <= _maxAccessWalkKm || destCandidateIds.contains(stopId)) {
+      if (roadOut != null) {
+        if (roadOut <= maxRoadMeters || destCandidateIds.contains(stopId)) {
+          addEdge(_walkEdgeByRoad(stopId, _destNode, roadOut));
+        }
+      } else if (walkOutKm <= _maxAccessWalkKm ||
+          destCandidateIds.contains(stopId)) {
         addEdge(_walkEdge(stopId, _destNode, walkOutKm));
       }
     }
@@ -1559,20 +1646,24 @@ class SupabaseRouteService {
   static const _roadDetourFactor = 1.3;
 
   /// The fare (before discounts) an option shows in the list.
-  static double estimateFarePhp(DijkstraTripPlanResult result) {
+  /// With [discount], jeepney and bus rides are 20% off (see
+  /// [PhFareCalculator.givesDiscount]).
+  static double estimateFarePhp(
+    DijkstraTripPlanResult result, {
+    bool discount = false,
+  }) {
     var total = 0.0;
     for (final leg in result.plan.legs) {
-      if (leg.communityFare != null) {
-        total += leg.communityFare!;
-        continue;
-      }
       final mode = _inferRouteMode(
         routeId: leg.routeId,
         routeType: leg.routeType,
         routeShortName: leg.routeShortName,
         routeLongName: leg.routeLongName,
       );
-      total += PhFareCalculator.compute(mode, _legRideKm(leg) * 1000.0);
+      final fare =
+          leg.communityFare ??
+          PhFareCalculator.compute(mode, _legRideKm(leg) * 1000.0);
+      total += PhFareCalculator.rideFare(fare, mode, discount: discount);
     }
     return total;
   }

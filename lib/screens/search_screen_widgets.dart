@@ -258,9 +258,8 @@ extension _SearchScreenSections on _SearchScreenState {
     ];
     if (hasOptions) rows.add(const _GeneratedRouteCaution());
     if (_routeAlternatives.isNotEmpty) {
-      final verified = _mostRiderVerifiedIndex();
       for (var i = 0; i < _routeAlternatives.length; i++) {
-        rows.add(_alternativeRow(i, verified: i == verified));
+        rows.add(_alternativeRow(i, verified: _isRiderVerified(i)));
       }
     } else if (_orsResult != null) {
       rows.add(_generatedResultRow(_orsResult!));
@@ -295,34 +294,12 @@ extension _SearchScreenSections on _SearchScreenState {
     return names.firstOrNull;
   }
 
-  /// The option riding most on rider-shared routes, if at least half its
-  /// ride is on them. Ties (often several at 100%) go to the one with the
-  /// fewest transfers, then the quickest.
-  int? _mostRiderVerifiedIndex() {
-    int? best;
-    var bestShare = 0.0;
-    for (var i = 0; i < _routeAlternatives.length; i++) {
-      if (_fallbackAlternativeRoutes[i] != null) continue;
-      final alt = _routeAlternatives[i];
-      final share = SupabaseRouteService.riderRouteShare(alt.result);
-      if (share < 0.5) continue;
-      if (best == null || share > bestShare + 0.001) {
-        best = i;
-        bestShare = share;
-        continue;
-      }
-      if ((share - bestShare).abs() > 0.001) continue;
-      final current = _routeAlternatives[best];
-      final legs = alt.result.plan.legs.length;
-      final currentLegs = current.result.plan.legs.length;
-      if (legs < currentLegs ||
-          (legs == currentLegs &&
-              alt.estimatedTimeMinutes < current.estimatedTimeMinutes)) {
-        best = i;
-      }
-    }
-    return best;
-  }
+  /// Riding at least half the way on rider-shared routes: every such
+  /// option gets the badge (several can ride entirely on them).
+  bool _isRiderVerified(int index) =>
+      _fallbackAlternativeRoutes[index] == null &&
+      SupabaseRouteService.riderRouteShare(_routeAlternatives[index].result) >=
+          0.5;
 
   Widget _alternativeRow(int index, {bool verified = false}) {
     final alt = _routeAlternatives[index];
@@ -330,7 +307,13 @@ extension _SearchScreenSections on _SearchScreenState {
     final legs = alt.result.plan.legs;
     final usesCommunity =
         fallback == null && legs.any((leg) => leg.isCommunity);
-    final fare = fallback == null ? alt.estimatedFarePhp : fallback.baseFarePhp;
+    final fare =
+        fallback == null
+            ? SupabaseRouteService.estimateFarePhp(
+              alt.result,
+              discount: _studentFare,
+            )
+            : PhFareCalculator.tripFare(fallback, discount: _studentFare);
     final minutes =
         fallback == null
             ? alt.estimatedTimeMinutes
@@ -367,7 +350,9 @@ extension _SearchScreenSections on _SearchScreenState {
     return RouteOptionRow(
       headline: _SearchScreenState._minutesLabel(result.durationSeconds / 60),
       details: [
-        _tripFareLabel(result.baseFarePhp),
+        _tripFareLabel(
+          PhFareCalculator.tripFare(result, discount: _studentFare),
+        ),
         result.distanceLabel,
       ].join(' · '),
       modes: collapseModes(result.steps.map((s) => s.suggestedMode)),
@@ -452,8 +437,8 @@ class _GeneratedRouteCaution extends StatelessWidget {
           Expanded(
             child: Text(
               'Generated automatically, so these may be inaccurate: transit '
-              'data is limited and can be outdated. Jeep, bus, train and '
-              'walking only. Times and fares are estimates.',
+              'data is limited and can be outdated. Tricycles only where '
+              'riders shared their routes. Times and fares are estimates.',
               style: TextStyle(
                 color:
                     AppColors.isDark

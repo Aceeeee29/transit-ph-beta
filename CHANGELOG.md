@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.29 — October 17, 2026
+
+- Far from a route when you press Start? The app offers to find a way to
+  its start using rider routes, and shows both as one trip (for example
+  "VGC → Monumento + Monumento → STI")
+- Route reports are shared with everyone: a report shows as a warning on
+  every route and generated trip on the same road for a day, and the
+  riders who shared those routes are notified. Moderators can keep or
+  remove reports
+- Generated routes measure the walk to your first ride and from your last
+  ride along the actual streets, so a tricycle nearby is used instead of
+  a long walk around the block
+- Every option that rides mostly on rider routes is marked
+  "Rider-verified", and the one with less walking is listed first
+- Student, PWD and senior discount applies only to jeepney and bus fares
+- Fixed "Failed to submit route" when sending an edited route for review
+
 ## v1.0.28 — October 15, 2026
 
 - Generated routes use rider routes near you: if one starts within a

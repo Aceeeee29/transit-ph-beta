@@ -29,59 +29,29 @@ extension _RouteMapScreenDataSections on _RouteMapScreenState {
     } catch (_) {}
   }
 
-  Future<void> _loadReportsSection() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/reports.json');
-      if (await file.exists()) {
-        final contents = await file.readAsString();
-        final Map<String, dynamic> jsonData = jsonDecode(contents);
-        final List<route_model.Report> loadedReports = [];
-        if (jsonData.containsKey(widget.route.id)) {
-          final List<dynamic> reportList = jsonData[widget.route.id];
-          loadedReports.addAll(
-            reportList.map(
-              (r) => route_model.Report(
-                type: r['type'],
-                description: r['description'],
-                timestamp: DateTime.fromMillisecondsSinceEpoch(r['timestamp']),
-              ),
-            ),
-          );
-        }
-        _setRouteReports(
-          loadedReports..addAll(widget.route.reports),
-          sortByLatest: true,
-        );
-      } else {
-        _setRouteReports(List.from(widget.route.reports));
-      }
-    } catch (_) {
-      _setRouteReports(List.from(widget.route.reports));
-    }
+  /// Reports from every rider on this route's road (shared in Firestore),
+  /// plus any saved on the route itself.
+  Future<void> _loadReportsSection({bool refresh = false}) async {
+    if (refresh) await RouteReportService.active(refresh: true);
+    final shared = await RouteReportService.affecting(_pathPoints);
+    if (!mounted) return;
+    _sharedReports = shared;
+    _setRouteReports([
+      for (final r in shared)
+        route_model.Report(
+          type: r.type,
+          description: _sharedReportText(r),
+          timestamp: r.createdAt,
+        ),
+      ...widget.route.reports,
+    ], sortByLatest: true);
   }
 
-  Future<void> _saveReportsSection() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/reports.json');
-      Map<String, dynamic> allReports = {};
-      if (await file.exists()) {
-        allReports = jsonDecode(await file.readAsString());
-      }
-      allReports[widget.route.id] =
-          _routeReports
-              .map(
-                (r) => {
-                  'type': r.type,
-                  'description': r.description,
-                  'timestamp': r.timestamp.millisecondsSinceEpoch,
-                },
-              )
-              .toList();
-      await file.writeAsString(jsonEncode(allReports));
-    } catch (e) {
-      debugPrint('RouteMapScreen: failed to save reports locally: $e');
-    }
+  /// A report filed on another route on the same road says which.
+  String? _sharedReportText(RouteIssueReport report) {
+    final note = report.description;
+    if (report.routeId == widget.route.id) return note;
+    final where = 'Reported on ${report.routeLabel}';
+    return note == null || note.isEmpty ? where : '$where: $note';
   }
 }

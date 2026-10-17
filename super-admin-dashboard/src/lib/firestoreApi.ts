@@ -30,6 +30,7 @@ import type {
   FeedbackItem,
   PostItem,
   RouteItem,
+  RouteReportItem,
   RouteStopItem,
   UserRole,
 } from '@/types/models'
@@ -837,6 +838,40 @@ export async function getFeedback(): Promise<FeedbackItem[]> {
       userId: data.userId,
     }
   })
+}
+
+/** Route reports still showing (under a day old, or kept), newest first. */
+export async function getRouteReports(): Promise<RouteReportItem[]> {
+  const snap = await getDocs(
+    query(collection(db, 'route_reports'), where('expiresAt', '>', Timestamp.now())),
+  )
+  return snap.docs
+    .map((d) => {
+      const data = d.data()
+      return {
+        id: d.id,
+        routeId: data.routeId ?? '',
+        routeLabel: data.routeLabel ?? '',
+        type: data.type ?? 'Other',
+        description: data.description,
+        createdAt: data.createdAt,
+        expiresAt: data.expiresAt,
+        kept: data.kept === true,
+      }
+    })
+    .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
+}
+
+/** Keeps a route report showing until it's removed. */
+export async function keepRouteReport(id: string) {
+  await updateDoc(doc(db, 'route_reports', id), {
+    kept: true,
+    expiresAt: Timestamp.fromDate(new Date(2100, 0, 1)),
+  })
+}
+
+export async function removeRouteReport(id: string) {
+  await deleteDoc(doc(db, 'route_reports', id))
 }
 
 export async function updateFeedbackStatus(feedbackId: string, status: 'resolved' | 'dismissed') {

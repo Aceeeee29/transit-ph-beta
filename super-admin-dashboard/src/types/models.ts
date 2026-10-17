@@ -89,6 +89,19 @@ export interface PostItem {
   createdAt?: Timestamp
 }
 
+/** A rider's report on a route; shows on every route on the same road for a
+ * day, or until removed when kept. */
+export interface RouteReportItem {
+  id: string
+  routeId: string
+  routeLabel: string
+  type: string
+  description?: string
+  createdAt?: Timestamp
+  expiresAt?: Timestamp
+  kept: boolean
+}
+
 export interface FeedbackItem {
   id: string
   type: 'feedback' | 'report'
