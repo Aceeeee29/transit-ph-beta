@@ -22,8 +22,14 @@ void main() {
     await frames();
     expect(find.text('Tap on the map to select the starting point'), findsOne);
 
-    // The tutorial opens on first use; its example is a finished route.
-    await tester.tap(find.text('Load Example'));
+    // The tutorial opens on first use; its last card offers an example, a
+    // finished route.
+    expect(find.text('Try an example route'), findsNothing);
+    while (find.text('Next').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Next'));
+      await frames();
+    }
+    await tester.tap(find.text('Try an example route'));
     await frames();
 
     expect(tester.takeException(), isNull);

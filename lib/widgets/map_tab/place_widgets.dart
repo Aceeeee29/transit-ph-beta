@@ -287,7 +287,7 @@ class PlaceDetailsSection extends StatelessWidget {
                       )
                       : TranslatedText(
                         'Enable location to see distance',
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: _textSecondary,

@@ -192,24 +192,20 @@ class HomeFareMatrixDialog extends StatelessWidget {
                 if (detail != null)
                   TranslatedText(
                     detail,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 11, color: _textSecondary),
                   ),
               ],
             ),
           ),
-          Flexible(
-            child: TranslatedText(
-              fare,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: color,
-              ),
+          const SizedBox(width: 8),
+          // The fare keeps its full width; the details wrap instead.
+          TranslatedText(
+            fare,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: color,
             ),
           ),
         ],

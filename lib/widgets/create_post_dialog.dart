@@ -546,7 +546,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
                   child: TranslatedText(
                     'Route tagged — shown on your post',
                     overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                    maxLines: 2,
                     style: TextStyle(
                       fontSize: 11,
                       color: _accent,
@@ -971,6 +971,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                       fontWeight: FontWeight.w700,
                                       color: _textPrimary,
                                     ),
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 2),
@@ -980,6 +981,7 @@ class _RoutePickerSheetState extends State<_RoutePickerSheet> {
                                       fontSize: 12,
                                       color: _textSecondary,
                                     ),
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],

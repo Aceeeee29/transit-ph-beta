@@ -31,12 +31,16 @@ class FollowStep {
   final bool designatedStops;
   final List<FollowStop> stops;
 
+  /// Where the step ends ("Balintawak"), for the "Get off soon" alert.
+  final String? endName;
+
   const FollowStep({
     required this.mode,
     required this.startIndex,
     required this.endIndex,
     bool? designatedStops,
     this.stops = const [],
+    this.endName,
   }) : designatedStops = designatedStops ?? mode == 'Train';
 
   bool get isWalk => mode == 'Walk';

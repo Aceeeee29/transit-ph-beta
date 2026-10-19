@@ -734,7 +734,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
               child: TranslatedText(
                 'Drag the dots on the map to fix a line',
                 style: TextStyle(fontSize: 11, color: _textSecondary),
-                maxLines: 1,
+                textAlign: TextAlign.end,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),

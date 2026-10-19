@@ -109,6 +109,36 @@ class FollowRouteLayers {
     ];
   }
 
+  /// The route's start: a small white dot in a dark ring, smaller than the
+  /// traveler's dot. (The end is the tripEnd pin.)
+  static MapDot startDot(LatLng point) => MapDot(
+    point,
+    radius: 5,
+    strokeColor: const Color(0xFF1F2937),
+    strokeWidth: 2.5,
+  );
+
+  /// Where one step hands over to the next (a mode switch): a small white
+  /// dot ringed in the next step's color. Steps of no length are skipped.
+  static List<MapDot> modeSwitchDots(
+    List<LatLng> path,
+    List<({int start, int end, Color color})> ranges,
+  ) {
+    final dots = <MapDot>[];
+    LatLng? previous;
+    for (var i = 1; i < ranges.length; i++) {
+      final range = ranges[i];
+      if (range.end <= range.start || range.start >= path.length) continue;
+      final point = path[range.start];
+      if (point == previous || range.start == 0) continue;
+      previous = point;
+      dots.add(
+        MapDot(point, radius: 3.5, strokeColor: range.color, strokeWidth: 2.5),
+      );
+    }
+    return dots;
+  }
+
   /// The next point to reach: a white ring in the connector's blue.
   static MapDot? targetDot(FollowGuidance guidance) {
     final target = guidance.target;

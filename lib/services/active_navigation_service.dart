@@ -12,6 +12,7 @@ import '../models/ors_route_result.dart';
 import '../models/route.dart' as route_model;
 import '../repositories/followed_route_repository.dart';
 import 'follow_alert_notifier.dart';
+import 'follow_legs.dart';
 import 'route_follow_engine.dart';
 import 'route_follow_guidance.dart';
 import 'routing_service.dart';
@@ -66,11 +67,14 @@ class FollowTarget {
       endLabel: destinationName,
       path: result.polyline,
       steps: [
-        for (final s in result.steps)
+        for (var i = 0; i < result.steps.length; i++)
           FollowStep(
-            mode: s.suggestedMode,
-            startIndex: s.wayPointStart,
-            endIndex: s.wayPointEnd,
+            mode: result.steps[i].suggestedMode,
+            startIndex: result.steps[i].wayPointStart,
+            endIndex: result.steps[i].wayPointEnd,
+            endName:
+                result.steps[i].toName ??
+                (i == result.steps.length - 1 ? destinationName : null),
           ),
       ],
       generatedRoute: result,
@@ -183,6 +187,10 @@ class ActiveNavigationService extends ChangeNotifier {
   Position? _lastPosition;
   Position? _previousPosition;
   FollowGuidance _guidance = FollowGuidance.none;
+  FollowLegProgress? _legProgress;
+
+  /// The ride step the "Get off soon" alert last fired for.
+  int? _getOffAlertedLeg;
 
   List<LatLng>? _fetchedConnector;
   RouteFollowEngine? _fetchedConnectorEngine;
@@ -230,6 +238,9 @@ class ActiveNavigationService extends ChangeNotifier {
   RouteFollowSnapshot? get followSnapshot => _engine?.lastSnapshot;
   bool get hasArrived => followSnapshot?.hasArrived ?? false;
   FollowGuidance get guidance => _guidance;
+
+  /// The step being travelled and what's left of it; null before progress.
+  FollowLegProgress? get legProgress => _legProgress;
 
   /// Path to draw from the traveler to the guidance target: a walking route
   /// when one could be fetched, otherwise a straight line.
@@ -452,10 +463,34 @@ class ActiveNavigationService extends ChangeNotifier {
       );
       engine.expectedJoinMeters =
           _guidance.target != null ? _guidance.targetAlongMeters : null;
+      _updateLeg(engine, snapshot);
       _updateConnector(LatLng(position.latitude, position.longitude));
       _trackDeviation(snapshot, here, _speedMps(position));
     }
     _followTicks.tick();
+  }
+
+  /// Which step the traveler is on; buzzes once near the end of each ride.
+  void _updateLeg(RouteFollowEngine engine, RouteFollowSnapshot snapshot) {
+    final steps = _target?.steps ?? const <FollowStep>[];
+    if (!snapshot.hasProgress) {
+      _legProgress = null;
+      return;
+    }
+    final leg = FollowLegs.locate(
+      engine: engine,
+      steps: steps,
+      progressMeters: snapshot.progressMeters,
+    );
+    _legProgress = leg;
+    if (leg == null ||
+        snapshot.status != RouteFollowStatus.onRoute ||
+        !leg.isGetOffSoon(steps) ||
+        _getOffAlertedLeg == leg.index) {
+      return;
+    }
+    _getOffAlertedLeg = leg.index;
+    FollowAlertNotifier.showGetOffSoon(steps[leg.index].endName);
   }
 
   /// Records the path taken while off the route; when the vehicle rejoins
@@ -530,6 +565,8 @@ class ActiveNavigationService extends ChangeNotifier {
 
   void _resetGuidance() {
     _guidance = FollowGuidance.none;
+    _legProgress = null;
+    _getOffAlertedLeg = null;
     _fetchedConnector = null;
     _fetchedConnectorEngine = null;
     _fetchedConnectorTarget = null;

@@ -57,7 +57,7 @@ extension _HomeScreenSections on _HomeScreenState {
                       TranslatedText(
                         'Your community transit guide',
                         overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                        maxLines: 2,
                         style: TextStyle(fontSize: 12, color: _textSecondary),
                       ),
                     ],
@@ -267,7 +267,7 @@ extension _HomeScreenSections on _HomeScreenState {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 220,
+            height: 240,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _tagMatchedRoutes.length,
@@ -335,7 +335,8 @@ extension _HomeScreenSections on _HomeScreenState {
                       color: _textPrimary,
                       letterSpacing: -0.2,
                     ),
-                    maxLines: 1,
+                    // Long place names wrap instead of being cut.
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -481,7 +482,7 @@ extension _HomeScreenSections on _HomeScreenState {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 220,
+          height: 240,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: routes.length > 5 ? 5 : routes.length,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -5,6 +6,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
+import '../screens/onboarding_screen.dart';
+import '../services/tutorial_service.dart';
+import '../widgets/tutorial_overlay.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/media_service.dart';
 import '../services/moderation_service.dart';
@@ -961,9 +965,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: 'Post Feedback',
                   icon: Icons.rate_review_outlined,
                   onTap: () => _showFeedbackDialog(context),
-                  isLast: true,
+                  isLast: !kDebugMode,
                   color: const Color(0xFF9B7FE8),
                 ),
+                // Debug builds only: see the first-launch cards again.
+                if (kDebugMode) ...[
+                  _actionRow(
+                    label: 'Replay intro (debug)',
+                    icon: Icons.slideshow_rounded,
+                    onTap: _replayIntro,
+                  ),
+                  _actionRow(
+                    label: 'Replay contribute tutorial (debug)',
+                    icon: Icons.school_outlined,
+                    onTap: _replayTutorial,
+                    isLast: true,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
@@ -973,6 +991,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+
+  void _replayIntro() {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OnboardingScreen(user: user, replay: true),
+      ),
+    );
+  }
+
+  void _replayTutorial() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        pageBuilder:
+            (context, _, _) => Stack(
+              children: [
+                TutorialOverlay(
+                  steps: TutorialService.getContributeTutorialSteps(),
+                  onComplete: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
       ),
     );
   }

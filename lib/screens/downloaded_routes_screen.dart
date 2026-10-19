@@ -168,7 +168,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
           subtitle: Text(
             'Followed ${_followedAgo(entry.followedAt)} · route only, '
             'map shows if downloaded or cached',
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: _textSecondary, fontSize: 12),
           ),
