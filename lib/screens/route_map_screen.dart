@@ -42,10 +42,11 @@ import '../models/place.dart';
 import '../services/map_tab_controller.dart';
 import '../widgets/map_tab/map_drawer.dart';
 import '../widgets/map_tab/map_side_button.dart';
-import '../widgets/map_tab/place_category_chips.dart';
+import '../services/follow_legs.dart';
+import '../widgets/route_map/follow_leg_card.dart';
+import '../widgets/route_map/route_modes.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
-import '../widgets/route_map/step_done_label.dart';
 import '../theme/app_colors.dart';
 part 'route_map_screen_widgets.dart';
 part 'route_map_screen_data.dart';
@@ -130,7 +131,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   final DraggableScrollableController _drawerController =
       DraggableScrollableController();
   Place? _selectedPlace;
-  static const double _drawerPeekHeight = 80.0;
+
+  /// Taller before Start: the Start button sits under the summary.
+  double get _drawerPeekHeight => RouteDrawerHeader.peekHeight(
+    showsButton: !_isNavigationStarted || _hasArrived,
+  );
+
+  /// Start pressed before the first GPS fix: following begins on the fix.
+  bool _isStarting = false;
+  Timer? _startTimeout;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static Color get _bg => AppColors.bg;
@@ -142,16 +151,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
   static const _green = Color(0xFF3EC97A);
-
-  final Map<String, Color> modeColors = {
-    'Walk': Colors.green,
-    'Jeepney': Colors.blue,
-    'Bus': Colors.red,
-    'Train': Colors.purple,
-    'Tricycle': Colors.orange,
-    'FX/Van': Colors.amber,
-    'Ferry': Colors.lightBlue,
-  };
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -240,7 +239,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   /// Keeps the 2D/3D button in step with a tilt by hand. Following sets
   /// the tilt itself, and a gesture stops following first.
   void _onMapCameraIdle(TransitMapCamera camera) {
-    if (_isNavigationStarted && _isAutoFollowEnabled) return;
+    if (_isNavigationStarted) return;
     final tilted = camera.tilt > 5;
     if (tilted != _tilted && mounted) setState(() => _tilted = tilted);
   }
@@ -557,6 +556,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       if (!mounted) return;
       setState(() => _applyPosition(position, _rawLatLng(position)));
       if (!_isNavigationStarted) _startLocationTracking();
+      _startIfWaiting();
     } catch (e) {
       debugPrint('RouteMapScreen: failed to get current position: $e');
     }
@@ -582,6 +582,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       return;
     }
     setState(() => _applyPosition(position, _rawLatLng(position)));
+    _startIfWaiting();
   }
 
   void _onNavigationPosition() {
@@ -848,14 +849,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _smoothMoveCamera(_displayPosition!, zoom: _followZoom, bearing: _heading);
   }
 
+  /// Start: right away with a location, otherwise as soon as one arrives.
   Future<void> _startNavigation() async {
     final here = _displayPosition;
     if (here == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Waiting for live location...')),
-      );
+      _waitForLocationThenStart();
       return;
     }
+    _startTimeout?.cancel();
+    if (_isStarting) setState(() => _isStarting = false);
     // Far from the route: offer a way to its start first.
     if (await _offerWayToStartSection(here) || !mounted) return;
 
@@ -874,6 +876,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             _followStep(
               i < widget.route.steps.length ? widget.route.steps[i] : null,
               ranges[i],
+              endName: FollowLegs.riderStepEnds(widget.route, i).to,
             ),
         ],
       ),
@@ -885,13 +888,41 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _centerOnCurrentLocation();
   }
 
+  void _waitForLocationThenStart() {
+    if (_isStarting) return;
+    setState(() => _isStarting = true);
+    _startTimeout?.cancel();
+    _startTimeout = Timer(const Duration(seconds: 30), () {
+      if (!mounted || !_isStarting) return;
+      setState(() => _isStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't get your location. Check that location is on, then "
+            'press Start again.',
+          ),
+        ),
+      );
+    });
+    if (_positionSubscription == null) _initLocation();
+  }
+
+  /// A fix arrived while Start waits for one.
+  void _startIfWaiting() {
+    if (_isStarting && _displayPosition != null && !_isNavigationStarted) {
+      _startNavigation();
+    }
+  }
+
   FollowStep _followStep(
     route_model.Step? step,
-    ({int start, int end, Color color}) range,
-  ) {
+    ({int start, int end, Color color}) range, {
+    String? endName,
+  }) {
     final designated = step?.usesDesignatedStops ?? false;
     return FollowStep(
       mode: step?.mode,
+      endName: endName,
       startIndex: range.start,
       endIndex: range.end,
       designatedStops: designated,
@@ -995,6 +1026,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
     _drawerController.dispose();
+    _startTimeout?.cancel();
     _facing.dispose();
     _positionSubscription?.cancel();
     super.dispose();
@@ -1190,26 +1222,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         : null;
   }
 
-  IconData _getModeIcon(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Icons.directions_walk;
-      case 'Jeepney':
-      case 'Bus':
-        return Icons.directions_bus;
-      case 'Train':
-        return Icons.train;
-      case 'Tricycle':
-        return Icons.two_wheeler;
-      case 'FX/Van':
-        return Icons.directions_car;
-      case 'Ferry':
-        return Icons.directions_boat;
-      default:
-        return Icons.directions_walk;
-    }
-  }
-
   IconData _getReportIcon(String type) {
     switch (type) {
       case 'Heavy traffic / congestion':
@@ -1259,7 +1271,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         (
           start: math.min(i == 0 ? 0 : boundaries[i - 1], last),
           end: math.min(i < boundaries.length ? boundaries[i] : last, last),
-          color: modeColors[widget.route.steps[i].mode] ?? Colors.blue,
+          color: RouteModes.color(widget.route.steps[i].mode),
         ),
     ];
   }
@@ -1305,26 +1317,26 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
-  /// The start pin and the end flag.
+  /// The end pin.
   List<MapIcon> get _icons => [
-    if (_pathPoints.isNotEmpty)
-      MapIcon(_pathPoints.first, MapPinImages.routeStart, anchorBottom: true),
     if (_pathPoints.length > 1)
-      MapIcon(_pathPoints.last, MapPinImages.routeEnd, anchorBottom: true),
+      MapIcon(_pathPoints.last, MapPinImages.tripEnd, anchorBottom: true),
   ];
 
-  /// Designated stops in their step's color, and the next point to reach
-  /// while following.
+  /// The start, each mode switch, designated stops in their step's color,
+  /// and the next point to reach while following.
   List<MapDot> get _dots {
     final target = FollowRouteLayers.targetDot(_guidance);
     return [
+      if (_pathPoints.isNotEmpty) FollowRouteLayers.startDot(_pathPoints.first),
+      ...FollowRouteLayers.modeSwitchDots(_pathPoints, _stepRanges()),
       for (final step in widget.route.steps)
         if (step.usesDesignatedStops)
           for (final stop in step.stops)
             MapDot(
               stop.point,
               radius: 5,
-              strokeColor: modeColors[step.mode] ?? Colors.blue,
+              strokeColor: RouteModes.color(step.mode),
             ),
       if (target != null) target,
     ];

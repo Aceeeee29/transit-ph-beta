@@ -16,34 +16,56 @@ void main() {
     expect(used.length, greaterThan(1));
   });
 
-  testWidgets('the header with a guide fits the generated-route drawer', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1080, 2200);
-    tester.view.devicePixelRatio = 2.75;
-    addTearDown(tester.view.reset);
+  for (final following in [false, true]) {
+    testWidgets(
+      'the drawer header fits its peek height (following: $following)',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2200);
+        tester.view.devicePixelRatio = 2.75;
+        addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              // Generated-route peek height minus the handle.
-              height: 100 - MapDrawer.handleHeight,
-              child: RouteDrawerHeader(
-                primary: '1 hr 12 min',
-                secondary: '18.4 km · ₱64',
-                byline: 'Suggested by ${RouteGuide.names[2]}',
-                trailing: const SizedBox(width: 90, height: 40),
+        final peek = RouteDrawerHeader.peekHeight(
+          showsButton: !following,
+          byline: !following,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  height: peek - MapDrawer.handleHeight,
+                  child: RouteDrawerHeader(
+                    primary: '1 hr 12 min',
+                    secondary: '18.4 km · ₱64 est.',
+                    byline: 'Suggested by ${RouteGuide.names[2]}',
+                    isFollowing: following,
+                    hasArrived: false,
+                    onStart: () {},
+                    onStop: () {},
+                    onDone: () {},
+                    onOverview: () {},
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.text('18.4 km · ₱64 est.'), findsOne);
+        expect(find.byTooltip('Whole route'), findsOne);
+        // The guide shows before Start; the X only while following.
+        expect(
+          find.text('Suggested by Erling Haaland'),
+          following ? findsNothing : findsOne,
+        );
+        expect(
+          find.byTooltip('Stop route'),
+          following ? findsOne : findsNothing,
+        );
+        expect(find.text('Start'), following ? findsNothing : findsOne);
+      },
     );
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    expect(find.text('Suggested by Erling Haaland'), findsOne);
-  });
+  }
 }

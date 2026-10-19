@@ -401,9 +401,43 @@ class _MainScreenState extends State<MainScreen> {
             );
           },
         ),
-        bottomNavigationBar: _buildNavBar(navItems),
+        // Following on the Map tab: the tabs give their room to the map.
+        bottomNavigationBar: ListenableBuilder(
+          listenable: Listenable.merge([
+            ActiveNavigationService.instance,
+            mapTab,
+          ]),
+          builder:
+              (context, _) =>
+                  _isFollowingInView()
+                      ? const SizedBox.shrink()
+                      : _buildNavBar(navItems),
+        ),
       ),
     );
+  }
+
+  /// The Map tab shows the route being followed, and it hasn't arrived.
+  bool _isFollowingInView() {
+    final current = MapTabController.instance.current;
+    final navigation = ActiveNavigationService.instance;
+    final target = navigation.activeTarget;
+    if (_selectedIndex != 2 ||
+        current == null ||
+        target == null ||
+        navigation.hasArrived) {
+      return false;
+    }
+    final route = current.route;
+    if (route != null) return target.id == route.id;
+    final generated = current.generated;
+    return generated != null &&
+        target.id ==
+            FollowTarget.generatedId(
+              generated,
+              current.originName,
+              current.destinationName,
+            );
   }
 
   /// The Map tab: browsing/contributing, with a route view on top while one

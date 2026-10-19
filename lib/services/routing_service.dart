@@ -518,6 +518,7 @@ class RoutingService {
             durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
             suggestedMode: 'Walk',
             estimatedFare: 0.0,
+            toName: originStopName,
             wayPointStart: startIdx,
             wayPointEnd: combinedPolyline.length - 1,
           ),
@@ -569,6 +570,8 @@ class RoutingService {
         durationSeconds: rideDurS,
         suggestedMode: rideMode,
         estimatedFare: rideFare,
+        fromName: hasStops ? originStopName : null,
+        toName: hasStops ? destStopName : null,
         wayPointStart: rideStartIdx,
         wayPointEnd: combinedPolyline.length - 1,
       ),
@@ -595,6 +598,7 @@ class RoutingService {
             durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
             suggestedMode: 'Walk',
             estimatedFare: 0.0,
+            fromName: destStopName,
             wayPointStart: startIdx,
             wayPointEnd: combinedPolyline.length - 1,
           ),
@@ -931,6 +935,9 @@ class RoutingService {
           durationSeconds: (walkInDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
           estimatedFare: 0.0,
+          toName:
+              selectedOriginStop['stop_name'] as String? ??
+              firstLeg.boardStopName,
           wayPointStart: 0,
           wayPointEnd: combinedPolyline.length - 1,
         ),
@@ -973,6 +980,8 @@ class RoutingService {
           estimatedFare:
               leg.communityFare ?? PhFareCalculator.compute(mode, distM),
           isCommunity: leg.isCommunity,
+          fromName: leg.boardStopName,
+          toName: leg.alightStopName,
           wayPointStart: vehicleStartIdx,
           wayPointEnd: vehicleEndIdx,
         ),
@@ -1004,6 +1013,8 @@ class RoutingService {
               durationSeconds: (transferDistM / 1000 / _walkSpeedKmh) * 3600,
               suggestedMode: 'Walk',
               estimatedFare: 0.0,
+              fromName: leg.alightStopName,
+              toName: nextLeg.boardStopName,
               wayPointStart: tStart,
               wayPointEnd: combinedPolyline.length - 1,
             ),
@@ -1046,6 +1057,9 @@ class RoutingService {
           durationSeconds: (walkOutDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
           estimatedFare: 0.0,
+          fromName:
+              selectedDestStop['stop_name'] as String? ??
+              lastLeg.alightStopName,
           wayPointStart: startIdx,
           wayPointEnd: combinedPolyline.length - 1,
         ),

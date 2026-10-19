@@ -4,9 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/gamification_service.dart';
 import '../theme/app_colors.dart';
 
+/// The cards a new account sees once: what TransitPH does, then which kind
+/// of rider they are.
 class OnboardingScreen extends StatefulWidget {
   final User user;
-  const OnboardingScreen({super.key, required this.user});
+
+  /// Shown again from Settings (debug builds): nothing is saved, and the
+  /// end just closes it.
+  final bool replay;
+
+  const OnboardingScreen({super.key, required this.user, this.replay = false});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -15,10 +22,8 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  bool _categorySelected = false;
-  bool _isLoading = false;
+  bool _isSaving = false;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
@@ -27,92 +32,74 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static Color get _textSecondary => AppColors.textSecondary;
   static Color get _border => AppColors.border;
 
-  final List<Map<String, dynamic>> _slides = [
-    {
-      'title': 'Welcome to TransitPH',
-      'description':
-          'Find the fastest and cheapest public transport routes in the Philippines.',
-      'icon': Icons.map,
-      'color': Colors.blue,
-    },
-    {
-      'title': 'Search Your Route',
-      'description':
-          'Enter your destination. TransitPH finds available public transport routes.',
-      'icon': Icons.search,
-      'color': Colors.green,
-    },
-    {
-      'title': 'Multi-Leg Routes',
-      'description':
-          'Some trips need multiple rides. TransitPH breaks trips into clear steps: Walk, Ride, Transfer.\n\nExample: Valenzuela → Monumento → SM North EDSA',
-      'icon': Icons.directions,
-      'color': Colors.orange,
-    },
-    {
-      'title': 'Route Details',
-      'description':
-          'Estimated travel time, Fare estimate, Landmarks & stops, Step-by-step directions.',
-      'icon': Icons.info,
-      'color': Colors.purple,
-    },
-    {
-      'title': 'Safety & Tips',
-      'description':
-          'Verified routes and safety tips. Always follow local traffic rules. Data is community & system-assisted.',
-      'icon': Icons.security,
-      'color': Colors.red,
-    },
-    {
-      'title': 'Contribute a Route',
-      'description':
-          'Know a route that\'s not on TransitPH? Help the community by contributing new routes. Your knowledge makes public transport better for everyone!',
-      'icon': Icons.add_location,
-      'color': Colors.indigo,
-    },
-    {
-      'title': 'You\'re Ready!',
-      'description':
-          'You\'re all set! Start exploring public transport routes in the Philippines.',
-      'icon': Icons.check_circle,
-      'color': Colors.teal,
-    },
+  static const _slides = [
+    _Slide(
+      title: 'Find your way by jeep, bus and train',
+      description:
+          'Type where you\'re going and press Generate routes. TransitPH '
+          'puts the walks and rides together, with times and fares.',
+      icon: Icons.alt_route_rounded,
+    ),
+    _Slide(
+      title: 'Follow your route live',
+      description:
+          'Press Start and TransitPH shows the ride you\'re on, how far to '
+          'your stop, and what comes next. It tells you before you need to '
+          'get off.',
+      icon: Icons.navigation_rounded,
+    ),
+    _Slide(
+      title: 'Routes by riders, for riders',
+      description:
+          'Know a jeepney or tricycle route that isn\'t here? Draw it on the '
+          'map in Contribute. Once approved, it helps everyone.',
+      icon: Icons.edit_road_rounded,
+    ),
+    _Slide(
+      title: 'Works with weak signal',
+      description:
+          'The CAMANAVA map is built in, and you can download routes for '
+          'offline use. Student, PWD or senior? Turn on the discount to see '
+          'your real fare.',
+      icon: Icons.wifi_off_rounded,
+    ),
   ];
 
-  void _onSkip() async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.user.uid)
-        .update({'hasSeenTutorial': true});
+  /// The slides, then the category picker.
+  int get _pageCount => _slides.length + 1;
+  bool get _onCategoryPage => _currentPage == _slides.length;
+
+  Future<void> _finish() async {
+    if (widget.replay) {
+      Navigator.of(context).pop();
+      return;
+    }
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .update({'hasSeenTutorial': true});
+    } catch (_) {
+      // Shown again next time; better than holding the rider here.
+    }
+    if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/main', arguments: false);
   }
 
   void _onNext() {
-    if (_currentPage < _slides.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _onStartExploring();
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  Future<void> _onCategorySelected(String category) async {
+    if (widget.replay) {
+      await _finish();
+      return;
     }
-  }
-
-  void _onStartExploring() async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.user.uid)
-        .update({'hasSeenTutorial': true});
-    Navigator.of(context).pushReplacementNamed('/main', arguments: false);
-  }
-
-  void _onCategorySelected(String category) async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isSaving = true);
     try {
-      // Save to Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.user.uid)
@@ -120,8 +107,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             'userCategory': category,
             'userTags': [category],
           });
-
-      // Also save to SharedPreferences via GamificationService
       final appUser = await GamificationService.loadUser();
       appUser.userCategory = category;
       appUser.userTags = [category];
@@ -132,18 +117,132 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       appUser.email = widget.user.email ?? '';
       await GamificationService.saveUser(appUser);
     } catch (_) {
-      // Continue anyway to proceed
+      // Continue anyway.
     }
-
-    setState(() {
-      _categorySelected = true;
-      _isLoading = false;
-    });
+    await _finish();
   }
 
-  // ─── Category selection screen ─────────────────────────────────────────────
-  Widget _buildCategorySelection() {
-    final categories = [
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child:
+                    _onCategoryPage
+                        ? null
+                        : Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: TextButton(
+                            onPressed: _finish,
+                            child: Text(
+                              'Skip',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+              ),
+            ),
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _currentPage = index),
+                itemCount: _pageCount,
+                itemBuilder:
+                    (context, index) =>
+                        index < _slides.length
+                            ? _buildSlide(_slides[index])
+                            : _buildCategoryPage(),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < _pageCount; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: _currentPage == i ? 20 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      color: _currentPage == i ? _accent : _border,
+                    ),
+                  ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                // The category page ends with a choice, not a button.
+                child:
+                    _onCategoryPage
+                        ? null
+                        : FilledButton(
+                          onPressed: _onNext,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _accent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            'Next',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlide(_Slide slide) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Center(child: _SlideArt(icon: slide.icon))),
+          const SizedBox(height: 24),
+          Text(
+            slide.title,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: _textPrimary,
+              letterSpacing: -0.4,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            slide.description,
+            style: TextStyle(fontSize: 15, color: _textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryPage() {
+    const categories = [
       _CategoryOption(
         label: 'Student',
         icon: Icons.school_outlined,
@@ -166,418 +265,103 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     ];
 
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 48),
-
-              // ── Logo badge ──────────────────────────────────────────
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accent.withOpacity(0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.directions_bus_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              Text(
-                'Welcome to\nTransitPH!',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  color: _textPrimary,
-                  letterSpacing: -0.5,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Select your category to personalize your experience:',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _textSecondary,
-                  height: 1.5,
-                ),
-              ),
-
-              const SizedBox(height: 36),
-
-              if (_isLoading)
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: _accent,
-                      strokeWidth: 2.5,
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: Column(
-                    children:
-                        categories.map((cat) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: GestureDetector(
-                              onTap:
-                                  _isLoading
-                                      ? null
-                                      : () => _onCategorySelected(cat.label),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _surface,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: _border),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accent.withOpacity(0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: _accentSoft,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        cat.icon,
-                                        color: _accent,
-                                        size: 22,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            cat.label,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w700,
-                                              color: _textPrimary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            cat.description,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: _textSecondary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.arrow_forward_ios_rounded,
-                                      size: 14,
-                                      color: _textSecondary,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_categorySelected) {
-      return _buildCategorySelection();
-    }
-
-    return Scaffold(
-      backgroundColor: _bg,
-      body: Stack(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Slide pages ──────────────────────────────────────────────
-          PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            itemCount: _slides.length,
-            itemBuilder: (context, index) {
-              final slide = _slides[index];
-              final slideColor = slide['color'] as Color;
-              final isLast = index == _slides.length - 1;
-
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(28, 80, 28, 180),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Icon badge
-                    Container(
-                      width: 110,
-                      height: 110,
+          const SizedBox(height: 16),
+          Text(
+            'Which fits you best?',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: _textPrimary,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'TransitPH uses this to suggest routes for you.',
+            style: TextStyle(fontSize: 15, color: _textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 24),
+          if (_isSaving)
+            const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: _accent,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            )
+          else
+            for (final category in categories)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Material(
+                  color: _surface,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => _onCategorySelected(category.label),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: slideColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: slideColor.withOpacity(0.25),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: slideColor.withOpacity(0.15),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: _border),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: _accentSoft,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              category.icon,
+                              color: _accent,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  category.label,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  category.description,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: _textSecondary,
                           ),
                         ],
                       ),
-                      child: Icon(
-                        slide['icon'] as IconData,
-                        size: 52,
-                        color: slideColor,
-                      ),
                     ),
-
-                    const SizedBox(height: 40),
-
-                    // Slide number pill
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _accentSoft,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${index + 1} of ${_slides.length}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _accent,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    Text(
-                      slide['title'] as String,
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: _textPrimary,
-                        letterSpacing: -0.4,
-                        height: 1.2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    Text(
-                      slide['description'] as String,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: _textSecondary,
-                        height: 1.6,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    if (isLast) ...[
-                      const SizedBox(height: 28),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3EC97A).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF3EC97A).withOpacity(0.3),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline_rounded,
-                              size: 16,
-                              color: Color(0xFF3EC97A),
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Ready to go!',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF3EC97A),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
-
-          // ── Skip button ──────────────────────────────────────────────
-          Positioned(
-            top: 50,
-            right: 20,
-            child: GestureDetector(
-              onTap: _onSkip,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accent.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  'Skip',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _textSecondary,
                   ),
                 ),
               ),
-            ),
-          ),
-
-          // ── Page dots ────────────────────────────────────────────────
-          Positioned(
-            bottom: 110,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _slides.length,
-                (index) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: _currentPage == index ? 22 : 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    color: _currentPage == index ? _accent : _border,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Next / Start Exploring button ────────────────────────────
-          Positioned(
-            bottom: 36,
-            left: 24,
-            right: 24,
-            child: GestureDetector(
-              onTap: _onNext,
-              child: Container(
-                height: 54,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0B8FD6), Color(0xFF2BB5F0)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accent.withOpacity(0.35),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _currentPage == _slides.length - 1
-                          ? 'Start Exploring'
-                          : 'Next',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.1,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      _currentPage == _slides.length - 1
-                          ? Icons.rocket_launch_rounded
-                          : Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -590,7 +374,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// ─── Private data class for category options ────────────────────────────────
+class _Slide {
+  final String title;
+  final String description;
+  final IconData icon;
+
+  const _Slide({
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+}
+
+/// A slide's picture: its icon in soft rings.
+class _SlideArt extends StatelessWidget {
+  final IconData icon;
+
+  const _SlideArt({required this.icon});
+
+  static const _accent = Color(0xFF0B8FD6);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      height: 220,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.accentSoft.withValues(alpha: 0.5),
+      ),
+      alignment: Alignment.center,
+      child: Container(
+        width: 140,
+        height: 140,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.accentSoft,
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, size: 64, color: _accent),
+      ),
+    );
+  }
+}
+
 class _CategoryOption {
   final String label;
   final IconData icon;

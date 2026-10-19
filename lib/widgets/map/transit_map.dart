@@ -299,12 +299,13 @@ class TransitMapController {
   }
 
   /// Shows all of [points] inside [padding] (logical pixels), no closer
-  /// than [maxZoom].
+  /// than [maxZoom]; with [flat], north up and untilted.
   Future<void> fitPoints(
     List<LatLng> points, {
     EdgeInsets padding = const EdgeInsets.all(40),
     double maxZoom = 17,
     Duration duration = const Duration(milliseconds: 600),
+    bool flat = false,
   }) async {
     if (points.isEmpty) return;
     final state = _state;
@@ -316,6 +317,7 @@ class TransitMapController {
             padding: padding,
             maxZoom: maxZoom,
             duration: Duration.zero,
+            flat: flat,
           );
       return;
     }
@@ -331,18 +333,29 @@ class TransitMapController {
       return moveTo(points.first, zoom: maxZoom, duration: duration);
     }
     await state._openLimitsForMove();
-    final ratio = state._pixelRatio;
+    if (flat) {
+      // North up and flat first: bounds fitted under a tilt or turn land
+      // off to one side.
+      final camera = await controller.queryCameraPosition();
+      if (camera != null && (camera.tilt > 0 || camera.bearing != 0)) {
+        await controller.moveCamera(
+          ml.CameraUpdate.newCameraPosition(
+            ml.CameraPosition(target: camera.target, zoom: camera.zoom),
+          ),
+        );
+      }
+    }
     await _run(
       ml.CameraUpdate.newLatLngBounds(
         ml.LatLngBounds(
           southwest: ml.LatLng(south, west),
           northeast: ml.LatLng(north, east),
         ),
-        // MapLibre takes these in screen pixels.
-        left: padding.left * ratio,
-        top: padding.top * ratio,
-        right: padding.right * ratio,
-        bottom: padding.bottom * ratio,
+        // Logical pixels: the plugin scales them to the screen itself.
+        left: padding.left,
+        top: padding.top,
+        right: padding.right,
+        bottom: padding.bottom,
       ),
       duration,
       false,

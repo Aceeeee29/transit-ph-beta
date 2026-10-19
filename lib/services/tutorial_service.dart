@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
 import 'gamification_service.dart';
@@ -32,99 +32,63 @@ class TutorialService {
     } catch (_) {}
   }
 
-  /// Get tutorial steps for contribute screen
+  /// The contribute tutorial: one card per part of drawing a route, in the
+  /// order it's done. [TutorialStep.image] holds a screenshot once added.
   static List<TutorialStep> getContributeTutorialSteps() {
-    // Using manual positions for better control
-    // Assuming typical screen size, positions are approximate
-    return [
+    return const [
       TutorialStep(
-        title: 'Welcome to Route Creation!',
+        title: 'Set the start',
         description:
-            'Let\'s learn how to create and share transit routes with the community.',
-        targetKey: 'map',
-        animationAsset: 'map_overview',
-        customPosition: const Offset(200, 150), // Center of map area
-        customSize: const Size(400, 300),
+            'Pick the vehicle, then tap the map where riders begin. Search a '
+            'place first to jump there.',
+        icon: Icons.touch_app_rounded,
+        image: 'assets/tutorial/contribute_1.jpg',
+        focus: 0.35,
       ),
       TutorialStep(
-        title: 'Step 1: Select Starting Point',
-        description: 'Tap on the map to mark where your route begins.',
-        targetKey: 'map',
-        animationAsset: 'tap_start_point',
-        customPosition: const Offset(200, 150),
-        customSize: const Size(400, 300),
+        title: 'Draw the line',
+        description:
+            'Keep tapping along the road; the line follows the street. Undo '
+            'takes back a point, and you can drag the dots to fix a turn.',
+        icon: Icons.gesture_rounded,
+        image: 'assets/tutorial/contribute_2.jpg',
+        focus: 0,
       ),
       TutorialStep(
-        title: 'Step 2: Choose Transport Mode',
+        title: 'Save the step',
         description:
-            'Select how you\'ll travel in this segment (bus, jeepney, walk, etc.).',
-        targetKey: 'mode_selector',
-        animationAsset: 'select_mode',
-        customPosition: const Offset(20, 100), // Top left controls
-        customSize: const Size(200, 100),
+            'Press Save step, then write what riders do ("Ride the jeep with '
+            'the Monumento signboard") and add the fare, hours and stops.',
+        icon: Icons.directions_bus_rounded,
+        image: 'assets/tutorial/contribute_3.jpg',
+        focus: -0.2,
       ),
       TutorialStep(
-        title: 'Step 3: Add Route Points',
+        title: 'Add the next ride',
         description:
-            'Tap to add more points along your route. The app will connect them automatically using snap-to-road.',
-        targetKey: 'map',
-        animationAsset: 'add_route_points',
-        customPosition: const Offset(200, 150),
-        customSize: const Size(400, 300),
+            'Changing vehicles? Tap to start the next step where this one '
+            'ended. When the whole trip is drawn, press Finish.',
+        icon: Icons.alt_route_rounded,
+        image: 'assets/tutorial/contribute_4.jpg',
+        focus: 0,
       ),
       TutorialStep(
-        title: 'Step 4: Add Instructions',
+        title: 'Fill in Basic Info',
         description:
-            'For each segment, add helpful instructions like "Take the blue jeepney" or "Walk to the corner".',
-        targetKey: 'mode_selector',
-        animationAsset: 'add_instructions',
-        customPosition: const Offset(20, 100),
-        customSize: const Size(200, 100),
+            'Type where the route starts and ends, like "SM Valenzuela" and '
+            '"Monumento", then press Next to pick tags.',
+        icon: Icons.edit_note_rounded,
+        image: 'assets/tutorial/contribute_5.jpg',
+        focus: 0.55,
       ),
       TutorialStep(
-        title: 'Step 5: Complete Your Route',
+        title: 'Describe it and finish',
         description:
-            'Add as many segments as needed, then tap "Finish Route" when done.',
-        targetKey: 'submit_button',
-        animationAsset: 'finish_route',
-        customPosition: const Offset(150, 500), // Bottom form area
-        customSize: const Size(150, 50),
-      ),
-      TutorialStep(
-        title: 'Step 6: Select Route Tags',
-        description:
-            'Choose tags that best match who this route helps and the route style (budget, fast, accessible, etc.).',
-        targetKey: 'route_form',
-        animationAsset: 'select_tags',
-        customPosition: const Offset(50, 400), // Form area
-        customSize: const Size(300, 200),
-      ),
-      TutorialStep(
-        title: 'Step 7: Fill Route Details',
-        description:
-            'Add a description, estimated time, price, and schedule to help others.',
-        targetKey: 'route_form',
-        animationAsset: 'fill_details',
-        customPosition: const Offset(50, 400), // Form area
-        customSize: const Size(300, 200),
-      ),
-      TutorialStep(
-        title: 'Step 8: Preview Your Route',
-        description:
-            'Preview how your route will look to others before submitting it.',
-        targetKey: 'preview_button',
-        animationAsset: 'preview_route',
-        customPosition: const Offset(20, 80), // App bar preview button
-        customSize: const Size(100, 40),
-      ),
-      TutorialStep(
-        title: 'Ready to Go!',
-        description:
-            'Now you know how to create routes. Your contributions help everyone navigate better!',
-        targetKey: 'submit_button',
-        animationAsset: 'submit_route',
-        customPosition: const Offset(150, 500),
-        customSize: const Size(150, 50),
+            'Add a short description, then press Finish Route. A moderator '
+            'reviews new routes before they appear for everyone.',
+        icon: Icons.send_rounded,
+        image: 'assets/tutorial/contribute_6.jpg',
+        focus: 0.8,
       ),
     ];
   }
@@ -244,20 +208,25 @@ class TutorialService {
   }
 }
 
+/// One card of a tutorial: a screenshot (or, until there is one, an icon),
+/// a title and a line or two.
 class TutorialStep {
   final String title;
   final String description;
-  final String targetKey;
-  final String? animationAsset;
-  final Offset? customPosition;
-  final Size? customSize;
 
-  TutorialStep({
+  /// An asset path, e.g. 'assets/tutorial/contribute_1.png'.
+  final String? image;
+
+  /// Which part of a tall [image] the card zooms to: -1 the top, 0 the
+  /// middle, 1 the bottom.
+  final double focus;
+  final IconData icon;
+
+  const TutorialStep({
     required this.title,
     required this.description,
-    required this.targetKey,
-    this.animationAsset,
-    this.customPosition,
-    this.customSize,
+    this.image,
+    this.focus = 0,
+    this.icon = Icons.lightbulb_outline_rounded,
   });
 }

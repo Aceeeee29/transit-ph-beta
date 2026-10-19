@@ -107,6 +107,11 @@ class OrsStep {
   /// True for rides taken from an admin-approved community route.
   final bool isCommunity;
 
+  /// Where the step starts and ends ("Monumento"), when known; the follow
+  /// card says "Ride to Monumento".
+  final String? fromName;
+  final String? toName;
+
   const OrsStep({
     required this.instruction,
     required this.distanceMeters,
@@ -116,6 +121,8 @@ class OrsStep {
     this.wayPointStart = 0,
     this.wayPointEnd = 0,
     this.isCommunity = false,
+    this.fromName,
+    this.toName,
   });
 
   Map<String, dynamic> toJson() => {
@@ -127,6 +134,8 @@ class OrsStep {
     'wayPointStart': wayPointStart,
     'wayPointEnd': wayPointEnd,
     'isCommunity': isCommunity,
+    if (fromName != null) 'fromName': fromName,
+    if (toName != null) 'toName': toName,
   };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
@@ -138,5 +147,7 @@ class OrsStep {
     wayPointStart: json['wayPointStart'] as int? ?? 0,
     wayPointEnd: json['wayPointEnd'] as int? ?? 0,
     isCommunity: json['isCommunity'] as bool? ?? false,
+    fromName: json['fromName'] as String?,
+    toName: json['toName'] as String?,
   );
 }

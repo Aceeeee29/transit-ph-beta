@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/ors_route_result.dart';
 import '../models/route.dart' as route_model;
 import 'fare_matrix.dart';
+import 'follow_legs.dart';
 
 /// One trip out of two: the way to a rider route's start (generated), then
 /// the rider route itself, so it can be followed in one go ("VGC → Monumento
@@ -53,6 +54,8 @@ class TripJoiner {
           wayPointStart: offset + range.start,
           wayPointEnd: offset + range.end,
           isCommunity: true,
+          fromName: FollowLegs.riderStepEnds(route, i).from,
+          toName: FollowLegs.riderStepEnds(route, i).to,
         ),
       );
     }
@@ -65,11 +68,31 @@ class TripJoiner {
       // Plus a few minutes to change rides.
       durationSeconds: toStart.durationSeconds + routeSeconds + 180,
       polyline: polyline,
-      steps: [...toStart.steps, ...routeSteps],
+      steps: [
+        // The way there ends at the rider route's start.
+        for (var i = 0; i < toStart.steps.length; i++)
+          i == toStart.steps.length - 1 && toStart.steps[i].toName == null
+              ? _endingAt(toStart.steps[i], route.startLocation)
+              : toStart.steps[i],
+        ...routeSteps,
+      ],
       bbox: _bbox(polyline),
       estimatedFarePhp: toStart.baseFarePhp + routeFare,
     );
   }
+
+  static OrsStep _endingAt(OrsStep step, String toName) => OrsStep(
+    instruction: step.instruction,
+    distanceMeters: step.distanceMeters,
+    durationSeconds: step.durationSeconds,
+    suggestedMode: step.suggestedMode,
+    estimatedFare: step.estimatedFare,
+    wayPointStart: step.wayPointStart,
+    wayPointEnd: step.wayPointEnd,
+    isCommunity: step.isCommunity,
+    fromName: step.fromName,
+    toName: toName,
+  );
 
   /// "VGC Terminal → Monumento + Monumento → STI Caloocan".
   static String title({

@@ -13,8 +13,8 @@ class AuthGate extends StatelessWidget {
 
   const AuthGate({super.key, this.quickRouteToken});
 
-  static const _privacyPolicyVersion = '2026-04-08';
-  static const _termsVersion = '2026-04-08';
+  static const _privacyPolicyVersion = '2026-10-19';
+  static const _termsVersion = '2026-10-19';
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static Color get _bg => AppColors.bg;

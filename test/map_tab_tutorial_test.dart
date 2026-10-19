@@ -77,11 +77,7 @@ void main() {
             TutorialOverlay(
               steps: [
                 for (var i = 0; i < 2; i++)
-                  TutorialStep(
-                    title: 'Step $i',
-                    description: '',
-                    targetKey: '',
-                  ),
+                  TutorialStep(title: 'Step $i', description: ''),
               ],
               onComplete: () => completed++,
             ),

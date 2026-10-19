@@ -1,64 +1,108 @@
 part of 'route_map_screen.dart';
 
-/// The route view's Map-tab chrome: the top bar (or the guidance card while
+/// The route view's Map-tab chrome: the top bar (or the step card while
 /// following), the right-side buttons and the route drawer.
 extension _RouteMapScreenChrome on _RouteMapScreenState {
   static const _accent = _RouteMapScreenState._accent;
-  static Color get _textPrimary => _RouteMapScreenState._textPrimary;
   static Color get _textSecondary => _RouteMapScreenState._textSecondary;
   static Color get _border => _RouteMapScreenState._border;
   static const _danger = _RouteMapScreenState._danger;
   static const _green = _RouteMapScreenState._green;
 
+  /// Following and not yet arrived: the step card and no tabs.
+  bool get _isFollowingNow => _isNavigationStarted && !_hasArrived;
+
   Widget _buildTopOverlaySection() {
-    if (_guidance.kind != FollowGuidanceKind.none) {
-      // Following: the next instruction takes the search bar's place.
-      return Positioned(
-        top: 8,
-        left: 12,
-        right: 12,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RouteBackButton(onBack: _closeView),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FollowGuidanceCard(
-                guidance: _guidance,
-                remainingMeters:
-                    ActiveNavigationService.instance.connectorRemainingMeters,
-                isRerouting: ActiveNavigationService.instance.isRerouting,
-                routeStartLabel: widget.route.startLocation,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    // Following: the step being travelled takes the top bar's place.
+    final legCard = _isFollowingNow ? _buildLegCard() : null;
     return Positioned(
       top: 8,
-      left: 0,
-      right: 0,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: RouteTopBar(
-              from: widget.route.startLocation,
-              to: widget.route.endLocation,
-              onBack: _closeView,
-            ),
+      left: 12,
+      right: 12,
+      child:
+          legCard ??
+          RouteTopBar(
+            from: widget.route.startLocation,
+            to: widget.route.endLocation,
+            onBack: _closeView,
           ),
-          if (!_isNavigationStarted) ...[
-            const SizedBox(height: 8),
-            PlaceCategoryChips(
-              selected: MapTabController.instance.placeCategories.value,
-              onToggleAll: MapTabController.instance.toggleAllCategories,
-              onToggle: MapTabController.instance.toggleCategory,
-            ),
-          ],
-        ],
+    );
+  }
+
+  /// Step [index] as the top card shows it.
+  FollowLegInfo _legInfo(int index) {
+    final step = widget.route.steps[index];
+    final ends = FollowLegs.riderStepEnds(widget.route, index);
+    final isWalk = step.mode == 'Walk';
+    final instruction = step.instruction.trim();
+    final fare =
+        isWalk
+            ? null
+            : _applyFareDiscount(
+              step.actualFare ?? _estimateStepFare(index, step),
+              step.mode,
+            );
+    return FollowLegInfo(
+      mode: step.mode,
+      headline:
+          ends.to != null
+              ? '${isWalk ? 'Walk' : 'Ride'} to ${ends.to}'
+              : instruction.isNotEmpty
+              ? instruction
+              : step.mode,
+      from: ends.from,
+      fare: fare != null && fare > 0 ? '₱${fare.round()}' : null,
+    );
+  }
+
+  /// The card while following; how to get back to the route replaces the
+  /// step while off it.
+  Widget? _buildLegCard() {
+    final steps = widget.route.steps;
+    if (steps.isEmpty) return null;
+    final navigation = ActiveNavigationService.instance;
+    final progress = navigation.legProgress;
+    final index = math.min(progress?.index ?? 0, steps.length - 1);
+    final next =
+        index + 1 < steps.length
+            ? _legInfo(index + 1).headline
+            : 'Arrive at ${widget.route.endLocation}';
+    final followSteps = navigation.activeTarget?.steps ?? const <FollowStep>[];
+    return FollowLegCard(
+      leg: _legInfo(index),
+      metersLeft: progress?.metersLeft ?? _estimateStepDistanceKm(index) * 1000,
+      next: next,
+      getOffSoon:
+          progress != null &&
+          _guidance.kind == FollowGuidanceKind.none &&
+          progress.isGetOffSoon(followSteps),
+      getOffName: FollowLegs.riderStepEnds(widget.route, index).to,
+      guidance:
+          _guidance.kind == FollowGuidanceKind.none
+              ? null
+              : FollowGuidanceCard(
+                guidance: _guidance,
+                remainingMeters: navigation.connectorRemainingMeters,
+                isRerouting: navigation.isRerouting,
+                routeStartLabel: widget.route.startLocation,
+              ),
+    );
+  }
+
+  /// The whole route in view. While following, the camera stops tracking
+  /// until the location button is pressed.
+  void _showWholeRoute() {
+    if (_pathPoints.isEmpty) return;
+    if (_isAutoFollowEnabled) _setAutoFollowEnabled(false);
+    _map.fitPoints(
+      _pathPoints,
+      padding: EdgeInsets.fromLTRB(
+        40,
+        _isNavigationStarted ? 190 : 90,
+        40,
+        _drawerPeekHeight + 40,
       ),
+      flat: true,
     );
   }
 
@@ -67,7 +111,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
     final following = _isNavigationStarted && _isAutoFollowEnabled;
     return Positioned(
       right: 12,
-      bottom: _RouteMapScreenState._drawerPeekHeight + 12,
+      bottom: _drawerPeekHeight + 12,
       child: MapSideButtons(
         children: [
           MapSideButton(
@@ -111,33 +155,33 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
   Widget _buildRouteDrawerSection() {
     final place = _selectedPlace;
     final remaining = _remainingTrip();
-    final fare = _routeFareLabel();
-    final String primary;
-    final List<String> details;
-    if (remaining != null) {
-      primary = '${math.max(1, remaining.minutes)} min left';
-      details = [
-        '${RouteMetricsService.formatDistance(remaining.meters / 1000)} left',
-        if (fare != null) fare,
-      ];
-    } else {
-      primary = _routeEtaLabel() ?? 'Route';
-      details = [_routeDistanceLabel(), if (fare != null) fare];
+    final fare = _routeFareLabel()?.replaceFirst('PHP ', '₱');
+    final time =
+        remaining != null
+            ? RouteMetricsService.formatEta(math.max(1, remaining.minutes))
+            : _routeEtaLabel() ?? 'Route';
+    final distance =
+        remaining != null
+            ? RouteMetricsService.formatDistance(remaining.meters / 1000)
+            : _routeDistanceLabel();
+    final modes = <String>[];
+    for (final step in widget.route.steps) {
+      if (!modes.contains(step.mode)) modes.add(step.mode);
     }
 
     return MapDrawer(
       controller: _drawerController,
-      peekHeight: _RouteMapScreenState._drawerPeekHeight,
+      peekHeight: _drawerPeekHeight,
       header: RouteDrawerHeader(
-        primary: primary,
-        secondary: details.join(' · '),
-        trailing: RouteFollowButton(
-          isFollowing: _isNavigationStarted,
-          hasArrived: _hasArrived,
-          onStart: _startNavigation,
-          onStop: _stopNavigation,
-          onDone: _finishArrivedRoute,
-        ),
+        primary: time,
+        secondary: [distance, if (fare != null) fare].join(' · '),
+        isFollowing: _isNavigationStarted,
+        hasArrived: _hasArrived,
+        isStarting: _isStarting,
+        onStart: _startNavigation,
+        onStop: _stopNavigation,
+        onDone: _finishArrivedRoute,
+        onOverview: _showWholeRoute,
       ),
       children: [
         if (place != null) ...[
@@ -187,7 +231,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
             ],
           ),
         ),
-        _buildModeLegendRow(),
+        RouteModeLegend(modes: modes),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Column(
@@ -196,46 +240,6 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
           ),
         ),
       ],
-    );
-  }
-
-  /// Which color is which mode on the map, inline under the actions.
-  Widget _buildModeLegendRow() {
-    final routeModes = widget.route.steps.map((s) => s.mode).toSet();
-    final entries =
-        modeColors.entries.where((e) => routeModes.contains(e.key)).toList();
-    if (entries.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 4,
-        children: [
-          for (final entry in entries)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 14,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: entry.value,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  entry.key,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
     );
   }
 

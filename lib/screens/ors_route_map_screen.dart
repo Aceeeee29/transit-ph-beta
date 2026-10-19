@@ -34,10 +34,10 @@ import '../models/place.dart';
 import '../services/map_tab_controller.dart';
 import '../widgets/map_tab/map_drawer.dart';
 import '../widgets/map_tab/map_side_button.dart';
-import '../widgets/map_tab/place_category_chips.dart';
+import '../widgets/route_map/follow_leg_card.dart';
+import '../widgets/route_map/route_modes.dart';
 import '../widgets/map_tab/place_widgets.dart';
 import '../widgets/map_tab/route_view_widgets.dart';
-import '../widgets/route_map/step_done_label.dart';
 import '../theme/app_colors.dart';
 
 /// Displays an ORS-generated route on an interactive map.
@@ -95,8 +95,16 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   final DraggableScrollableController _drawerController =
       DraggableScrollableController();
   Place? _selectedPlace;
-  // Taller than other route views: the header also credits the guide.
-  static const double _drawerPeekHeight = 100.0;
+
+  /// Taller before Start: the Start button and the guide's credit.
+  double get _drawerPeekHeight => RouteDrawerHeader.peekHeight(
+    showsButton: !_isNavigationStarted || _hasArrived,
+    byline: !_isNavigationStarted,
+  );
+
+  /// Start pressed before the first GPS fix: following begins on the fix.
+  bool _isStarting = false;
+  Timer? _startTimeout;
 
   static const _cacheMode = 'Auto';
 
@@ -204,7 +212,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   /// Keeps the 2D/3D button in step with a tilt by hand. Following sets
   /// the tilt itself, and a gesture stops following first.
   void _onMapCameraIdle(TransitMapCamera camera) {
-    if (_isNavigationStarted && _isAutoFollowEnabled) return;
+    if (_isNavigationStarted) return;
     final tilted = camera.tilt > 5;
     if (tilted != _tilted && mounted) setState(() => _tilted = tilted);
   }
@@ -297,6 +305,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
           if (mounted) {
             _applyPosition(position, _rawLatLng(position));
             if (!_isNavigationStarted) _startLocationTracking();
+            _startIfWaiting();
           }
         } catch (_) {}
       }
@@ -324,6 +333,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       return;
     }
     setState(() => _applyPosition(position, _rawLatLng(position)));
+    _startIfWaiting();
   }
 
   void _onNavigationPosition() {
@@ -403,19 +413,28 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
     _drawerController.dispose();
+    _startTimeout?.cancel();
     _facing.dispose();
     _positionSubscription?.cancel();
     super.dispose();
   }
 
-  void _centerOnRoute() {
-    if (widget.result.polyline.isEmpty) return;
+  /// The whole route in view. While following, the camera stops tracking
+  /// until the location button is pressed.
+  void _showWholeRoute() {
     final points = widget.result.polyline;
-    final center = LatLng(
-      (points.first.latitude + points.last.latitude) / 2,
-      (points.first.longitude + points.last.longitude) / 2,
+    if (points.isEmpty) return;
+    if (_isAutoFollowEnabled) setState(() => _isAutoFollowEnabled = false);
+    _map.fitPoints(
+      points,
+      padding: EdgeInsets.fromLTRB(
+        40,
+        _isNavigationStarted ? 190 : 90,
+        40,
+        _drawerPeekHeight + 40,
+      ),
+      flat: true,
     );
-    _map.moveTo(center, zoom: 13.0, bearing: 0);
   }
 
   void _centerOnMe() {
@@ -426,14 +445,44 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     _smoothMoveCamera(_displayPosition!, zoom: _followZoom, bearing: _heading);
   }
 
+  /// Start: right away with a location, otherwise as soon as one arrives.
   void _startNavigation() {
     if (_displayPosition == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Waiting for live location...')),
-      );
+      _waitForLocationThenStart();
       return;
     }
+    _beginFollowing();
+  }
 
+  void _waitForLocationThenStart() {
+    if (_isStarting) return;
+    setState(() => _isStarting = true);
+    _startTimeout?.cancel();
+    _startTimeout = Timer(const Duration(seconds: 30), () {
+      if (!mounted || !_isStarting) return;
+      setState(() => _isStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't get your location. Check that location is on, then "
+            'press Start again.',
+          ),
+        ),
+      );
+    });
+    if (_positionSubscription == null && !_isLocating) _initLocation();
+  }
+
+  /// A fix arrived while Start waits for one.
+  void _startIfWaiting() {
+    if (_isStarting && _displayPosition != null && !_isNavigationStarted) {
+      _beginFollowing();
+    }
+  }
+
+  void _beginFollowing() {
+    _startTimeout?.cancel();
+    _isStarting = false;
     // The session's stream takes over from the preview stream.
     _stopLocationTracking();
     _isAutoFollowEnabled = true;
@@ -530,7 +579,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         (
           start: step.wayPointStart,
           end: step.wayPointEnd,
-          color: _modeColor(step.suggestedMode),
+          color: RouteModes.color(step.suggestedMode),
         ),
     ];
   }
@@ -557,19 +606,25 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     ];
   }
 
-  /// Round start and end badges.
+  /// The end pin.
   List<MapIcon> get _icons {
     final points = widget.result.polyline;
     return [
-      if (points.isNotEmpty) MapIcon(points.first, MapPinImages.badgeStart),
-      if (points.length > 1) MapIcon(points.last, MapPinImages.badgeEnd),
+      if (points.length > 1)
+        MapIcon(points.last, MapPinImages.tripEnd, anchorBottom: true),
     ];
   }
 
-  /// The next point to reach while following.
+  /// The start, each mode switch, and the next point to reach while
+  /// following.
   List<MapDot> get _dots {
+    final points = widget.result.polyline;
     final target = FollowRouteLayers.targetDot(_guidance);
-    return [if (target != null) target];
+    return [
+      if (points.isNotEmpty) FollowRouteLayers.startDot(points.first),
+      ...FollowRouteLayers.modeSwitchDots(points, _stepRanges),
+      if (target != null) target,
+    ];
   }
 
   /// The traveler's arrow, drawn above every other layer. It turns with
@@ -670,7 +725,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         ...widget.result.polyline,
         _displayPosition,
       ]),
-      keepInsidePadding: const EdgeInsets.fromLTRB(
+      keepInsidePadding: EdgeInsets.fromLTRB(
         16,
         120,
         16,
@@ -690,61 +745,85 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         }
       },
       onCameraIdle: _onMapCameraIdle,
-      // Below the top bar and the chips.
-      compassMargin: const math.Point(16, 130),
-      attributionMargin: const math.Point(8, _drawerPeekHeight + 8),
+      // Below the top bar, or the taller step card while following.
+      compassMargin: math.Point(16, _isFollowingNow ? 200 : 80),
+      attributionMargin: math.Point(8, _drawerPeekHeight + 8),
+    );
+  }
+
+  /// Following and not yet arrived: the step card and no tabs.
+  bool get _isFollowingNow => _isNavigationStarted && !_hasArrived;
+
+  /// The step being travelled, for the top card.
+  FollowLegInfo _legInfo(int index) {
+    final steps = widget.result.steps;
+    final step = steps[index];
+    final isLast = index == steps.length - 1;
+    final to = step.toName ?? (isLast ? widget.destinationName : null);
+    final isWalk = step.suggestedMode == 'Walk';
+    final fare =
+        isWalk || step.estimatedFare <= 0
+            ? null
+            : '₱${_applyFareDiscount(step.estimatedFare, step.suggestedMode).round()}';
+    return FollowLegInfo(
+      mode: step.suggestedMode,
+      headline:
+          to != null
+              ? '${isWalk ? 'Walk' : 'Ride'} to $to'
+              : step.instruction.replaceFirst('[Estimated] ', ''),
+      from: step.fromName,
+      fare: fare,
+    );
+  }
+
+  /// The card while following; how to get back to the route replaces the
+  /// step while off it.
+  Widget? _buildLegCard() {
+    final steps = widget.result.steps;
+    if (steps.isEmpty) return null;
+    final navigation = ActiveNavigationService.instance;
+    final progress = navigation.legProgress;
+    final index = progress?.index ?? 0;
+    final next =
+        index + 1 < steps.length
+            ? _legInfo(index + 1).headline
+            : 'Arrive at ${widget.destinationName}';
+    final followSteps = navigation.activeTarget?.steps ?? const <FollowStep>[];
+    return FollowLegCard(
+      leg: _legInfo(index),
+      metersLeft: progress?.metersLeft ?? steps[index].distanceMeters,
+      next: next,
+      getOffSoon:
+          progress != null &&
+          _guidance.kind == FollowGuidanceKind.none &&
+          progress.isGetOffSoon(followSteps),
+      getOffName: steps[index].toName,
+      guidance:
+          _guidance.kind == FollowGuidanceKind.none
+              ? null
+              : FollowGuidanceCard(
+                guidance: _guidance,
+                remainingMeters: navigation.connectorRemainingMeters,
+                isRerouting: navigation.isRerouting,
+                routeStartLabel: widget.originName,
+              ),
     );
   }
 
   Widget _buildTopOverlay() {
-    if (_guidance.kind != FollowGuidanceKind.none) {
-      // Following: the next instruction takes the search bar's place.
-      return Positioned(
-        top: 8,
-        left: 12,
-        right: 12,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RouteBackButton(onBack: _closeView),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FollowGuidanceCard(
-                guidance: _guidance,
-                remainingMeters:
-                    ActiveNavigationService.instance.connectorRemainingMeters,
-                isRerouting: ActiveNavigationService.instance.isRerouting,
-                routeStartLabel: widget.originName,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    // Following: the step being travelled takes the top bar's place.
+    final legCard = _isFollowingNow ? _buildLegCard() : null;
     return Positioned(
       top: 8,
-      left: 0,
-      right: 0,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: RouteTopBar(
-              from: widget.originName,
-              to: widget.destinationName,
-              onBack: _closeView,
-            ),
+      left: 12,
+      right: 12,
+      child:
+          legCard ??
+          RouteTopBar(
+            from: widget.originName,
+            to: widget.destinationName,
+            onBack: _closeView,
           ),
-          if (!_isNavigationStarted) ...[
-            const SizedBox(height: 8),
-            PlaceCategoryChips(
-              selected: MapTabController.instance.placeCategories.value,
-              onToggleAll: MapTabController.instance.toggleAllCategories,
-              onToggle: MapTabController.instance.toggleCategory,
-            ),
-          ],
-        ],
-      ),
     );
   }
 
@@ -793,43 +872,42 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   Widget _buildDrawer() {
     final place = _selectedPlace;
     final snapshot = _followSnapshot;
-    final String primary;
-    final String secondary;
+    final int minutes;
+    final double meters;
     if (snapshot != null && snapshot.hasProgress) {
       // Time left scales the route's estimate by the distance left.
       final total = widget.result.distanceMeters;
       final share = total > 0 ? snapshot.remainingMeters / total : 1.0;
-      final minutesLeft = (widget.result.durationSeconds * share / 60)
-          .ceil()
-          .clamp(1, 1 << 20);
-      primary = '$minutesLeft min left';
-      secondary =
-          '${RouteMetricsService.formatDistanceMeters(snapshot.remainingMeters)} left'
-          ' · ${_totalFareLabel()}';
+      minutes = (widget.result.durationSeconds * share / 60).ceil().clamp(
+        1,
+        1 << 20,
+      );
+      meters = snapshot.remainingMeters;
     } else {
-      primary = widget.result.durationLabel;
-      secondary =
-          '${RouteMetricsService.formatDistanceMeters(widget.result.distanceMeters)}'
-          ' · ${_totalFareLabel()}';
+      minutes = math.max(1, (widget.result.durationSeconds / 60).ceil());
+      meters = widget.result.distanceMeters;
     }
+    final steps = widget.result.steps;
 
     return MapDrawer(
       controller: _drawerController,
       peekHeight: _drawerPeekHeight,
       header: RouteDrawerHeader(
-        primary: primary,
-        secondary: secondary,
+        primary: RouteMetricsService.formatEta(minutes),
+        secondary:
+            '${RouteMetricsService.formatDistanceMeters(meters)}'
+            ' · ${_totalFareLabel()}',
         byline:
             'Suggested by ${RouteGuide.nameFor('${widget.destinationName}|'
             '${widget.result.distanceMeters.round()}|'
             '${widget.result.durationSeconds.round()}')}',
-        trailing: RouteFollowButton(
-          isFollowing: _isNavigationStarted,
-          hasArrived: _hasArrived,
-          onStart: _startNavigation,
-          onStop: _stopNavigation,
-          onDone: _endNavigationAndOfferCorrection,
-        ),
+        isFollowing: _isNavigationStarted,
+        hasArrived: _hasArrived,
+        isStarting: _isStarting,
+        onStart: _startNavigation,
+        onStop: _stopNavigation,
+        onDone: _endNavigationAndOfferCorrection,
+        onOverview: _showWholeRoute,
       ),
       children: [
         if (place != null) ...[
@@ -841,13 +919,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
           const Divider(height: 1),
         ],
         RouteReportBanner(reports: _roadReports),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (widget.showDownloadButton)
+        if (widget.showDownloadButton)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 RouteActionChip(
                   icon:
                       _isDownloaded
@@ -862,102 +940,65 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
                           ? null
                           : _downloadGeneratedRoute,
                 ),
-              RouteActionChip(
-                icon: Icons.fit_screen_rounded,
-                label: 'Whole route',
-                onTap: _centerOnRoute,
-              ),
+              ],
+            ),
+          ),
+        RouteModeLegend(modes: _activeModes()),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_hasFareSteps) ...[
+                const SizedBox(height: 2),
+                FareDiscountToggle(
+                  value: _isDiscountFareEnabled,
+                  onChanged: _setDiscountEnabled,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                  iconColor: AppColors.textSecondary,
+                  iconSize: 16,
+                  activeColor: const Color(0xFF0B8FD6),
+                ),
+              ],
+              const SizedBox(height: 16),
+              RouteSectionLabel('Route Steps (${steps.length})'),
+              if (steps.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      'No step data available',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ),
+                )
+              else
+                for (var i = 0; i < steps.length; i++)
+                  _buildStepTile(i, steps[i], _isStepCompleted(i)),
             ],
           ),
         ),
-        _buildModeLegendRow(),
-        if (_hasFareSteps)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: FareDiscountToggle(
-              value: _isDiscountFareEnabled,
-              onChanged: _setDiscountEnabled,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              labelStyle: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-              ),
-              iconColor: AppColors.textSecondary,
-              iconSize: 15,
-              activeColor: Colors.blue.shade700,
-            ),
-          ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
-            'Steps (${widget.result.steps.length})',
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
-          ),
-        ),
-        if (widget.result.steps.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Text(
-                'No step data available',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-          )
-        else
-          for (var i = 0; i < widget.result.steps.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 56),
-            _buildStepTile(widget.result.steps[i], _isStepCompleted(i)),
-          ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Text(
             '© OSRM · © OpenStreetMap contributors',
             style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
         ),
       ],
-    );
-  }
-
-  /// Which color is which mode on the map.
-  Widget _buildModeLegendRow() {
-    final modes = _activeModes();
-    if (modes.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 4,
-        children: [
-          for (final mode in modes)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 14,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _modeColor(mode),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Icon(_modeIcon(mode), size: 13, color: _modeColor(mode)),
-                const SizedBox(width: 3),
-                Text(
-                  mode,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: _modeColor(mode),
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
     );
   }
 
@@ -969,98 +1010,32 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     return FollowRouteLayers.isRangeCompleted(ranges[index], _followSnapshot);
   }
 
-  Widget _buildStepTile(OrsStep step, bool isCompleted) {
-    final modeColor =
-        isCompleted ? AppColors.textSecondary : _modeColor(step.suggestedMode);
-    const instructionStyle = TextStyle(fontSize: 13);
-    final tile = ListTile(
-      dense: true,
-      leading: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: modeColor.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
-          border: Border.all(color: modeColor, width: 1.5),
-        ),
-        child: Icon(
-          isCompleted ? Icons.check_rounded : _modeIcon(step.suggestedMode),
-          size: 16,
-          color: modeColor,
-        ),
-      ),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: modeColor,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              step.suggestedMode,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  step.instruction,
-                  style:
-                      isCompleted
-                          ? StepDoneLabel.strike(instructionStyle)
-                          : instructionStyle,
-                ),
-                if (isCompleted) ...[
-                  const SizedBox(height: 3),
-                  const StepDoneLabel(),
-                ],
-                if (step.isCommunity) ...[
-                  const SizedBox(height: 3),
-                  const CommunityRouteBadge(),
-                ],
-              ],
-            ),
-          ),
+  Widget _buildStepTile(int index, OrsStep step, bool isCompleted) {
+    final mode = step.suggestedMode;
+    final fare = step.estimatedFare;
+    final showsDiscount =
+        _isDiscountFareEnabled && PhFareCalculator.givesDiscount(mode);
+    return RouteStepCard(
+      number: index + 1,
+      mode: mode,
+      instruction: step.instruction.replaceFirst('[Estimated] ', ''),
+      isCompleted: isCompleted,
+      distance:
+          step.distanceMeters > 0
+              ? RouteMetricsService.formatDistanceMeters(step.distanceMeters)
+              : null,
+      fare:
+          mode == 'Walk' || fare <= 0
+              ? null
+              : 'Fare: PHP ${fare.toStringAsFixed(0)} (estimated)'
+                  '${showsDiscount ? '\n${FareDiscountToggle.defaultLabel}: PHP ${_applyFareDiscount(fare, mode).toStringAsFixed(0)}' : ''}',
+      extras: [
+        if (step.isCommunity) ...[
+          const SizedBox(height: 4),
+          const CommunityRouteBadge(),
         ],
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (step.distanceMeters > 0)
-            Text(
-              _formatStepDistance(step.distanceMeters),
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-            ),
-          if (step.estimatedFare > 0)
-            Text(
-              '₱${_applyFareDiscount(step.estimatedFare, step.suggestedMode).toStringAsFixed(0)}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.green.shade600,
-              ),
-            ),
-        ],
-      ),
+      ],
     );
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 250),
-      opacity: isCompleted ? 0.5 : 1.0,
-      child: tile,
-    );
-  }
-
-  String _formatStepDistance(double meters) {
-    return RouteMetricsService.formatDistanceMeters(meters);
   }
 
   String _totalFareLabel() {
@@ -1086,47 +1061,5 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       }
     }
     return modes;
-  }
-
-  IconData _modeIcon(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Icons.directions_walk;
-      case 'Jeepney':
-        return Icons.directions_bus;
-      case 'Bus':
-        return Icons.directions_bus_filled;
-      case 'Train':
-        return Icons.train;
-      case 'Tricycle':
-        return Icons.two_wheeler;
-      case 'FX/Van':
-        return Icons.airport_shuttle;
-      case 'Ferry':
-        return Icons.directions_boat;
-      default:
-        return Icons.directions_bus;
-    }
-  }
-
-  Color _modeColor(String mode) {
-    switch (mode) {
-      case 'Walk':
-        return Colors.green.shade600;
-      case 'Jeepney':
-        return Colors.blue.shade600;
-      case 'Bus':
-        return Colors.red.shade600;
-      case 'Train':
-        return Colors.purple.shade600;
-      case 'Tricycle':
-        return Colors.orange.shade600;
-      case 'FX/Van':
-        return Colors.amber.shade700;
-      case 'Ferry':
-        return Colors.lightBlue.shade600;
-      default:
-        return Colors.blue.shade600;
-    }
   }
 }

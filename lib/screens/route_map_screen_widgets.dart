@@ -12,14 +12,6 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   static const _green = _RouteMapScreenState._green;
 
   Widget _buildStepTileSection(int idx, route_model.Step step) {
-    final isCompleted = _isStepCompleted(idx);
-    final modeColor =
-        isCompleted ? _textSecondary : (modeColors[step.mode] ?? _accent);
-    final instructionStyle = TextStyle(
-      fontSize: 13,
-      color: _textPrimary,
-      height: 1.4,
-    );
     final stepSchedule = _stepScheduleText(step);
     final altSuggestion = step.alternateRouteSuggestion?.trim();
     final isTransport = step.mode != 'Walk';
@@ -30,222 +22,105 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
     final showsDiscount =
         _isDiscountFareEnabled && PhFareCalculator.givesDiscount(step.mode);
     final fareProfileLabel = FareDiscountToggle.defaultLabel;
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 250),
-      opacity: isCompleted ? 0.5 : 1.0,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: isCompleted ? _surfaceAlt : _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final stepKm = _estimateStepDistanceKm(idx);
+    return RouteStepCard(
+      number: idx + 1,
+      mode: step.mode,
+      instruction: step.instruction,
+      isCompleted: _isStepCompleted(idx),
+      distance: stepKm > 0 ? RouteMetricsService.formatDistance(stepKm) : null,
+      // The regular fare is always shown; the discounted one is added when
+      // the discount toggle is on and the ride gives it.
+      fare:
+          isTransport
+              ? 'Fare: PHP ${baseFareValue.toStringAsFixed(0)} '
+                  '(${step.actualFare != null ? 'actual' : 'estimated'})'
+                  '${showsDiscount ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}'
+              : null,
+      extras: [
+        if (step.details.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            step.details,
+            style: TextStyle(fontSize: 12, color: _textSecondary, height: 1.4),
+          ),
+        ],
+        if (_boardingLabel(step) case final boarding?) ...[
+          const SizedBox(height: 4),
+          Row(
             children: [
-              Column(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: modeColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: modeColor.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Icon(
-                      isCompleted
-                          ? Icons.check_rounded
-                          : _getModeIcon(step.mode),
-                      color: modeColor,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: _surfaceAlt,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _border),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${idx + 1}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: _textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              Icon(
+                step.usesDesignatedStops
+                    ? Icons.place_rounded
+                    : Icons.front_hand_outlined,
+                size: 13,
+                color: _textSecondary,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 4),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          step.mode,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: modeColor,
-                          ),
-                        ),
-                        if (isCompleted) ...[
-                          const SizedBox(width: 6),
-                          const StepDoneLabel(),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      step.instruction,
-                      style:
-                          isCompleted
-                              ? StepDoneLabel.strike(instructionStyle)
-                              : instructionStyle,
-                    ),
-                    if (step.details.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        step.details,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                    if (_boardingLabel(step) case final boarding?) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            step.usesDesignatedStops
-                                ? Icons.place_rounded
-                                : Icons.front_hand_outlined,
-                            size: 13,
-                            color: _textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: TranslatedText(
-                              boarding,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: _textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (stepSchedule != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFE89A3C,
-                          ).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: const Color(
-                              0xFFFFD9AE,
-                            ).withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Text(
-                          'Schedule: $stepSchedule',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF9A5A17),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (altSuggestion != null && altSuggestion.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF8E1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFFFD54F)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.info_outline_rounded,
-                              size: 14,
-                              color: Color(0xFF7A5800),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                altSuggestion,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF7A5800),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (isTransport) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF8F2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFB9E4C6)),
-                        ),
-                        // The regular fare is always shown; the discounted
-                        // one is added when the discount toggle is on and
-                        // the ride gives it.
-                        child: Text(
-                          'Fare: PHP ${baseFareValue.toStringAsFixed(0)} '
-                          '(${step.actualFare != null ? 'actual' : 'estimated'})'
-                          '${showsDiscount ? '\n$fareProfileLabel: PHP ${fareValue.toStringAsFixed(0)}' : ''}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF2D9F63),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                child: TranslatedText(
+                  boarding,
+                  style: TextStyle(fontSize: 11, color: _textSecondary),
                 ),
               ),
             ],
           ),
-        ),
-      ),
+        ],
+        if (stepSchedule != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE89A3C).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFFFFD9AE).withValues(alpha: 0.35),
+              ),
+            ),
+            child: Text(
+              'Schedule: $stepSchedule',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF9A5A17),
+              ),
+            ),
+          ),
+        ],
+        if (altSuggestion != null && altSuggestion.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFFD54F)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: Color(0xFF7A5800),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    altSuggestion,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF7A5800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -518,11 +393,11 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         ..._pathPoints,
         _displayPosition,
       ]),
-      keepInsidePadding: const EdgeInsets.fromLTRB(
+      keepInsidePadding: EdgeInsets.fromLTRB(
         16,
         120,
         16,
-        _RouteMapScreenState._drawerPeekHeight + 16,
+        _drawerPeekHeight + 16,
       ),
       places: _mapPlaces,
       lines: _lines,
@@ -536,12 +411,9 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
         if (_isAutoFollowEnabled) _setAutoFollowEnabled(false);
       },
       onCameraIdle: _onMapCameraIdle,
-      // Below the top bar and the chips.
-      compassMargin: const math.Point(16, 130),
-      attributionMargin: const math.Point(
-        8,
-        _RouteMapScreenState._drawerPeekHeight + 8,
-      ),
+      // Below the top bar, or the taller step card while following.
+      compassMargin: math.Point(16, _isFollowingNow ? 200 : 80),
+      attributionMargin: math.Point(8, _drawerPeekHeight + 8),
     );
   }
 

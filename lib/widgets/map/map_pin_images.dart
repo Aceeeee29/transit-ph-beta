@@ -28,9 +28,9 @@ class MapPinImages {
   static const routeStart = 'tph-route-start';
   static const routeEnd = 'tph-route-end';
 
-  /// A generated route's start and end: round badges.
-  static const badgeStart = 'tph-badge-start';
-  static const badgeEnd = 'tph-badge-end';
+  /// A route view's end: a small red pin, smaller than the traveler's dot
+  /// up close. (The start is a [MapDot].)
+  static const tripEnd = 'tph-trip-end';
 
   /// A place searched on the drawing map.
   static const searched = 'tph-searched';
@@ -60,12 +60,12 @@ class MapPinImages {
       userDot: await _userDot(pixelRatio),
       routeStart: await _icon(Icons.location_on, Colors.green, 40, pixelRatio),
       routeEnd: await _icon(Icons.flag, Colors.red, 40, pixelRatio),
-      badgeStart: await _badge(
-        Colors.green.shade600,
-        Icons.my_location,
+      tripEnd: await _icon(
+        Icons.location_on,
+        Colors.red.shade600,
+        26,
         pixelRatio,
       ),
-      badgeEnd: await _badge(Colors.red.shade600, Icons.flag, pixelRatio),
       searched: await _icon(Icons.my_location_rounded, _blue, 34, pixelRatio),
       handleStart: await _handle(Colors.green, 36, pixelRatio),
       handleEnd: await _handle(Colors.red, 36, pixelRatio),
@@ -79,22 +79,6 @@ class MapPinImages {
       ),
       handleInsert: await _insertHandle(pixelRatio),
     };
-  }
-
-  /// A colored round badge with a white ring and [icon].
-  static Future<Uint8List> _badge(
-    Color color,
-    IconData icon,
-    double pixelRatio,
-  ) {
-    const size = 44.0, pad = 6.0;
-    return _draw(size + pad * 2, pixelRatio, (canvas) {
-      const center = Offset(size / 2 + pad, size / 2 + pad);
-      _shadow(canvas, center + const Offset(0, 2), size / 2, 4);
-      canvas.drawCircle(center, size / 2, Paint()..color = Colors.white);
-      canvas.drawCircle(center, size / 2 - 2.5, Paint()..color = color);
-      _paintIcon(canvas, icon, Colors.white, 22, center);
-    });
   }
 
   /// A drawing handle: a [color] dot with a white ring.

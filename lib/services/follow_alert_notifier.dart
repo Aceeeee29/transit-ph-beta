@@ -12,6 +12,7 @@ class FollowAlertNotifier {
   static const _channelId = 'follow_route_alerts';
   static const _channelName = 'Follow Route alerts';
   static const _arrivalId = 4101;
+  static const _getOffId = 4102;
 
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _isInitialized = false;
@@ -24,6 +25,35 @@ class FollowAlertNotifier {
       ),
     );
     _isInitialized = true;
+  }
+
+  /// Near the end of a ride: buzzes even with the phone in a pocket.
+  static Future<void> showGetOffSoon(String? stopName) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _ensureInitialized();
+      await _plugin.show(
+        id: _getOffId,
+        title: 'Get off soon',
+        body:
+            stopName != null
+                ? '$stopName is about 300 m ahead.'
+                : 'Your stop is about 300 m ahead.',
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: 'Arrival alerts while following a route.',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: statusIcon,
+            timeoutAfter: 60000,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('FollowAlertNotifier: could not show get-off alert: $e');
+    }
   }
 
   static Future<void> showArrived(String destination) async {

@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.0.31 — October 19, 2026
+
+- Following a route now shows the ride you're on at the top: where to
+  ride or walk to, how far and how long until that part ends, and its
+  fare, with the next step shown under it
+- "Get off soon": about 300 m before the end of a jeep, bus or train
+  ride, the app warns you and your phone buzzes, even in your pocket
+- Press Start once: if your location isn't ready yet, the app waits for
+  it and starts by itself
+- More room for the map while following: the bottom tabs hide until you
+  stop or arrive, and the place category buttons are gone from route
+  views
+- New route drawer, the same on rider routes, generated routes and
+  find-a-way trips: X to stop on the left, time in the middle with the
+  distance and fare under it, and a whole-route button on the right
+- Fixed the whole-route button zooming to the wrong place; on find-a-way
+  trips it now shows the way to the rider route too
+- Smaller start and end markers, plus small dots where you change
+  vehicles
+- New contribute tutorial with real screenshots of each step, and new
+  welcome cards for new accounts
+- Updated Terms and Conditions and Privacy Policy (you'll be asked to
+  accept them once)
+- Long place names and labels no longer get cut off with "…" on Home
+  route cards, the fare matrix and elsewhere
+
 ## v1.0.30 — October 17, 2026
 
 - Fixed routes drawn in Contribute showing "0 m · 0 min": distance, time
