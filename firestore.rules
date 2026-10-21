@@ -257,6 +257,12 @@ service cloud.firestore {
       }
     }
 
+    // Collection-group reads of route audit logs (the dashboard counts each
+    // moderator's approvals from them). Read-only; writes stay on the rule above.
+    match /{path=**}/auditLogs/{logId} {
+      allow read: if isStaff();
+    }
+
     // ── QUICK ROUTE LINKS (24h token-based access) ─────────────────────────
     match /quick_route_links/{token} {
       // Token docs are never listable; only direct token lookup is allowed.
