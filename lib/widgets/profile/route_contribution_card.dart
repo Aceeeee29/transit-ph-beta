@@ -20,9 +20,7 @@ class RouteContributionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final distance = RouteMetricsService.calculateRouteDistance(
-      route.pathPoints,
-    );
+    final distance = RouteMetricsService.routeDistanceKm(route);
     final distanceLabel = RouteMetricsService.formatDistanceForUnit(
       distance,
       distanceUnit: distanceUnit,
@@ -59,7 +57,7 @@ class RouteContributionCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 _infoPill(
                   icon: Icons.schedule_outlined,
-                  label: RouteMetricsService.formatEtaLabel(route.eta),
+                  label: RouteMetricsService.routeEtaLabel(route),
                 ),
               ],
             ),

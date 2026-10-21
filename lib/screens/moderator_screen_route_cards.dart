@@ -214,18 +214,24 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    if (route.eta != null)
-                      _metaChip(Icons.timer_outlined, route.eta!, _accent),
+                    if (RouteMetricsService.routeEtaMinutes(route) != null)
+                      _metaChip(
+                        Icons.timer_outlined,
+                        RouteMetricsService.routeEtaLabel(route),
+                        _accent,
+                      ),
                     if (route.price != null)
                       _metaChip(
                         Icons.payments_outlined,
                         route.price!,
                         _success,
                       ),
-                    if (route.distance != null)
+                    if (RouteMetricsService.routeDistanceKm(route) > 0)
                       _metaChip(
                         Icons.straighten_rounded,
-                        route.distance!,
+                        RouteMetricsService.formatDistance(
+                          RouteMetricsService.routeDistanceKm(route),
+                        ),
                         _textSecondary,
                       ),
                     _metaChip(

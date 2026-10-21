@@ -555,10 +555,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   int _routeEstimatedMinutes(route_model.Route route) {
-    final parsedEta = int.tryParse(
-      (route.eta ?? '').replaceAll(RegExp(r'[^0-9]'), ''),
-    );
-    if (parsedEta != null && parsedEta > 0) return parsedEta;
+    // The saved ETA, else an estimate from the drawn line.
+    final known = RouteMetricsService.routeEtaMinutes(route);
+    if (known != null) return known;
 
     final distanceKm =
         route.distanceMeters != null && route.distanceMeters! > 0
@@ -927,7 +926,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// A generated option's [fare] (already discounted where it applies),
   /// worded as on its route page.
-  String _tripFareLabel(double fare) => PhFareCalculator.tripEstimateLabel(fare);
+  String _tripFareLabel(double fare) =>
+      PhFareCalculator.tripEstimateLabel(fare);
 
   static String _fareLabel(double fare) {
     if (!fare.isFinite) return '₱—';

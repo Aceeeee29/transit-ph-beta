@@ -272,16 +272,23 @@ extension _ContributeScreenSections on _ContributeScreenState {
   /// Distance · time · fare of what's drawn so far, e.g. "1.2 km · 14 min ·
   /// ₱14". Road-measured numbers once every step has them.
   String _routeMetricsLine() {
-    final modes = steps.map((s) => s.mode).toList();
+    // The step still being drawn counts too, in its chosen vehicle: it runs
+    // from the last saved step's end to the end of the line.
+    final modes = [for (var i = 0; i < _stepCount; i++) _modeForStep(i)];
+    // Measured lengths and times cover saved steps only.
     final hasMeasuredDistance =
-        _stepOrsDistM.isNotEmpty && _stepOrsDistM.every((d) => d != null);
+        !_hasOpenStep &&
+        _stepOrsDistM.isNotEmpty &&
+        _stepOrsDistM.every((d) => d != null);
     final distance = RouteMetricsService.formatDistance(
       hasMeasuredDistance
           ? _stepOrsDistM.fold(0.0, (sum, d) => sum + (d ?? 0)) / 1000
           : RouteMetricsService.calculateRouteDistance(pathPoints),
     );
     int minutes;
-    if (_stepOrsDurS.isNotEmpty && _stepOrsDurS.every((d) => d != null)) {
+    if (!_hasOpenStep &&
+        _stepOrsDurS.isNotEmpty &&
+        _stepOrsDurS.every((d) => d != null)) {
       var seconds = _stepOrsDurS.fold(0.0, (sum, d) => sum + (d ?? 0));
       // About two minutes per transfer.
       if (steps.length > 1) seconds += (steps.length - 1) * 120;
@@ -301,7 +308,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     return [
       distance,
       RouteMetricsService.formatEta(minutes),
-      if (steps.isNotEmpty) fare,
+      if (_stepCount > 0) fare,
     ].join(' · ');
   }
 

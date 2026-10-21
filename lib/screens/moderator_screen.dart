@@ -5,6 +5,7 @@ import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../services/moderation_service.dart';
 import '../models/route_issue_report.dart';
+import '../services/route_metrics_service.dart';
 import '../services/route_report_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';

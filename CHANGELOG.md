@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.32 — October 21, 2026
+
+- Fixed rider routes showing "0 min" or "0 m" in your Profile, the
+  Moderator panel and route previews: routes saved that way now show a
+  time and distance worked out from their drawn line
+- Saved times like "1 h 5 min" are read correctly (they were shown as
+  15 minutes)
+- Contribute shows the time and fare while you're still drawing a step,
+  not only after you save it
+
 ## v1.0.31 — October 19, 2026
 
 - Following a route now shows the ride you're on at the top: where to

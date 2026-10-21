@@ -1,4 +1,5 @@
 import 'package:latlong2/latlong.dart' show LatLng, Distance, LengthUnit;
+import '../models/route.dart' as route_model;
 import 'fare_matrix.dart';
 
 class RouteMetricsService {
@@ -203,7 +204,7 @@ class RouteMetricsService {
     } else {
       final hours = minutes ~/ 60;
       final mins = minutes % 60;
-      return '$hours h ${mins > 0 ? '$mins min' : ''}';
+      return mins > 0 ? '$hours h $mins min' : '$hours h';
     }
   }
 
@@ -344,5 +345,72 @@ class RouteMetricsService {
       default:
         return 0.1; // Default
     }
+  }
+
+  /// Minutes in a saved ETA ("25", "25 min", "1 h 5 min"); null when it is
+  /// missing, unreadable or 0.
+  static int? parseEtaMinutes(String? text) {
+    final raw = text?.trim().toLowerCase() ?? '';
+    if (raw.isEmpty) return null;
+    final hours = RegExp(
+      r'(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b',
+    ).firstMatch(raw);
+    final minutes = RegExp(
+      r'(\d+)\s*(?:m|min|mins|minute|minutes)\b',
+    ).firstMatch(raw);
+    final int total;
+    if (hours != null || minutes != null) {
+      total =
+          ((double.tryParse(hours?.group(1) ?? '') ?? 0) * 60).round() +
+          (int.tryParse(minutes?.group(1) ?? '') ?? 0);
+    } else {
+      total = int.tryParse(raw.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    }
+    return total > 0 ? total : null;
+  }
+
+  /// A rider route's travel time in minutes: its saved ETA, or an estimate
+  /// from its drawn line when that is missing or 0 (routes saved before
+  /// 1.0.30 could store "0 min"). Null when neither is known.
+  static int? routeEtaMinutes(route_model.Route route) {
+    final saved = parseEtaMinutes(route.eta);
+    if (saved != null) return saved;
+    final points = route.pathPoints;
+    final steps = route.steps;
+    if (steps.isEmpty || points.length < 2) return null;
+    // Without saved boundaries the line is shared out evenly, as the route
+    // view draws it.
+    final boundaries =
+        route.stepBoundaries.isNotEmpty
+            ? route.stepBoundaries
+            : List.generate(
+              steps.length - 1,
+              (i) => ((i + 1) * (points.length - 1) / steps.length).round(),
+            );
+    final estimated = calculateEta(
+      points,
+      steps.map((s) => s.mode).toList(),
+      boundaries,
+    );
+    return estimated > 0 ? estimated : null;
+  }
+
+  /// [routeEtaMinutes] as "25 min" / "1 h 5 min", or [fallback].
+  static String routeEtaLabel(
+    route_model.Route route, {
+    String fallback = 'N/A',
+  }) {
+    final minutes = routeEtaMinutes(route);
+    return minutes == null ? fallback : formatEta(minutes);
+  }
+
+  /// A rider route's length in km: the saved distance, or the drawn line
+  /// measured when the saved one is missing or 0.
+  static double routeDistanceKm(route_model.Route route) {
+    final meters = route.distanceMeters;
+    if (meters != null && meters > 0) return meters / 1000;
+    final parsed = parseDistanceToKm(route.distance);
+    if (parsed != null && parsed > 0) return parsed;
+    return calculateRouteDistance(route.pathPoints);
   }
 }
