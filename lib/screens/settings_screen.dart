@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Appearance.light: 'Light',
     Appearance.dark: 'Dark',
     Appearance.auto: 'Auto',
-    Appearance.system: 'Follow phone',
+    Appearance.system: 'System',
   };
 
   // ─── Dropdown row

@@ -200,9 +200,15 @@ extension _ContributeScreenSections on _ContributeScreenState {
         }
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to submit route: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is PendingRouteLimitException
+                  ? '$e'
+                  : 'Failed to submit route: $e',
+            ),
+          ),
+        );
         return;
       }
 

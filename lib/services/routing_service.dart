@@ -8,6 +8,7 @@ import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import 'supabase_route_service.dart';
+import 'walk_ride_join.dart';
 import 'transport_mode_inference.dart';
 
 /// Thrown when routing cannot produce a result.
@@ -920,24 +921,86 @@ class RoutingService {
               allowRoadSnap: !_isStationBasedLeg(lastLeg, lastLegMode),
             )
             : null;
-    final shapes = await shapePolylines;
+    final rides = [...await shapePolylines];
+    var walkInPts = walkInFuture == null ? null : await walkInFuture;
+    final transferWalks = <int, List<LatLng>>{
+      for (final entry in transferFutures.entries) entry.key: await entry.value,
+    };
+    var walkOutPts = walkOutFuture == null ? null : await walkOutFuture;
+
+    // ── Join walks and rides where they meet ────────────────────────────────
+    // A jeepney or tricycle can be flagged down anywhere on its road, so
+    // board where the street walk first reaches the ride's line and get
+    // off where the next walk last leaves it, instead of walking along the
+    // ride's road to the router's stop (see WalkRideJoin).
+    var walkInName =
+        selectedOriginStop['stop_name'] as String? ?? firstLeg.boardStopName;
+    var walkOutName =
+        selectedDestStop['stop_name'] as String? ?? lastLeg.alightStopName;
+    final boardNames = [for (final leg in legs) leg.boardStopName];
+    final alightNames = [for (final leg in legs) leg.alightStopName];
+    final boardMoved = List.filled(legs.length, false);
+    bool hailable(int i) =>
+        WalkRideJoin.canHail(legModes[i]) && rides[i].length >= 2;
+
+    void joinBoard(int i, List<LatLng> walk, void Function(List<LatLng>) set) {
+      if (!hailable(i)) return;
+      final joined = WalkRideJoin.board(walk, rides[i]);
+      if (joined == null) return;
+      final was = rides[i].first;
+      rides[i] = joined.ride;
+      boardMoved[i] = true;
+      boardNames[i] = WalkRideJoin.renamed(
+        boardNames[i],
+        was,
+        joined.ride.first,
+      );
+      if (i == 0) {
+        walkInName = WalkRideJoin.renamed(walkInName, was, joined.ride.first);
+      }
+      set(joined.walk);
+    }
+
+    void joinAlight(int i, List<LatLng> walk, void Function(List<LatLng>) set) {
+      if (!hailable(i)) return;
+      final joined = WalkRideJoin.alight(rides[i], walk);
+      if (joined == null) return;
+      final was = rides[i].last;
+      rides[i] = joined.ride;
+      alightNames[i] = WalkRideJoin.renamed(
+        alightNames[i],
+        was,
+        joined.ride.last,
+      );
+      if (i == legs.length - 1) {
+        walkOutName = WalkRideJoin.renamed(walkOutName, was, joined.ride.last);
+      }
+      set(joined.walk);
+    }
+
+    if (walkInPts case final walk?) {
+      joinBoard(0, walk, (w) => walkInPts = w);
+    }
+    for (final i in transferWalks.keys.toList()) {
+      joinAlight(i, transferWalks[i]!, (w) => transferWalks[i] = w);
+      joinBoard(i + 1, transferWalks[i]!, (w) => transferWalks[i] = w);
+    }
+    if (walkOutPts case final walk?) {
+      joinAlight(legs.length - 1, walk, (w) => walkOutPts = w);
+    }
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
-    if (walkInFuture != null) {
-      final walkInPts = await walkInFuture;
+    if (walkInPts case final walkInPts?) {
       final walkInDistM = _polylineDistanceKm(walkInPts) * 1000;
       combinedPolyline.addAll(walkInPts);
       steps.add(
         OrsStep(
-          instruction:
-              'Walk to ${selectedOriginStop['stop_name'] ?? firstLeg.boardStopName}',
+          instruction: 'Walk to $walkInName',
           distanceMeters: walkInDistM,
           durationSeconds: (walkInDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
           estimatedFare: 0.0,
-          toName:
-              selectedOriginStop['stop_name'] as String? ??
-              firstLeg.boardStopName,
+          toName: walkInName,
           wayPointStart: 0,
           wayPointEnd: combinedPolyline.length - 1,
         ),
@@ -949,7 +1012,9 @@ class RoutingService {
     // ── Vehicle legs ──────────────────────────────────────────────────────────
     for (int i = 0; i < legs.length; i++) {
       final leg = legs[i];
-      final polyline = shapes[i];
+      final polyline = rides[i];
+      final boardName = boardNames[i];
+      final alightName = alightNames[i];
       final mode = legModes[i];
 
       final vehicleStartIdx = combinedPolyline.length - 1;
@@ -966,22 +1031,31 @@ class RoutingService {
       final distKm = _polylineDistanceKm(polyline);
       final distM = distKm * 1000;
       final routeLabel = _routeLabelForLeg(leg);
+      var communityLabel = leg.communityLabel?.replaceAll(
+        leg.alightStopName,
+        alightName,
+      );
+      // The contributor's note is about boarding at their step's start;
+      // boarding was moved, so it no longer applies.
+      if (boardMoved[i]) {
+        communityLabel = communityLabel?.replaceFirst(RegExp(r' — ".*"$'), '');
+      }
 
       steps.add(
         OrsStep(
           instruction:
-              leg.communityLabel ??
+              communityLabel ??
               (routeLabel != null
-                  ? 'Ride $mode ($routeLabel) from ${leg.boardStopName} to ${leg.alightStopName}'
-                  : 'Ride $mode from ${leg.boardStopName} to ${leg.alightStopName}'),
+                  ? 'Ride $mode ($routeLabel) from $boardName to $alightName'
+                  : 'Ride $mode from $boardName to $alightName'),
           distanceMeters: distM,
           durationSeconds: (distKm / _speedForMode(mode)) * 3600,
           suggestedMode: mode,
           estimatedFare:
               leg.communityFare ?? PhFareCalculator.compute(mode, distM),
           isCommunity: leg.isCommunity,
-          fromName: leg.boardStopName,
-          toName: leg.alightStopName,
+          fromName: boardName,
+          toName: alightName,
           wayPointStart: vehicleStartIdx,
           wayPointEnd: vehicleEndIdx,
         ),
@@ -991,10 +1065,9 @@ class RoutingService {
       if (i < legs.length - 1) {
         final nextLeg = legs[i + 1];
         final transferRouteLabel = _routeLabelForLeg(nextLeg) ?? 'next line';
-        final transferFuture = transferFutures[i];
+        final transferPts = transferWalks[i];
 
-        if (transferFuture != null) {
-          final transferPts = await transferFuture;
+        if (transferPts != null) {
           final transferDistM = _polylineDistanceKm(transferPts) * 1000;
           final tStart = combinedPolyline.length - 1;
           final transferToAdd =
@@ -1008,13 +1081,13 @@ class RoutingService {
           steps.add(
             OrsStep(
               instruction:
-                  'Transfer: walk from ${leg.alightStopName} to ${nextLeg.boardStopName}, then board $transferRouteLabel',
+                  'Transfer: walk from $alightName to ${boardNames[i + 1]}, then board $transferRouteLabel',
               distanceMeters: transferDistM,
               durationSeconds: (transferDistM / 1000 / _walkSpeedKmh) * 3600,
               suggestedMode: 'Walk',
               estimatedFare: 0.0,
-              fromName: leg.alightStopName,
-              toName: nextLeg.boardStopName,
+              fromName: alightName,
+              toName: boardNames[i + 1],
               wayPointStart: tStart,
               wayPointEnd: combinedPolyline.length - 1,
             ),
@@ -1023,8 +1096,7 @@ class RoutingService {
           final tIdx = combinedPolyline.length - 1;
           steps.add(
             OrsStep(
-              instruction:
-                  'Transfer at ${leg.alightStopName}: board $transferRouteLabel',
+              instruction: 'Transfer at $alightName: board $transferRouteLabel',
               distanceMeters: 0.0,
               durationSeconds: 45.0,
               suggestedMode: 'Walk',
@@ -1038,8 +1110,7 @@ class RoutingService {
     }
 
     // ── Walk-out ──────────────────────────────────────────────────────────────
-    if (walkOutFuture != null) {
-      final walkOutPts = await walkOutFuture;
+    if (walkOutPts case final walkOutPts?) {
       final walkOutDistM = _polylineDistanceKm(walkOutPts) * 1000;
       final startIdx = combinedPolyline.length - 1;
       final walkOutToAdd =
@@ -1051,15 +1122,12 @@ class RoutingService {
       combinedPolyline.addAll(walkOutToAdd);
       steps.add(
         OrsStep(
-          instruction:
-              'Walk from ${selectedDestStop['stop_name'] ?? lastLeg.alightStopName} to destination',
+          instruction: 'Walk from $walkOutName to destination',
           distanceMeters: walkOutDistM,
           durationSeconds: (walkOutDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
           estimatedFare: 0.0,
-          fromName:
-              selectedDestStop['stop_name'] as String? ??
-              lastLeg.alightStopName,
+          fromName: walkOutName,
           wayPointStart: startIdx,
           wayPointEnd: combinedPolyline.length - 1,
         ),

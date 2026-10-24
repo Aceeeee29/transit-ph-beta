@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_profile_bootstrap_service.dart';
 import '../widgets/auth/auth_text_field.dart';
 import '../theme/app_colors.dart';
+import '../utils/password_rules.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -57,36 +58,42 @@ class _SignupScreenState extends State<SignupScreen> {
     'baseball',
   ];
 
-  bool _isStrongPassword(String password) {
-    if (password.length < 8) return false;
-    if (_commonPasswords.contains(password.toLowerCase())) return false;
-
-    bool hasUpper = password.contains(RegExp(r'[A-Z]'));
-    bool hasLower = password.contains(RegExp(r'[a-z]'));
-    bool hasNumber = password.contains(RegExp(r'[0-9]'));
-    bool hasSymbol = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
-
-    int categories = 0;
-    if (hasUpper) categories++;
-    if (hasLower) categories++;
-    if (hasNumber) categories++;
-    if (hasSymbol) categories++;
-
-    return categories >= 2;
+  @override
+  void initState() {
+    super.initState();
+    // The checklist under the fields ticks off as the user types.
+    _passwordController.addListener(_refreshChecklist);
+    _confirmPasswordController.addListener(_refreshChecklist);
   }
 
+  void _refreshChecklist() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _passwordsMatch =>
+      _confirmPasswordController.text.isNotEmpty &&
+      _passwordController.text == _confirmPasswordController.text;
+
   Future<void> _signup() async {
-    if (_passwordController.text != _confirmPasswordController.text) {
+    final password = _passwordController.text;
+    if (!PasswordRules.isValid(password)) {
       setState(() {
-        _errorMessage = 'Passwords do not match';
+        _errorMessage =
+            'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character. Spaces are not allowed.';
       });
       return;
     }
 
-    if (!_isStrongPassword(_passwordController.text)) {
+    if (_commonPasswords.contains(password.toLowerCase())) {
       setState(() {
-        _errorMessage =
-            'Password must be at least 8-16 characters long and contain at least 2 of the following: uppercase letters, lowercase letters, numbers, symbols. Common passwords are not allowed.';
+        _errorMessage = 'That password is too common. Please choose another.';
+      });
+      return;
+    }
+
+    if (!_passwordsMatch) {
+      setState(() {
+        _errorMessage = 'Passwords do not match';
       });
       return;
     }
@@ -100,7 +107,7 @@ class _SignupScreenState extends State<SignupScreen> {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
+            password: _passwordController.text,
           );
 
       // Send email verification
@@ -173,6 +180,33 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   // ─── Visibility toggle helper ──────────────────────────────────────────────
+  Widget _passwordRule(String label, bool passes) {
+    const passColor = Color(0xFF2E9E5B);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            passes ? Icons.check_circle_rounded : Icons.circle_outlined,
+            size: 14,
+            color: passes ? passColor : _textSecondary,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: passes ? passColor : _textSecondary,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _visibilityToggle({
     required bool visible,
     required VoidCallback onTap,
@@ -377,8 +411,9 @@ class _SignupScreenState extends State<SignupScreen> {
 
                       const SizedBox(height: 14),
 
-                      // Password hint
+                      // Password checklist, ticked off while typing
                       Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
@@ -388,25 +423,15 @@ class _SignupScreenState extends State<SignupScreen> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: _border),
                         ),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              size: 14,
-                              color: _textSecondary,
-                            ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                'At least 8 characters with 2 of: uppercase, lowercase, numbers, symbols.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: _textSecondary,
-                                  height: 1.5,
-                                ),
+                            for (final (label, passes) in PasswordRules.rules)
+                              _passwordRule(
+                                label,
+                                passes(_passwordController.text),
                               ),
-                            ),
+                            _passwordRule('Passwords match', _passwordsMatch),
                           ],
                         ),
                       ),

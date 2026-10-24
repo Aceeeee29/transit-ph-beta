@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.33 — October 24, 2026
+
+- Fixed the map staying grey (only the route lines showing) when you
+  open a downloaded route with no internet
+- Generated routes no longer make you walk along a jeepney, tricycle or
+  FX road to its stop and then ride back over the same stretch: you
+  board where your walk first reaches its road, and get off where your
+  next walk leaves it
+- Report button on generated routes too, also while following; reports
+  show on every route on that road, like on rider routes
+- A rider's note on a route (like where to wait for the jeep) only shows
+  when you board where that note applies
+- You can have at most 3 routes waiting for review at a time
+- New accounts need a stronger password: at least 8 characters with an
+  uppercase letter, a lowercase letter, a number and a special
+  character, no spaces; a checklist shows what's still missing as you
+  type
+- Appearance option "Follow phone" is now called "System"
+
 ## v1.0.32 — October 21, 2026
 
 - Fixed rider routes showing "0 min" or "0 m" in your Profile, the

@@ -10,6 +10,8 @@ import '../models/ors_route_result.dart';
 import '../models/route_issue_report.dart';
 import '../services/route_report_service.dart';
 import '../widgets/route_map/route_report_banner.dart';
+import '../widgets/route_map/route_report_dialog.dart';
+import '../services/gamification_service.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/active_navigation_service.dart';
 import '../services/fare_matrix.dart';
@@ -142,6 +144,45 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
 
   /// Riders' reports on the roads this trip rides.
   List<RouteIssueReport> _roadReports = const [];
+
+  void _showReportDialog() {
+    showRouteReportDialog(context, onSubmit: _submitReport);
+  }
+
+  /// Same as on a community route: the report is filed on this trip's line,
+  /// so it shows on every route sharing the road and their contributors
+  /// are told.
+  Future<void> _submitReport(String type, String description) async {
+    final RouteIssueReport report;
+    try {
+      report = await RouteReportService.submit(
+        routeId: 'generated',
+        routeLabel: '${widget.originName} → ${widget.destinationName}',
+        path: widget.result.polyline,
+        type: type,
+        description: description.isNotEmpty ? description : null,
+      );
+    } catch (e) {
+      debugPrint('[RouteReports] Submit failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't send the report. Check your connection."),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _roadReports = [..._roadReports, report]);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Report sent. Riders on this road will see it.'),
+      ),
+    );
+    final user = await GamificationService.loadUser();
+    await GamificationService.incrementReportsSubmitted(user);
+  }
 
   Future<void> _loadFareProfile() async {
     final student = await FareProfileService.isStudent();
@@ -836,6 +877,12 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       bottom: _drawerPeekHeight + 12,
       child: MapSideButtons(
         children: [
+          MapSideButton(
+            icon: Icons.report_problem_rounded,
+            tooltip: 'Report a problem with this route',
+            iconColor: const Color(0xFFE05C6A),
+            onTap: _showReportDialog,
+          ),
           MapSideButton(
             icon: Icons.view_in_ar_rounded,
             tooltip: _tilted ? 'Flat view' : '3D view',

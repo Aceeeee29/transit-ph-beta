@@ -41,7 +41,7 @@ class MapStyleService with WidgetsBindingObserver {
   final appearance = ValueNotifier<Appearance>(Appearance.light);
 
   /// Whether the app is dark right now ([appearance], with "Auto" and
-  /// "Follow phone" resolved).
+  /// "System" resolved).
   final isDark = ValueNotifier<bool>(false);
 
   Listenable get changes => Listenable.merge([look, isDark]);
@@ -72,7 +72,7 @@ class MapStyleService with WidgetsBindingObserver {
       // Defaults: clean, light.
     }
     _resolveDark();
-    // "Follow phone" follows the phone's dark theme as it changes.
+    // "System" follows the phone's dark theme as it changes.
     if (!_observing) {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;

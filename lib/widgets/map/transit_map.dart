@@ -700,7 +700,14 @@ class _TransitMapState extends State<TransitMap>
       compassViewMargins: widget.compassMargin,
       attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
       attributionButtonMargins: widget.attributionMargin,
-      onMapCreated: (controller) => _ml = controller,
+      onMapCreated: (controller) {
+        _ml = controller;
+        // MapLibre holds back every request while the phone has no
+        // network, even to our own tile server on 127.0.0.1, so a cold
+        // start offline drew a blank map. All its data comes from that
+        // server, which handles being offline itself.
+        unawaited(controller.forceOnlineMode().catchError((_) {}));
+      },
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _onMapClick,
       onCameraIdle: _onCameraIdle,

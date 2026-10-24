@@ -11,6 +11,7 @@ import '../models/location_search_result.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
+import '../services/route_service.dart' show PendingRouteLimitException;
 import '../services/gamification_service.dart';
 import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';

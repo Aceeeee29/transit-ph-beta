@@ -111,6 +111,22 @@ void main() {
       expect(legs.single.communityLabel, contains('Ride the jeep signed'));
     });
 
+    test('drops the contributor note when boarding mid-route', () async {
+      // The note ("Ride the jeep signed …") is about where the step
+      // starts; boarding ~2 km in, it no longer applies.
+      final alternatives =
+          await SupabaseRouteService.planWithCommunityRoutesOnly(
+            origin: const LatLng(14.6380, 120.9870),
+            destination: const LatLng(14.6549, 120.9841),
+            communityRoutes: [stiToMonumento],
+          );
+
+      expect(alternatives, isNotEmpty);
+      final leg = alternatives.first.result.plan.legs.single;
+      expect(leg.communityLabel, contains('STI Caloocan → Monumento'));
+      expect(leg.communityLabel, isNot(contains('Ride the jeep signed')));
+    });
+
     test('names a mid-route drop-off after the nearest known place', () async {
       // Runs north→south straight past SM City Grand Central.
       final poloToSouth = jeepRoute(

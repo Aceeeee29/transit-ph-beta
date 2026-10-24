@@ -4,6 +4,17 @@ import '../models/notification.dart';
 import '../models/route.dart' as route_model;
 import '../services/notifications_service.dart';
 
+/// The rider already has [RouteService.maxPendingRoutesPerUser] routes
+/// waiting for review. Its text is shown to them as is.
+class PendingRouteLimitException implements Exception {
+  const PendingRouteLimitException();
+
+  @override
+  String toString() =>
+      'You already have ${RouteService.maxPendingRoutesPerUser} routes '
+      'waiting for review. You can send more once a moderator reviews them.';
+}
+
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const int _staleReviewDays = 45;
@@ -373,9 +384,37 @@ class RouteService {
     }
   }
 
+  /// How many routes one rider may have waiting for review at once.
+  static const maxPendingRoutesPerUser = 3;
+
+  /// Throws [PendingRouteLimitException] when [contributorId] already has
+  /// [maxPendingRoutesPerUser] other routes waiting for review. Checked in
+  /// the app only: Firestore rules can't count a user's documents.
+  static Future<void> _checkPendingLimit(
+    String? contributorId,
+    String routeId,
+  ) async {
+    if (contributorId == null || contributorId.isEmpty) return;
+    final pending =
+        await _firestore
+            .collection('routes')
+            .where('contributorId', isEqualTo: contributorId)
+            .where(
+              'approvalStatus',
+              isEqualTo: route_model.RouteApprovalStatus.pending.name,
+            )
+            .get();
+    // Re-sending a route that's already waiting doesn't add one.
+    final others = pending.docs.where((doc) => doc.id != routeId).length;
+    if (others >= maxPendingRoutesPerUser) {
+      throw const PendingRouteLimitException();
+    }
+  }
+
   /// Save a new route — always starts as PENDING, awaiting moderator approval
   static Future<void> saveRoute(route_model.Route route) async {
     try {
+      await _checkPendingLimit(route.contributorId, route.id);
       final data = route.toJson();
       data['approvalStatus'] = route_model.RouteApprovalStatus.pending.name;
       data['createdAt'] = FieldValue.serverTimestamp();

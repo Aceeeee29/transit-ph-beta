@@ -1424,8 +1424,12 @@ class SupabaseRouteService {
     return best;
   }
 
+  /// The contributor's note (e.g. where to wait for the jeep) describes
+  /// boarding at the start of their step, so it's only shown when the
+  /// rider boards there too.
   static String _communityInstruction(
     _CommunityTrip trip,
+    Map<String, dynamic> boardStop,
     Map<String, dynamic> alightStop,
   ) {
     var text = 'Ride ${trip.mode} along the community route ${trip.routeLabel}';
@@ -1436,7 +1440,10 @@ class SupabaseRouteService {
       return '$text (opposite direction of what was contributed — '
           'not verified yet)';
     }
-    return trip.note.isEmpty ? text : '$text — "${trip.note}"';
+    final boardsAtStepStart = boardStop['path_index'] == 0;
+    return trip.note.isEmpty || !boardsAtStepStart
+        ? text
+        : '$text — "${trip.note}"';
   }
 
   static TransitLeg _communityLegFromEdges(
@@ -1470,7 +1477,7 @@ class SupabaseRouteService {
       // The contributor's fare covers the whole step; partial rides fall
       // back to the LTFRB formula downstream.
       communityFare: wholeStep ? trip.actualFare : null,
-      communityLabel: _communityInstruction(trip, alightStop),
+      communityLabel: _communityInstruction(trip, boardStop, alightStop),
     );
   }
 
