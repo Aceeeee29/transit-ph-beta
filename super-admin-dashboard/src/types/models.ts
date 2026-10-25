@@ -1,7 +1,7 @@
 ﻿import type { Timestamp } from 'firebase/firestore'
 
 export type UserRole = 'user' | 'moderator' | 'superadmin'
-export type UserStatus = 'active' | 'offline' | 'restricted' | 'banned'
+export type UserStatus = 'active' | 'offline' | 'restricted' | 'banned' | 'closed'
 export type RouteStatus = 'pending' | 'approved' | 'rejected'
 export type PostStatus = 'pending' | 'approved' | 'flagged' | 'rejected'
 export type AnnouncementType = 'info' | 'warning' | 'critical'
@@ -14,6 +14,7 @@ export interface AppUser {
   role: UserRole
   status: UserStatus
   restrictedUntil?: Timestamp
+  tempSuperadminUntil?: Timestamp
   createdAt?: Timestamp
   routesContributed: number
   badges?: string[]

@@ -36,17 +36,36 @@ service cloud.firestore {
         data.content.size() <= 500;
     }
 
+    // Banned and restricted riders can still read, but not post, comment,
+    // add routes or file reports. The app also checks; this stops a
+    // modified app or a direct API call.
+    function notBanned() {
+      let me = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let until = me.get('restrictedUntil', null);
+      return me.get('isBanned', false) != true &&
+        me.get('status', 'active') != 'banned' &&
+        !(until is timestamp && until > request.time);
+    }
+
+    // Set only by staff or the dashboard, never by the rider's own app.
+    // tempSuperadmin*: the dashboard lets these accounts in.
+    function staffOnlyUserKeys() {
+      return ['role', 'isBanned', 'status', 'restrictedAt', 'restrictedUntil',
+        'tempSuperadminUntil', 'tempSuperadminBy'];
+    }
+
     // ── USERS ─────────────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isAuth();
       allow create: if isSelf(uid) &&
-        request.resource.data.get('role', 'user') == 'user';
+        request.resource.data.get('role', 'user') == 'user' &&
+        !request.resource.data.keys().hasAny(['tempSuperadminUntil', 'tempSuperadminBy']);
       // A rider can edit their own profile, but not their role or their
       // ban/restriction state (those belong to staff).
       allow update: if (
         isSelf(uid) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['role', 'isBanned', 'status', 'restrictedAt', 'restrictedUntil'])
+          .hasAny(staffOnlyUserKeys())
       ) || isSuperAdmin() || (
         isModerator() &&
         resource.data.get('role', 'user') == 'user' &&
@@ -69,7 +88,8 @@ service cloud.firestore {
           )
         )
       );
-      allow delete: if isSuperAdmin();
+      // A rider deletes their own account (Settings → Delete account).
+      allow delete: if isSelf(uid) || isSuperAdmin();
 
       match /achievements/{achievementId} {
         allow read, write: if isSelf(uid) || isStaff();
@@ -87,21 +107,39 @@ service cloud.firestore {
     // ── POSTS ─────────────────────────────────────────────────────────────────
     match /posts/{postId} {
       // FIX: Pending posts are now only visible to their own author.
+      // The author sees every post of their own, rejected ones too (so
+      // deleting their account can find them all).
       allow read: if isAuth() && (
         isStaff() ||
         resource.data.moderationStatus == 'approved' ||
-        (resource.data.moderationStatus == 'pending' &&
-          request.auth.uid == resource.data.userId)
+        request.auth.uid == resource.data.userId
       );
 
-      allow create: if isAuth() && hasValidPostContent(request.resource.data);
+      // Posted as yourself; new posts are live (approved) or waiting
+      // (pending), never pre-rejected or under someone else's name.
+      allow create: if isAuth() && hasValidPostContent(request.resource.data) && (
+        isStaff() || (
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.get('moderationStatus', 'approved') in ['approved', 'pending'] &&
+          notBanned()
+        )
+      );
 
       // FIX: Added field-level validation for post votes.
       // Vote counters can only move by 1 per operation and voter arrays
       // are constrained to transitions involving the requesting UID.
+      // The author edits the post itself but not who wrote it, its review
+      // state (a rejected post stays rejected), its feed lifetime (staff
+      // set that) or the vote counts (votes go through the branch below).
       allow update: if isAuth() &&
         hasValidPostContent(request.resource.data) && (
-          request.auth.uid == resource.data.userId ||
+          (
+            request.auth.uid == resource.data.userId &&
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              'userId', 'moderationStatus', 'expiresAt',
+              'upvoteCount', 'downvoteCount', 'upvotedBy', 'downvotedBy'
+            ])
+          ) ||
           isStaff() ||
           (
             request.resource.data.diff(resource.data).affectedKeys()
@@ -152,9 +190,17 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if isAuth();
-        allow create: if isAuth();
+        // Commented as yourself, on a post that exists.
+        allow create: if isAuth() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.content is string &&
+          request.resource.data.content.size() > 0 &&
+          request.resource.data.content.size() <= 1000 &&
+          exists(/databases/$(database)/documents/posts/$(postId)) &&
+          notBanned();
         allow update: if isAuth() &&
-          resource.data.userId == request.auth.uid;
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == request.auth.uid;
         allow delete: if isAuth() && (
           resource.data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/posts/$(postId)).data.userId == request.auth.uid ||
@@ -164,11 +210,56 @@ service cloud.firestore {
     }
 
     // ── ROUTES ────────────────────────────────────────────────────────────────
+    // One rider's feedback (routeFeedback, saved in the same transaction)
+    // moves each yes/no pair by exactly one.
+    function feedbackPairStep(before, after, yes, no) {
+      let dYes = after.get(yes, 0) - before.get(yes, 0);
+      let dNo = after.get(no, 0) - before.get(no, 0);
+      return dYes >= 0 && dNo >= 0 && dYes + dNo == 1;
+    }
+
+    function isFeedbackSummaryStep(routeId) {
+      let before = resource.data.get('feedbackSummary', {});
+      let after = request.resource.data.feedbackSummary;
+      let feedbackPath = /databases/$(database)/documents/routes/$(routeId)/routeFeedback/$(request.auth.uid);
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['feedbackSummary', 'updatedAt']) &&
+        after is map &&
+        after.keys().hasOnly([
+          'fareAccurateYes', 'fareAccurateNo',
+          'scheduleAccurateYes', 'scheduleAccurateNo',
+          'stillOperatingYes', 'stillOperatingNo',
+          'lastFeedbackAt'
+        ]) &&
+        existsAfter(feedbackPath) &&
+        getAfter(feedbackPath).data.updatedAt == request.time &&
+        feedbackPairStep(before, after, 'fareAccurateYes', 'fareAccurateNo') &&
+        feedbackPairStep(before, after, 'scheduleAccurateYes', 'scheduleAccurateNo') &&
+        feedbackPairStep(before, after, 'stillOperatingYes', 'stillOperatingNo');
+    }
+
     match /routes/{routeId} {
       allow read: if isAuth();
-      allow create: if isAuth();
+      // Riders add routes as themselves, waiting for review; only staff
+      // add one that's already approved.
+      allow create: if isAuth() && (
+        isStaff() || (
+          request.resource.data.contributorId == request.auth.uid &&
+          request.resource.data.approvalStatus == 'pending' &&
+          notBanned()
+        )
+      );
+      // The contributor may edit their route, but an edit goes back to
+      // review: they can't approve it or hand it to someone else.
       allow update: if isAuth() && (
-        resource.data.contributorId == request.auth.uid ||
+        (
+          resource.data.contributorId == request.auth.uid &&
+          request.resource.data.contributorId == request.auth.uid &&
+          (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvalStatus']) ||
+            request.resource.data.approvalStatus == 'pending'
+          )
+        ) ||
         isStaff() ||
         (
           request.resource.data.diff(resource.data).affectedKeys()
@@ -183,12 +274,24 @@ service cloud.firestore {
           (request.resource.data.downvotes - resource.data.downvotes) >= -1 &&
           (request.resource.data.downvotes - resource.data.downvotes) <= 1
         ) ||
+        isFeedbackSummaryStep(routeId) ||
+        // Closing their account: the contributor hands the route over as
+        // "Former rider" (only these fields; it stays for everyone).
         (
+          resource.data.contributorId == request.auth.uid &&
+          request.resource.data.get('contributorId', null) == null &&
+          request.resource.data.get('contributorName', '') == 'Former rider' &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['feedbackSummary', 'updatedAt'])
+            .hasOnly(['contributorId', 'contributorName', 'contributorClosed', 'updatedAt'])
         )
       );
-      allow delete: if isStaff();
+      // Staff, or a contributor removing their own route that isn't live
+      // yet (deleting their account).
+      allow delete: if isStaff() || (
+        isAuth() &&
+        resource.data.contributorId == request.auth.uid &&
+        resource.data.get('approvalStatus', 'pending') != 'approved'
+      );
 
       // Per-user vote state for one active vote at a time.
       match /routeVotes/{userId} {
@@ -270,6 +373,13 @@ service cloud.firestore {
       allow read: if isStaff();
     }
 
+    // Collection-group reads of post comments: finding someone's comments
+    // across all posts when their account is deleted or closed. Comments
+    // are readable anyway; writes stay on the rule under posts.
+    match /{path=**}/comments/{commentId} {
+      allow read: if isAuth();
+    }
+
     // ── QUICK ROUTE LINKS (24h token-based access) ─────────────────────────
     match /quick_route_links/{token} {
       // Token docs are never listable; only direct token lookup is allowed.
@@ -309,19 +419,47 @@ service cloud.firestore {
 
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
     match /notifications/{notifId} {
-      allow read, update, delete: if isAuth() &&
-        resource.data.userId == request.auth.uid;
+      allow read, update: if isAuth() && (
+        resource.data.userId == request.auth.uid || isSuperAdmin()
+      );
+      // The superadmin too: closing an account removes its notifications.
+      allow delete: if isAuth() && (
+        resource.data.userId == request.auth.uid || isSuperAdmin()
+      );
 
       // FIX: Moderators can create notifications for any userId, including
       // themselves (e.g. self-approval of a submitted route). Non-moderators
       // still cannot target themselves to prevent self-spam.
+      // A rider only sends the kinds the app sends, to the person they're
+      // about: a vote/comment/reply goes to that post's author, a route
+      // report to that route's contributor. Older app versions leave
+      // fromUserId empty on votes and comments, so empty is allowed.
       allow create: if isAuth() && (
         isModerator() ||
         isSuperAdmin() ||
         (
           request.resource.data.keys().hasAll(['userId', 'type', 'timestamp']) &&
           request.resource.data.userId is string &&
-          request.resource.data.userId != request.auth.uid
+          request.resource.data.userId != request.auth.uid &&
+          request.resource.data.get('message', '') is string &&
+          request.resource.data.get('message', '').size() <= 400 &&
+          request.resource.data.get('isRead', false) == false &&
+          request.resource.data.get('fromUserId', null) in [null, request.auth.uid] &&
+          (
+            (
+              request.resource.data.type in ['upvote', 'downvote', 'comment', 'reply'] &&
+              request.resource.data.get('postId', null) is string &&
+              get(/databases/$(database)/documents/posts/$(request.resource.data.postId))
+                .data.userId == request.resource.data.userId
+            ) ||
+            (
+              request.resource.data.type == 'route_reported' &&
+              request.resource.data.get('fromUserId', null) == request.auth.uid &&
+              request.resource.data.get('routeId', null) is string &&
+              get(/databases/$(database)/documents/routes/$(request.resource.data.routeId))
+                .data.get('contributorId', '') == request.resource.data.userId
+            )
+          )
         )
       );
     }
@@ -339,7 +477,8 @@ service cloud.firestore {
         request.resource.data.path is list &&
         request.resource.data.path.size() <= 300 &&
         request.resource.data.expiresAt is timestamp &&
-        request.resource.data.expiresAt < request.time + duration.value(25, 'h');
+        request.resource.data.expiresAt < request.time + duration.value(25, 'h') &&
+        notBanned();
       allow update, delete: if isStaff();
     }
 
@@ -351,7 +490,11 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid ||
         isStaff()
       );
-      allow update, delete: if isStaff();
+      allow update: if isStaff();
+      // The author too, when deleting their account.
+      allow delete: if isStaff() || (
+        isAuth() && resource.data.userId == request.auth.uid
+      );
     }
 
     // ── LOCATIONS ─────────────────────────────────────────────────────────────
@@ -381,8 +524,10 @@ service cloud.firestore {
     }
 
     // ── ROUTE CACHE (per-user) ──────────────────────────────────────────────
+    // Searches can show where someone travels: owner only. (The app keeps
+    // its route cache on the phone now; nothing reads this collection.)
     match /route_cache/{cacheId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
       allow update: if isAuth() &&
         resource.data.userId == request.auth.uid &&

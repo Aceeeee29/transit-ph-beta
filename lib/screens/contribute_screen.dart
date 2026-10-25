@@ -24,7 +24,7 @@ import '../widgets/map/transit_map.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/route_preview.dart';
 import '../widgets/route_form_stepper.dart';
-import '../widgets/tutorial_overlay.dart';
+import '../widgets/spotlight_tutorial.dart';
 import '../services/location_service.dart';
 import '../utils/map_distance.dart';
 import 'contribute_location_search_screen.dart';
@@ -48,6 +48,7 @@ part 'contribute_screen_map_editor.dart';
 part 'contribute_screen_map_search.dart';
 part 'contribute_screen_maplibre.dart';
 part 'contribute_screen_route_builder.dart';
+part 'contribute_screen_tour.dart';
 
 /// What the Map tab is currently showing. The map itself is shared — only the
 /// overlay UI and draw behaviour swap when the user toggles.
@@ -174,6 +175,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
       index < steps.length ? steps[index].mode : _openStepMode;
   bool get _showPins => MapTabController.instance.showPins.value;
   bool _showTutorial = false;
+
+  // The parts the Contribute tour lights up.
+  final _tourTopBarKey = GlobalKey();
+  final _tourSearchKey = GlobalKey();
+  final _tourCardKey = GlobalKey();
+  final _tourModesKey = GlobalKey();
+  final _tourToolsKey = GlobalKey();
+  final _tourSaveKey = GlobalKey();
+  final _tourFinishKey = GlobalKey();
+  final _tourSideKey = GlobalKey();
+  final _tourDrawerKey = GlobalKey();
+
+  /// The rider's own drawing while the tour shows its example instead.
+  _TourSnapshot? _tourSnapshot;
   late MapTabMode _mapMode;
   LatLng? _searchedLocation;
 
@@ -293,6 +308,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _mapMode = widget.mapMode;
     MapTabController.instance.placeCategories.addListener(_onSharedMapState);
     MapTabController.instance.showPins.addListener(_onSharedMapState);
+    MapTabController.instance.contributeTourRequested.addListener(
+      _onTutorialRequested,
+    );
     if (_mapMode == MapTabMode.contribute) _checkTutorialStatus();
     _loadPositionIfAllowed();
     OsmPlaces.all().then((places) {
@@ -323,7 +341,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
     // The drawer swaps content (places list vs. route form), so start it
     // back at rest.
     if (_drawerController.isAttached) _drawerController.reset();
-    if (mode == MapTabMode.contribute) _checkTutorialStatus();
+    if (mode == MapTabMode.contribute) {
+      _checkTutorialStatus();
+    } else if (_showTutorial) {
+      // Left Contribute mid-tour (back gesture): put the rider's own
+      // drawing back in place of the example.
+      _endTour();
+    }
   }
 
   /// Shows the blue dot and distances without asking: only when location
@@ -455,18 +479,28 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   Future<void> _checkTutorialStatus() async {
+    if (_takeTutorialRequest()) return;
     final hasSeenTutorial = await TutorialService.hasSeenContributeTutorial();
-    if (!hasSeenTutorial && mounted) _showTutorialOverlay();
+    if (!hasSeenTutorial && mounted && _mapMode == MapTabMode.contribute) {
+      _showTutorialOverlay();
+    }
   }
 
-  void _onTutorialComplete() {
-    // Hide first: the save is a Firestore write that only completes once the
-    // server answers (never while offline), and until the overlay is gone its
-    // faded-out backdrop swallows every tap on the map.
-    setState(() => _showTutorial = false);
-    // Leave the map tappable: an open drawer covers most of it.
-    if (_drawerController.isAttached) _drawerController.reset();
-    unawaited(TutorialService.markContributeTutorialAsSeen());
+  /// Settings → "Contribute tutorial" asks for the tour; it plays once
+  /// Contribute is on screen. True when it started it.
+  bool _takeTutorialRequest() {
+    final request = MapTabController.instance.contributeTourRequested;
+    if (!request.value || _mapMode != MapTabMode.contribute) return false;
+    request.value = false;
+    _showTutorialOverlay();
+    return true;
+  }
+
+  void _onTutorialRequested() {
+    // MainScreen switches to Contribute in the same frame; look after it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeTutorialRequest();
+    });
   }
 
   void _loadExampleRoute() {
@@ -499,6 +533,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
   void dispose() {
     MapTabController.instance.placeCategories.removeListener(_onSharedMapState);
     MapTabController.instance.showPins.removeListener(_onSharedMapState);
+    MapTabController.instance.contributeTourRequested.removeListener(
+      _onTutorialRequested,
+    );
     _drawerController.dispose();
     _startLocationController.dispose();
     _endLocationController.dispose();
@@ -1262,10 +1299,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     });
   }
 
-  void _showTutorialOverlay() {
-    // The map stays clear: the first steps are about tapping it.
-    setState(() => _showTutorial = true);
-  }
+  void _showTutorialOverlay() => _startTour();
 
   void _setSelectedRouteTags(List<String> tags) {
     setState(() => _selectedRouteTags = tags);
@@ -1332,10 +1366,16 @@ class _ContributeScreenState extends State<ContributeScreen> {
             onAllDismissed: _onNotificationsDismissed,
           ),
         if (_showTutorial && !isNearby)
-          TutorialOverlay(
-            steps: TutorialService.getContributeTutorialSteps(),
-            onComplete: _onTutorialComplete,
-            onExampleRouteRequested: _loadExampleRoute,
+          SpotlightTutorial(
+            steps: _contributeTourSteps(),
+            onComplete: _endTour,
+            finishLabel: 'Start drawing',
+            // Only over an empty map: it would replace the rider's drawing.
+            extraLabel:
+                (_tourSnapshot?.pathPoints.isEmpty ?? true)
+                    ? 'Try the example'
+                    : null,
+            onExtra: _loadExampleRoute,
           ),
       ],
     );

@@ -2,14 +2,11 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'cloudinary_service.dart';
-import '../theme/app_colors.dart';
 
-/// Thrown when a post media upload fails — carries a user-facing message
+/// Thrown when a profile photo upload fails — carries a user-facing message
 /// plus the raw details for logs.
 class MediaUploadException implements Exception {
   final String userMessage;
@@ -23,13 +20,11 @@ class MediaUploadException implements Exception {
 
 class MediaService {
   static final ImagePicker _imagePicker = ImagePicker();
-  static bool _isRecording = false;
-  static bool _isPlaying = false;
 
-  /// Max file size accepted by storage.rules (50MB).
+  /// Largest photo accepted for upload (50MB).
   static const int maxUploadBytes = 50 * 1024 * 1024;
 
-  /// Common preflight checks shared by image/video uploads.
+  /// Preflight checks before an upload.
   /// Throws [MediaUploadException] with a specific message on failure.
   static Future<void> _checkUploadable(File file, String kind) async {
     if (!await file.exists()) {
@@ -72,21 +67,6 @@ class MediaService {
     );
   }
 
-  /// Upload a post image to Cloudinary and return its URL.
-  /// Throws [MediaUploadException] with a specific message on failure.
-  static Future<String> uploadPostImage(File file, String postId) async {
-    const kind = 'photo';
-    try {
-      await _checkUploadable(file, kind);
-      return await CloudinaryService.uploadImage(
-        file,
-        folder: 'posts/$postId/images',
-      );
-    } catch (e) {
-      _throwForUploadError(e, kind, 'uploadPostImage');
-    }
-  }
-
   /// Upload a profile picture to Cloudinary and return its URL.
   /// Throws [MediaUploadException] with a specific message on failure.
   static Future<String> uploadProfilePhoto(File file, String uid) async {
@@ -100,27 +80,6 @@ class MediaService {
     } catch (e) {
       _throwForUploadError(e, kind, 'uploadProfilePhoto');
     }
-  }
-
-  /// Upload a post video to Cloudinary and return its URL.
-  /// Throws [MediaUploadException] with a specific message on failure.
-  static Future<String> uploadPostVideo(File file, String postId) async {
-    const kind = 'video';
-    try {
-      await _checkUploadable(file, kind);
-      return await CloudinaryService.uploadVideo(
-        file,
-        folder: 'posts/$postId/videos',
-      );
-    } catch (e) {
-      _throwForUploadError(e, kind, 'uploadPostVideo');
-    }
-  }
-
-  /// True when [url] looks like a remote (http/https) URL vs a local path.
-  static bool isRemoteUrl(String url) {
-    final lower = url.toLowerCase();
-    return lower.startsWith('http://') || lower.startsWith('https://');
   }
 
   /// Pick an image from the gallery
@@ -173,119 +132,7 @@ class MediaService {
 
     return null;
   }
-
-  /// Pick a video from the gallery
-  static Future<File?> pickVideoFromGallery() async {
-    final XFile? video = await _imagePicker.pickVideo(
-      source: ImageSource.gallery,
-      maxDuration: const Duration(minutes: 5),
-    );
-
-    if (video != null) {
-      return File(video.path);
-    }
-
-    return null;
-  }
-
-  /// Record a video with the camera
-  static Future<File?> recordVideo() async {
-    final XFile? video = await _imagePicker.pickVideo(
-      source: ImageSource.camera,
-      maxDuration: const Duration(minutes: 5),
-    );
-
-    if (video != null) {
-      return File(video.path);
-    }
-
-    return null;
-  }
-
-  /// Start recording audio (simulated for now)
-  static Future<bool> startRecording() async {
-    // Request microphone permission
-    final status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      return false;
-    }
-
-    // Simulate starting recording
-    _isRecording = true;
-    return true;
-  }
-
-  /// Stop recording and return the file (simulated for now)
-  static Future<File?> stopRecording() async {
-    if (_isRecording) {
-      _isRecording = false;
-
-      // Create a dummy file to simulate recording
-      final tempDir = await getTemporaryDirectory();
-      final filePath =
-          '${tempDir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final file = File(filePath);
-      await file.writeAsString('Simulated audio content');
-
-      return file;
-    }
-    return null;
-  }
-
-  /// Initialize audio player (simulated)
-  static Future<void> initAudioPlayer() async {
-    // Simulated initialization
-    await Future.delayed(const Duration(milliseconds: 100));
-  }
-
-  /// Play audio file (simulated)
-  static Future<void> playAudio(String filePath) async {
-    _isPlaying = true;
-    // Simulate playing for 3 seconds
-    await Future.delayed(const Duration(seconds: 3));
-    _isPlaying = false;
-  }
-
-  /// Stop audio playback (simulated)
-  static Future<void> stopAudio() async {
-    _isPlaying = false;
-  }
-
-  /// Check if audio is playing (simulated)
-  static bool get isPlaying => _isPlaying;
-
-  /// Save a temporary file to a permanent location
-  static Future<File> saveFilePermanently(File tempFile) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final fileName = path.basename(tempFile.path);
-    final savedFile = await tempFile.copy('${appDir.path}/$fileName');
-    return savedFile;
-  }
-
-  /// Get a unique file name
-  static String getUniqueFileName(String originalName) {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final extension = path.extension(originalName);
-    final baseName = path.basenameWithoutExtension(originalName);
-    return '${baseName}_$timestamp$extension';
-  }
-
-  /// Get file type from path
-  static MediaType getFileType(String filePath) {
-    final extension = path.extension(filePath).toLowerCase();
-    if (['.jpg', '.jpeg', '.png', '.gif'].contains(extension)) {
-      return MediaType.image;
-    } else if (['.mp4', '.mov', '.avi', '.mkv'].contains(extension)) {
-      return MediaType.video;
-    } else if (['.mp3', '.m4a', '.aac', '.wav'].contains(extension)) {
-      return MediaType.audio;
-    } else {
-      return MediaType.unknown;
-    }
-  }
 }
-
-enum MediaType { image, video, audio, unknown }
 
 /// Widget to display an image with options to view, replace, or delete
 class ImagePreviewWidget extends StatelessWidget {
@@ -350,137 +197,6 @@ class ImagePreviewWidget extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Widget to display audio controls for voice notes
-class AudioPreviewWidget extends StatefulWidget {
-  final File audioFile;
-  final VoidCallback onReplace;
-  final VoidCallback onDelete;
-
-  const AudioPreviewWidget({
-    super.key,
-    required this.audioFile,
-    required this.onReplace,
-    required this.onDelete,
-  });
-
-  @override
-  State<AudioPreviewWidget> createState() => _AudioPreviewWidgetState();
-}
-
-class _AudioPreviewWidgetState extends State<AudioPreviewWidget> {
-  bool _isPlaying = false;
-  double _playbackProgress = 0.0;
-  Timer? _progressTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    MediaService.initAudioPlayer();
-  }
-
-  @override
-  void dispose() {
-    _progressTimer?.cancel();
-    MediaService.stopAudio();
-    super.dispose();
-  }
-
-  Future<void> _togglePlayback() async {
-    if (_isPlaying) {
-      await MediaService.stopAudio();
-      _progressTimer?.cancel();
-      setState(() {
-        _isPlaying = false;
-        _playbackProgress = 0.0;
-      });
-    } else {
-      setState(() {
-        _isPlaying = true;
-      });
-
-      // Start a timer to simulate progress
-      _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (
-        timer,
-      ) {
-        setState(() {
-          _playbackProgress += 0.01;
-          if (_playbackProgress >= 1.0) {
-            _playbackProgress = 0.0;
-            _isPlaying = false;
-            timer.cancel();
-          }
-        });
-      });
-
-      await MediaService.playAudio(widget.audioFile.path);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              // Play/Pause button
-              IconButton(
-                icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                onPressed: _togglePlayback,
-                color: Colors.blue,
-              ),
-
-              // Progress bar
-              Expanded(
-                child: LinearProgressIndicator(
-                  value: _playbackProgress,
-                  backgroundColor: AppColors.border,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                ),
-              ),
-
-              // Duration text
-              const SizedBox(width: 8),
-              Text(
-                '0:${(_playbackProgress * 30).toInt().toString().padLeft(2, '0')}',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // Replace button
-              TextButton.icon(
-                icon: const Icon(Icons.mic, size: 16),
-                label: const Text('Re-record'),
-                onPressed: widget.onReplace,
-              ),
-              const SizedBox(width: 8),
-              // Delete button
-              TextButton.icon(
-                icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                label: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onPressed: widget.onDelete,
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

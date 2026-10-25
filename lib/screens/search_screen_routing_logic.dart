@@ -287,7 +287,45 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       } catch (e) {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
+
+      // Close enough to walk: walking is shown first, and rides that don't
+      // save at least a few minutes over it are dropped.
+      final walkMinutes = WalkOption.offered(origin, destLatLng);
+      if (walkMinutes != null) {
+        final kept = <DijkstraRouteAlternative>[];
+        final keptLabels = <int, String>{};
+        for (var i = 0; i < alternatives.length; i++) {
+          final alt = alternatives[i];
+          if (!WalkOption.rideWorthIt(alt.estimatedTimeMinutes, walkMinutes)) {
+            continue;
+          }
+          if (labelsByIndex[i] case final label?) {
+            keptLabels[kept.length] = label;
+          }
+          kept.add(alt);
+        }
+        alternatives = kept;
+        labelsByIndex = keptLabels;
+      }
+
       final originName = await originNameFuture;
+      if (alternatives.isEmpty && walkMinutes != null) {
+        // Walking is the only sensible option; it's drawn when opened.
+        if (_isStaleRouteRequest(requestId)) return;
+        setState(() {
+          _isLoadingOrs = false;
+          _orsResult = null;
+          _routeAlternatives = alternatives;
+          _fallbackAlternativeRoutes = fallbackAlternatives;
+          _alternativeLabels = labelsByIndex;
+          _selectedAlternativeIndex = 0;
+          _lastOriginForAlternatives = origin;
+          _lastDestinationForAlternatives = destLatLng;
+          _lastGeneratedOriginName = originName;
+          _lastGeneratedDestinationName = query;
+        });
+        return;
+      }
       if (fallbackAlternatives[0] == null && alternatives.isNotEmpty) {
         // The list needs only times, fares and modes. Drawing a route on the
         // roads can take 8+ s (the map service often times out), so the

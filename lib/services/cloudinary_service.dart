@@ -120,14 +120,4 @@ class CloudinaryService {
       folder: folder,
     );
   }
-
-  /// Upload a video and return its Cloudinary URL.
-  static Future<String> uploadVideo(File file, {String? folder}) {
-    return _upload(
-      file: file,
-      kind: 'video',
-      resourceType: 'video',
-      folder: folder,
-    );
-  }
 }

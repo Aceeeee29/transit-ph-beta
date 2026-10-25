@@ -113,10 +113,12 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
   }
 
   /// The route being drawn: each step in its mode's color on a dark edge.
+  /// The step still being drawn counts too (it runs to the end of the
+  /// line); without it a new step showed only dots until Save step.
   List<MapLine> get _routeLines {
     final result = <MapLine>[];
-    for (int i = 0; i < steps.length; i++) {
-      final color = modeColors[steps[i].mode] ?? Colors.blue;
+    for (int i = 0; i < _stepCount; i++) {
+      final color = modeColors[_modeForStep(i)] ?? Colors.blue;
       final startIdx = (i == 0) ? 0 : stepBoundaries[i - 1];
       final endIdx =
           (i < stepBoundaries.length)

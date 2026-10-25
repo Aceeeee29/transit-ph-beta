@@ -12,8 +12,10 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- open_filex adds these; it only opens the downloaded update APK in
+         app storage, and the app has no video or audio features -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
     <!-- Required to install downloaded APK updates directly inside the app -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Remove MediaProjection permission added by Agora SDK since screen sharing is not used -->

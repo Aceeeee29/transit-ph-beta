@@ -113,6 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       final message = e.toString();
+      if (!mounted) return;
       setState(
         () =>
             _errorMessage =
@@ -121,7 +122,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     : 'Failed to sign in with Google: ${message.replaceFirst('Exception: ', '')}',
       );
     } finally {
-      setState(() => _isGoogleLoading = false);
+      // Signing in replaces this screen, so it's often gone by now.
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 

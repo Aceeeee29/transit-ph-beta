@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -7,8 +9,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
 import '../screens/onboarding_screen.dart';
-import '../services/tutorial_service.dart';
-import '../widgets/tutorial_overlay.dart';
+import '../services/account_deletion_service.dart';
+import '../services/map_tab_controller.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/media_service.dart';
 import '../services/moderation_service.dart';
@@ -988,7 +990,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // ─── Log out
             _logoutButton(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
+            Center(child: _deleteAccountLink()),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -1005,21 +1009,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// The tour lights up the real Contribute controls, so it plays on the
+  /// Map tab: back to the main screen, which opens Contribute for it.
   void _replayTutorial() {
-    Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        opaque: false,
-        pageBuilder:
-            (context, _, _) => Stack(
-              children: [
-                TutorialOverlay(
-                  steps: TutorialService.getContributeTutorialSteps(),
-                  onComplete: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-      ),
-    );
+    final mapTab = MapTabController.instance;
+    final host = mapTab.hostRoute;
+    Navigator.of(context).popUntil((route) => route == host || route.isFirst);
+    mapTab.contributeTourRequested.value = true;
   }
 
   Widget _logoutButton() {

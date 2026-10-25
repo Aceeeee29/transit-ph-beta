@@ -98,7 +98,22 @@ class _MainScreenState extends State<MainScreen> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAnnouncements());
     MapTabController.instance.addListener(_onMapTabChanged);
+    MapTabController.instance.contributeTourRequested.addListener(
+      _onContributeTourRequested,
+    );
     TranslateChatHead.loadEnabled();
+  }
+
+  /// Settings asked for the Contribute tour: show Contribute on the Map
+  /// tab; ContributeScreen plays it once it's there.
+  void _onContributeTourRequested() {
+    final mapTab = MapTabController.instance;
+    if (!mounted || !mapTab.contributeTourRequested.value) return;
+    if (mapTab.current != null) mapTab.close();
+    setState(() {
+      _selectedIndex = 2;
+      _mapTabMode = MapTabMode.contribute;
+    });
   }
 
   @override
@@ -114,6 +129,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     final mapTab = MapTabController.instance;
     mapTab.removeListener(_onMapTabChanged);
+    mapTab.contributeTourRequested.removeListener(_onContributeTourRequested);
     if (mapTab.hostRoute == _ownRoute) mapTab.hostRoute = null;
     _connectivitySubscription?.cancel();
     _userSubscription?.cancel();
@@ -198,6 +214,7 @@ class _MainScreenState extends State<MainScreen> {
       final fetchedPosts = await PostService.getAllPosts();
       final fetchedRoutes = await RouteService.getAllRoutes();
       PostService.deleteExpiredPosts(); // fire-and-forget background cleanup
+      if (!mounted) return;
       setState(() {
         posts = fetchedPosts;
         routes = fetchedRoutes;
@@ -206,7 +223,8 @@ class _MainScreenState extends State<MainScreen> {
     } catch (e) {
       debugPrint('[MainScreen] Error loading data: $e');
     } finally {
-      setState(() => _isLoading = false);
+      // The sign-in gate can swap this screen out while loading.
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

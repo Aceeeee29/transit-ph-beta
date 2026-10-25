@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.33+33
+version: 1.0.34+34
 
 
 environment:
@@ -63,9 +63,6 @@ dependencies:
   package_info_plus: ^8.3.0
   google_sign_in: ^6.1.0
   image_picker: ^1.0.7
-  flutter_sound: ^9.2.13
-  record: ^6.0.0
-  audio_session: ^0.1.18
   app_links: ^6.4.1
   flutter_animate: ^4.5.0
   video_player: ^2.8.2
@@ -115,7 +112,6 @@ flutter:
   assets:
     - .env
     - assets/icon/app_icon.png
-    - assets/tutorial/
     # Clean map styles and CAMANAVA tiles (tool/build_map_pack.dart).
     - assets/map/
     - assets/map/fonts/Noto_Sans_Regular/

@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.34 — October 25, 2026
+
+- Fixed the terms and consent screen flickering or coming back after
+  you had already accepted
+- New Contribute tutorial: a guided tour that highlights each part of
+  the screen and shows an example route being drawn; replay it from
+  Settings or the ? button. Your own drawing comes back when it ends
+- Contribute now shows the line of the step you're still drawing, not
+  only the saved ones
+- You can delete your account in Settings. Your posts, comments and
+  routes still waiting for review are removed; approved routes stay
+  and are shown as by "Former rider"
+- Short trips you can walk now show a walk-only option first, and rides
+  that don't save at least 5 minutes are left out
+- The app no longer asks for microphone access
+
 ## v1.0.33 — October 24, 2026
 
 - Fixed the map staying grey (only the route lines showing) when you

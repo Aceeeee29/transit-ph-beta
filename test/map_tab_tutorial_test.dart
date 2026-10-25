@@ -4,11 +4,12 @@ import 'package:transitph_beta/widgets/map/transit_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transitph_beta/screens/contribute_screen.dart';
-import 'package:transitph_beta/services/tutorial_service.dart';
-import 'package:transitph_beta/widgets/tutorial_overlay.dart';
+import 'package:transitph_beta/widgets/spotlight_tutorial.dart';
 
 void main() {
-  testWidgets('the map is still tappable after the tutorial', (tester) async {
+  testWidgets('the tour puts the map back and leaves it tappable', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(1080, 2200);
     tester.view.devicePixelRatio = 2.75;
@@ -37,8 +38,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Tutorial'));
     await frames();
+    expect(find.byType(SpotlightTutorial), findsOneWidget);
+
+    // Mid-tour the example route is drawn: its step's Save button shows.
+    var sawSaveStep = false;
     for (var i = 0; i < 20; i++) {
-      final done = find.text('Got it!');
+      if (find.text('Save step').evaluate().isNotEmpty) sawSaveStep = true;
+      final done = find.text('Start drawing');
       final next = find.text('Next');
       if (done.evaluate().isNotEmpty) {
         await tester.tap(done);
@@ -49,7 +55,15 @@ void main() {
       }
       await frames();
     }
-    expect(find.text('Got it!'), findsNothing);
+    expect(sawSaveStep, isTrue);
+    expect(find.byType(SpotlightTutorial), findsNothing);
+
+    // The rider's own (empty) map is back.
+    expect(find.text('Save step'), findsNothing);
+    expect(
+      find.text('Tap on the map to select the starting point'),
+      findsOneWidget,
+    );
 
     // The middle of the screen reaches the map, not an open drawer.
     final center = tester.getCenter(find.byType(ContributeScreen));
@@ -59,33 +73,53 @@ void main() {
     expect(result.path.any((entry) => entry.target == map), isTrue);
   });
 
-  testWidgets('the closing tutorial lets taps through and completes once', (
-    tester,
-  ) async {
+  Widget host({
+    required List<SpotlightStep> steps,
+    required VoidCallback onComplete,
+    VoidCallback? onUnderneathTap,
+    GlobalKey? targetKey,
+  }) {
+    return MaterialApp(
+      home: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onUnderneathTap,
+            ),
+          ),
+          Positioned(
+            left: 40,
+            top: 100,
+            child: SizedBox(key: targetKey, width: 80, height: 40),
+          ),
+          SpotlightTutorial(steps: steps, onComplete: onComplete),
+        ],
+      ),
+    );
+  }
+
+  testWidgets('the tour locks the screen, then lets taps through as it closes',
+      (tester) async {
     var completed = 0;
     var underneathTaps = 0;
+    final target = GlobalKey();
     await tester.pumpWidget(
-      MaterialApp(
-        home: Stack(
-          children: [
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => underneathTaps++,
-              ),
-            ),
-            TutorialOverlay(
-              steps: [
-                for (var i = 0; i < 2; i++)
-                  TutorialStep(title: 'Step $i', description: ''),
-              ],
-              onComplete: () => completed++,
-            ),
-          ],
-        ),
+      host(
+        targetKey: target,
+        steps: [
+          SpotlightStep(title: 'Step 0', body: '', target: target),
+          const SpotlightStep(title: 'Step 1', body: ''),
+        ],
+        onComplete: () => completed++,
+        onUnderneathTap: () => underneathTaps++,
       ),
     );
     await tester.pumpAndSettle();
+
+    // Even the lit part doesn't reach the screen underneath.
+    await tester.tapAt(const Offset(80, 120));
+    expect(underneathTaps, 0);
 
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
@@ -96,6 +130,41 @@ void main() {
     await tester.tapAt(const Offset(10, 10));
     expect(underneathTaps, 1);
 
+    await tester.pumpAndSettle();
+    expect(completed, 1);
+    expect(find.byType(SpotlightTutorial), findsOneWidget); // host removes it
+  });
+
+  testWidgets('each step sets the screen up; Back and Skip work', (
+    tester,
+  ) async {
+    final shown = <int>[];
+    var completed = 0;
+    await tester.pumpWidget(
+      host(
+        steps: [
+          for (var i = 0; i < 3; i++)
+            SpotlightStep(
+              title: 'Step $i',
+              body: '',
+              onShow: () => shown.add(i),
+            ),
+        ],
+        onComplete: () => completed++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(shown, [0]);
+    expect(find.text('1 of 3'), findsOneWidget);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(shown, [0, 1, 0]);
+    expect(find.text('Step 0'), findsOneWidget);
+
+    await tester.tap(find.text('Skip tour'));
     await tester.pumpAndSettle();
     expect(completed, 1);
   });

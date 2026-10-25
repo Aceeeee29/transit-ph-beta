@@ -20,16 +20,15 @@ void main() {
       MaterialApp(home: ContributeScreen(onRouteSubmitted: (_) async {})),
     );
     await frames();
-    expect(find.text('Tap on the map to select the starting point'), findsOne);
 
-    // The tutorial opens on first use; its last card offers an example, a
-    // finished route.
-    expect(find.text('Try an example route'), findsNothing);
+    // The tour opens on first use; its last card offers the example, a
+    // finished route, over the rider's empty map.
+    expect(find.text('Try the example'), findsNothing);
     while (find.text('Next').evaluate().isNotEmpty) {
       await tester.tap(find.text('Next'));
       await frames();
     }
-    await tester.tap(find.text('Try an example route'));
+    await tester.tap(find.text('Try the example'));
     await frames();
 
     expect(tester.takeException(), isNull);

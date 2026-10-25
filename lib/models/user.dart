@@ -119,12 +119,15 @@ class User {
 
   /// What the app may write to its own profile. Role and ban/restriction
   /// fields are set by staff and the dashboard, never by the rider's app.
+  /// hasSeenTutorial is left out too: only onboarding sets it, so a save
+  /// from a stale copy can't send the rider back through onboarding.
   Map<String, dynamic> toProfileUpdateJson() {
     return toJson()
       ..remove('uid')
       ..remove('role')
       ..remove('isBanned')
-      ..remove('restrictedUntil');
+      ..remove('restrictedUntil')
+      ..remove('hasSeenTutorial');
   }
 
   factory User.fromJson(Map<String, dynamic> json) {

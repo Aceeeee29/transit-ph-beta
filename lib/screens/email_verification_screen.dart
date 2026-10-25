@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
-import 'main_screen.dart';
 import '../theme/app_colors.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
@@ -71,34 +69,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           // Small delay to show the message
           await Future.delayed(const Duration(seconds: 1));
 
-          // Navigate to main screen after verification
+          // Back through the sign-in gate: it picks onboarding or the main
+          // screen (and the Moderator tab) like on every other sign-in.
+          // Going straight to MainScreen skipped onboarding.
           if (mounted) {
-            // Check user role and navigate accordingly
-            final userDoc =
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(updatedUser.uid)
-                    .get();
-            if (userDoc.exists) {
-              final data = userDoc.data() as Map<String, dynamic>;
-              final role = data['role'] as String?;
-              final isAdmin = role == 'moderator';
-
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (context) => MainScreen(isAdmin: isAdmin),
-                ),
-                (route) => false,
-              );
-            } else {
-              // Fallback to regular user
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (context) => const MainScreen(isAdmin: false),
-                ),
-                (route) => false,
-              );
-            }
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
           }
         }
       } else {

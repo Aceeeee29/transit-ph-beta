@@ -406,3 +406,134 @@ extension _SettingsScreenSections on _SettingsScreenState {
     );
   }
 }
+
+/// Settings → Delete account: what goes, confirming it's you, then the
+/// deletion itself (AccountDeletionService).
+extension _SettingsDeleteAccount on _SettingsScreenState {
+  static const _danger = Color(0xFFD14343);
+
+  Widget _deleteAccountLink() {
+    return TextButton(
+      onPressed: _deleteAccount,
+      style: TextButton.styleFrom(foregroundColor: _danger),
+      child: const TranslatedText(
+        'Delete account',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const TranslatedText('Delete your account?'),
+            content: const SingleChildScrollView(
+              child: TranslatedText(
+                'This can\'t be undone. We delete your profile, your posts '
+                'and their comments, your comments on other posts, routes '
+                'still waiting for review, your notifications and the '
+                'feedback you sent.\n\nRoutes already approved stay for other '
+                'riders, credited to "Former rider".',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const TranslatedText('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: TextButton.styleFrom(foregroundColor: _danger),
+                child: const TranslatedText('Delete'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Firebase only deletes an account right after signing in.
+    String? password;
+    if (!AccountDeletionService.usesGoogle) {
+      password = await _askPasswordForDeletion();
+      if (password == null || !mounted) return;
+    }
+    try {
+      final ok = await AccountDeletionService.reauthenticate(
+        password: password,
+      );
+      if (!ok || !mounted) return;
+    } on ReauthException catch (e) {
+      messenger.showSnackBar(SnackBar(content: TranslatedText(e.message)));
+      return;
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (_) => const PopScope(
+              canPop: false,
+              child: AlertDialog(
+                content: Row(
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(child: TranslatedText('Deleting your account...')),
+                  ],
+                ),
+              ),
+            ),
+      ),
+    );
+    try {
+      await AccountDeletionService.deleteCurrentAccount();
+      navigator.pushNamedAndRemoveUntil('/', (route) => false);
+      messenger.showSnackBar(
+        const SnackBar(content: TranslatedText('Your account was deleted.')),
+      );
+    } catch (e) {
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not delete your account: $e')),
+      );
+    }
+  }
+
+  Future<String?> _askPasswordForDeletion() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const TranslatedText('Confirm it\'s you'),
+            content: TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+              onSubmitted: (value) => Navigator.of(ctx).pop(value),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const TranslatedText('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(controller.text),
+                style: TextButton.styleFrom(foregroundColor: _danger),
+                child: const TranslatedText('Continue'),
+              ),
+            ],
+          ),
+    ).whenComplete(controller.dispose);
+  }
+}

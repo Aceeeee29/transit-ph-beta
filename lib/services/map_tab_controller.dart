@@ -55,6 +55,11 @@ class MapTabController extends ChangeNotifier {
   );
   final ValueNotifier<bool> showPins = ValueNotifier(true);
 
+  /// Set by Settings → "Contribute tutorial": MainScreen opens Contribute
+  /// on the Map tab, which plays the tour there (it lights up the real
+  /// controls, so it can't play over Settings) and clears this.
+  final ValueNotifier<bool> contributeTourRequested = ValueNotifier(false);
+
   void toggleCategory(PlaceCategory category) {
     final next = Set<PlaceCategory>.from(placeCategories.value);
     if (!next.remove(category)) next.add(category);

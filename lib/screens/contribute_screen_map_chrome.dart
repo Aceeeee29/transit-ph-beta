@@ -76,8 +76,10 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
       left: 0,
       right: 0,
       child: Column(
+        key: _tourTopBarKey,
         children: [
           Padding(
+            key: _tourSearchKey,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: bar,
           ),
@@ -96,35 +98,38 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
     return Positioned(
       right: 12,
       bottom: _ContributeScreenState._drawerPeekHeight + 12,
-      child: MapSideButtons(
-        children: [
-          MapSideButton(
-            icon: Icons.view_in_ar_rounded,
-            tooltip: _tilted ? 'Flat view' : '3D view',
-            active: _tilted,
-            iconColor: _ContributeScreenState._accent,
-            onTap: _toggleTilt,
-          ),
-          MapSideButton(
-            icon:
-                _showPins
-                    ? Icons.location_on_rounded
-                    : Icons.location_off_rounded,
-            tooltip: _showPins ? 'Hide pins' : 'Show pins',
-            iconColor:
-                _showPins
-                    ? _ContributeScreenState._accent
-                    : _ContributeScreenState._textSecondary,
-            onTap: _togglePins,
-          ),
-          MapSideButton(
-            icon: Icons.my_location_rounded,
-            tooltip: 'Center on my location',
-            iconColor: _ContributeScreenState._accent,
-            busy: _nearbyIsLocating,
-            onTap: _centerOnNearbyUser,
-          ),
-        ],
+      child: KeyedSubtree(
+        key: _tourSideKey,
+        child: MapSideButtons(
+          children: [
+            MapSideButton(
+              icon: Icons.view_in_ar_rounded,
+              tooltip: _tilted ? 'Flat view' : '3D view',
+              active: _tilted,
+              iconColor: _ContributeScreenState._accent,
+              onTap: _toggleTilt,
+            ),
+            MapSideButton(
+              icon:
+                  _showPins
+                      ? Icons.location_on_rounded
+                      : Icons.location_off_rounded,
+              tooltip: _showPins ? 'Hide pins' : 'Show pins',
+              iconColor:
+                  _showPins
+                      ? _ContributeScreenState._accent
+                      : _ContributeScreenState._textSecondary,
+              onTap: _togglePins,
+            ),
+            MapSideButton(
+              icon: Icons.my_location_rounded,
+              tooltip: 'Center on my location',
+              iconColor: _ContributeScreenState._accent,
+              busy: _nearbyIsLocating,
+              onTap: _centerOnNearbyUser,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -135,10 +140,13 @@ extension _ContributeScreenMapChrome on _ContributeScreenState {
     return MapDrawer(
       controller: _drawerController,
       peekHeight: _ContributeScreenState._drawerPeekHeight,
-      header: RegionWeatherRow(
-        regions: philippineRegions.keys.toList(),
-        selectedRegion: selectedRegion,
-        onRegionSelected: _onRegionChanged,
+      header: KeyedSubtree(
+        key: _tourDrawerKey,
+        child: RegionWeatherRow(
+          regions: philippineRegions.keys.toList(),
+          selectedRegion: selectedRegion,
+          onRegionSelected: _onRegionChanged,
+        ),
       ),
       children: [
         if (place != null) ...[

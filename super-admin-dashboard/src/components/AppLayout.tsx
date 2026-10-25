@@ -50,7 +50,7 @@ function getAvatarColor(str?: string | null) {
 }
 
 export function AppLayout() {
-  const { user, role, logout } = useAuth()
+  const { user, role, logout, isTempSuperAdmin, tempSuperadminUntil } = useAuth()
   const navigate = useNavigate()
 
   const onLogout = async () => {
@@ -87,7 +87,9 @@ export function AppLayout() {
           </div>
           <div className="profile-info">
             <div className="profile-name">{displayName}</div>
-            <span className="profile-role">{role ?? 'superadmin'}</span>
+            <span className="profile-role" title={tempSuperadminUntil ? `Access ends ${tempSuperadminUntil.toLocaleString()}` : undefined}>
+              {isTempSuperAdmin ? 'temp superadmin' : role ?? 'superadmin'}
+            </span>
           </div>
         </div>
 

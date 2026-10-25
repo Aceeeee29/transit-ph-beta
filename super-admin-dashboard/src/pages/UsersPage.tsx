@@ -1,7 +1,8 @@
 ﻿import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteUser, getUsers, liftUserRestriction, restrictUser, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
+import { deleteUser, getUsers, grantTempSuperadmin, hasActiveTempSuperadmin, liftUserRestriction, restrictUser, revokeTempSuperadmin, setUserBanStatus, updateUserRole } from '@/lib/firestoreApi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useAuth } from '@/hooks/useAuth'
 import { ArrowUpDown, Search, Users } from 'lucide-react'
 import type { AppUser, UserRole } from '@/types/models'
 
@@ -73,7 +74,9 @@ function RoleBadge({ role }: { role?: string }) {
   )
 }
 function StatusBadge({ status }: { status?: string }) {
-  const s: React.CSSProperties = status === 'banned'
+  const s: React.CSSProperties = status === 'closed'
+    ? { background: 'rgba(74,85,104,0.12)', color: '#4A5568', border: '1px solid rgba(74,85,104,0.24)' }
+    : status === 'banned'
     ? { background: 'rgba(224,92,106,0.12)', color: '#E05C6A', border: '1px solid rgba(224,92,106,0.22)' }
     : status === 'restricted'
       ? { background: 'rgba(255,181,71,0.16)', color: '#C17C00', border: '1px solid rgba(193,124,0,0.28)' }
@@ -100,8 +103,33 @@ function getRestrictionDaysLabel(user: AppUser) {
   return `restricted (${daysLeft}d left)`
 }
 
+const TEMP_ADMIN_HOURS = [
+  { hours: 1, label: '1 hour' },
+  { hours: 6, label: '6 hours' },
+  { hours: 24, label: '1 day' },
+  { hours: 72, label: '3 days' },
+  { hours: 168, label: '7 days' },
+]
+
+function TempAdminBadge({ user }: { user: AppUser }) {
+  if (!hasActiveTempSuperadmin(user) || !user.tempSuperadminUntil) return null
+  const until = user.tempSuperadminUntil.toDate()
+  const hoursLeft = Math.max(1, Math.ceil((until.getTime() - Date.now()) / (60 * 60 * 1000)))
+  const left = hoursLeft >= 48 ? `${Math.ceil(hoursLeft / 24)}d left` : `${hoursLeft}h left`
+  return (
+    <span title={`Superadmin access until ${until.toLocaleString()}`} style={{
+      background: 'rgba(46,124,246,0.12)', color: '#2E7CF6', border: '1px solid rgba(46,124,246,0.2)',
+      display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:99, fontSize:'0.72rem', fontWeight:700, whiteSpace:'nowrap',
+    }}>
+      <span style={{ width:5, height:5, borderRadius:'50%', background:'currentColor', flexShrink:0 }} />
+      temp admin ({left})
+    </span>
+  )
+}
+
 export function UsersPage() {
   const qc = useQueryClient()
+  const { user: me, isTempSuperAdmin } = useAuth()
   const { data = [], isLoading, isError, error } = useQuery({ queryKey: ['users'], queryFn: getUsers })
 
   const [search, setSearch] = useState('')
@@ -115,6 +143,9 @@ export function UsersPage() {
   const [restrictDays, setRestrictDays] = useState(7)
   const [banConfirmId, setBanConfirmId] = useState<string | null>(null)
   const [banTypedText, setBanTypedText] = useState('')
+  const [grantConfirmId, setGrantConfirmId] = useState<string | null>(null)
+  const [grantTypedText, setGrantTypedText] = useState('')
+  const [grantHours, setGrantHours] = useState(24)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const roleOptions: UserRole[] = ['user', 'moderator']
 
@@ -163,10 +194,29 @@ export function UsersPage() {
     onSuccess: async () => { setMutationError(null); await invalidate() },
     onError: (err) => setMutationError(toErrorText('Failed to unban user', err)),
   })
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteUser(id),
+  const grantAdmin = useMutation({
+    mutationFn: ({ id, hours }: { id: string; hours: number }) => grantTempSuperadmin(id, me?.uid ?? '', hours),
     onSuccess: async () => { setMutationError(null); await invalidate() },
-    onError: (err) => setMutationError(toErrorText('Failed to delete account', err)),
+    onError: (err) => setMutationError(toErrorText('Failed to grant superadmin access', err)),
+  })
+  const revokeAdmin = useMutation({
+    mutationFn: (id: string) => revokeTempSuperadmin(id),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    onError: (err) => setMutationError(toErrorText('Failed to revoke superadmin access', err)),
+  })
+  const closeGrant = () => { setGrantConfirmId(null); setGrantTypedText(''); setGrantHours(24) }
+  // Temporary superadmins can't change roles or hand out access themselves.
+  const TempAdminButton = ({ u }: { u: AppUser }) => {
+    if (isTempSuperAdmin) return null
+    return hasActiveTempSuperadmin(u)
+      ? <Btn sm variant="danger" disabled={revokeAdmin.isPending} onClick={() => { if (confirm(`Revoke superadmin access for ${u.name}?`)) revokeAdmin.mutate(u.id) }}>Revoke Admin</Btn>
+      : <Btn sm variant="outline" onClick={() => setGrantConfirmId(u.id)}>Grant Admin</Btn>
+  }
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteUser(id, me?.uid),
+    onSuccess: async () => { setMutationError(null); await invalidate() },
+    // A partial close still changed things: refresh the list either way.
+    onError: async (err) => { setMutationError(toErrorText('Failed to close account', err)); await invalidate() },
   })
 
   const toggleSort = (field: keyof AppUser) => {
@@ -265,7 +315,12 @@ export function UsersPage() {
                       </div>
                     </td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.email}</td>
-                    <td><StatusBadge status={getRestrictionDaysLabel(u)} /></td>
+                    <td>
+                      <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                        <StatusBadge status={getRestrictionDaysLabel(u)} />
+                        <TempAdminBadge user={u} />
+                      </div>
+                    </td>
                     <td style={{ color:'var(--text-secondary)', fontSize:'0.81rem' }}>{u.createdAt?.toDate().toLocaleDateString() ?? '-'}</td>
                     <td style={{ fontWeight:600 }}>{u.routesContributed ?? 0}</td>
                     <td>
@@ -277,14 +332,14 @@ export function UsersPage() {
                             const currentRole = (u.role === 'moderator' ? 'moderator' : 'user') as UserRole
                             if (nextRole !== currentRole) updateRole.mutate({ id: u.id, role: nextRole })
                           }}
-                          disabled={updateRole.isPending}
+                          disabled={updateRole.isPending || isTempSuperAdmin}
                           style={{ width:'auto', minWidth:112, fontSize:'0.76rem', padding:'5px 8px' }}
                         >
                           {roleOptions.map((role) => (
                             <option key={role} value={role}>{role}</option>
                           ))}
                         </select>
-                        {u.status === 'banned' ? (
+                        {u.status === 'closed' ? null : u.status === 'banned' ? (
                           <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                         ) : (
                           <>
@@ -295,9 +350,12 @@ export function UsersPage() {
                             <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
                           </>
                         )}
-                        <Btn sm variant="danger" onClick={() => { if (confirm('Delete account permanently?')) remove.mutate(u.id) }}>
-                          Delete
-                        </Btn>
+                        <TempAdminButton u={u} />
+                        {!isTempSuperAdmin && u.status !== 'closed' && (
+                          <Btn sm variant="danger" onClick={() => { if (confirm(`Close ${u.name}'s account? Their posts, comments, pending routes, notifications and feedback are deleted, their profile is emptied, and they can't sign in again. Approved routes stay, credited to "Former rider". This can't be undone.`)) remove.mutate(u.id) }}>
+                            Close account
+                          </Btn>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -318,7 +376,7 @@ export function UsersPage() {
                   </div>
                 </div>
                 <div style={{ color:'var(--text-secondary)', fontSize:'0.8rem' }}>{u.email}</div>
-                <div style={{ display:'flex', gap:6 }}><StatusBadge status={getRestrictionDaysLabel(u)} /></div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}><StatusBadge status={getRestrictionDaysLabel(u)} /><TempAdminBadge user={u} /></div>
                 <div style={{ display:'flex', gap:5 }}>
                   <select
                     value={(u.role === 'moderator' ? 'moderator' : 'user') as UserRole}
@@ -327,14 +385,14 @@ export function UsersPage() {
                       const currentRole = (u.role === 'moderator' ? 'moderator' : 'user') as UserRole
                       if (nextRole !== currentRole) updateRole.mutate({ id: u.id, role: nextRole })
                     }}
-                    disabled={updateRole.isPending}
+                    disabled={updateRole.isPending || isTempSuperAdmin}
                     style={{ width:'auto', minWidth:110, fontSize:'0.76rem', padding:'5px 8px' }}
                   >
                     {roleOptions.map((role) => (
                       <option key={role} value={role}>{role}</option>
                     ))}
                   </select>
-                  {u.status === 'banned' ? (
+                  {u.status === 'closed' ? null : u.status === 'banned' ? (
                     <Btn sm variant="success" onClick={() => unban.mutate(u.id)}>Unban</Btn>
                   ) : (
                     <>
@@ -345,6 +403,7 @@ export function UsersPage() {
                       <Btn sm variant="danger" onClick={() => setBanConfirmId(u.id)}>Ban</Btn>
                     </>
                   )}
+                  <TempAdminButton u={u} />
                 </div>
               </div>
             ))}
@@ -420,6 +479,40 @@ export function UsersPage() {
               if (restrictConfirmId) restrict.mutate({ id: restrictConfirmId, days: restrictDays })
               setRestrictConfirmId(null); setRestrictTypedText(''); setRestrictDays(7)
             }}>Restrict User</Btn>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(grantConfirmId)} onOpenChange={(open) => { if (!open) closeGrant() }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Grant Temporary Superadmin</DialogTitle></DialogHeader>
+          <p style={{ color:'var(--text-secondary)', fontSize:'0.85rem', marginBottom:12 }}>
+            {data.find((u) => u.id === grantConfirmId)?.name ?? 'This user'} will be able to log in to this dashboard with
+            full superadmin access until it expires. Their app role stays the same. They can't change roles,
+            delete accounts, or grant access to others. Type <strong style={{ color:'#2E7CF6' }}>GRANT</strong> to confirm.
+          </p>
+          <label style={{ color:'var(--text-secondary)', fontSize:'0.78rem', marginBottom:6, display:'block' }}>Access length</label>
+          <select
+            value={grantHours}
+            onChange={(e) => setGrantHours(Number(e.target.value) || 24)}
+            style={{ width: '100%', marginBottom: 10 }}
+          >
+            {TEMP_ADMIN_HOURS.map(({ hours, label }) => (
+              <option key={hours} value={hours}>{label}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={grantTypedText}
+            onChange={(e) => setGrantTypedText(e.target.value)}
+            placeholder="Type GRANT to confirm"
+          />
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
+            <Btn variant="outline" onClick={closeGrant}>Cancel</Btn>
+            <Btn variant="primary" disabled={grantTypedText !== 'GRANT'} onClick={() => {
+              if (grantConfirmId) grantAdmin.mutate({ id: grantConfirmId, hours: grantHours })
+              closeGrant()
+            }}>Grant Access</Btn>
           </div>
         </DialogContent>
       </Dialog>

@@ -243,7 +243,11 @@ extension _SearchScreenSections on _SearchScreenState {
   }
 
   List<Widget> _suggestedRouteRows() {
-    final hasOptions = _routeAlternatives.isNotEmpty || _orsResult != null;
+    final walkMinutes = _walkOptionMinutes;
+    final hasOptions =
+        _routeAlternatives.isNotEmpty ||
+        _orsResult != null ||
+        walkMinutes != null;
     if (_isLoadingOrs && !hasOptions) {
       return const [_MessageRow(text: 'Finding routes…', busy: true)];
     }
@@ -257,13 +261,15 @@ extension _SearchScreenSections on _SearchScreenState {
         ),
     ];
     if (hasOptions) rows.add(const _GeneratedRouteCaution());
+    if (walkMinutes != null) rows.add(_walkOptionRow(walkMinutes));
     if (_routeAlternatives.isNotEmpty) {
       for (var i = 0; i < _routeAlternatives.length; i++) {
         rows.add(_alternativeRow(i, verified: _isRiderVerified(i)));
       }
-    } else if (_orsResult != null) {
+    } else if (_orsResult != null &&
+        _selectedAlternativeIndex != _SearchScreenState._walkOptionIndex) {
       rows.add(_generatedResultRow(_orsResult!));
-    } else if (!_orsError) {
+    } else if (!_orsError && walkMinutes == null) {
       rows.add(
         _MessageRow(
           text: 'Let TransitPH build a route for this trip.',
@@ -343,6 +349,29 @@ extension _SearchScreenSections on _SearchScreenState {
       verified: verified,
       busy: _pendingAlternativeIndex == index,
       onTap: () => _openAlternative(index),
+    );
+  }
+
+  /// Walking the whole way, shown first when the trip is short enough.
+  Widget _walkOptionRow(double minutes) {
+    final km = minutes / 60 * 5;
+    return RouteOptionRow(
+      headline: _SearchScreenState._minutesLabel(minutes),
+      details: [
+        'Free',
+        'Walk only',
+        _SearchScreenState._walkLabel(km),
+      ].join(' · '),
+      modes: collapseModes(['Walk']),
+      tag:
+          _routeAlternatives.isEmpty ||
+                  _routeAlternatives.every(
+                    (alt) => alt.estimatedTimeMinutes > minutes,
+                  )
+              ? 'Fastest'
+              : null,
+      busy: _pendingAlternativeIndex == _SearchScreenState._walkOptionIndex,
+      onTap: _openWalkOption,
     );
   }
 

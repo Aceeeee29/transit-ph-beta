@@ -727,13 +727,21 @@ class RoutingService {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     if (profile == 'foot' && base == null) {
-      return await _osrmRoute(
-            waypoints,
-            profile,
-            base: _osrmFootBase,
-            timeout: const Duration(seconds: 5),
-          ) ??
-          await _osrmRoute(waypoints, profile, base: '$_osrmBase/foot');
+      final foot = await _osrmRoute(
+        waypoints,
+        profile,
+        base: _osrmFootBase,
+        timeout: const Duration(seconds: 8),
+      );
+      if (foot != null) return foot;
+      // The demo server only has the car profile: it keeps to one-way
+      // streets and car turns, so a walk could loop around whole blocks.
+      // Use it only when it stays close to the direct way; otherwise the
+      // caller draws a straight line.
+      final car = await _osrmRoute(waypoints, profile, base: '$_osrmBase/foot');
+      if (car == null) return null;
+      final directKm = _polylineDistanceKm(waypoints);
+      return _polylineDistanceKm(car) <= directKm * 1.5 + 0.15 ? car : null;
     }
     if (waypoints.length < 2) return null;
     final from = waypoints.first;

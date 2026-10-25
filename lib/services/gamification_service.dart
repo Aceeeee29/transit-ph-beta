@@ -32,23 +32,20 @@ class GamificationService {
           final data = docSnapshot.data() as Map<String, dynamic>;
           return app_user.User.fromJson(data);
         } else {
-          // Create a new user document in Firestore if it doesn't exist
+          // Sign-in creates the document (UserProfileBootstrapService). Not
+          // writing one here: a new account's document can still be on its
+          // way, and a full write over it wiped legal consent and the
+          // tutorial flag on the phone until the rules refused it, so the
+          // consent screen flickered in and out.
           final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-          final newUser = app_user.User(
+          return app_user.User(
+            uid: uid,
             name:
                 firebaseUser?.displayName ??
                 firebaseUser?.email?.split('@').first ??
                 'User',
             email: firebaseUser?.email ?? '',
           );
-
-          // Save to Firestore
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .set(newUser.toJson());
-
-          return newUser;
         }
       } catch (_) {}
     }

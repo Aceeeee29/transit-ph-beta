@@ -6,6 +6,7 @@ import 'main_screen.dart';
 import 'email_verification_screen.dart';
 import 'onboarding_screen.dart';
 import 'legal_consent_screen.dart';
+import '../services/account_deletion_service.dart';
 import '../theme/app_colors.dart';
 
 class AuthGate extends StatelessWidget {
@@ -118,22 +119,47 @@ class AuthGate extends StatelessWidget {
         .replaceAll('-', '_')
         .replaceAll(' ', '_');
 
-    return role == 'moderator' ||
-        role == 'superadmin' ||
-        role == 'super_admin';
+    return role == 'moderator' || role == 'superadmin' || role == 'super_admin';
   }
+
+  // Accounts the server has confirmed past consent / onboarding this run.
+  // A write the phone shows before the server refuses it can briefly drop
+  // those fields; without this the screen flickered between consent and
+  // Home and the rider couldn't use the app.
+  static final Set<String> _confirmedLegal = {};
+  static final Set<String> _confirmedTutorial = {};
 
   static Widget _buildAuthedDestination({
     required User user,
-    required Map<String, dynamic> data,
+    required DocumentSnapshot snapshot,
     required String? quickRouteToken,
     required bool enforceEmailVerification,
   }) {
+    final data = (snapshot.data() as Map<String, dynamic>?) ?? {};
+    final confirmed =
+        !snapshot.metadata.hasPendingWrites && !snapshot.metadata.isFromCache;
+    if (confirmed && _hasAcceptedLatestLegalDocuments(data)) {
+      _confirmedLegal.add(user.uid);
+    }
+    if (confirmed && data['hasSeenTutorial'] == true) {
+      _confirmedTutorial.add(user.uid);
+    }
+
     final isAdmin = _isAdminRole(data);
     final restrictionEndsAt = _restrictionEndsAt(data);
     final isRestricted = _isRestrictionActive(data);
-    final hasSeenTutorial = data['hasSeenTutorial'] as bool? ?? false;
-    final hasAcceptedLegal = _hasAcceptedLatestLegalDocuments(data);
+    final hasSeenTutorial =
+        data['hasSeenTutorial'] == true ||
+        _confirmedTutorial.contains(user.uid);
+    final hasAcceptedLegal =
+        _hasAcceptedLatestLegalDocuments(data) ||
+        _confirmedLegal.contains(user.uid);
+
+    // Closed from the dashboard: signed out with its own message.
+    final status = ((data['status'] as String?) ?? '').trim().toLowerCase();
+    if (status == 'closed') {
+      return const _RestrictedAccountHandler(closed: true);
+    }
 
     if (isRestricted) {
       return _RestrictedAccountHandler(restrictedUntil: restrictionEndsAt);
@@ -196,14 +222,18 @@ class AuthGate extends StatelessWidget {
               }
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final data = userSnapshot.data!.data() ?? <String, dynamic>{};
                 return _buildAuthedDestination(
                   user: user,
-                  data: data,
+                  snapshot: userSnapshot.data!,
                   quickRouteToken: quickRouteToken,
                   enforceEmailVerification: true,
                 );
               } else {
+                // Deleting the account removes the profile just before the
+                // sign-in account; signing out here would stop that.
+                if (AccountDeletionService.inProgress) {
+                  return _loadingScaffold();
+                }
                 // Document may not exist yet — race between auth event and
                 // Firestore write completing. Wait 2 s then retry once.
                 return FutureBuilder<DocumentSnapshot>(
@@ -221,17 +251,18 @@ class AuthGate extends StatelessWidget {
                     }
 
                     if (retrySnapshot.hasData && retrySnapshot.data!.exists) {
-                      final data =
-                          retrySnapshot.data!.data() as Map<String, dynamic>;
                       return _buildAuthedDestination(
                         user: user,
-                        data: data,
+                        snapshot: retrySnapshot.data!,
                         quickRouteToken: quickRouteToken,
                         enforceEmailVerification: false,
                       );
                     }
 
                     // Still no document after retry — sign out
+                    if (AccountDeletionService.inProgress) {
+                      return _loadingScaffold();
+                    }
                     FirebaseAuth.instance.signOut();
                     return const LoginScreen();
                   },
@@ -251,7 +282,10 @@ class AuthGate extends StatelessWidget {
 class _RestrictedAccountHandler extends StatefulWidget {
   final DateTime? restrictedUntil;
 
-  const _RestrictedAccountHandler({this.restrictedUntil});
+  /// Closed for good (dashboard "Close account"), not restricted for a time.
+  final bool closed;
+
+  const _RestrictedAccountHandler({this.restrictedUntil, this.closed = false});
 
   @override
   State<_RestrictedAccountHandler> createState() =>
@@ -273,6 +307,9 @@ class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
   }
 
   String _buildRestrictionMessage() {
+    if (widget.closed) {
+      return 'This TransitPH account has been closed. Contact support if you think this was a mistake.';
+    }
     final restrictedUntil = widget.restrictedUntil;
     if (restrictedUntil == null) {
       return 'Your TransitPH account is temporarily restricted. Please try again later or contact support if you think this was a mistake.';
@@ -330,7 +367,9 @@ class _RestrictedAccountHandlerState extends State<_RestrictedAccountHandler> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Account Restricted',
+                            widget.closed
+                                ? 'Account Closed'
+                                : 'Account Restricted',
                             style: TextStyle(
                               color: AuthGate._textPrimary,
                               fontWeight: FontWeight.w800,

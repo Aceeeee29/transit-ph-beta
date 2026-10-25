@@ -17,6 +17,7 @@ import '../services/location_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
+import '../services/walk_option.dart';
 
 import '../widgets/location_permission_notice.dart';
 import '../widgets/notification_overlay.dart';
@@ -872,6 +873,49 @@ class _SearchScreenState extends State<SearchScreen> {
       // Opening the option draws it again (and shows any error then).
       debugPrint('[SearchScreen] Drawing the first option failed: $e');
     }
+  }
+
+  /// [_selectedAlternativeIndex] while the walk-only option is the one built.
+  static const _walkOptionIndex = -1;
+
+  /// Minutes to walk the whole trip, when short enough to offer it.
+  double? get _walkOptionMinutes {
+    final origin = _lastOriginForAlternatives;
+    final destination = _lastDestinationForAlternatives;
+    if (origin == null || destination == null) return null;
+    return WalkOption.offered(origin, destination);
+  }
+
+  /// Draws the walk the whole way (on streets) and opens it on the map.
+  Future<void> _openWalkOption() async {
+    final origin = _lastOriginForAlternatives;
+    final destination = _lastDestinationForAlternatives;
+    if (_isLoadingOrs || origin == null || destination == null) return;
+    if (_orsResult == null || _selectedAlternativeIndex != _walkOptionIndex) {
+      setState(() => _pendingAlternativeIndex = _walkOptionIndex);
+      try {
+        final walk = await RoutingService.buildWalkFallbackRoute(
+          origin: origin,
+          destination: destination,
+          note: 'Walk the whole way',
+        );
+        if (!mounted) return;
+        setState(() {
+          _orsResult = walk;
+          _selectedAlternativeIndex = _walkOptionIndex;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _orsError = true;
+          _orsErrorMessage = "Couldn't draw the walk. Try again.";
+        });
+        return;
+      } finally {
+        if (mounted) setState(() => _pendingAlternativeIndex = null);
+      }
+    }
+    _openResultOnMap();
   }
 
   void _openResultOnMap() {

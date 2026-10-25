@@ -1,14 +1,25 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route.dart' as route_model;
-import 'gamification_service.dart';
 
 class TutorialService {
+  /// Its own flag, not onboarding's hasSeenTutorial: skipping onboarding
+  /// used to hide the Contribute tutorial for good.
+  static const _contributeSeenField = 'hasSeenContributeTutorial';
+
+  static DocumentReference<Map<String, dynamic>>? _userDoc() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance.collection('users').doc(uid);
+  }
+
   /// Check if the user has seen the contribute tutorial
   static Future<bool> hasSeenContributeTutorial() async {
     try {
-      final user = await GamificationService.loadUser();
-      return user.hasSeenTutorial;
+      final snapshot = await _userDoc()?.get();
+      return snapshot?.data()?[_contributeSeenField] == true;
     } catch (_) {
       return false;
     }
@@ -17,85 +28,14 @@ class TutorialService {
   /// Mark the contribute tutorial as seen
   static Future<void> markContributeTutorialAsSeen() async {
     try {
-      final user = await GamificationService.loadUser();
-      user.hasSeenTutorial = true;
-      await GamificationService.saveUser(user);
+      await _userDoc()?.update({_contributeSeenField: true});
     } catch (_) {}
   }
 
-  /// Reset tutorial status (for testing)
-  static Future<void> resetTutorialStatus() async {
-    try {
-      final user = await GamificationService.loadUser();
-      user.hasSeenTutorial = false;
-      await GamificationService.saveUser(user);
-    } catch (_) {}
-  }
-
-  /// The contribute tutorial: one card per part of drawing a route, in the
-  /// order it's done. [TutorialStep.image] holds a screenshot once added.
-  static List<TutorialStep> getContributeTutorialSteps() {
-    return const [
-      TutorialStep(
-        title: 'Set the start',
-        description:
-            'Pick the vehicle, then tap the map where riders begin. Search a '
-            'place first to jump there.',
-        icon: Icons.touch_app_rounded,
-        image: 'assets/tutorial/contribute_1.jpg',
-        focus: 0.35,
-      ),
-      TutorialStep(
-        title: 'Draw the line',
-        description:
-            'Keep tapping along the road; the line follows the street. Undo '
-            'takes back a point, and you can drag the dots to fix a turn.',
-        icon: Icons.gesture_rounded,
-        image: 'assets/tutorial/contribute_2.jpg',
-        focus: 0,
-      ),
-      TutorialStep(
-        title: 'Save the step',
-        description:
-            'Press Save step, then write what riders do ("Ride the jeep with '
-            'the Monumento signboard") and add the fare, hours and stops.',
-        icon: Icons.directions_bus_rounded,
-        image: 'assets/tutorial/contribute_3.jpg',
-        focus: -0.2,
-      ),
-      TutorialStep(
-        title: 'Add the next ride',
-        description:
-            'Changing vehicles? Tap to start the next step where this one '
-            'ended. When the whole trip is drawn, press Finish.',
-        icon: Icons.alt_route_rounded,
-        image: 'assets/tutorial/contribute_4.jpg',
-        focus: 0,
-      ),
-      TutorialStep(
-        title: 'Fill in Basic Info',
-        description:
-            'Type where the route starts and ends, like "SM Valenzuela" and '
-            '"Monumento", then press Next to pick tags.',
-        icon: Icons.edit_note_rounded,
-        image: 'assets/tutorial/contribute_5.jpg',
-        focus: 0.55,
-      ),
-      TutorialStep(
-        title: 'Describe it and finish',
-        description:
-            'Add a short description, then press Finish Route. A moderator '
-            'reviews new routes before they appear for everyone.',
-        icon: Icons.send_rounded,
-        image: 'assets/tutorial/contribute_6.jpg',
-        focus: 0.8,
-      ),
-    ];
-  }
-
-  /// The route Load Example fills in: a real CAMANAVA commute (LRT-1
-  /// Monumento to Our Lady of Fatima University by MacArthur Highway
-  /// jeepney), with each step drawn along the street.
+  /// The example route the Contribute tour draws (and "Try the example"
+  /// loads): a real CAMANAVA commute (LRT-1 Monumento to Our Lady of
+  /// Fatima University by MacArthur Highway jeepney), with each step drawn
+  /// along the street.
   static route_model.Route getExampleRoute() {
     const walkToJeep = [
       LatLng(14.654300, 120.983813), // LRT-1 Monumento Station
@@ -206,27 +146,4 @@ class TutorialService {
       audienceTags: const ['Student'],
     );
   }
-}
-
-/// One card of a tutorial: a screenshot (or, until there is one, an icon),
-/// a title and a line or two.
-class TutorialStep {
-  final String title;
-  final String description;
-
-  /// An asset path, e.g. 'assets/tutorial/contribute_1.png'.
-  final String? image;
-
-  /// Which part of a tall [image] the card zooms to: -1 the top, 0 the
-  /// middle, 1 the bottom.
-  final double focus;
-  final IconData icon;
-
-  const TutorialStep({
-    required this.title,
-    required this.description,
-    this.image,
-    this.focus = 0,
-    this.icon = Icons.lightbulb_outline_rounded,
-  });
 }

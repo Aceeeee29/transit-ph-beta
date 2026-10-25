@@ -5,6 +5,7 @@
   collection,
   collectionGroup,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -224,6 +225,7 @@ function resolveUserStatus(data: DocumentData): AppUser['status'] {
   const status = String(data.status ?? '').trim().toLowerCase()
   const restrictedUntil = getRestrictionUntil(data)
 
+  if (status === 'closed') return 'closed'
   if (data.isBanned || status === 'banned') return 'banned'
 
   if (status === 'restricted') {
@@ -259,6 +261,7 @@ function mapUserDoc(d: QueryDocumentSnapshot<DocumentData>): AppUser {
     role: data.role ?? 'user',
     status: resolveUserStatus(data),
     restrictedUntil: getRestrictionUntil(data),
+    tempSuperadminUntil: data.tempSuperadminUntil instanceof Timestamp ? data.tempSuperadminUntil : undefined,
     createdAt: normalizeTimestamp(data.createdAt ?? data.timestamp),
     routesContributed: data.routesContributed ?? data.contributionCount ?? 0,
     badges: data.badges ?? [],
@@ -592,11 +595,44 @@ function buildDashboardStatsFromData(
   }
 }
 
-export async function getCurrentUserRole(uid: string): Promise<UserRole | null> {
+export interface CurrentUserAccess {
+  role: UserRole
+  // Set when the account only has temporary superadmin access.
+  tempSuperadminUntil: Date | null
+}
+
+export async function getCurrentUserAccess(uid: string): Promise<CurrentUserAccess | null> {
   const userSnap = await getDoc(doc(db, 'users', uid))
   if (!userSnap.exists()) return null
-  const role = (userSnap.data().role ?? 'user') as UserRole
-  return role
+  const data = userSnap.data()
+  const until = data.tempSuperadminUntil instanceof Timestamp ? data.tempSuperadminUntil.toDate() : null
+  return {
+    role: (data.role ?? 'user') as UserRole,
+    tempSuperadminUntil: until && until.getTime() > Date.now() ? until : null,
+  }
+}
+
+export function hasActiveTempSuperadmin(user: AppUser) {
+  return Boolean(user.tempSuperadminUntil && user.tempSuperadminUntil.toMillis() > Date.now())
+}
+
+// Temporary superadmin: lets the account log in to this dashboard until the
+// expiry. Their real role is untouched, so nothing changes in the app.
+export async function grantTempSuperadmin(userId: string, grantedBy: string, hours: number) {
+  const until = Timestamp.fromDate(new Date(Date.now() + hours * 60 * 60 * 1000))
+  await updateDoc(doc(db, 'users', userId), {
+    tempSuperadminUntil: until,
+    tempSuperadminBy: grantedBy,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export async function revokeTempSuperadmin(userId: string) {
+  await updateDoc(doc(db, 'users', userId), {
+    tempSuperadminUntil: deleteField(),
+    tempSuperadminBy: deleteField(),
+    updatedAt: serverTimestamp(),
+  })
 }
 
 export async function getUsers(): Promise<AppUser[]> {
@@ -643,7 +679,15 @@ export async function liftUserRestriction(userId: string) {
   })
 }
 
-export async function deleteUser(userId: string) {
+/**
+ * Removes an account. With Cloud Functions (paid plan) the server deletes
+ * everything, sign-in account included. Without them (the free plan) the
+ * dashboard can't touch the sign-in account, so it closes the account:
+ * same content rules as the app's "Delete account", personal info wiped,
+ * and status "closed" so the app won't let it sign back in. Deleting only
+ * the user doc let the person sign in again as a brand-new user.
+ */
+export async function deleteUser(userId: string, closedBy?: string) {
   const callable = httpsCallable<{ userId: string }, { ok?: boolean }>(
     functionsClient,
     'adminDeleteUserAccount',
@@ -653,8 +697,95 @@ export async function deleteUser(userId: string) {
     await callable({ userId })
     return
   } catch {
-    // Fallback keeps legacy behavior when functions are not yet deployed.
-    await deleteDoc(doc(db, 'users', userId))
+    await closeUserAccount(userId, closedBy)
+  }
+}
+
+async function deleteAllIn(docs: QueryDocumentSnapshot<DocumentData>[]) {
+  for (const d of docs) await deleteDoc(d.ref)
+}
+
+/** Each part on its own: one failing (e.g. a missing index) doesn't stop the rest. */
+async function closeStep(name: string, run: () => Promise<void>, failures: string[]) {
+  try {
+    await run()
+  } catch (err) {
+    console.warn(`[closeUserAccount] ${name} failed`, err)
+    failures.push(name)
+  }
+}
+
+export async function closeUserAccount(userId: string, closedBy?: string) {
+  const failures: string[] = []
+
+  // Posts, each with its comments (a post's comments aren't removed with it).
+  await closeStep('posts', async () => {
+    const posts = await getDocs(query(collection(db, 'posts'), where('userId', '==', userId)))
+    for (const post of posts.docs) {
+      await deleteAllIn((await getDocs(collection(post.ref, 'comments'))).docs)
+      await deleteDoc(post.ref)
+    }
+  }, failures)
+
+  // Their comments on other riders' posts.
+  await closeStep('comments', async () => {
+    const comments = await getDocs(query(collectionGroup(db, 'comments'), where('userId', '==', userId)))
+    await deleteAllIn(comments.docs)
+  }, failures)
+
+  // Routes not live yet go; approved ones stay, credited to "Former rider".
+  await closeStep('routes', async () => {
+    const routes = await getDocs(query(collection(db, 'routes'), where('contributorId', '==', userId)))
+    for (const route of routes.docs) {
+      if (route.data().approvalStatus === 'approved') {
+        await updateDoc(route.ref, {
+          contributorId: null,
+          contributorName: 'Former rider',
+          contributorClosed: true,
+          updatedAt: serverTimestamp(),
+        })
+      } else {
+        await deleteDoc(route.ref)
+      }
+    }
+  }, failures)
+
+  for (const name of ['notifications', 'feedbacks']) {
+    await closeStep(name, async () => {
+      await deleteAllIn((await getDocs(query(collection(db, name), where('userId', '==', userId)))).docs)
+    }, failures)
+  }
+
+  const userRef = doc(db, 'users', userId)
+  for (const sub of ['achievements', 'badges', 'routeHistory']) {
+    await closeStep(sub, async () => {
+      await deleteAllIn((await getDocs(collection(userRef, sub))).docs)
+    }, failures)
+  }
+
+  // Kept (so signing in doesn't recreate it) but emptied and marked closed.
+  await updateDoc(userRef, {
+    status: 'closed',
+    isBanned: true,
+    name: 'Closed account',
+    email: deleteField(),
+    photoUrl: null,
+    userCategory: null,
+    userTags: [],
+    recentSearches: [],
+    followedRouteIds: [],
+    bookmarkedPostIds: [],
+    preferences: deleteField(),
+    restrictedAt: deleteField(),
+    restrictedUntil: deleteField(),
+    tempSuperadminUntil: deleteField(),
+    tempSuperadminBy: deleteField(),
+    closedAt: serverTimestamp(),
+    closedBy: closedBy ?? null,
+  })
+
+  if (failures.length > 0) {
+    throw new Error(`Account closed, but some of its content could not be removed: ${failures.join(', ')}. Try again, or remove it by hand.`)
   }
 }
 

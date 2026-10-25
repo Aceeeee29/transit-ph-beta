@@ -342,6 +342,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
       left: 12,
       right: _ContributeScreenState._sideButtonsInset,
       child: Container(
+        key: _tourCardKey,
         padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
         decoration: BoxDecoration(
           color: _surface.withValues(alpha: 0.97),
@@ -373,11 +374,14 @@ extension _ContributeScreenSections on _ContributeScreenState {
                 ),
                 if (drawing && steps.isNotEmpty && !_hasOpenStep) ...[
                   const SizedBox(width: 8),
-                  _pillAction(
-                    icon: Icons.check_rounded,
-                    label: 'Finish (${steps.length})',
-                    onTap: _onFinishRoutePressed,
-                    primary: true,
+                  KeyedSubtree(
+                    key: _tourFinishKey,
+                    child: _pillAction(
+                      icon: Icons.check_rounded,
+                      label: 'Finish (${steps.length})',
+                      onTap: _onFinishRoutePressed,
+                      primary: true,
+                    ),
                   ),
                 ],
               ],
@@ -392,6 +396,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             if (_hasOpenStep) ...[
               const SizedBox(height: 8),
               Wrap(
+                key: _tourSaveKey,
                 spacing: 6,
                 runSpacing: 6,
                 children: [
@@ -412,6 +417,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             if (hasPoints) ...[
               const SizedBox(height: 6),
               Wrap(
+                key: _tourToolsKey,
                 spacing: 6,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -470,6 +476,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             if (drawing && !_hasOpenStep) ...[
               const SizedBox(height: 8),
               SizedBox(
+                key: _tourModesKey,
                 height: 32,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
