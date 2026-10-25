@@ -119,7 +119,6 @@ class AuthGate extends StatelessWidget {
         .replaceAll(' ', '_');
 
     return role == 'moderator' ||
-        role == 'admin' ||
         role == 'superadmin' ||
         role == 'super_admin';
   }

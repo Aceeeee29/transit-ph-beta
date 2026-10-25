@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum UserRole { user, moderator, admin }
+enum UserRole { user, moderator, superadmin }
 
 DateTime? _parseDateTime(dynamic rawValue) {
   if (rawValue is Timestamp) return rawValue.toDate();
@@ -24,10 +24,9 @@ UserRole _parseUserRole(dynamic rawRole) {
   switch (normalized) {
     case 'moderator':
       return UserRole.moderator;
-    case 'admin':
     case 'superadmin':
     case 'super_admin':
-      return UserRole.admin;
+      return UserRole.superadmin;
     case 'user':
     default:
       return UserRole.user;
@@ -116,6 +115,16 @@ class User {
       'hasSeenTutorial': hasSeenTutorial,
       'recentSearches': recentSearches,
     };
+  }
+
+  /// What the app may write to its own profile. Role and ban/restriction
+  /// fields are set by staff and the dashboard, never by the rider's app.
+  Map<String, dynamic> toProfileUpdateJson() {
+    return toJson()
+      ..remove('uid')
+      ..remove('role')
+      ..remove('isBanned')
+      ..remove('restrictedUntil');
   }
 
   factory User.fromJson(Map<String, dynamic> json) {

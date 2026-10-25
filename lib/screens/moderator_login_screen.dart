@@ -70,7 +70,6 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
 
       final isPrivilegedRole =
           role == 'moderator' ||
-          role == 'admin' ||
           role == 'superadmin' ||
           role == 'super_admin';
 

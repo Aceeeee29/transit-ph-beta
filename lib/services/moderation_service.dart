@@ -157,7 +157,6 @@ class ModerationService {
         .replaceAll('-', '_')
         .replaceAll(' ', '_');
     return role == 'moderator' ||
-        role == 'admin' ||
         role == 'superadmin' ||
         role == 'super_admin';
   }

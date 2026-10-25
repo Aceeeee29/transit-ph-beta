@@ -71,16 +71,17 @@ class GamificationService {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
-            .update(user.toJson());
+            .update(user.toProfileUpdateJson());
 
         return;
       } catch (_) {
-        // If update fails (document might not exist), try to set it
+        // If update fails (document might not exist), try to set it. Merge,
+        // so an existing document keeps its role and moderation fields.
         try {
           await FirebaseFirestore.instance
               .collection('users')
               .doc(uid)
-              .set(user.toJson());
+              .set(user.toProfileUpdateJson(), SetOptions(merge: true));
 
           return;
         } catch (_) {}

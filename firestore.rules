@@ -39,8 +39,15 @@ service cloud.firestore {
     // ── USERS ─────────────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isAuth();
-      allow create: if isSelf(uid);
-      allow update: if isSelf(uid) || isSuperAdmin() || (
+      allow create: if isSelf(uid) &&
+        request.resource.data.get('role', 'user') == 'user';
+      // A rider can edit their own profile, but not their role or their
+      // ban/restriction state (those belong to staff).
+      allow update: if (
+        isSelf(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'isBanned', 'status', 'restrictedAt', 'restrictedUntil'])
+      ) || isSuperAdmin() || (
         isModerator() &&
         resource.data.get('role', 'user') == 'user' &&
         request.resource.data.get('role', 'user') == resource.data.get('role', 'user') &&
