@@ -109,30 +109,35 @@ extension _ModeratorScreenRouteReports on _ModeratorScreenState {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              if (!report.kept)
-                OutlinedButton(
+          _lockWhileBusy(
+            'report:${report.id}',
+            Row(
+              children: [
+                if (!report.kept)
+                  OutlinedButton(
+                    onPressed:
+                        () => _runReportAction(
+                          report.id,
+                          () => RouteReportService.keep(report.id),
+                          'Report kept until removed',
+                        ),
+                    child: const Text('Keep'),
+                  ),
+                const Spacer(),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: _ModeratorScreenState._danger,
+                  ),
                   onPressed:
                       () => _runReportAction(
-                        () => RouteReportService.keep(report.id),
-                        'Report kept until removed',
+                        report.id,
+                        () => RouteReportService.remove(report.id),
+                        'Report removed',
                       ),
-                  child: const Text('Keep'),
+                  child: const Text('Remove'),
                 ),
-              const Spacer(),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: _ModeratorScreenState._danger,
-                ),
-                onPressed:
-                    () => _runReportAction(
-                      () => RouteReportService.remove(report.id),
-                      'Report removed',
-                    ),
-                child: const Text('Remove'),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -140,9 +145,10 @@ extension _ModeratorScreenRouteReports on _ModeratorScreenState {
   }
 
   Future<void> _runReportAction(
+    String reportId,
     Future<void> Function() action,
     String done,
-  ) async {
+  ) => _runOnce('report:$reportId', () async {
     try {
       await action();
       if (mounted) {
@@ -157,7 +163,7 @@ extension _ModeratorScreenRouteReports on _ModeratorScreenState {
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
-  }
+  });
 
   static String _hoursLeft(DateTime expiresAt) {
     final left = expiresAt.difference(DateTime.now());

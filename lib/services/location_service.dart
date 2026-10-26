@@ -27,6 +27,29 @@ class LocationService {
     return true;
   }
 
+  /// Goes up each time a prompt ends with location allowed, so things that
+  /// load on their own, like the weather, can load without another tap.
+  static final accessGrants = ValueNotifier<int>(0);
+
+  static void noteGranted(LocationPermission permission) {
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      accessGrants.value++;
+    }
+  }
+
+  /// Location is on and allowed; never shows a prompt.
+  static Future<bool> hasAccess() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return false;
+      final permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static final _startupAsk = Completer<void>();
 
   /// Done once the launch-time prompt below has been answered (or wasn't
@@ -44,7 +67,7 @@ class LocationService {
     try {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        await Geolocator.requestPermission();
+        noteGranted(await Geolocator.requestPermission());
       }
     } catch (_) {
     } finally {

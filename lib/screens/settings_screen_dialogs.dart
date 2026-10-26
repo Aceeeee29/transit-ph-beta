@@ -132,7 +132,12 @@ extension _SettingsScreenSections on _SettingsScreenState {
     if (action == null || !mounted) return;
 
     if (action == 'remove') {
-      await _saveProfilePhotoUrl(null);
+      _setUploadingPhoto(true);
+      try {
+        await _saveProfilePhotoUrl(null);
+      } finally {
+        if (mounted) _setUploadingPhoto(false);
+      }
       return;
     }
 
@@ -197,211 +202,246 @@ extension _SettingsScreenSections on _SettingsScreenState {
 
   Future<void> _showEditProfileDialogSection() async {
     final controller = TextEditingController(text: _displayName);
+    // While saving, Save does nothing: a second tap saved again and then
+    // closed Settings along with the dialog.
+    var saving = false;
 
     await showDialog<void>(
       context: context,
       builder:
-          (dialogContext) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _bg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withOpacity(0.08),
-                    blurRadius: 32,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+          (dialogContext) => StatefulBuilder(
+            builder:
+                (dialogContext, setDialogState) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  child: Container(
                     decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                      border: Border(bottom: BorderSide(color: _border)),
+                      color: _bg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accent.withOpacity(0.08),
+                          blurRadius: 32,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 32,
-                          height: 32,
+                          padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
                           decoration: BoxDecoration(
-                            color: _accentSoft,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: const Icon(
-                            Icons.edit_outlined,
-                            color: _accent,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        TranslatedText(
-                          'Edit Profile Name',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _border),
-                      ),
-                      child: TextField(
-                        controller: controller,
-                        autofocus: true,
-                        textInputAction: TextInputAction.done,
-                        style: TextStyle(color: _textPrimary, fontSize: 14),
-                        decoration: InputDecoration(
-                          labelText: 'Name',
-                          labelStyle: TextStyle(color: _textSecondary),
-                          prefixIcon: Icon(
-                            Icons.person_outline,
-                            color: _accent,
-                            size: 18,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            vertical: 13,
-                            horizontal: 4,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => Navigator.of(dialogContext).pop(),
-                            child: Container(
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: _surface,
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(color: _border),
-                              ),
-                              alignment: Alignment.center,
-                              child: TranslatedText(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: _textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
+                            color: _surface,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20),
                             ),
+                            border: Border(bottom: BorderSide(color: _border)),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: GestureDetector(
-                            onTap: () async {
-                              final updatedName = controller.text.trim();
-                              if (updatedName.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Name cannot be empty.'),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              try {
-                                final user =
-                                    await GamificationService.loadUser();
-                                user.name = updatedName;
-                                await GamificationService.saveUser(user);
-
-                                final authUser =
-                                    firebase_auth
-                                        .FirebaseAuth
-                                        .instance
-                                        .currentUser;
-                                if (authUser != null) {
-                                  await authUser.updateDisplayName(updatedName);
-                                }
-
-                                if (!mounted) return;
-                                _setDisplayName(updatedName);
-
-                                Navigator.of(dialogContext).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Profile updated successfully.',
-                                    ),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Failed to update profile: $e',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              height: 44,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF0B8FD6),
-                                    Color(0xFF2BB5F0),
-                                  ],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: _accentSoft,
+                                  borderRadius: BorderRadius.circular(9),
                                 ),
-                                borderRadius: BorderRadius.circular(11),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _accent.withOpacity(0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
+                                child: const Icon(
+                                  Icons.edit_outlined,
+                                  color: _accent,
+                                  size: 16,
+                                ),
                               ),
-                              alignment: Alignment.center,
-                              child: const TranslatedText(
-                                'Save',
+                              const SizedBox(width: 10),
+                              TranslatedText(
+                                'Edit Profile Name',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: _textPrimary,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 14,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _border),
+                            ),
+                            child: TextField(
+                              controller: controller,
+                              autofocus: true,
+                              textInputAction: TextInputAction.done,
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontSize: 14,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Name',
+                                labelStyle: TextStyle(color: _textSecondary),
+                                prefixIcon: Icon(
+                                  Icons.person_outline,
+                                  color: _accent,
+                                  size: 18,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 13,
+                                  horizontal: 4,
                                 ),
                               ),
                             ),
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap:
+                                      () => Navigator.of(dialogContext).pop(),
+                                  child: Container(
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: _surface,
+                                      borderRadius: BorderRadius.circular(11),
+                                      border: Border.all(color: _border),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: TranslatedText(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        color: _textSecondary,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 2,
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    if (saving) return;
+                                    final updatedName = controller.text.trim();
+                                    if (updatedName.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Name cannot be empty.',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    setDialogState(() => saving = true);
+                                    try {
+                                      final user =
+                                          await GamificationService.loadUser();
+                                      user.name = updatedName;
+                                      await GamificationService.saveUser(user);
+
+                                      final authUser =
+                                          firebase_auth
+                                              .FirebaseAuth
+                                              .instance
+                                              .currentUser;
+                                      if (authUser != null) {
+                                        await authUser.updateDisplayName(
+                                          updatedName,
+                                        );
+                                      }
+
+                                      if (!mounted) return;
+                                      _setDisplayName(updatedName);
+
+                                      Navigator.of(dialogContext).pop();
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Profile updated successfully.',
+                                          ),
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      if (!mounted) return;
+                                      if (dialogContext.mounted) {
+                                        setDialogState(() => saving = false);
+                                      }
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to update profile: $e',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF0B8FD6),
+                                          Color(0xFF2BB5F0),
+                                        ],
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(11),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: _accent.withOpacity(0.3),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    alignment: Alignment.center,
+                                    child:
+                                        saving
+                                            ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                            : const TranslatedText(
+                                              'Save',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
           ),
     );
   }
@@ -414,7 +454,7 @@ extension _SettingsDeleteAccount on _SettingsScreenState {
 
   Widget _deleteAccountLink() {
     return TextButton(
-      onPressed: _deleteAccount,
+      onPressed: _isDeletingAccount ? null : _deleteAccount,
       style: TextButton.styleFrom(foregroundColor: _danger),
       child: const TranslatedText(
         'Delete account',
@@ -423,7 +463,19 @@ extension _SettingsDeleteAccount on _SettingsScreenState {
     );
   }
 
+  // One deletion at a time: the sign-in check runs with nothing covering
+  // the screen, so the link could be tapped again meanwhile.
   Future<void> _deleteAccount() async {
+    if (_isDeletingAccount) return;
+    _setDeletingAccount(true);
+    try {
+      await _runAccountDeletion();
+    } finally {
+      if (mounted) _setDeletingAccount(false);
+    }
+  }
+
+  Future<void> _runAccountDeletion() async {
     final navigator = Navigator.of(context, rootNavigator: true);
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(

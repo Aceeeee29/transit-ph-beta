@@ -33,7 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
   static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
+  /// Either sign-in is running: both buttons wait for it.
+  bool get _isBusy => _isLoading || _isGoogleLoading;
+
   Future<void> _login() async {
+    if (_isBusy) return;
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() => _errorMessage = 'Please enter email and password');
       return;
@@ -72,6 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    if (_isBusy) return;
     setState(() {
       _errorMessage = null;
       _isGoogleLoading = true;
@@ -346,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Sign in button
                       GestureDetector(
-                        onTap: _isLoading ? null : _login,
+                        onTap: _isBusy ? null : _login,
                         child: Container(
                           width: double.infinity,
                           height: 52,
@@ -422,7 +427,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Google sign-in button
                       GestureDetector(
-                        onTap: _isGoogleLoading ? null : _signInWithGoogle,
+                        onTap: _isBusy ? null : _signInWithGoogle,
                         child: Container(
                           width: double.infinity,
                           height: 52,

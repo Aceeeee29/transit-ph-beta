@@ -75,6 +75,7 @@ class _SignupScreenState extends State<SignupScreen> {
       _passwordController.text == _confirmPasswordController.text;
 
   Future<void> _signup() async {
+    if (_isLoading) return;
     final password = _passwordController.text;
     if (!PasswordRules.isValid(password)) {
       setState(() {

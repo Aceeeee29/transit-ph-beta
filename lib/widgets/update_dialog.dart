@@ -60,7 +60,22 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
 
   // ── Download & install ────────────────────────────────────────────────────
 
+  // Set before the install-permission check, which can return before the
+  // button changes: a quick second tap started a second download into the
+  // same file.
+  bool _isStarting = false;
+
   Future<void> _startDownload() async {
+    if (_isStarting || _state == _DownloadState.downloading) return;
+    _isStarting = true;
+    try {
+      await _download();
+    } finally {
+      _isStarting = false;
+    }
+  }
+
+  Future<void> _download() async {
     // iOS cannot sideload APKs — open the App Store URL instead.
     if (Platform.isIOS) {
       await _openUrl();

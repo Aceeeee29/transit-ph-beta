@@ -22,6 +22,9 @@ class RouteFormStepper extends StatefulWidget {
   /// form covers. Null when there is no step to finish yet.
   final VoidCallback? onFinishRoute;
 
+  /// The route or quick link is being sent: the send buttons are disabled.
+  final bool isSending;
+
   const RouteFormStepper({
     super.key,
     required this.startLocationController,
@@ -38,6 +41,7 @@ class RouteFormStepper extends StatefulWidget {
     required this.selectionMode,
     this.quickCreateMode = false,
     this.onFinishRoute,
+    this.isSending = false,
   });
 
   @override
@@ -487,15 +491,27 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
         const SizedBox(height: 10),
         ElevatedButton.icon(
           onPressed:
-              (widget.quickCreateMode &&
+              widget.isSending
+                  ? null
+                  : (widget.quickCreateMode &&
                       widget.onSubmitForReviewInstead != null)
                   ? widget.onSubmitForReviewInstead
                   : widget.onSubmit,
-          icon: const Icon(
-            Icons.pending_actions_rounded,
-            size: 18,
-            color: Colors.white,
-          ),
+          icon:
+              widget.isSending
+                  ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                  : const Icon(
+                    Icons.pending_actions_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
           label: const Text(
             'Submit for Review',
             style: TextStyle(
@@ -507,6 +523,8 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           style: ElevatedButton.styleFrom(
             backgroundColor: _warning,
             foregroundColor: Colors.white,
+            disabledBackgroundColor: _warning.withValues(alpha: 0.6),
+            disabledForegroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -526,7 +544,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: widget.onSubmit,
+            onPressed: widget.isSending ? null : widget.onSubmit,
             icon: const Icon(Icons.bolt_rounded, size: 16),
             label: const Text('Use This Link: Quick Create (24h)'),
             style: OutlinedButton.styleFrom(
@@ -574,7 +592,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: widget.onCreateQuickLink,
+            onPressed: widget.isSending ? null : widget.onCreateQuickLink,
             icon: const Icon(Icons.link_rounded, size: 16),
             label: const Text('Generate 24h Quick Link'),
             style: OutlinedButton.styleFrom(

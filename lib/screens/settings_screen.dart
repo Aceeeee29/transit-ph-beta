@@ -47,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isClearingRouteCache = false;
   bool _isLoggingOut = false;
   bool _isUploadingPhoto = false;
+  bool _isDeletingAccount = false;
 
   String language = 'English';
   String distanceUnit = 'Miles';
@@ -72,6 +73,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _setUploadingPhoto(bool value) {
     setState(() {
       _isUploadingPhoto = value;
+    });
+  }
+
+  void _setDeletingAccount(bool value) {
+    setState(() {
+      _isDeletingAccount = value;
     });
   }
 

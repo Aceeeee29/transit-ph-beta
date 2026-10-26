@@ -24,6 +24,7 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   late Future<List<NotificationModel>> _notificationsFuture;
+  bool _isMarkingAllRead = false;
 
   // ─── Color tokens (matches design system) ──────────────────────────────────
   static Color get _bg => AppColors.bg;
@@ -498,12 +499,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         Flexible(
                           child: GestureDetector(
                             onTap: () async {
-                              for (final n in notifications.where(
-                                (n) => !n.isRead,
-                              )) {
-                                await NotificationsService.markAsRead(n.id);
+                              if (_isMarkingAllRead) return;
+                              _isMarkingAllRead = true;
+                              try {
+                                for (final n in notifications.where(
+                                  (n) => !n.isRead,
+                                )) {
+                                  await NotificationsService.markAsRead(n.id);
+                                }
+                              } finally {
+                                _isMarkingAllRead = false;
                               }
-                              setState(_loadNotifications);
+                              if (mounted) setState(_loadNotifications);
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(

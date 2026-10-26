@@ -33,6 +33,36 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   final TextEditingController _userSearchController = TextEditingController();
   String _userSearchQuery = '';
 
+  // Items with an action still saving ('route:<id>', 'user:<uid>'...).
+  // Their buttons ignore taps until it ends, so a double tap can't approve
+  // twice (two notifications) or approve and reject at once.
+  final Set<String> _busyItems = {};
+
+  /// Runs [action] for [item] unless an action for it is still running.
+  Future<void> _runOnce(String item, Future<void> Function() action) async {
+    if (!_busyItems.add(item)) return;
+    setState(() {});
+    try {
+      await action();
+    } finally {
+      _busyItems.remove(item);
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// [child]'s buttons, dimmed and untappable while [item] is busy.
+  Widget _lockWhileBusy(String item, Widget child) {
+    final busy = _busyItems.contains(item);
+    return IgnorePointer(
+      ignoring: busy,
+      child: AnimatedOpacity(
+        opacity: busy ? 0.5 : 1,
+        duration: const Duration(milliseconds: 150),
+        child: child,
+      ),
+    );
+  }
+
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
@@ -551,24 +581,29 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     required Color color,
     required Future<void> Function() onTap,
     bool filled = false,
+    // Buttons sharing an item wait for each other (see _runOnce).
+    required String lockItem,
   }) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: filled ? color : color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withOpacity(0.3)),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: filled ? Colors.white : color,
+      child: _lockWhileBusy(
+        lockItem,
+        GestureDetector(
+          onTap: () => _runOnce(lockItem, onTap),
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: filled ? color : color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: filled ? Colors.white : color,
+              ),
             ),
           ),
         ),

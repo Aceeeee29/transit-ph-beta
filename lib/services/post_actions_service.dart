@@ -10,6 +10,8 @@ class PostActionsService {
     String reason,
     String userId,
   ) async {
+    // Riders can't report their own post.
+    if (userId.isNotEmpty && userId == post.userId) return;
     // Create report feedback without auto-changing post visibility.
     final feedbackId = DateTime.now().millisecondsSinceEpoch.toString();
     final feedback = feedback_model.Feedback(

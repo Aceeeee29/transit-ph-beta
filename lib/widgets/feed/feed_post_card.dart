@@ -110,6 +110,10 @@ class _FeedPostCardState extends State<FeedPostCard> {
     super.dispose();
   }
 
+  bool get _isOwnPost =>
+      widget.currentUserId.isNotEmpty &&
+      widget.currentUserId == widget.post.userId;
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
@@ -152,9 +156,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
               displayName: displayName,
               initials: initials,
               catColor: catColor,
-              isOwnPost:
-                  widget.currentUserId.isNotEmpty &&
-                  widget.currentUserId == post.userId,
+              isOwnPost: _isOwnPost,
               onDeleteTapped: widget.onDeleteTapped,
               onLifetimeTapped: widget.onLifetimeTapped,
             ),
@@ -204,11 +206,13 @@ class _FeedPostCardState extends State<FeedPostCard> {
           onTap: widget.onCommentTapped,
         ),
         const Spacer(),
-        FeedActionButton(
-          icon: Icons.flag_outlined,
-          color: FeedColors.danger,
-          onTap: widget.onReportTapped,
-        ),
+        // No reporting your own post (delete it instead).
+        if (!_isOwnPost)
+          FeedActionButton(
+            icon: Icons.flag_outlined,
+            color: FeedColors.danger,
+            onTap: widget.onReportTapped,
+          ),
       ],
     );
   }

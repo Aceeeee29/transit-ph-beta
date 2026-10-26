@@ -31,6 +31,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
   static const _gold = Color(0xFFFFB547);
 
   Future<void> _moderatorLogin() async {
+    if (_isLoading) return;
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() => _errorMessage = 'Please enter your credentials');
       return;

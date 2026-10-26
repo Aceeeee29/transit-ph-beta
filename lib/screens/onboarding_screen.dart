@@ -69,7 +69,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int get _pageCount => _slides.length + 1;
   bool get _onCategoryPage => _currentPage == _slides.length;
 
+  // Finishing pops or replaces this screen: a second tap did it twice,
+  // opening Home twice (or closing the screen under a replay).
+  bool _isFinishing = false;
+
   Future<void> _finish() async {
+    if (_isFinishing) return;
+    _isFinishing = true;
     if (widget.replay) {
       Navigator.of(context).pop();
       return;
@@ -94,6 +100,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _onCategorySelected(String category) async {
+    if (_isSaving || _isFinishing) return;
     if (widget.replay) {
       await _finish();
       return;

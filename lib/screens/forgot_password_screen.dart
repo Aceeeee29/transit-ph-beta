@@ -31,6 +31,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _sendResetEmail() async {
+    if (_isLoading) return;
     final email = _emailController.text.trim();
 
     if (email.isEmpty) {

@@ -709,6 +709,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
           onReset: _onReset,
           selectionMode: selectionMode,
           quickCreateMode: _isQuickCreateMode,
+          isSending: _isSendingRoute,
           // Same condition as the map's Finish pill.
           onFinishRoute:
               selectionMode == 'step' && steps.isNotEmpty

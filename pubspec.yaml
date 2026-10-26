@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.34+34
+version: 1.0.35+35
 
 
 environment:
@@ -74,6 +74,7 @@ dependencies:
   maplibre_gl: 0.27.1
   vector_tile: 2.0.1
   flutter_compass: ^0.8.1
+  flutter_native_splash: ^2.4.8
 
 dev_dependencies:
   flutter_test:
@@ -97,6 +98,21 @@ flutter_launcher_icons:
   adaptive_icon_foreground_inset: 0
   ios: true
   remove_alpha_ios: true
+
+# Launch splash: the logo on its own navy. splash_logo.png is app_icon.png
+# shrunk onto a 1152 px navy square so Android 12+, which crops the splash
+# image to a circle, shows the whole wordmark. Regenerate with:
+#   dart run flutter_native_splash:create
+# Stays up until AuthGate has a screen to show (lib/services/launch_splash.dart).
+flutter_native_splash:
+  color: "#01184B"
+  image: assets/icon/splash_logo.png
+  android_12:
+    color: "#01184B"
+    image: assets/icon/splash_logo.png
+  android: true
+  ios: true
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

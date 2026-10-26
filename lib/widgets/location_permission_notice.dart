@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import '../services/location_service.dart';
 import 'translated_text.dart';
 
 /// Makes sure TransitPH can read the device location before a feature that
@@ -41,6 +42,7 @@ Future<bool> ensureLocationAccess(
       final stopwatch = Stopwatch()..start();
       permission = await Geolocator.requestPermission();
       stopwatch.stop();
+      LocationService.noteGranted(permission);
       final osShowedPrompt =
           stopwatch.elapsed >= _minPromptAnswerTime && !_osStoppedPrompting;
       if (permission == LocationPermission.deniedForever) {

@@ -10,6 +10,7 @@ import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/main_screen.dart';
 import 'services/ipv4_first_http.dart';
+import 'services/launch_splash.dart';
 import 'services/location_service.dart';
 import 'services/moderation_service.dart';
 import 'services/offline_tile_service.dart';
@@ -83,7 +84,8 @@ ThemeData buildTheme({bool dark = false}) {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  LaunchSplash.hold(binding);
 
   // Before anything goes online: IPv4 where a server has it, so a
   // connection with broken IPv6 doesn't hang every request.

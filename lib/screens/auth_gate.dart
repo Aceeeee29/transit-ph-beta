@@ -7,6 +7,7 @@ import 'email_verification_screen.dart';
 import 'onboarding_screen.dart';
 import 'legal_consent_screen.dart';
 import '../services/account_deletion_service.dart';
+import '../services/launch_splash.dart';
 import '../theme/app_colors.dart';
 
 class AuthGate extends StatelessWidget {
@@ -57,6 +58,12 @@ class AuthGate extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // Every screen but the loading one takes the launch splash down.
+  static Widget _ready(Widget screen) {
+    LaunchSplash.release();
+    return screen;
   }
 
   static bool _hasAcceptedLatestLegalDocuments(Map<String, dynamic> data) {
@@ -218,15 +225,17 @@ class AuthGate extends StatelessWidget {
 
               if (userSnapshot.hasError) {
                 FirebaseAuth.instance.signOut();
-                return const LoginScreen();
+                return _ready(const LoginScreen());
               }
 
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                return _buildAuthedDestination(
-                  user: user,
-                  snapshot: userSnapshot.data!,
-                  quickRouteToken: quickRouteToken,
-                  enforceEmailVerification: true,
+                return _ready(
+                  _buildAuthedDestination(
+                    user: user,
+                    snapshot: userSnapshot.data!,
+                    quickRouteToken: quickRouteToken,
+                    enforceEmailVerification: true,
+                  ),
                 );
               } else {
                 // Deleting the account removes the profile just before the
@@ -251,11 +260,13 @@ class AuthGate extends StatelessWidget {
                     }
 
                     if (retrySnapshot.hasData && retrySnapshot.data!.exists) {
-                      return _buildAuthedDestination(
-                        user: user,
-                        snapshot: retrySnapshot.data!,
-                        quickRouteToken: quickRouteToken,
-                        enforceEmailVerification: false,
+                      return _ready(
+                        _buildAuthedDestination(
+                          user: user,
+                          snapshot: retrySnapshot.data!,
+                          quickRouteToken: quickRouteToken,
+                          enforceEmailVerification: false,
+                        ),
                       );
                     }
 
@@ -264,7 +275,7 @@ class AuthGate extends StatelessWidget {
                       return _loadingScaffold();
                     }
                     FirebaseAuth.instance.signOut();
-                    return const LoginScreen();
+                    return _ready(const LoginScreen());
                   },
                 );
               }
@@ -272,7 +283,7 @@ class AuthGate extends StatelessWidget {
           );
         } else {
           // User is not signed in
-          return const LoginScreen();
+          return _ready(const LoginScreen());
         }
       },
     );

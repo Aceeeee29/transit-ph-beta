@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.35 — October 26, 2026
+
+- New launch screen with the TransitPH logo, shown until the app is
+  ready instead of a blank screen and a loading spinner
+- With no internet, the app shows only your downloaded routes, and back
+  no longer takes you to Home. Everything comes back on its own once
+  you're online again
+- The weather on Home now shows up by itself once location is turned on
+  or allowed, and again when the internet comes back, so you no longer
+  have to tap "Weather"
+- Fixed the Joined date going missing for new accounts (including
+  accounts made again after being deleted); missing dates are restored
+- You can no longer report your own post
+- Fixed buttons doing things twice when tapped quickly, like sending a
+  route twice, approving twice, saving Settings and then closing it, or
+  starting the update download twice
+
 ## v1.0.34 — October 25, 2026
 
 - Fixed the terms and consent screen flickering or coming back after

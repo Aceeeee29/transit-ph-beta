@@ -9,7 +9,6 @@ import 'contribute_screen.dart';
 import 'profile_screen.dart';
 import 'feed_screen.dart';
 import 'moderator_screen.dart';
-import 'offline_mode_prompt_screen.dart';
 import 'downloaded_routes_screen.dart';
 import 'route_map_screen.dart';
 import 'search_screen.dart';
@@ -23,6 +22,7 @@ import '../services/post_service.dart';
 import '../services/route_service.dart';
 import '../services/active_navigation_service.dart';
 import '../services/map_tab_controller.dart';
+import '../services/user_profile_bootstrap_service.dart';
 import '../widgets/announcement_dialog.dart';
 import '../widgets/translate_chathead.dart';
 import '../widgets/translated_text.dart';
@@ -48,8 +48,11 @@ class _MainScreenState extends State<MainScreen> {
   Timer? _exitTimer;
   bool _isLoading = false;
   bool _didCheckAnnouncements = false;
-  bool _isOfflinePromptVisible = false;
-  bool _offlineModeAccepted = false;
+
+  /// No internet: only Downloaded Routes (and a route opened from it) shows,
+  /// until the connection is back.
+  bool _offline = false;
+  Timer? _offlineTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   StreamSubscription<User?>? _userSubscription;
   String? _pendingQuickRouteToken;
@@ -87,6 +90,8 @@ class _MainScreenState extends State<MainScreen> {
     }
     ModerationService.postsNotifier.value = posts;
     GamificationService.updateStreakOnAppOpen();
+    final signedIn = FirebaseAuth.instance.currentUser;
+    if (signedIn != null) UserProfileBootstrapService.restoreJoinDate(signedIn);
     _loadData();
     _startConnectivityMonitoring();
     // Rebuild whenever the signed-in user's profile (name, photo) changes,
@@ -132,6 +137,7 @@ class _MainScreenState extends State<MainScreen> {
     mapTab.contributeTourRequested.removeListener(_onContributeTourRequested);
     if (mapTab.hostRoute == _ownRoute) mapTab.hostRoute = null;
     _connectivitySubscription?.cancel();
+    _offlineTimer?.cancel();
     _userSubscription?.cancel();
     _exitTimer?.cancel();
     super.dispose();
@@ -145,30 +151,40 @@ class _MainScreenState extends State<MainScreen> {
     final connectivity = Connectivity();
 
     final initial = await connectivity.checkConnectivity();
-    if (mounted && !_hasNetwork(initial)) {
-      await _showOfflinePrompt();
-    }
+    if (mounted && !_hasNetwork(initial)) _enterOffline();
 
     _connectivitySubscription = connectivity.onConnectivityChanged.listen((
       results,
-    ) async {
+    ) {
       if (!mounted) return;
       if (_hasNetwork(results)) {
-        _offlineModeAccepted = false;
-        return;
-      }
-      if (!_offlineModeAccepted) {
-        await _showOfflinePrompt();
+        _offlineTimer?.cancel();
+        _leaveOffline();
+      } else {
+        // Switching wifi to mobile data passes through "none" for a moment;
+        // only a lasting drop locks the app.
+        _offlineTimer?.cancel();
+        _offlineTimer = Timer(const Duration(seconds: 3), _enterOffline);
       }
     });
   }
 
-  Future<void> _showOfflinePrompt() async {
-    if (!mounted || _isOfflinePromptVisible) return;
-
-    // A route being followed keeps working offline (it's already loaded and
-    // GPS needs no data), so don't cover it with the full-screen prompt.
-    if (ActiveNavigationService.instance.isActive) {
+  /// Covers the app with Downloaded Routes. Pages opened on top (search,
+  /// settings, ...) close so back can't reach them. A route being followed
+  /// stays open: it's already loaded and GPS needs no data.
+  void _enterOffline() {
+    if (!mounted || _offline) return;
+    final own = _ownRoute;
+    if (own != null && own.isActive && !own.isCurrent) {
+      Navigator.of(context).popUntil((route) => route == own);
+    }
+    final following = ActiveNavigationService.instance.isActive;
+    if (!following) MapTabController.instance.close();
+    setState(() {
+      _offline = true;
+      _exitArmed = false;
+    });
+    if (following) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: TranslatedText(
@@ -177,25 +193,26 @@ class _MainScreenState extends State<MainScreen> {
           duration: Duration(seconds: 4),
         ),
       );
-      return;
-    }
-
-    _isOfflinePromptVisible = true;
-    try {
-      final result = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => const OfflineModePromptScreen()),
-      );
-      if (result == OfflineModePromptScreen.continueOfflineResult) {
-        _offlineModeAccepted = true;
-        if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const DownloadedRoutesScreen()),
-        );
-      }
-    } finally {
-      _isOfflinePromptVisible = false;
     }
   }
+
+  void _leaveOffline() {
+    if (!mounted || !_offline) return;
+    setState(() => _offline = false);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: TranslatedText("You're back online."),
+          duration: Duration(seconds: 3),
+        ),
+      );
+  }
+
+  /// A route opened from Downloaded Routes (or one being followed) is on
+  /// screen; otherwise offline shows only the list.
+  bool get _viewingRoute =>
+      _selectedIndex == 2 && MapTabController.instance.current != null;
 
   Future<void> _checkAnnouncements() async {
     if (_didCheckAnnouncements || !mounted) return;
@@ -231,29 +248,44 @@ class _MainScreenState extends State<MainScreen> {
   /// The system back gesture: an open route closes, Contribute returns to
   /// the normal map (the drawing is kept), other tabs go Home, and on Home
   /// the first back only arms "press back again to exit".
+  /// Offline, back from a route goes to Downloaded Routes and the first
+  /// back there arms exit, so the rest of the app is never reached.
   void _onBack() {
     final mapTab = MapTabController.instance;
     if (_selectedIndex == 2 && mapTab.current != null) {
-      mapTab.back(context);
+      _closeRoute();
+    } else if (_offline) {
+      _armExit();
     } else if (_selectedIndex == 2 && _mapTabMode == MapTabMode.contribute) {
       setState(() => _mapTabMode = MapTabMode.nearby);
     } else if (_selectedIndex != 0) {
       setState(() => _selectedIndex = 0);
     } else {
-      setState(() => _exitArmed = true);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: TranslatedText('Press back again to exit'),
-            duration: _exitWindow,
-          ),
-        );
-      _exitTimer?.cancel();
-      _exitTimer = Timer(_exitWindow, () {
-        if (mounted) setState(() => _exitArmed = false);
-      });
+      _armExit();
     }
+  }
+
+  /// Offline there's nowhere to go back to (e.g. the search a route came
+  /// from), so it only closes.
+  void _closeRoute() {
+    final mapTab = MapTabController.instance;
+    _offline ? mapTab.close() : mapTab.back(context);
+  }
+
+  void _armExit() {
+    setState(() => _exitArmed = true);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: TranslatedText('Press back again to exit'),
+          duration: _exitWindow,
+        ),
+      );
+    _exitTimer?.cancel();
+    _exitTimer = Timer(_exitWindow, () {
+      if (mounted) setState(() => _exitArmed = false);
+    });
   }
 
   /// Route search, optionally already planning a trip to [destination].
@@ -362,7 +394,7 @@ class _MainScreenState extends State<MainScreen> {
     return PopScope(
       // Back steps out one level at a time; only a second back on Home
       // leaves the app.
-      canPop: _selectedIndex == 0 && _exitArmed,
+      canPop: _exitArmed && (_offline ? !_viewingRoute : _selectedIndex == 0),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _onBack();
       },
@@ -375,7 +407,8 @@ class _MainScreenState extends State<MainScreen> {
           builder: (context, _) {
             // The route view on the Map tab already shows the session, so the
             // "tap to return" banner would point where you already are.
-            final viewingRoute = _selectedIndex == 2 && mapTab.current != null;
+            final viewingRoute = _viewingRoute;
+            final offlineList = _offline && !viewingRoute;
             final activeTarget =
                 viewingRoute
                     ? null
@@ -385,9 +418,20 @@ class _MainScreenState extends State<MainScreen> {
             final content = Stack(
               fit: StackFit.expand,
               children: [
+                // Offline the tabs stay alive (drafts, scroll) but hidden.
                 Positioned.fill(
-                  child: IndexedStack(index: _selectedIndex, children: screens),
+                  child: Offstage(
+                    offstage: offlineList,
+                    child: IndexedStack(
+                      index: _selectedIndex,
+                      children: screens,
+                    ),
+                  ),
                 ),
+                if (offlineList)
+                  const Positioned.fill(
+                    child: DownloadedRoutesScreen(offline: true),
+                  ),
                 ValueListenableBuilder<bool>(
                   valueListenable: TranslateChatHead.enabled,
                   builder:
@@ -427,7 +471,7 @@ class _MainScreenState extends State<MainScreen> {
           ]),
           builder:
               (context, _) =>
-                  _isFollowingInView()
+                  _offline || _isFollowingInView()
                       ? const SizedBox.shrink()
                       : _buildNavBar(navItems),
         ),
@@ -477,7 +521,7 @@ class _MainScreenState extends State<MainScreen> {
                 route: current.route!,
                 enableRouteIntegrity: current.enableRouteIntegrity,
                 showDownloadButton: current.showDownloadButton,
-                onClose: () => MapTabController.instance.back(context),
+                onClose: _closeRoute,
               )
             else
               OrsRouteMapScreen(
@@ -486,7 +530,7 @@ class _MainScreenState extends State<MainScreen> {
                 originName: current.originName,
                 destinationName: current.destinationName,
                 showDownloadButton: current.showDownloadButton,
-                onClose: () => MapTabController.instance.back(context),
+                onClose: _closeRoute,
               ),
           ],
         );

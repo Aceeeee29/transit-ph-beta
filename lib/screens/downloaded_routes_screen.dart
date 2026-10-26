@@ -9,7 +9,11 @@ import '../services/map_tab_controller.dart';
 import '../theme/app_colors.dart';
 
 class DownloadedRoutesScreen extends StatefulWidget {
-  const DownloadedRoutesScreen({super.key});
+  /// Shown by MainScreen in place of the app while there's no internet:
+  /// no back button, and a note saying the app comes back once online.
+  final bool offline;
+
+  const DownloadedRoutesScreen({super.key, this.offline = false});
 
   @override
   State<DownloadedRoutesScreen> createState() => _DownloadedRoutesScreenState();
@@ -265,22 +269,26 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _surfaceAlt,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: _border),
-            ),
-            child: Icon(
-              Icons.arrow_back_ios_new,
-              size: 15,
-              color: _textSecondary,
-            ),
-          ),
-        ),
+        automaticallyImplyLeading: false,
+        leading:
+            widget.offline
+                ? null
+                : GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    margin: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _surfaceAlt,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_ios_new,
+                      size: 15,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ),
         title: Row(
           children: [
             Container(
@@ -334,236 +342,270 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
           child: Container(height: 1, color: _border),
         ),
       ),
-      body: FutureBuilder<List<route_model.Route>>(
-        future: _routesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: _accent),
-            );
-          }
+      body: Column(
+        children: [
+          if (widget.offline) _buildOfflineNote(),
+          Expanded(child: _buildRouteList()),
+        ],
+      ),
+    );
+  }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _border),
-                ),
-                child: Text(
-                  'Failed to load downloaded routes: ${snapshot.error}',
-                  style: TextStyle(color: _textPrimary),
-                ),
+  Widget _buildOfflineNote() {
+    const warn = Color(0xFFE89A3C);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: warn.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: warn.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: warn, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "You're offline. Only downloaded routes work for now; the rest "
+              'of the app comes back once you reconnect.',
+              style: TextStyle(color: _textPrimary, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteList() {
+    return FutureBuilder<List<route_model.Route>>(
+      future: _routesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: _accent));
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _border),
               ),
-            );
-          }
-
-          final routes = snapshot.data ?? const <route_model.Route>[];
-          final filteredRoutes =
-              routes.where((route) {
-                final q = _searchQuery.trim().toLowerCase();
-                if (q.isEmpty) return true;
-                return route.startLocation.toLowerCase().contains(q) ||
-                    route.endLocation.toLowerCase().contains(q) ||
-                    route.shortDescription.toLowerCase().contains(q);
-              }).toList();
-          final filteredRecent =
-              _recent.where((entry) {
-                final q = _searchQuery.trim().toLowerCase();
-                if (q.isEmpty) return true;
-                return entry.startLabel.toLowerCase().contains(q) ||
-                    entry.endLabel.toLowerCase().contains(q);
-              }).toList();
-
-          if (routes.isEmpty && _recent.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              color: _accent,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  const SizedBox(height: 120),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _border),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.download_done_rounded,
-                          size: 34,
-                          color: _textSecondary,
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          'No downloaded routes yet',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Open a route while online and tap Download.',
-                          style: TextStyle(color: _textSecondary),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Failed to load downloaded routes: ${snapshot.error}',
+                style: TextStyle(color: _textPrimary),
               ),
-            );
-          }
+            ),
+          );
+        }
 
+        final routes = snapshot.data ?? const <route_model.Route>[];
+        final filteredRoutes =
+            routes.where((route) {
+              final q = _searchQuery.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return route.startLocation.toLowerCase().contains(q) ||
+                  route.endLocation.toLowerCase().contains(q) ||
+                  route.shortDescription.toLowerCase().contains(q);
+            }).toList();
+        final filteredRecent =
+            _recent.where((entry) {
+              final q = _searchQuery.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return entry.startLabel.toLowerCase().contains(q) ||
+                  entry.endLabel.toLowerCase().contains(q);
+            }).toList();
+
+        if (routes.isEmpty && _recent.isEmpty) {
           return RefreshIndicator(
             onRefresh: _refresh,
             color: _accent,
             child: ListView(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               children: [
+                const SizedBox(height: 120),
                 Container(
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: _surfaceAlt,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _border, width: 1.5),
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _border),
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (value) {
-                      setState(() => _searchQuery = value);
-                    },
-                    style: TextStyle(color: _textPrimary, fontSize: 14),
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        color: _accent,
-                        size: 19,
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.download_done_rounded,
+                        size: 34,
+                        color: _textSecondary,
                       ),
-                      hintText: 'Search downloaded routes...',
-                      hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 14,
-                        horizontal: 4,
+                      SizedBox(height: 10),
+                      Text(
+                        'No downloaded routes yet',
+                        style: TextStyle(
+                          color: _textPrimary,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Open a route while online and tap Download.',
+                        style: TextStyle(color: _textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          color: _accent,
+          child: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: _surfaceAlt,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _border, width: 1.5),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value);
+                  },
+                  style: TextStyle(color: _textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: _accent,
+                      size: 19,
+                    ),
+                    hintText: 'Search downloaded routes...',
+                    hintStyle: TextStyle(color: _textSecondary, fontSize: 14),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 4,
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                if (filteredRecent.isNotEmpty) ...[
-                  _buildSectionLabel('Recently followed'),
-                  ...filteredRecent.map(_buildFollowedTile),
-                  const SizedBox(height: 6),
-                  if (routes.isNotEmpty) _buildSectionLabel('Downloaded'),
-                ],
-                if (filteredRoutes.isEmpty && filteredRecent.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(16),
+              ),
+              const SizedBox(height: 12),
+              if (filteredRecent.isNotEmpty) ...[
+                _buildSectionLabel('Recently followed'),
+                ...filteredRecent.map(_buildFollowedTile),
+                const SizedBox(height: 6),
+                if (routes.isNotEmpty) _buildSectionLabel('Downloaded'),
+              ],
+              if (filteredRoutes.isEmpty && filteredRecent.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Text(
+                    'No routes found for your search.',
+                    style: TextStyle(color: _textSecondary),
+                  ),
+                ),
+              ...filteredRoutes.map((route) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
                     decoration: BoxDecoration(
                       color: _surface,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: _border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accent.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Text(
-                      'No routes found for your search.',
-                      style: TextStyle(color: _textSecondary),
-                    ),
-                  ),
-                ...filteredRoutes.map((route) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: _border),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
+                      leading: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: _surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _border),
                         ),
-                        leading: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: _surfaceAlt,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _border),
-                          ),
-                          child: const Icon(
-                            Icons.download_done_rounded,
-                            color: _accent,
-                            size: 18,
-                          ),
+                        child: const Icon(
+                          Icons.download_done_rounded,
+                          color: _accent,
+                          size: 18,
                         ),
-                        title: Text(
-                          '${route.startLocation} to ${route.endLocation}',
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      ),
+                      title: Text(
+                        '${route.startLocation} to ${route.endLocation}',
+                        style: TextStyle(
+                          color: _textPrimary,
+                          fontWeight: FontWeight.w500,
                         ),
-                        subtitle: Text(
-                          route.shortDescription,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: _textSecondary),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: () => _confirmDeleteRoute(route),
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: Border.all(
-                                    color: Colors.red.withOpacity(0.25),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 17,
-                                  color: Colors.red,
+                      ),
+                      subtitle: Text(
+                        route.shortDescription,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: _textSecondary),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () => _confirmDeleteRoute(route),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: Colors.red.withOpacity(0.25),
                                 ),
                               ),
+                              child: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 17,
+                                color: Colors.red,
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(Icons.chevron_right, color: _textSecondary),
-                          ],
-                        ),
-                        onTap: () {
-                          _openRoute(route);
-                        },
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.chevron_right, color: _textSecondary),
+                        ],
                       ),
+                      onTap: () {
+                        _openRoute(route);
+                      },
                     ),
-                  );
-                }),
-              ],
-            ),
-          );
-        },
-      ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 }

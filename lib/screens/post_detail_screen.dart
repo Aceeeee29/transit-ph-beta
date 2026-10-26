@@ -107,15 +107,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _userVote = nextVote;
   }
 
+  // One vote at a time: votes toggle, so a double tap voted and then took
+  // the vote back.
+  bool _isVoting = false;
+
   Future<void> _vote(bool isUpvote) async {
     final post = _post;
-    if (post == null) return;
+    if (post == null || _isVoting) return;
+    _isVoting = true;
     final previousVote = _userVote;
-    final nextVote = await PostActionsService.votePost(
-      post.id,
-      widget.currentUserId,
-      isUpvote: isUpvote,
-    );
+    final bool? nextVote;
+    try {
+      nextVote = await PostActionsService.votePost(
+        post.id,
+        widget.currentUserId,
+        isUpvote: isUpvote,
+      );
+    } finally {
+      _isVoting = false;
+    }
     if (!mounted) return;
     setState(() => _applyLocalVoteState(previousVote, nextVote));
     if (nextVote == true &&

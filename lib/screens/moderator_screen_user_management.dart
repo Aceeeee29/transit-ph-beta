@@ -179,6 +179,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                                 : 'Restrict',
                         color: user.hasActiveRestriction ? _success : _danger,
                         filled: user.hasActiveRestriction,
+                        lockItem: 'user:${user.uid}',
                         onTap: () async {
                           if (user.uid == null) return;
                           if (user.role != UserRole.user) {
@@ -343,6 +344,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         _actionButton(
                           label: 'Resolve',
                           color: _success,
+                          lockItem: 'feedback:${feedback.id}',
                           filled: true,
                           onTap: () async {
                             await ModerationService.updateFeedbackStatus(
@@ -356,6 +358,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         _actionButton(
                           label: 'Dismiss',
                           color: _textSecondary,
+                          lockItem: 'feedback:${feedback.id}',
                           onTap: () async {
                             await _deleteFeedbackWithConfirmation(
                               feedback,
@@ -374,6 +377,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                         _actionButton(
                           label: 'Delete',
                           color: _danger,
+                          lockItem: 'feedback:${feedback.id}',
                           onTap: () async {
                             await _deleteFeedbackWithConfirmation(
                               feedback,

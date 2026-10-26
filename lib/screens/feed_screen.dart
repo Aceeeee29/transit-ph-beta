@@ -42,6 +42,7 @@ class _FeedScreenState extends State<FeedScreen> {
   final _upvoteCounts = <String, int>{};
   final _downvoteCounts = <String, int>{};
   final _pendingVotePostIds = <String>{};
+  final _deletingPostIds = <String>{};
   final _postComments = <String, List<Comment>>{};
   final _loadedPostIds = <String>{};
 
@@ -184,11 +185,13 @@ class _FeedScreenState extends State<FeedScreen> {
             ],
           ),
     );
-    if (confirmed == true) {
+    // Already being deleted from an earlier tap.
+    if (confirmed == true && _deletingPostIds.add(post.id)) {
       try {
         await PostService.deletePost(post.id);
         widget.onPostDeleted?.call(post);
       } catch (e) {
+        _deletingPostIds.remove(post.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

@@ -139,6 +139,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   List<double?> _stepOrsDistM = [];
   List<double?> _stepOrsDurS = [];
   bool _isPlacingStep = false;
+
+  /// A submit or quick link is being sent: further taps do nothing, so a
+  /// double tap can't send the route twice.
+  bool _isSendingRoute = false;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
   String? selectedRegion = 'CAMANAVA';
@@ -424,7 +428,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _saveToHistory();
   }
 
-  Future<void> _createQuickLink() async {
+  Future<void> _createQuickLink() => _whileSendingRoute(_sendQuickLink);
+
+  Future<void> _sendQuickLink() async {
     if (pathPoints.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1308,7 +1314,19 @@ class _ContributeScreenState extends State<ContributeScreen> {
   // ─── Submit ──────────────────────────────────────────────────────────────────
 
   void _submit({bool forceModeration = false}) async {
-    await this._submitSection(forceModeration: forceModeration);
+    await _whileSendingRoute(
+      () => this._submitSection(forceModeration: forceModeration),
+    );
+  }
+
+  Future<void> _whileSendingRoute(Future<void> Function() send) async {
+    if (_isSendingRoute) return;
+    setState(() => _isSendingRoute = true);
+    try {
+      await send();
+    } finally {
+      if (mounted) setState(() => _isSendingRoute = false);
+    }
   }
 
   void _submitForReviewInstead() {

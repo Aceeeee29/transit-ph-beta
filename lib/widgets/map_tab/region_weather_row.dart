@@ -1,4 +1,7 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../services/location_service.dart';
 import '../../services/weather_service.dart';
@@ -112,9 +115,35 @@ class WeatherChip extends StatefulWidget {
     final fresh =
         _fetchedAt != null &&
         DateTime.now().difference(_fetchedAt!) < const Duration(minutes: 15);
+    _watchLocationAccess();
     if (!force && _pending != null && fresh) return _pending!;
     _fetchedAt = DateTime.now();
     return _pending = _fetch();
+  }
+
+  static AppLifecycleListener? _lifecycle;
+
+  /// Loads the weather by itself once location becomes available: allowed
+  /// in any prompt, switched on in quick settings, or allowed in the
+  /// phone's Settings and then back in the app. No "Weather" tap needed.
+  static void _watchLocationAccess() {
+    if (_lifecycle != null || kIsWeb) return;
+    _lifecycle = AppLifecycleListener(onResume: _loadIfMissing);
+    LocationService.accessGrants.addListener(_loadIfMissing);
+    Geolocator.getServiceStatusStream().listen((status) {
+      if (status == ServiceStatus.enabled) _loadIfMissing();
+    }, onError: (_) {});
+    // A fetch made offline fails; try again once the phone reconnects.
+    Connectivity().onConnectivityChanged.listen((results) {
+      if (results.any((r) => r != ConnectivityResult.none)) _loadIfMissing();
+    }, onError: (_) {});
+  }
+
+  /// Nothing shown and nothing loading: try again if location is usable.
+  static Future<void> _loadIfMissing() async {
+    if (current.value != null || _pending != null) return;
+    if (!await LocationService.hasAccess()) return;
+    if (current.value == null && _pending == null) load(force: true);
   }
 
   static Future<WeatherData?> _fetch() async {

@@ -15,6 +15,7 @@ class EmailVerificationScreen extends StatefulWidget {
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   bool _isLoading = false;
+  bool _isSigningOut = false;
   String? _message;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   static const _green = Color(0xFF3EC97A);
 
   Future<void> _resendVerificationEmail() async {
+    if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _message = null;
@@ -52,6 +54,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _checkVerification() async {
+    if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _message = null;
@@ -94,7 +97,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
+    if (_isSigningOut) return;
+    _isSigningOut = true;
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {
+      _isSigningOut = false;
+      return;
+    }
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const LoginScreen()),

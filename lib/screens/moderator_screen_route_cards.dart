@@ -365,90 +365,97 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () async {
-                          await ModerationService.rejectRoute(route.id);
-                          await widget.onRoutesModerated?.call();
-                        },
-                        child: Container(
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: _danger.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _danger.withOpacity(0.3)),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(
-                                Icons.close_rounded,
-                                size: 16,
-                                color: _danger,
+                _lockWhileBusy(
+                  'route:${route.id}',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap:
+                              () => _runOnce('route:${route.id}', () async {
+                                await ModerationService.rejectRoute(route.id);
+                                await widget.onRoutesModerated?.call();
+                              }),
+                          child: Container(
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: _danger.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _danger.withOpacity(0.3),
                               ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Reject',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
                                   color: _danger,
                                 ),
-                              ),
-                            ],
+                                SizedBox(width: 6),
+                                Text(
+                                  'Reject',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _danger,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () async {
-                          await ModerationService.approveRoute(route.id);
-                          await widget.onRoutesModerated?.call();
-                        },
-                        child: Container(
-                          height: 42,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [_success.withOpacity(0.9), _success],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap:
+                              () => _runOnce('route:${route.id}', () async {
+                                await ModerationService.approveRoute(route.id);
+                                await widget.onRoutesModerated?.call();
+                              }),
+                          child: Container(
+                            height: 42,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [_success.withOpacity(0.9), _success],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _success.withOpacity(0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
                             ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _success.withOpacity(0.25),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(
-                                Icons.verified_rounded,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Approve',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.verified_rounded,
+                                  size: 16,
                                   color: Colors.white,
                                 ),
-                              ),
-                            ],
+                                SizedBox(width: 6),
+                                Text(
+                                  'Approve',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1004,6 +1011,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                       _actionButton(
                         label: 'Remove',
                         color: _danger,
+                        lockItem: 'post:${post.id}',
                         onTap: () async {
                           await ModerationService.removePostPermanently(
                             post.id,
@@ -1015,6 +1023,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                       _actionButton(
                         label: 'Dismiss',
                         color: _success,
+                        lockItem: 'post:${post.id}',
                         onTap: () async {
                           await ModerationService.dismissReportedPost(post.id);
                           _refreshModeratorState();
