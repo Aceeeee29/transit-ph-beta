@@ -12,9 +12,6 @@ class WalkOption {
   /// Walks up to this long are offered as an option of their own.
   static const maxMinutes = 30.0;
 
-  /// A ride must beat walking the whole way by at least this much.
-  static const minRideSavingMinutes = 5.0;
-
   static const _walkSpeedKmh = 5.0;
 
   /// Streets go around blocks: about this much longer than a straight line
@@ -36,7 +33,8 @@ class WalkOption {
   }
 
   /// Whether a ride option taking [rideMinutes] is worth showing next to
-  /// walking the whole way in [walkMinutes].
+  /// walking the whole way in [walkMinutes]: any ride that gets there
+  /// sooner, since riders take a short jeep ride to skip the heat or rain.
   static bool rideWorthIt(double rideMinutes, double walkMinutes) =>
-      rideMinutes <= walkMinutes - minRideSavingMinutes;
+      rideMinutes < walkMinutes;
 }

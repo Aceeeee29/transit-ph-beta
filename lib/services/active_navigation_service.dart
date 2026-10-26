@@ -313,7 +313,12 @@ class ActiveNavigationService extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: _followSettings(target),
-    ).listen(_onPosition, onError: (_) {});
+    ).listen(
+      _onPosition,
+      onError: (Object e) {
+        debugPrint('ActiveNavigationService: location stream failed: $e');
+      },
+    );
     _idleAnchor = null;
     _lastMovedAt = DateTime.now();
     _idleTimer?.cancel();

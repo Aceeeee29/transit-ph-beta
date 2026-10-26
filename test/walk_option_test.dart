@@ -20,13 +20,14 @@ void main() {
       expect(WalkOption.rideWorthIt(16, walk), isFalse);
     });
 
-    test('keeps a ride that saves real time over a long walk', () {
+    test('keeps any ride that gets there sooner than walking', () {
       const far = LatLng(14.6850, 120.9560); // ~2.2 km: ~34 min on foot
       expect(WalkOption.offered(start, far), isNull);
       const nearish = LatLng(14.6800, 120.9560); // ~1.7 km: ~26 min
       final walk = WalkOption.offered(start, nearish)!;
       expect(WalkOption.rideWorthIt(12, walk), isTrue);
-      expect(WalkOption.rideWorthIt(walk - 2, walk), isFalse);
+      expect(WalkOption.rideWorthIt(walk - 2, walk), isTrue);
+      expect(WalkOption.rideWorthIt(walk + 1, walk), isFalse);
     });
   });
 }

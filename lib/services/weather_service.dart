@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
 
+import 'location_service.dart';
+
 class WeatherData {
   final String temp;
   final String condition;
@@ -50,8 +52,8 @@ class WeatherService {
       // high-accuracy GPS fix indoors can take minutes or never come).
       final position =
           await Geolocator.getLastKnownPosition() ??
-          await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
+          await LocationService.fixAllowingSettingsDialog(
+            const LocationSettings(
               accuracy: LocationAccuracy.medium,
               timeLimit: Duration(seconds: 15),
             ),

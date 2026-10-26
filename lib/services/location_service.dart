@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
@@ -83,8 +84,8 @@ class LocationService {
         return null;
       }
 
-      return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
+      return await fixAllowingSettingsDialog(
+        const LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 10),
         ),
@@ -92,6 +93,46 @@ class LocationService {
     } catch (e) {
       return null;
     }
+  }
+
+  /// [Geolocator.getCurrentPosition], made once more when its time limit ran
+  /// out while the app was off screen.
+  ///
+  /// With Google's "Location Accuracy" setting off, a fix first shows
+  /// Google's dialog to turn it on. The time limit keeps running while the
+  /// dialog is up, and once it runs out the request is cancelled, so tapping
+  /// "Turn on" afterwards turns location on with nothing waiting for it.
+  static Future<Position> fixAllowingSettingsDialog(
+    LocationSettings settings,
+  ) async {
+    var leftScreen = false;
+    final listener = AppLifecycleListener(onInactive: () => leftScreen = true);
+    try {
+      return await Geolocator.getCurrentPosition(locationSettings: settings);
+    } on TimeoutException {
+      if (!leftScreen && _isOnScreen) rethrow;
+      await _untilOnScreen();
+      if (!await Geolocator.isLocationServiceEnabled()) rethrow;
+      return await Geolocator.getCurrentPosition(locationSettings: settings);
+    } finally {
+      listener.dispose();
+    }
+  }
+
+  static bool get _isOnScreen =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  static Future<void> _untilOnScreen() {
+    if (_isOnScreen) return Future.value();
+    final resumed = Completer<void>();
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        listener.dispose();
+        resumed.complete();
+      },
+    );
+    return resumed.future;
   }
 
   /// Reverse geocode coordinates to get address
