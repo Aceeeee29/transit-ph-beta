@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.36 — October 26, 2026
+
+- Fixed Follow Route standing still after you tap Start
+- Short trips you could walk show jeep rides again whenever they're
+  faster than walking, not only when they save 5 minutes or more
+- Tapping "Turn on" in Google's location accuracy popup now always gets
+  your location, even if you took a while to answer it
+
 ## v1.0.35 — October 26, 2026
 
 - New launch screen with the TransitPH logo, shown until the app is
@@ -16,11 +24,6 @@
 - Fixed buttons doing things twice when tapped quickly, like sending a
   route twice, approving twice, saving Settings and then closing it, or
   starting the update download twice
-- Fixed Follow Route standing still after you tap Start
-- Short trips you could walk show jeep rides again whenever they're
-  faster than walking, not only when they save 5 minutes or more
-- Tapping "Turn on" in Google's location accuracy popup now always gets
-  your location, even if you took a while to answer it
 
 ## v1.0.34 — October 25, 2026
 
