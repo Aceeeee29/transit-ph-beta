@@ -112,6 +112,10 @@ class OrsStep {
   final String? fromName;
   final String? toName;
 
+  /// A walk with no real path found: its line is just the two ends and its
+  /// length an estimate, so the map draws it dashed.
+  final bool isEstimatedPath;
+
   const OrsStep({
     required this.instruction,
     required this.distanceMeters,
@@ -123,6 +127,7 @@ class OrsStep {
     this.isCommunity = false,
     this.fromName,
     this.toName,
+    this.isEstimatedPath = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -136,6 +141,7 @@ class OrsStep {
     'isCommunity': isCommunity,
     if (fromName != null) 'fromName': fromName,
     if (toName != null) 'toName': toName,
+    if (isEstimatedPath) 'isEstimatedPath': true,
   };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
@@ -149,5 +155,6 @@ class OrsStep {
     isCommunity: json['isCommunity'] as bool? ?? false,
     fromName: json['fromName'] as String?,
     toName: json['toName'] as String?,
+    isEstimatedPath: json['isEstimatedPath'] as bool? ?? false,
   );
 }

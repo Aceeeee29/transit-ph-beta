@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.37 — October 28, 2026
+
+- Walking is now measured along a real walking path, not a straight
+  line: a place 250 m away that's 1.2 km on foot around a river or wall
+  no longer hides the jeep rides, and rides slower than the real walk
+  are left out
+- Walks are saved on your phone, so a walk found once opens again next
+  time, even without internet
+- When no walking path can be found, the walk is drawn dashed and marked
+  "exact path unavailable" instead of cutting straight through buildings,
+  while following too
+- Places pinned on the map (schools, malls, parks) now show up when you
+  search, and picking one takes you to its exact pin
+
 ## v1.0.36 — October 26, 2026
 
 - Fixed Follow Route standing still after you tap Start

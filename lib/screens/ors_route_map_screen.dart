@@ -625,6 +625,16 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     ];
   }
 
+  /// Indexes in [_stepRanges] of walks with no real path found.
+  Set<int> get _estimatedWalkRanges {
+    final steps = widget.result.steps;
+    if (steps.every((s) => s.wayPointEnd == 0)) return const {};
+    return {
+      for (final (index, step) in steps.indexed)
+        if (step.isEstimatedPath) index,
+    };
+  }
+
   /// The route (travelled part grey while following) plus, when the
   /// traveler is off it, the dashed temporary path back to it.
   List<MapLine> get _lines {
@@ -635,6 +645,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         snapshot: _followSnapshot,
         outline: Colors.white,
         fillWidth: 5.5,
+        estimated: _estimatedWalkRanges,
       ),
       if (_isNavigationStarted) ...[
         ...FollowRouteLayers.connectorLines(

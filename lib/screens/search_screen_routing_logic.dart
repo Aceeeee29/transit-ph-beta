@@ -81,6 +81,14 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         return;
       }
 
+      // Close enough that walking might do: get the real walking path
+      // alongside the rides. The straight line can't tell, since 250 m
+      // apart can be 1.2 km on foot around a river or a wall.
+      final walkPathFuture =
+          WalkOption.worthAsking(origin, destLatLng)
+              ? RoutingService.walkPath(origin, destLatLng)
+              : null;
+
       List<DijkstraRouteAlternative> alternatives = [];
       var fallbackAlternatives = <int, OrsRouteResult>{};
       var labelsByIndex = <int, String>{};
@@ -288,9 +296,16 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
 
-      // Close enough to walk: walking is shown first, and rides that don't
-      // save at least a few minutes over it are dropped.
-      final walkMinutes = WalkOption.offered(origin, destLatLng);
+      // Close enough to walk: walking is shown first, and rides slower than
+      // it are dropped. With no walking path found there's no walk to
+      // offer, and every ride stays.
+      final walkPath = await walkPathFuture?.timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => null,
+      );
+      if (_isStaleRouteRequest(requestId)) return;
+      final walkMinutes =
+          walkPath == null ? null : WalkOption.offered(walkPath);
       if (walkMinutes != null) {
         final kept = <DijkstraRouteAlternative>[];
         final keptLabels = <int, String>{};
@@ -321,6 +336,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           _selectedAlternativeIndex = 0;
           _lastOriginForAlternatives = origin;
           _lastDestinationForAlternatives = destLatLng;
+          _walkOptionMinutes = walkMinutes;
           _lastGeneratedOriginName = originName;
           _lastGeneratedDestinationName = query;
         });
@@ -341,6 +357,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           _selectedAlternativeIndex = 0;
           _lastOriginForAlternatives = origin;
           _lastDestinationForAlternatives = destLatLng;
+          _walkOptionMinutes = walkMinutes;
           _lastGeneratedOriginName = originName;
           _lastGeneratedDestinationName = query;
         });
@@ -388,6 +405,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         _selectedAlternativeIndex = 0;
         _lastOriginForAlternatives = origin;
         _lastDestinationForAlternatives = destLatLng;
+        _walkOptionMinutes = walkMinutes;
         _lastGeneratedOriginName = originName;
         _lastGeneratedDestinationName = query;
       });

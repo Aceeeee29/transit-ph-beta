@@ -92,6 +92,7 @@ class TripJoiner {
     isCommunity: step.isCommunity,
     fromName: step.fromName,
     toName: toName,
+    isEstimatedPath: step.isEstimatedPath,
   );
 
   /// "VGC Terminal → Monumento + Monumento → STI Caloocan".

@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
+import '../repositories/walk_path_repository.dart';
 import 'supabase_route_service.dart';
 import 'walk_ride_join.dart';
 import 'transport_mode_inference.dart';
@@ -29,6 +30,10 @@ class RoutingException implements Exception {
 /// OSRM public API is used for road snapping only (free, no key required).
 class RoutingService {
   static const _minWalkSegmentKm = 0.08;
+
+  /// A walk with no path found is estimated this much longer than the
+  /// straight line, since streets go around blocks.
+  static const _walkRoadFactor = 1.3;
   static const _walkSpeedKmh = 5.0;
   static const _stopSearchRadiusKm = 0.5;
   static const _stopSearchRadiusExpandedKm = 1.5;
@@ -214,10 +219,10 @@ class RoutingService {
   /// Lightweight road-snap between two points: drawing in the Contribute
   /// screen and walking paths back to a followed route.
   ///
-  /// Uses OpenRouteService first, which has a real walking profile and can
-  /// avoid expressways, and falls back to OSRM when it is unavailable or
-  /// rate-limited. No Supabase, no GTFS, no caching. Returns null if both
-  /// are unreachable so the caller can fall back to a straight line.
+  /// Walks come from [walkPath]. Vehicles use OpenRouteService first, which
+  /// can avoid expressways, and fall back to OSRM when it is unavailable or
+  /// rate-limited. Returns null if nothing answers so the caller can fall
+  /// back to a straight line.
   static Future<OrsRouteResult?> snapToRoad({
     required LatLng origin,
     required LatLng destination,
@@ -225,13 +230,16 @@ class RoutingService {
     bool? allowExpressways,
   }) async {
     final pts =
-        await _orsRoute(
-          origin,
-          destination,
-          mode: mode,
-          allowExpressways: allowExpressways ?? defaultAllowsExpressways(mode),
-        ) ??
-        await _osrmSnap(origin, destination, _osrmProfileForMode(mode));
+        mode == 'Walk'
+            ? await walkPath(origin, destination)
+            : await _orsRoute(
+                  origin,
+                  destination,
+                  mode: mode,
+                  allowExpressways:
+                      allowExpressways ?? defaultAllowsExpressways(mode),
+                ) ??
+                await _osrmSnap(origin, destination, _osrmProfileForMode(mode));
     if (pts == null || pts.length < 2) return null;
 
     final distKm = _polylineDistanceKm(pts);
@@ -246,6 +254,60 @@ class RoutingService {
       bbox: [],
     );
   }
+
+  /// A walking path from [from] to [to] along streets, footpaths and
+  /// alleys, or null when none could be had. Only walking routers are
+  /// asked: they ignore one-way rules and never cut through buildings or
+  /// walls. Every path found is kept on the device, so a walk found once is
+  /// there next time, even offline. Never stand in a straight line for it.
+  static Future<List<LatLng>?> walkPath(LatLng from, LatLng to) async {
+    final saved = await WalkPathRepository.get(from, to);
+    if (saved != null) {
+      // Saved ends can be up to ~28 m off; walk on from the exact ones.
+      return [
+        if (_haversineKm(from, saved.first) > 0.002) from,
+        ...saved,
+        if (_haversineKm(saved.last, to) > 0.002) to,
+      ];
+    }
+    // OpenRouteService gets a longer wait: it can take 10–17 s to answer.
+    final path =
+        await _osrmRoute(
+          [from, to],
+          'foot',
+          base: _osrmFootBase,
+          rejectLoops: false,
+        ) ??
+        await _orsRoute(
+          from,
+          to,
+          mode: 'Walk',
+          allowExpressways: true,
+          timeout: const Duration(seconds: 15),
+        );
+    if (path == null || path.length < 2) return null;
+    unawaited(WalkPathRepository.put(from, to, path));
+    return path;
+  }
+
+  /// A walk leg from [from] to [to]: its path and length, or when no path
+  /// could be had, just the two ends with a length estimated along streets
+  /// and [estimated] set, so it's drawn dashed rather than as a real way.
+  static Future<({List<LatLng> points, bool estimated})> _walkLeg(
+    LatLng from,
+    LatLng to,
+  ) async {
+    final path = await walkPath(from, to);
+    return path != null
+        ? (points: path, estimated: false)
+        : (points: [from, to], estimated: true);
+  }
+
+  static double _walkLegMeters(List<LatLng> points, bool estimated) =>
+      _polylineDistanceKm(points) * 1000 * (estimated ? _walkRoadFactor : 1);
+
+  static String _estimatedNote(bool estimated) =>
+      estimated ? ' (exact path unavailable)' : '';
 
   /// Road path through [points] in order — e.g. a recorded ride — for
   /// turning it into route geometry. Null when routing fails.
@@ -507,14 +569,16 @@ class RoutingService {
     if (hasStops) {
       final walkInKm = _haversineKm(origin, originStop);
       if (walkInKm > _minWalkSegmentKm) {
-        final walkPts =
-            await _osrmSnap(origin, originStop, 'foot') ?? [origin, originStop];
-        final walkDistM = _polylineDistanceKm(walkPts) * 1000;
+        final walk = await _walkLeg(origin, originStop);
+        final walkPts = walk.points;
+        final walkDistM = _walkLegMeters(walkPts, walk.estimated);
         final startIdx = combinedPolyline.length;
         combinedPolyline.addAll(walkPts);
         steps.add(
           OrsStep(
-            instruction: 'Walk to ${originStopName ?? 'nearest stop'}',
+            instruction:
+                'Walk to ${originStopName ?? 'nearest stop'}'
+                '${_estimatedNote(walk.estimated)}',
             distanceMeters: walkDistM,
             durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
             suggestedMode: 'Walk',
@@ -522,6 +586,7 @@ class RoutingService {
             toName: originStopName,
             wayPointStart: startIdx,
             wayPointEnd: combinedPolyline.length - 1,
+            isEstimatedPath: walk.estimated,
           ),
         );
       } else {
@@ -540,8 +605,16 @@ class RoutingService {
             : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     final osrmProf = _osrmProfileForMode(rideMode);
 
-    final ridePts =
-        await _osrmSnap(ridePtA, ridePtB, osrmProf) ?? [ridePtA, ridePtB];
+    final List<LatLng> ridePts;
+    if (rideMode == 'Walk') {
+      // A walk the whole way is only worth showing along a real path.
+      ridePts =
+          await walkPath(ridePtA, ridePtB) ??
+          (throw const RoutingException("Couldn't find a walking path."));
+    } else {
+      ridePts =
+          await _osrmSnap(ridePtA, ridePtB, osrmProf) ?? [ridePtA, ridePtB];
+    }
 
     final rideDistM = _polylineDistanceKm(ridePts) * 1000;
     final rideSpeed = _speedForMode(rideMode);
@@ -582,10 +655,9 @@ class RoutingService {
     if (hasStops) {
       final walkOutKm = _haversineKm(destStop, destination);
       if (walkOutKm > _minWalkSegmentKm) {
-        final walkPts =
-            await _osrmSnap(destStop, destination, 'foot') ??
-            [destStop, destination];
-        final walkDistM = _polylineDistanceKm(walkPts) * 1000;
+        final walk = await _walkLeg(destStop, destination);
+        final walkPts = walk.points;
+        final walkDistM = _walkLegMeters(walkPts, walk.estimated);
         final startIdx = combinedPolyline.length - 1;
         final toAdd =
             _haversineKm(combinedPolyline.last, walkPts.first) < 0.001
@@ -594,7 +666,9 @@ class RoutingService {
         combinedPolyline.addAll(toAdd);
         steps.add(
           OrsStep(
-            instruction: 'Walk from ${destStopName ?? 'stop'} to destination',
+            instruction:
+                'Walk from ${destStopName ?? 'stop'} to destination'
+                '${_estimatedNote(walk.estimated)}',
             distanceMeters: walkDistM,
             durationSeconds: (walkDistM / 1000 / _walkSpeedKmh) * 3600,
             suggestedMode: 'Walk',
@@ -602,6 +676,7 @@ class RoutingService {
             fromName: destStopName,
             wayPointStart: startIdx,
             wayPointEnd: combinedPolyline.length - 1,
+            isEstimatedPath: walk.estimated,
           ),
         );
       }
@@ -651,6 +726,7 @@ class RoutingService {
     LatLng to, {
     required String mode,
     required bool allowExpressways,
+    Duration timeout = const Duration(seconds: 8),
   }) async {
     String key;
     try {
@@ -680,7 +756,7 @@ class RoutingService {
                 },
             }),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(timeout);
 
       if (response.statusCode == 429) {
         _orsCooldownUntil = DateTime.now().add(_orsCooldown);
@@ -717,31 +793,28 @@ class RoutingService {
   static const _maxOsrmWaypoints = 25;
 
   /// Road-snaps a path that must pass through [waypoints] in order.
-  /// Walks try the walking server first, then the demo server (a car
-  /// route, but along streets), before a caller falls back to a straight
-  /// line. The walking server didn't answer within 8 s on one home wifi.
+  /// Walks go to walking routers only ([walkPath]): the demo server routes
+  /// cars, along one-way streets, so a walk could loop around whole blocks.
+  /// [rejectLoops] drops paths that balloon far past the direct way, which
+  /// for cars means a roundabout loop; a walking router's long way round is
+  /// real (a river or wall in between), so walks keep it.
   static Future<List<LatLng>?> _osrmRoute(
     List<LatLng> waypoints,
     String profile, {
     String? base,
     Duration timeout = const Duration(seconds: 8),
+    bool rejectLoops = true,
   }) async {
     if (profile == 'foot' && base == null) {
-      final foot = await _osrmRoute(
+      if (waypoints.length == 2) {
+        return walkPath(waypoints.first, waypoints.last);
+      }
+      return _osrmRoute(
         waypoints,
         profile,
         base: _osrmFootBase,
-        timeout: const Duration(seconds: 8),
+        rejectLoops: false,
       );
-      if (foot != null) return foot;
-      // The demo server only has the car profile: it keeps to one-way
-      // streets and car turns, so a walk could loop around whole blocks.
-      // Use it only when it stays close to the direct way; otherwise the
-      // caller draws a straight line.
-      final car = await _osrmRoute(waypoints, profile, base: '$_osrmBase/foot');
-      if (car == null) return null;
-      final directKm = _polylineDistanceKm(waypoints);
-      return _polylineDistanceKm(car) <= directKm * 1.5 + 0.15 ? car : null;
     }
     if (waypoints.length < 2) return null;
     final from = waypoints.first;
@@ -785,12 +858,13 @@ class RoutingService {
       // OSRM can occasionally produce pathological small-area loops near
       // roundabouts/interchanges. If detected, skip snap so callers can
       // fall back to GTFS shape or straight segment.
-      if (_shouldRejectSnappedPath(
-        from: from,
-        to: to,
-        points: points,
-        referenceKm: via.length > 2 ? _polylineDistanceKm(via) : null,
-      )) {
+      if (rejectLoops &&
+          _shouldRejectSnappedPath(
+            from: from,
+            to: to,
+            points: points,
+            referenceKm: via.length > 2 ? _polylineDistanceKm(via) : null,
+          )) {
         debugPrint('[OSRM] Rejected looped snap geometry, falling back');
         return null;
       }
@@ -907,7 +981,8 @@ class RoutingService {
               allowRoadSnap: !_isStationBasedLeg(firstLeg, firstLegMode),
             )
             : null;
-    final transferFutures = <int, Future<List<LatLng>>>{};
+    final transferFutures =
+        <int, Future<({List<LatLng> points, bool estimated})>>{};
     for (int i = 0; i < legs.length - 1; i++) {
       final alightPt = LatLng(legs[i].alightLat, legs[i].alightLon);
       final boardPt = LatLng(legs[i + 1].boardLat, legs[i + 1].boardLon);
@@ -930,11 +1005,19 @@ class RoutingService {
             )
             : null;
     final rides = [...await shapePolylines];
-    var walkInPts = walkInFuture == null ? null : await walkInFuture;
-    final transferWalks = <int, List<LatLng>>{
+    final walkIn = walkInFuture == null ? null : await walkInFuture;
+    final transferLegs = <int, ({List<LatLng> points, bool estimated})>{
       for (final entry in transferFutures.entries) entry.key: await entry.value,
     };
-    var walkOutPts = walkOutFuture == null ? null : await walkOutFuture;
+    final walkOut = walkOutFuture == null ? null : await walkOutFuture;
+    var walkInPts = walkIn?.points;
+    final transferWalks = <int, List<LatLng>>{
+      for (final entry in transferLegs.entries) entry.key: entry.value.points,
+    };
+    var walkOutPts = walkOut?.points;
+    final walkInEstimated = walkIn?.estimated ?? false;
+    final walkOutEstimated = walkOut?.estimated ?? false;
+    bool transferEstimated(int i) => transferLegs[i]?.estimated ?? false;
 
     // ── Join walks and rides where they meet ────────────────────────────────
     // A jeepney or tricycle can be flagged down anywhere on its road, so
@@ -986,24 +1069,27 @@ class RoutingService {
       set(joined.walk);
     }
 
-    if (walkInPts case final walk?) {
+    // An estimated walk is only its two ends, so where it "meets" a ride
+    // means nothing; those keep the router's stop.
+    if (walkInPts case final walk? when !walkInEstimated) {
       joinBoard(0, walk, (w) => walkInPts = w);
     }
     for (final i in transferWalks.keys.toList()) {
+      if (transferEstimated(i)) continue;
       joinAlight(i, transferWalks[i]!, (w) => transferWalks[i] = w);
       joinBoard(i + 1, transferWalks[i]!, (w) => transferWalks[i] = w);
     }
-    if (walkOutPts case final walk?) {
+    if (walkOutPts case final walk? when !walkOutEstimated) {
       joinAlight(legs.length - 1, walk, (w) => walkOutPts = w);
     }
 
     // ── Walk-in ───────────────────────────────────────────────────────────────
     if (walkInPts case final walkInPts?) {
-      final walkInDistM = _polylineDistanceKm(walkInPts) * 1000;
+      final walkInDistM = _walkLegMeters(walkInPts, walkInEstimated);
       combinedPolyline.addAll(walkInPts);
       steps.add(
         OrsStep(
-          instruction: 'Walk to $walkInName',
+          instruction: 'Walk to $walkInName${_estimatedNote(walkInEstimated)}',
           distanceMeters: walkInDistM,
           durationSeconds: (walkInDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
@@ -1011,6 +1097,7 @@ class RoutingService {
           toName: walkInName,
           wayPointStart: 0,
           wayPointEnd: combinedPolyline.length - 1,
+          isEstimatedPath: walkInEstimated,
         ),
       );
     } else {
@@ -1076,7 +1163,8 @@ class RoutingService {
         final transferPts = transferWalks[i];
 
         if (transferPts != null) {
-          final transferDistM = _polylineDistanceKm(transferPts) * 1000;
+          final estimated = transferEstimated(i);
+          final transferDistM = _walkLegMeters(transferPts, estimated);
           final tStart = combinedPolyline.length - 1;
           final transferToAdd =
               combinedPolyline.isNotEmpty &&
@@ -1089,7 +1177,8 @@ class RoutingService {
           steps.add(
             OrsStep(
               instruction:
-                  'Transfer: walk from $alightName to ${boardNames[i + 1]}, then board $transferRouteLabel',
+                  'Transfer: walk from $alightName to ${boardNames[i + 1]}, then board $transferRouteLabel'
+                  '${_estimatedNote(estimated)}',
               distanceMeters: transferDistM,
               durationSeconds: (transferDistM / 1000 / _walkSpeedKmh) * 3600,
               suggestedMode: 'Walk',
@@ -1098,6 +1187,7 @@ class RoutingService {
               toName: boardNames[i + 1],
               wayPointStart: tStart,
               wayPointEnd: combinedPolyline.length - 1,
+              isEstimatedPath: estimated,
             ),
           );
         } else {
@@ -1119,7 +1209,7 @@ class RoutingService {
 
     // ── Walk-out ──────────────────────────────────────────────────────────────
     if (walkOutPts case final walkOutPts?) {
-      final walkOutDistM = _polylineDistanceKm(walkOutPts) * 1000;
+      final walkOutDistM = _walkLegMeters(walkOutPts, walkOutEstimated);
       final startIdx = combinedPolyline.length - 1;
       final walkOutToAdd =
           combinedPolyline.isNotEmpty &&
@@ -1130,7 +1220,9 @@ class RoutingService {
       combinedPolyline.addAll(walkOutToAdd);
       steps.add(
         OrsStep(
-          instruction: 'Walk from $walkOutName to destination',
+          instruction:
+              'Walk from $walkOutName to destination'
+              '${_estimatedNote(walkOutEstimated)}',
           distanceMeters: walkOutDistM,
           durationSeconds: (walkOutDistM / 1000 / _walkSpeedKmh) * 3600,
           suggestedMode: 'Walk',
@@ -1138,6 +1230,7 @@ class RoutingService {
           fromName: walkOutName,
           wayPointStart: startIdx,
           wayPointEnd: combinedPolyline.length - 1,
+          isEstimatedPath: walkOutEstimated,
         ),
       );
     }
@@ -1361,18 +1454,19 @@ class RoutingService {
     return [board, alight];
   }
 
-  static Future<List<LatLng>> _buildWalkConnectorPolyline(
+  /// A walk between a stop and the trip's ends or another stop. Station
+  /// connectors are straight on purpose; any other walk with no path found
+  /// is [estimated] (see [_walkLeg]).
+  static Future<({List<LatLng> points, bool estimated})>
+  _buildWalkConnectorPolyline(
     LatLng from,
     LatLng to, {
     required bool allowRoadSnap,
   }) async {
-    if (allowRoadSnap) {
-      final snapped = await _osrmSnap(from, to, 'foot');
-      if (snapped != null && snapped.length >= 2) {
-        return _clipShapeToStops(snapped, from, to);
-      }
-    }
-    return [from, to];
+    if (!allowRoadSnap) return (points: [from, to], estimated: false);
+    final walk = await _walkLeg(from, to);
+    if (walk.estimated) return walk;
+    return (points: _clipShapeToStops(walk.points, from, to), estimated: false);
   }
 
   static bool _isStationBasedLeg(TransitLeg leg, String mode) {

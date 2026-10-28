@@ -13,7 +13,8 @@ class FollowRouteLayers {
 
   /// The route, one line pair per step range. While following, the part
   /// already travelled is grey and the rest keeps its colour, split exactly
-  /// at the traveler's progress point.
+  /// at the traveler's progress point. Ranges whose index is in [estimated]
+  /// (walks with no real path found) are drawn dashed with no outline.
   static List<MapLine> routeLines({
     required List<LatLng> path,
     required List<({int start, int end, Color color})> ranges,
@@ -21,11 +22,27 @@ class FollowRouteLayers {
     required Color outline,
     double outlineWidth = 8.0,
     double fillWidth = 6.0,
+    Set<int> estimated = const {},
   }) {
     if (path.length < 2) return const [];
 
-    List<MapLine> line(List<LatLng> pts, Color fill, Color edge) {
+    List<MapLine> line(
+      List<LatLng> pts,
+      Color fill,
+      Color edge, {
+      bool dashed = false,
+    }) {
       if (pts.length < 2) return const [];
+      if (dashed) {
+        return [
+          MapLine(
+            pts,
+            color: fill,
+            width: fillWidth,
+            style: MapLineStyle.dashed,
+          ),
+        ];
+      }
       return [
         MapLine(pts, color: edge, width: outlineWidth),
         MapLine(pts, color: fill, width: fillWidth),
@@ -37,15 +54,18 @@ class FollowRouteLayers {
     final travelled = <MapLine>[];
     final remaining = <MapLine>[];
 
-    for (final range in ranges) {
+    for (final (index, range) in ranges.indexed) {
       final start = range.start.clamp(0, last);
       final end = range.end.clamp(0, last);
       if (end <= start) continue;
+      final dashed = estimated.contains(index);
       final pts = path.sublist(start, end + 1);
       if (snapshot == null || !snapshot.hasProgress || splitSegment < start) {
-        remaining.addAll(line(pts, range.color, outline));
+        remaining.addAll(line(pts, range.color, outline, dashed: dashed));
       } else if (snapshot.hasArrived || splitSegment >= end) {
-        travelled.addAll(line(pts, travelledFill, travelledOutline));
+        travelled.addAll(
+          line(pts, travelledFill, travelledOutline, dashed: dashed),
+        );
       } else {
         final cut = snapshot.progressPoint;
         travelled.addAll(
@@ -53,6 +73,7 @@ class FollowRouteLayers {
             [...path.sublist(start, splitSegment + 1), cut],
             travelledFill,
             travelledOutline,
+            dashed: dashed,
           ),
         );
         remaining.addAll(
@@ -60,6 +81,7 @@ class FollowRouteLayers {
             [cut, ...path.sublist(splitSegment + 1, end + 1)],
             range.color,
             outline,
+            dashed: dashed,
           ),
         );
       }

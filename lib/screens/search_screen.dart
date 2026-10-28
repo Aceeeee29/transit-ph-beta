@@ -4,10 +4,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import '../models/place.dart';
 import '../models/route.dart' as route_model;
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/map_tab_controller.dart';
+import '../services/osm_places.dart';
 import '../services/search_service.dart';
 import '../services/fare_matrix.dart';
 import '../services/fare_profile_service.dart';
@@ -69,6 +71,7 @@ class SearchSession {
   final LatLng? destinationPoint;
   final String? originName;
   final String? destinationName;
+  final double? walkMinutes;
 
   const SearchSession({
     required this.origin,
@@ -83,6 +86,7 @@ class SearchSession {
     required this.destinationPoint,
     required this.originName,
     required this.destinationName,
+    required this.walkMinutes,
   });
 }
 
@@ -99,6 +103,10 @@ class _SearchScreenState extends State<SearchScreen> {
   List<route_model.Route> _routes = [];
   List<route_model.Route> _filteredRoutes = [];
   List<String> _suggestions = [];
+
+  /// The places pinned on the map (schools, malls, parks...), suggested by
+  /// name and found at their pin's exact spot.
+  List<Place> _pinPlaces = const [];
   bool _isSearching = false;
   bool _showOmnibox = false;
   List<String> _pendingNotifications = [];
@@ -133,6 +141,10 @@ class _SearchScreenState extends State<SearchScreen> {
   LatLng? _lastDestinationForAlternatives;
   String? _lastGeneratedOriginName;
   String? _lastGeneratedDestinationName;
+
+  /// Minutes to walk the whole trip along its walking path, when short
+  /// enough to offer it; null when it isn't, or no path was found.
+  double? _walkOptionMinutes;
 
   int? _pendingAlternativeIndex;
 
@@ -171,6 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _selectedAlternativeIndex = 0;
     _lastOriginForAlternatives = null;
     _lastDestinationForAlternatives = null;
+    _walkOptionMinutes = null;
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -186,6 +199,9 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     });
     _loadRecentSearches();
+    OsmPlaces.all().then((places) {
+      if (mounted) setState(() => _pinPlaces = places);
+    });
     _routesRefresh = _refreshRoutes();
     FareProfileService.isStudent().then((student) {
       if (student && mounted) setState(() => _studentFare = true);
@@ -247,6 +263,10 @@ class _SearchScreenState extends State<SearchScreen> {
     final key = query.trim().toLowerCase();
     final cached = _geocodeCache[key];
     if (cached != null) return cached;
+    // A place pinned on the map is where its pin is.
+    for (final place in _pinPlaces) {
+      if (place.name.toLowerCase() == key) return LatLng(place.lat, place.lng);
+    }
     final found = await _geocodePhilippinesUncached(query);
     if (found != null) _geocodeCache[key] = found;
     return found;
@@ -313,13 +333,11 @@ class _SearchScreenState extends State<SearchScreen> {
     final searchTerm = query.trim().toLowerCase();
     // Places only: whole routes ("A to B") and route tags read as a
     // destination when picked, which no search can find.
-    final newSuggestions = _placeSuggestions(searchTerm);
-
-    newSuggestions.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final newSuggestions = _suggestionsFor(searchTerm);
 
     setState(() {
       _isSearching = true;
-      _suggestions = newSuggestions.take(5).toList();
+      _suggestions = newSuggestions;
       _showOmnibox = showSuggestions && _suggestions.isNotEmpty;
       // Only show approved routes in search results
       _filteredRoutes =
@@ -368,16 +386,33 @@ class _SearchScreenState extends State<SearchScreen> {
     return places;
   }
 
+  /// Up to five suggestions for [searchTerm] (lowercase): recent searches
+  /// and route ends A–Z, then places pinned on the map, names starting
+  /// with it first.
+  List<String> _suggestionsFor(String searchTerm) {
+    final own = _placeSuggestions(searchTerm)
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final taken = {for (final s in own) s.toLowerCase()};
+    final pins = <String>[];
+    for (final place in _pinPlaces) {
+      final name = place.name.toLowerCase();
+      if (name.contains(searchTerm) && taken.add(name)) pins.add(place.name);
+    }
+    pins.sort((a, b) {
+      final aStarts = a.toLowerCase().startsWith(searchTerm);
+      final bStarts = b.toLowerCase().startsWith(searchTerm);
+      if (aStarts != bStarts) return aStarts ? -1 : 1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    });
+    return [...own, ...pins].take(5).toList();
+  }
+
   /// Typing in the start field suggests places, like "Where to?" does.
   void _onOriginTyped(String query) {
     final searchTerm = query.trim().toLowerCase();
     setState(() {
       _originSuggestions =
-          searchTerm.isEmpty
-              ? []
-              : (_placeSuggestions(searchTerm)..sort(
-                (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-              )).take(5).toList();
+          searchTerm.isEmpty ? [] : _suggestionsFor(searchTerm);
       if (_originSuggestions.isNotEmpty) _showOmnibox = false;
       if (query.trim() != _lastOrsOrigin) _clearGeneratedRoutes();
     });
@@ -800,6 +835,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _lastDestinationForAlternatives = session.destinationPoint;
     _lastGeneratedOriginName = session.originName;
     _lastGeneratedDestinationName = session.destinationName;
+    _walkOptionMinutes = session.walkMinutes;
     // Fills the community list for the same trip (the options stay: the
     // query is unchanged) after the first frame, when setState is allowed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -823,6 +859,7 @@ class _SearchScreenState extends State<SearchScreen> {
       destinationPoint: _lastDestinationForAlternatives,
       originName: _lastGeneratedOriginName,
       destinationName: _lastGeneratedDestinationName,
+      walkMinutes: _walkOptionMinutes,
     );
     final onRefresh = widget.onRefresh;
     return (context) => Navigator.of(context).push(
@@ -877,14 +914,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// [_selectedAlternativeIndex] while the walk-only option is the one built.
   static const _walkOptionIndex = -1;
-
-  /// Minutes to walk the whole trip, when short enough to offer it.
-  double? get _walkOptionMinutes {
-    final origin = _lastOriginForAlternatives;
-    final destination = _lastDestinationForAlternatives;
-    if (origin == null || destination == null) return null;
-    return WalkOption.offered(origin, destination);
-  }
 
   /// Draws the walk the whole way (on streets) and opens it on the map.
   Future<void> _openWalkOption() async {
