@@ -5,18 +5,26 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-/// Walking paths from a walking router, kept on the device so a walk found
-/// once (home to the jeep stop) is there next time, even without internet.
-/// Ends match to about 28 m, either way round.
+/// Saves walking paths on the phone, so a walk we found once (like home to
+/// the jeep stop) is ready next time, even with no internet.
+///
+/// A saved walk is found again if your start and end are within about
+/// 28 m of the saved ones. Walking the same path backwards counts too.
 class WalkPathRepository {
   WalkPathRepository._();
 
   static const _dbName = 'transitph_walks.db';
   static const _table = 'walk_paths';
+
+  /// Walks older than this are forgotten, in case streets changed.
   static const _keepFor = Duration(days: 30);
+
+  /// At most this many walks are kept; the oldest go first.
   static const _maxKept = 500;
 
-  /// Ends are rounded to 1/4000 of a degree, about 28 m.
+  /// To find a saved walk, we round the start and end points to a grid.
+  /// 1/4000 of a degree is about 28 m, so points that close count as the
+  /// same place.
   static const _cellsPerDegree = 4000;
 
   static Future<Database>? _db;
@@ -48,8 +56,9 @@ class WalkPathRepository {
   static int get _oldestKept =>
       DateTime.now().subtract(_keepFor).millisecondsSinceEpoch;
 
-  /// The saved walk from [from] to [to], or one saved the other way round
-  /// (reversed); null when there is none.
+  /// Gets the saved walk from [from] to [to], or null if we don't have it.
+  /// If we only saved the opposite walk (from [to] to [from]), we return
+  /// that one turned around.
   static Future<List<LatLng>?> get(LatLng from, LatLng to) async {
     try {
       final db = await _database();
@@ -81,6 +90,7 @@ class WalkPathRepository {
     return null;
   }
 
+  /// Saves the walk, then clears out old walks so the list stays small.
   static Future<void> put(LatLng from, LatLng to, List<LatLng> points) async {
     try {
       final db = await _database();

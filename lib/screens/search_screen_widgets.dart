@@ -104,11 +104,16 @@ extension _SearchScreenSections on _SearchScreenState {
 
   /// Where routes start. Left empty it reads "Your location" and uses GPS;
   /// type a place to start somewhere else, clear it to go back.
+  ///
+  /// If you're riding a rider route with Follow Route on, it reads "On the
+  /// Bus (VGC Terminal → STI College Caloocan)" instead, because the
+  /// search will start you on that bus.
   Widget _buildFromRow() {
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: _originController,
       builder: (context, value, _) {
         final isCustom = value.text.isNotEmpty;
+        final onBoard = ActiveNavigationService.instance.onBoardLabel;
         return TextField(
           controller: _originController,
           focusNode: _originFocusNode,
@@ -116,7 +121,7 @@ extension _SearchScreenSections on _SearchScreenState {
           style: TextStyle(color: _textPrimary, fontSize: 16),
           decoration: InputDecoration(
             // Reads as the value, not a faded hint: it's the real start.
-            hintText: 'Your location',
+            hintText: onBoard == null ? 'Your location' : 'On the $onBoard',
             hintStyle: TextStyle(color: _textPrimary, fontSize: 16),
             prefixIcon: Icon(
               isCustom ? Icons.trip_origin_rounded : Icons.my_location_rounded,

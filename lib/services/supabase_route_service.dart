@@ -63,6 +63,37 @@ class TransitLeg {
   bool get isCommunity => communityLabel != null;
 }
 
+/// You're already riding one of the rider routes, so a new search should
+/// start with you on that vehicle, not standing by the road.
+///
+/// Example: you're on the VGC bus near the Malinta exit and search for SM
+/// Grand Central. Without this, the planner thinks you're standing on the
+/// expressway, and since that bus only picks people up at VGC Terminal, it
+/// tells you to walk to a jeep. With this, every option starts with
+/// "stay on the bus".
+class OnBoardRide {
+  /// The rider route you're on ([CommunityRoute.id]).
+  final String routeId;
+
+  /// Which step of that route you're riding (0 = its first step).
+  final int stepIndex;
+
+  /// Where the vehicle is now, on the route's line.
+  final LatLng point;
+
+  const OnBoardRide({
+    required this.routeId,
+    required this.stepIndex,
+    required this.point,
+  });
+
+  /// Short text for comparing searches: the same ride from about the same
+  /// spot (within ~10 m) counts as the same.
+  String get key =>
+      '$routeId:$stepIndex:'
+      '${point.latitude.toStringAsFixed(4)},${point.longitude.toStringAsFixed(4)}';
+}
+
 /// An admin-approved user route, reduced to what the router needs.
 class CommunityRoute {
   final String id;
@@ -534,6 +565,7 @@ class SupabaseRouteService {
     RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
     double edgePenaltyFactor = 0.45,
     List<CommunityRoute> communityRoutes = const [],
+    OnBoardRide? onBoard,
   }) async {
     if ((originCandidates.isEmpty || destCandidates.isEmpty) &&
         communityRoutes.isEmpty) {
@@ -547,6 +579,7 @@ class SupabaseRouteService {
       destCandidates: destCandidates,
       allowFerry: allowFerry,
       communityRoutes: communityRoutes,
+      onBoard: onBoard,
     );
 
     var context = _getCachedDijkstraContext(contextKey);
@@ -563,6 +596,7 @@ class SupabaseRouteService {
                 destCandidates: destCandidates,
                 allowFerry: allowFerry,
                 communityRoutes: communityRoutes,
+                onBoard: onBoard,
               ).whenComplete(() {
                 // A block: returning the removed future would make this
                 // wait on itself (see findNearestStops).
@@ -600,6 +634,7 @@ class SupabaseRouteService {
     required LatLng destination,
     required List<CommunityRoute> communityRoutes,
     RouteOptimizationMode optimizationMode = RouteOptimizationMode.balanced,
+    OnBoardRide? onBoard,
   }) async {
     final context = await _buildDijkstraGraphContext(
       origin: origin,
@@ -610,6 +645,7 @@ class SupabaseRouteService {
       communityRoutes: communityRoutes,
       includeGtfs: false,
       measureWalks: false,
+      onBoard: onBoard,
     );
     if (context == null) return const [];
     final results = _runDijkstraAlternatives(
@@ -897,6 +933,7 @@ class SupabaseRouteService {
     bool includeGtfs = true,
     // Off in tests (no network).
     bool measureWalks = true,
+    OnBoardRide? onBoard,
   }) async {
     final corridorStops =
         includeGtfs
@@ -940,6 +977,17 @@ class SupabaseRouteService {
       addEdge: addEdge,
     );
 
+    // Already on a rider's vehicle? Then you start on it, wherever it is.
+    final onBoardStart =
+        onBoard == null
+            ? null
+            : _addOnBoardStart(
+              onBoard: onBoard,
+              routes: communityRoutes,
+              allStopsById: allStopsById,
+              addEdge: addEdge,
+            );
+
     if (adjacency.isEmpty) return null;
 
     final stopList = allStopsById.values.toList();
@@ -960,6 +1008,9 @@ class SupabaseRouteService {
         );
         final dKm = _haversineKm(aPt, bPt);
         if (dKm > _transferRadiusKm) continue;
+        // The "where you are now" stop is on a moving vehicle: you can't
+        // walk from it to another stop.
+        if (aId == onBoardStart?.id || bId == onBoardStart?.id) continue;
 
         addEdge(_walkEdge(aId, bId, dKm, extraSec: _transferBasePenaltySec));
         addEdge(_walkEdge(bId, aId, dKm, extraSec: _transferBasePenaltySec));
@@ -989,6 +1040,8 @@ class SupabaseRouteService {
 
     for (final stop in stopList) {
       final stopId = stop['stop_id'].toString();
+      // Its only way in was added with it, and you can't walk from it.
+      if (stopId == onBoardStart?.id) continue;
       final pt = LatLng(
         (stop['stop_lat'] as num).toDouble(),
         (stop['stop_lon'] as num).toDouble(),
@@ -996,7 +1049,10 @@ class SupabaseRouteService {
 
       final roadIn = walkInRoad[stopId];
       final walkInKm = _haversineKm(origin, pt);
-      if (roadIn != null) {
+      if (onBoardStart != null && onBoardStart.mustStayOn) {
+        // On a bus that can't drop you off here, so no walking from where
+        // you are now. Every option starts by staying on the bus.
+      } else if (roadIn != null) {
         if (roadIn <= maxRoadMeters || originCandidateIds.contains(stopId)) {
           addEdge(_walkEdgeByRoad(_originNode, stopId, roadIn));
         }
@@ -1356,6 +1412,92 @@ class SupabaseRouteService {
     }
   }
 
+  /// Puts you on the vehicle you're already riding (see [OnBoardRide]).
+  ///
+  /// It adds a stop right where the vehicle is now, then a ride from there
+  /// to every stop further along where people can get off. These rides
+  /// have no boarding wait, since you're already on.
+  ///
+  /// Returns the new stop's id, and whether you must stay on: a bus with
+  /// fixed stops can't drop you off right here, so every option has to
+  /// start with staying on it. A jeep can drop you anywhere, so getting
+  /// off now and doing something else is still allowed.
+  ///
+  /// Returns null if that ride isn't in the graph (for example the route
+  /// didn't load, or the step is a walk).
+  static ({String id, bool mustStayOn})? _addOnBoardStart({
+    required OnBoardRide onBoard,
+    required List<CommunityRoute> routes,
+    required Map<String, Map<String, dynamic>> allStopsById,
+    required void Function(_GraphEdge edge) addEdge,
+  }) {
+    final route = routes.where((r) => r.id == onBoard.routeId).firstOrNull;
+    if (route == null || onBoard.stepIndex >= route.steps.length) return null;
+    final step = route.steps[onBoard.stepIndex];
+    if (step.mode == 'Walk' || step.path.length < 2) return null;
+
+    // Where along this step's line the vehicle is right now.
+    final line = RouteFollowEngine(step.path);
+    final here = line.nearestInRange(onBoard.point, 0, line.totalMeters);
+    if (here == null) return null;
+    final hereKm = here.along / 1000;
+
+    // The stops that _addCommunityLegs made for this step are named
+    // "community|<route>|<step>|0", "...|1", and so on, in order.
+    final prefix = 'community|${route.id}|${onBoard.stepIndex}|';
+    final stopNodes = _designatedStopNodes(step);
+    final alongKm = _cumulativeKm(step.path);
+    final tripId = 'community|${route.id}|${onBoard.stepIndex}';
+    final speedKmh = _fallbackSpeedForMode(step.mode);
+    final routeType = switch (step.mode) {
+      'Train' => 2,
+      'Ferry' => 4,
+      _ => 3,
+    };
+
+    final id =
+        '$prefix'
+        'onboard';
+    var ridesAdded = 0;
+    for (var k = 0; allStopsById.containsKey('$prefix$k'); k++) {
+      final stop = allStopsById['$prefix$k']!;
+      final km = alongKm[stop['path_index'] as int] - hereKm;
+      // Only stops still ahead of you (by more than ~50 m).
+      if (km <= 0.05) continue;
+      // With fixed stops, only where the bus lets people off.
+      if (stopNodes != null && !stopNodes[k].dropoff) continue;
+      addEdge(
+        _GraphEdge(
+          from: id,
+          to: '$prefix$k',
+          costSeconds: km / speedKmh * 3600,
+          distanceMeters: km * 1000,
+          isWalk: false,
+          tripId: tripId,
+          routeId: 'COMMUNITY',
+          routeShortName: step.mode,
+          routeType: routeType,
+          weightFactor: _communityWeightFactor,
+        ),
+      );
+      ridesAdded++;
+    }
+    if (ridesAdded == 0) return null;
+
+    allStopsById[id] = {
+      'stop_id': id,
+      'stop_name': 'where you are now',
+      'stop_lat': here.point.latitude,
+      'stop_lon': here.point.longitude,
+      'path_index': here.segment,
+      'named': false,
+      'on_board': true,
+    };
+    // You're already there: getting "to" this stop takes no walking.
+    addEdge(_walkEdgeByRoad(_originNode, id, 0));
+    return (id: id, mustStayOn: stopNodes != null);
+  }
+
   /// The boardable points of a step with designated stops, in order along
   /// its path: the step's two ends plus each stop, at the nearest path
   /// vertex — just the ends when no stops are mapped yet. Null for
@@ -1432,7 +1574,12 @@ class SupabaseRouteService {
     Map<String, dynamic> boardStop,
     Map<String, dynamic> alightStop,
   ) {
-    var text = 'Ride ${trip.mode} along the community route ${trip.routeLabel}';
+    // Already riding it (see OnBoardRide): you just stay on.
+    final alreadyOn = boardStop['on_board'] == true;
+    var text =
+        alreadyOn
+            ? 'Stay on the ${trip.mode} (community route ${trip.routeLabel})'
+            : 'Ride ${trip.mode} along the community route ${trip.routeLabel}';
     if (alightStop['named'] == true) {
       text += ', get off at ${alightStop['stop_name']}';
     }
@@ -1475,8 +1622,12 @@ class SupabaseRouteService {
       alightLon: (alightStop['stop_lon'] as num).toDouble(),
       communityPath: trip.reversed ? segment.reversed.toList() : segment,
       // The contributor's fare covers the whole step; partial rides fall
-      // back to the LTFRB formula downstream.
-      communityFare: wholeStep ? trip.actualFare : null,
+      // back to the LTFRB formula downstream. If you're already on this
+      // ride, you've already paid, so staying on adds nothing.
+      communityFare:
+          boardStop['on_board'] == true
+              ? 0
+              : (wholeStep ? trip.actualFare : null),
       communityLabel: _communityInstruction(trip, boardStop, alightStop),
     );
   }
@@ -2060,6 +2211,7 @@ class SupabaseRouteService {
     required List<Map<String, dynamic>> destCandidates,
     required bool allowFerry,
     required List<CommunityRoute> communityRoutes,
+    OnBoardRide? onBoard,
   }) {
     final communityKey = communityRoutes
         .map(
@@ -2084,7 +2236,7 @@ class SupabaseRouteService {
             .toList()
           ..sort();
 
-    return '${allowFerry ? '1' : '0'}|$originKey|$destKey|o:${originIds.join(',')}|d:${destIds.join(',')}|c:$communityKey';
+    return '${allowFerry ? '1' : '0'}|$originKey|$destKey|o:${originIds.join(',')}|d:${destIds.join(',')}|c:$communityKey|b:${onBoard?.key ?? '-'}';
   }
 
   static _DijkstraGraphContext? _getCachedDijkstraContext(String key) {

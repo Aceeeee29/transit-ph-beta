@@ -95,13 +95,14 @@ class LocationService {
     }
   }
 
-  /// [Geolocator.getCurrentPosition], made once more when its time limit ran
-  /// out while the app was off screen.
+  /// Gets your current location, and tries once more if the time ran out
+  /// while Google's location popup was open.
   ///
-  /// With Google's "Location Accuracy" setting off, a fix first shows
-  /// Google's dialog to turn it on. The time limit keeps running while the
-  /// dialog is up, and once it runs out the request is cancelled, so tapping
-  /// "Turn on" afterwards turns location on with nothing waiting for it.
+  /// The problem this fixes: when Google's "Location Accuracy" setting is
+  /// off, asking for your location first shows Google's "Turn on" popup.
+  /// Our time limit keeps counting while the popup is open. If it runs out,
+  /// the request is cancelled. Then when you finally tap "Turn on",
+  /// location turns on, but nothing in the app is waiting for it anymore.
   static Future<Position> fixAllowingSettingsDialog(
     LocationSettings settings,
   ) async {

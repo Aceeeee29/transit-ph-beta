@@ -23,6 +23,10 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
       // alongside the routing instead of before it.
       Future<String> originNameFuture;
 
+      // Set when you're already riding a rider route (Follow Route knows),
+      // so every option starts with you on that vehicle.
+      OnBoardRide? onBoard;
+
       // An empty start field means "Your location".
       final originText = _originController.text.trim();
       if (originText.isEmpty) {
@@ -46,13 +50,18 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
           return;
         }
         origin = LatLng(position.latitude, position.longitude);
-        originNameFuture = LocationService.getAddressFromCoordinates(
-          position.latitude,
-          position.longitude,
-        ).then(
-          (name) => name ?? 'Current Location',
-          onError: (_) => 'Current Location',
-        );
+        onBoard = ActiveNavigationService.instance.onBoardRide;
+        final onBoardLabel = ActiveNavigationService.instance.onBoardLabel;
+        originNameFuture =
+            onBoard != null && onBoardLabel != null
+                ? Future.value('On the $onBoardLabel')
+                : LocationService.getAddressFromCoordinates(
+                  position.latitude,
+                  position.longitude,
+                ).then(
+                  (name) => name ?? 'Current Location',
+                  onError: (_) => 'Current Location',
+                );
       } else {
         final originLatLng = await _geocodePhilippines(originText);
         if (_isStaleRouteRequest(requestId)) return;
@@ -81,9 +90,10 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         return;
       }
 
-      // Close enough that walking might do: get the real walking path
-      // alongside the rides. The straight line can't tell, since 250 m
-      // apart can be 1.2 km on foot around a river or a wall.
+      // If the trip might be walkable, start getting the real walking path
+      // now, while the rides are being searched, so we don't wait longer.
+      // We can't judge by the straight line: 250 m apart on the map can be
+      // a 1.2 km walk around a river or a wall.
       final walkPathFuture =
           WalkOption.worthAsking(origin, destLatLng)
               ? RoutingService.walkPath(origin, destLatLng)
@@ -116,6 +126,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             optimization: 'balanced',
             maxAlternatives: 8,
             communityRoutes: communityRoutes,
+            onBoard: onBoard,
           ),
           RoutingService.getRouteAlternatives(
             origin: origin,
@@ -123,6 +134,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             optimization: 'fastest',
             maxAlternatives: 8,
             communityRoutes: communityRoutes,
+            onBoard: onBoard,
           ),
           RoutingService.getRouteAlternatives(
             origin: origin,
@@ -130,6 +142,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
             optimization: 'budget',
             maxAlternatives: 8,
             communityRoutes: communityRoutes,
+            onBoard: onBoard,
           ),
           // A rider route within a 20-minute walk (either end) is always
           // among the options, even when the transit feed rides cheaper.
@@ -140,6 +153,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
               optimization: 'community',
               maxAlternatives: 3,
               communityRoutes: communityRoutes,
+              onBoard: onBoard,
             ),
         ]);
         if (_isStaleRouteRequest(requestId)) return;
@@ -296,9 +310,11 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
         debugPrint('[SearchScreen] Alternative lookup failed: $e');
       }
 
-      // Close enough to walk: walking is shown first, and rides slower than
-      // it are dropped. With no walking path found there's no walk to
-      // offer, and every ride stays.
+      // Walkable trip: "walk the whole way" is shown first, and any ride
+      // that's slower than walking is hidden.
+      // If we couldn't get a walking path (server down, no internet, or
+      // it took over 6 more seconds), we don't offer walking at all, and
+      // every ride option stays.
       final walkPath = await walkPathFuture?.timeout(
         const Duration(seconds: 6),
         onTimeout: () => null,

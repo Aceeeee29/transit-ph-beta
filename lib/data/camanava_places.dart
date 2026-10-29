@@ -56,8 +56,9 @@ const List<Place> camanavaPlaces = [
     name: 'San Jose de Navotas Parish Church',
     city: 'Navotas',
     categories: [PlaceCategory.tourist],
-    lat: 14.648979,
-    lng: 120.976529,
+    // Google Maps: MW7W+52F, Navotas (was wrongly placed in Caloocan).
+    lat: 14.662938,
+    lng: 120.945047,
     address: 'M. Naval St., Navotas',
     description:
         'Makasaysayang simbahan ng Navotas malapit sa fish port. Dito '
@@ -114,7 +115,8 @@ const List<Place> camanavaPlaces = [
     lng: 120.976511,
     address: 'Samson Rd., Caloocan',
     description:
-        'STI campus malapit sa MCU. Sikat sa IT at business programs nito.',
+        'STI campus sa Samson Road, katabi ng UE Caloocan at AMA. Sikat '
+        'sa IT at business programs nito.',
   ),
   Place(
     id: 'caloocan-hs',
@@ -166,18 +168,8 @@ const List<Place> camanavaPlaces = [
     address: 'Maysan Rd., Valenzuela',
     description: 'Catholic school kilala sa edukasyon at vocational training.',
   ),
-  Place(
-    id: 'plv',
-    name: 'Pamantasan ng Lungsod ng Valenzuela',
-    city: 'Valenzuela',
-    categories: [PlaceCategory.school],
-    lat: 14.693982,
-    lng: 120.969447,
-    address: 'Tongco St., Poblacion II, Valenzuela',
-    description:
-        'City university ng Valenzuela (dating Valenzuela City '
-        'Polytechnic College).',
-  ),
+  // NOTE: 'plv' (Pamantasan ng Lungsod ng Valenzuela) removed per request;
+  // OpenStreetMap's pin is at the right spot.
   Place(
     id: 'valenzuela-nhs',
     name: 'Valenzuela National High School',
@@ -190,31 +182,12 @@ const List<Place> camanavaPlaces = [
         'Public high school sa Valenzuela — dating tinawag na Pio '
         'Valenzuela National High School.',
   ),
-  Place(
-    id: 'olfu',
-    name: 'Our Lady of Fatima University',
-    city: 'Valenzuela',
-    categories: [PlaceCategory.school],
-    lat: 14.678099,
-    lng: 120.980963,
-    address: '120 McArthur Hwy., Marulas, Valenzuela',
-    description:
-        'Pribadong unibersidad na kilala sa nursing, medicine at '
-        'allied health programs. Pinagmulan ng Fatima University Medical '
-        'Center.',
-  ),
+  // NOTE: 'olfu' (Our Lady of Fatima University) removed per request;
+  // OpenStreetMap's pin is at the right spot.
 
   // ── Hospitals ───────────────────────────────────────────────────────────
-  Place(
-    id: 'our-lady-of-grace',
-    name: 'Our Lady of Grace Hospital',
-    city: 'Caloocan',
-    categories: [PlaceCategory.hospital],
-    lat: 14.6620,
-    lng: 120.9820,
-    address: '5th Ave., Caloocan',
-    description: 'Private hospital na nag-aalok ng 24-hour emergency services.',
-  ),
+  // NOTE: 'our-lady-of-grace' (Our Lady of Grace Hospital) removed per
+  // request; OpenStreetMap's pin is at the right spot.
   Place(
     id: 'mcu-fdtm',
     name: 'MCU-FDTMF Hospital',
@@ -249,17 +222,8 @@ const List<Place> camanavaPlaces = [
     address: 'Brgy. San Agustin, Malabon',
     description: 'Lokal na pampublikong ospital ng Malabon.',
   ),
-  Place(
-    id: 'navotas-city-hospital',
-    name: 'Navotas City Hospital',
-    city: 'Navotas',
-    categories: [PlaceCategory.hospital],
-    // TODO: coordinates still pending re-pin ("pa").
-    lat: 14.6460,
-    lng: 120.9440,
-    address: 'M. Naval St., Navotas',
-    description: 'City hospital na nagsisilbi sa mga residente ng Navotas.',
-  ),
+  // NOTE: 'navotas-city-hospital' (Navotas City Hospital) removed per
+  // request; OpenStreetMap's pin is at the right spot.
   Place(
     id: 'fatima-medical',
     name: 'Fatima University Medical Center',
@@ -310,30 +274,9 @@ const List<Place> camanavaPlaces = [
         'Malaking SM mall sa Monumento — dating Ever Gotesco Grand '
         'Central, katabi ng LRT Monumento.',
   ),
-  Place(
-    id: 'monumento-mall',
-    name: 'Monumento Mall',
-    city: 'Caloocan',
-    categories: [PlaceCategory.mall],
-    lat: 14.654384,
-    lng: 120.984039,
-    address: 'Rizal Ave. Ext., Caloocan',
-    description:
-        'Mall sa tabi ng LRT Monumento, sikat sa local stalls at '
-        'foodcourt.',
-  ),
-  Place(
-    id: 'caloocan-mall',
-    name: 'Caloocan Mall',
-    city: 'Caloocan',
-    categories: [PlaceCategory.mall],
-    lat: 14.654141,
-    lng: 120.984023,
-    address: 'Rizal Ave. Ext., Caloocan',
-    description:
-        'Lumang public market-mall combo ng Monumento — dating '
-        'tinawag na Metro Mall Monumento.',
-  ),
+  // NOTE: 'monumento-mall' (Monumento Mall) and 'caloocan-mall' (Caloocan
+  // Mall) removed per request: they were 27 m apart, and OpenStreetMap's
+  // pins there (North mall, LRT Caloocan Mall, Jackman Plaza) are used.
   // NOTE: 'sm-malabon' (SM Center Malabon) removed per request.
   Place(
     id: 'vmall-monumento',
@@ -371,16 +314,8 @@ const List<Place> camanavaPlaces = [
         'Pinakamalaking mall sa Valenzuela, mayron cinema at '
         'central foodcourt near McArthur Highway.',
   ),
-  Place(
-    id: 'victory-central-mall',
-    name: 'Victory Central Mall Valenzuela',
-    city: 'Valenzuela',
-    categories: [PlaceCategory.mall],
-    lat: 14.7050,
-    lng: 120.9560,
-    address: 'McArthur Hwy., Valenzuela',
-    description: 'Lokal na mall at palengke ng Valenzuela poblacion.',
-  ),
+  // NOTE: 'victory-central-mall' (Victory Central Mall Valenzuela) removed
+  // per request; its spot was only a guess.
   Place(
     id: 'fisher-mall-malabon',
     name: 'Fisher Mall Malabon',
@@ -395,18 +330,8 @@ const List<Place> camanavaPlaces = [
   ),
 
   // ── Parks ───────────────────────────────────────────────────────────────
-  Place(
-    id: 'navotas-centennial-park',
-    name: 'Navotas Centennial Park',
-    city: 'Navotas',
-    categories: [PlaceCategory.park],
-    lat: 14.651015,
-    lng: 120.94673,
-    address: 'Along R-10 dike, Navotas',
-    description:
-        'Seafront park sa dike ng Navotas — magandang tambayan sa gabi '
-        'para sa jogging at sahang ng fish port bay.',
-  ),
+  // NOTE: 'navotas-centennial-park' (Navotas Centennial Park) removed per
+  // request; OpenStreetMap's "Navotas City Park" pin is used.
   Place(
     id: 'valenzuela-peoples-park',
     name: 'Valenzuela People\'s Park',

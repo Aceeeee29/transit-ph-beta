@@ -348,7 +348,9 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             if (!_isNavigationStarted) _startLocationTracking();
             _startIfWaiting();
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('OrsRouteMapScreen: failed to get current position: $e');
+        }
       }
     }
     if (mounted) setState(() => _isLocating = false);
@@ -360,7 +362,12 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: ActiveNavigationService.trackingSettings,
-    ).listen(_handleLocationUpdate, onError: (_) {});
+    ).listen(
+      _handleLocationUpdate,
+      onError: (Object e) {
+        debugPrint('OrsRouteMapScreen: location stream failed: $e');
+      },
+    );
   }
 
   void _stopLocationTracking() {
@@ -625,7 +632,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     ];
   }
 
-  /// Indexes in [_stepRanges] of walks with no real path found.
+  /// Which steps (by position in [_stepRanges]) are walks we only have an
+  /// estimate for. These are drawn as dashed lines.
   Set<int> get _estimatedWalkRanges {
     final steps = widget.result.steps;
     if (steps.every((s) => s.wayPointEnd == 0)) return const {};

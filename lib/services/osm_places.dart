@@ -143,14 +143,33 @@ class OsmPlaces {
     };
   }
 
+  /// OpenStreetMap pins we know are wrong, so we never show them.
+  /// Each entry is the pin's name and roughly where it sits.
+  static const _wrongPins = [
+    // STI's old campus near Monumento. STI moved to Samson Road, next to
+    // UE Caloocan and AMA (our own "STI College Caloocan" pin).
+    (name: 'STI Caloocan', lat: 14.65152, lng: 120.98290),
+  ];
+
+  static bool _isWrongPin(Place place) => _wrongPins.any(
+    (wrong) =>
+        place.name == wrong.name &&
+        (place.lat - wrong.lat).abs() < 0.001 &&
+        (place.lng - wrong.lng).abs() < 0.001,
+  );
+
   /// [own] places, then [osm] places that aren't one of ours: an
   /// OpenStreetMap place right next to ours (within 80 m), or nearby with
   /// the same name, is the same place and ours wins. OpenStreetMap's own
-  /// duplicates (a building and a point, same name) are dropped too.
+  /// duplicates (a building and a point, same name) are dropped too, and
+  /// so are the [_wrongPins].
   @visibleForTesting
   static List<Place> mergePlaces(List<Place> own, List<Place> osm) {
     final kept = <Place>[];
-    final sorted = [...osm]..sort((a, b) => a.rank.compareTo(b.rank));
+    final sorted = [
+      for (final place in osm)
+        if (!_isWrongPin(place)) place,
+    ]..sort((a, b) => a.rank.compareTo(b.rank));
     for (final place in sorted) {
       bool sameAs(Place other, {double near = 80}) {
         final metres = _metresBetween(place, other);
@@ -171,7 +190,6 @@ class OsmPlaces {
 
   /// Whether two names are the same place: every word of the shorter one
   /// is in the longer one ("SM Grand Central" vs "SM City Grand Central").
-  @visibleForTesting
   static bool sameName(String a, String b) {
     Set<String> words(String s) =>
         s

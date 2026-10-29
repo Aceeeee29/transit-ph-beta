@@ -31,8 +31,8 @@ class RoutingException implements Exception {
 class RoutingService {
   static const _minWalkSegmentKm = 0.08;
 
-  /// A walk with no path found is estimated this much longer than the
-  /// straight line, since streets go around blocks.
+  /// When we don't have the real walking path, we guess the walk is 30%
+  /// longer than a straight line, because streets go around blocks.
   static const _walkRoadFactor = 1.3;
   static const _walkSpeedKmh = 5.0;
   static const _stopSearchRadiusKm = 0.5;
@@ -98,6 +98,7 @@ class RoutingService {
     String optimization = 'balanced',
     int maxAlternatives = 3,
     List<CommunityRoute> communityRoutes = const [],
+    OnBoardRide? onBoard,
   }) async {
     List<List<Map<String, dynamic>>> candidates;
     try {
@@ -160,6 +161,7 @@ class RoutingService {
       maxAlternatives: maxAlternatives,
       optimizationMode: _parseOptimizationMode(optimization),
       communityRoutes: communityRoutes,
+      onBoard: onBoard,
     );
   }
 
@@ -255,22 +257,33 @@ class RoutingService {
     );
   }
 
-  /// A walking path from [from] to [to] along streets, footpaths and
-  /// alleys, or null when none could be had. Only walking routers are
-  /// asked: they ignore one-way rules and never cut through buildings or
-  /// walls. Every path found is kept on the device, so a walk found once is
-  /// there next time, even offline. Never stand in a straight line for it.
+  /// Finds the way a person would actually walk from [from] to [to]:
+  /// along streets, footpaths and alleys. Returns null if we can't get one.
+  ///
+  /// We only ask walking map servers. Unlike car routing, they ignore
+  /// one-way streets, and they never draw a line through a house or wall.
+  ///
+  /// Every path we get is saved on the phone, so the next time the same
+  /// walk comes up it's there right away, even with no internet.
+  ///
+  /// If this returns null, don't draw a straight line and pretend it's the
+  /// path. A straight line can go through buildings or across a river.
   static Future<List<LatLng>?> walkPath(LatLng from, LatLng to) async {
+    // 1. Did we save this walk before?
     final saved = await WalkPathRepository.get(from, to);
     if (saved != null) {
-      // Saved ends can be up to ~28 m off; walk on from the exact ones.
+      // A saved walk can start or end up to ~28 m from where you are now,
+      // so connect your exact start and end to it.
       return [
         if (_haversineKm(from, saved.first) > 0.002) from,
         ...saved,
         if (_haversineKm(saved.last, to) > 0.002) to,
       ];
     }
-    // OpenRouteService gets a longer wait: it can take 10–17 s to answer.
+
+    // 2. Ask the FOSSGIS walking server (usually answers in under a
+    //    second). If it fails, ask OpenRouteService, which is slower
+    //    (10–17 s), so it gets more time before we give up.
     final path =
         await _osrmRoute(
           [from, to],
@@ -286,13 +299,18 @@ class RoutingService {
           timeout: const Duration(seconds: 15),
         );
     if (path == null || path.length < 2) return null;
+
+    // 3. Save it for next time (no need to wait for the save to finish).
     unawaited(WalkPathRepository.put(from, to, path));
     return path;
   }
 
-  /// A walk leg from [from] to [to]: its path and length, or when no path
-  /// could be had, just the two ends with a length estimated along streets
-  /// and [estimated] set, so it's drawn dashed rather than as a real way.
+  /// One walking part of a trip, like "walk to the jeep stop".
+  ///
+  /// Normally this is the real walking path. If we couldn't get one, we
+  /// still need something to show, so we return just the start and end
+  /// with [estimated] set to true. The map then draws it as a dashed line,
+  /// which tells the rider "we don't know the exact way here".
   static Future<({List<LatLng> points, bool estimated})> _walkLeg(
     LatLng from,
     LatLng to,
@@ -303,9 +321,13 @@ class RoutingService {
         : (points: [from, to], estimated: true);
   }
 
+  /// How long a walking part is, in meters. For an estimated walk (only a
+  /// straight line), we add 30% because real streets go around blocks.
   static double _walkLegMeters(List<LatLng> points, bool estimated) =>
       _polylineDistanceKm(points) * 1000 * (estimated ? _walkRoadFactor : 1);
 
+  /// Text added to a step's instruction when its walking path is only an
+  /// estimate, so the rider knows not to trust the line on the map.
   static String _estimatedNote(bool estimated) =>
       estimated ? ' (exact path unavailable)' : '';
 
@@ -607,7 +629,8 @@ class RoutingService {
 
     final List<LatLng> ridePts;
     if (rideMode == 'Walk') {
-      // A walk the whole way is only worth showing along a real path.
+      // "Walk the whole way" is only shown with a real walking path. If we
+      // can't get one, show an error instead of a line through houses.
       ridePts =
           await walkPath(ridePtA, ridePtB) ??
           (throw const RoutingException("Couldn't find a walking path."));
@@ -792,12 +815,16 @@ class RoutingService {
 
   static const _maxOsrmWaypoints = 25;
 
-  /// Road-snaps a path that must pass through [waypoints] in order.
-  /// Walks go to walking routers only ([walkPath]): the demo server routes
-  /// cars, along one-way streets, so a walk could loop around whole blocks.
-  /// [rejectLoops] drops paths that balloon far past the direct way, which
-  /// for cars means a roundabout loop; a walking router's long way round is
-  /// real (a river or wall in between), so walks keep it.
+  /// Gets a path along the roads that passes through [waypoints] in order.
+  ///
+  /// Walks are handed to [walkPath] instead. The free OSRM demo server only
+  /// knows car routes: it follows one-way streets, so a walk drawn by it
+  /// could circle a whole block for no reason.
+  ///
+  /// [rejectLoops]: for cars, a path much longer than the direct way is
+  /// usually a mistake (a loop around a roundabout), so we throw it away.
+  /// For walks we keep it, because a long way around is often real, like
+  /// going around a river or a walled subdivision.
   static Future<List<LatLng>?> _osrmRoute(
     List<LatLng> waypoints,
     String profile, {
@@ -1069,8 +1096,9 @@ class RoutingService {
       set(joined.walk);
     }
 
-    // An estimated walk is only its two ends, so where it "meets" a ride
-    // means nothing; those keep the router's stop.
+    // Normally we board the jeep where the walk first reaches its road.
+    // An estimated walk is only a straight line, so where it "reaches the
+    // road" means nothing. For those, keep the stop the planner picked.
     if (walkInPts case final walk? when !walkInEstimated) {
       joinBoard(0, walk, (w) => walkInPts = w);
     }
@@ -1454,9 +1482,13 @@ class RoutingService {
     return [board, alight];
   }
 
-  /// A walk between a stop and the trip's ends or another stop. Station
-  /// connectors are straight on purpose; any other walk with no path found
-  /// is [estimated] (see [_walkLeg]).
+  /// The walk to a stop, from a stop, or between two stops when changing
+  /// rides.
+  ///
+  /// Walks to and from train stations ([allowRoadSnap] false) stay a
+  /// straight line on purpose. Any other walk uses the real walking path,
+  /// or comes back marked [estimated] if we couldn't get one (see
+  /// [_walkLeg]).
   static Future<({List<LatLng> points, bool estimated})>
   _buildWalkConnectorPolyline(
     LatLng from,

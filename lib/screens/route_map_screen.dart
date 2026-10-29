@@ -568,7 +568,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: ActiveNavigationService.trackingSettings,
-    ).listen(_handleLocationUpdate, onError: (_) {});
+    ).listen(
+      _handleLocationUpdate,
+      onError: (Object e) {
+        debugPrint('RouteMapScreen: location stream failed: $e');
+      },
+    );
   }
 
   void _stopLocationTracking() {

@@ -19,6 +19,7 @@ import '../services/location_service.dart';
 import '../services/route_metrics_service.dart';
 import '../services/route_service.dart';
 import '../services/supabase_route_service.dart';
+import '../services/active_navigation_service.dart';
 import '../services/walk_option.dart';
 
 import '../widgets/location_permission_notice.dart';
@@ -104,8 +105,9 @@ class _SearchScreenState extends State<SearchScreen> {
   List<route_model.Route> _filteredRoutes = [];
   List<String> _suggestions = [];
 
-  /// The places pinned on the map (schools, malls, parks...), suggested by
-  /// name and found at their pin's exact spot.
+  /// Every place pinned on the map (schools, malls, parks...). Typing a
+  /// pin's name suggests it, and picking it uses the pin's exact spot
+  /// instead of looking the name up online.
   List<Place> _pinPlaces = const [];
   bool _isSearching = false;
   bool _showOmnibox = false;
@@ -142,8 +144,9 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _lastGeneratedOriginName;
   String? _lastGeneratedDestinationName;
 
-  /// Minutes to walk the whole trip along its walking path, when short
-  /// enough to offer it; null when it isn't, or no path was found.
+  /// How many minutes it takes to walk the whole trip. Null means we don't
+  /// show "walk the whole way": the walk is too long, or we couldn't get a
+  /// real walking path.
   double? _walkOptionMinutes;
 
   int? _pendingAlternativeIndex;
@@ -267,6 +270,19 @@ class _SearchScreenState extends State<SearchScreen> {
     for (final place in _pinPlaces) {
       if (place.name.toLowerCase() == key) return LatLng(place.lat, place.lng);
     }
+    // No pin has that exact name, but maybe it's a shorter way of saying
+    // one: "STI Caloocan" means our "STI College Caloocan" pin. Only used
+    // when exactly one pin fits, so "People's Park" (there are several)
+    // still gets looked up online, and only for two words or more, so
+    // "Monumento" alone isn't taken to mean "VMall Monumento".
+    final nameMatches = [
+      if (key.split(RegExp(r'\s+')).length >= 2)
+        for (final place in _pinPlaces)
+          if (OsmPlaces.sameName(place.name, query)) place,
+    ];
+    if (nameMatches.length == 1) {
+      return LatLng(nameMatches.single.lat, nameMatches.single.lng);
+    }
     final found = await _geocodePhilippinesUncached(query);
     if (found != null) _geocodeCache[key] = found;
     return found;
@@ -386,9 +402,11 @@ class _SearchScreenState extends State<SearchScreen> {
     return places;
   }
 
-  /// Up to five suggestions for [searchTerm] (lowercase): recent searches
-  /// and route ends A–Z, then places pinned on the map, names starting
-  /// with it first.
+  /// The suggestions shown while typing [searchTerm] (in lowercase), at
+  /// most five:
+  ///  1. Your recent searches and rider routes' start/end names, A to Z.
+  ///  2. Then map pins. Pins whose name starts with what you typed come
+  ///     before pins that only contain it somewhere.
   List<String> _suggestionsFor(String searchTerm) {
     final own = _placeSuggestions(searchTerm)
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));

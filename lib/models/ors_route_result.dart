@@ -112,8 +112,9 @@ class OrsStep {
   final String? fromName;
   final String? toName;
 
-  /// A walk with no real path found: its line is just the two ends and its
-  /// length an estimate, so the map draws it dashed.
+  /// True when this is a walk we couldn't get the real path for. Its line
+  /// is just a straight line from start to end, and its length is a guess,
+  /// so the map draws it dashed.
   final bool isEstimatedPath;
 
   const OrsStep({

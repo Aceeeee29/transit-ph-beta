@@ -54,6 +54,16 @@ void main() {
     expect(merged.map((p) => p.id), ['sm', 'osm-3']);
   });
 
+  test('never shows the old STI Caloocan pin near Monumento', () {
+    final osm = [
+      _place('osm-old', 'STI Caloocan', 14.65152, 120.98290),
+      // Another STI branch with the same name elsewhere still shows.
+      _place('osm-other', 'STI Caloocan', 14.7000, 121.0000),
+    ];
+    final merged = OsmPlaces.mergePlaces(const [], osm);
+    expect(merged.map((p) => p.id), ['osm-other']);
+  });
+
   test('names match when one is contained in the other', () {
     expect(
       OsmPlaces.sameName('SM Grand Central', 'SM City Grand Central'),

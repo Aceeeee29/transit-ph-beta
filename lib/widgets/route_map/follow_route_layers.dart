@@ -11,10 +11,14 @@ class FollowRouteLayers {
   static final travelledOutline = Colors.grey.shade600;
   static const connectorColor = Color(0xFF0B8FD6);
 
-  /// The route, one line pair per step range. While following, the part
-  /// already travelled is grey and the rest keeps its colour, split exactly
-  /// at the traveler's progress point. Ranges whose index is in [estimated]
-  /// (walks with no real path found) are drawn dashed with no outline.
+  /// Draws the route, one colored line per step (walk, jeep, bus...).
+  ///
+  /// While following, the part you've already traveled turns grey and the
+  /// rest keeps its color. The split happens exactly where you are.
+  ///
+  /// Steps listed in [estimated] are walks we don't have the real path
+  /// for. They're drawn dashed with no white outline, so they don't look
+  /// like a real street to follow.
   static List<MapLine> routeLines({
     required List<LatLng> path,
     required List<({int start, int end, Color color})> ranges,
