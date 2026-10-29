@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.38 — October 29, 2026
+
+- Already riding a bus or jeep from a rider route while following it?
+  Searching now starts you on that ride: the options say "Stay on the
+  bus" and add no new fare, instead of telling you to get off and walk
+  to another jeep. A bus with fixed stops only lets you off at its stops
+- Searching "STI Caloocan" now takes you to the new campus on Samson
+  Road, next to UE Caloocan and AMA. The old pin near Monumento is gone
+- San Jose de Navotas Parish Church is now pinned at its real spot in
+  Navotas (it was showing in Caloocan)
+- Removed duplicate and guessed map pins (Our Lady of Fatima University,
+  PLV, Our Lady of Grace Hospital, Navotas City Hospital, Navotas
+  Centennial Park, Monumento Mall, Caloocan Mall, Victory Central Mall).
+  Their OpenStreetMap pins, at the right spots, show instead
+
 ## v1.0.37 — October 28, 2026
 
 - Walking is now measured along a real walking path, not a straight
