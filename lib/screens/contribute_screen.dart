@@ -277,7 +277,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     'Tricycle',
     'FX/Van',
     'Walk',
-    'Ferry',
+    'Boat',
   ];
 
   static const List<String> onboardingUserTags = [
@@ -301,7 +301,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     'Train': Colors.purple,
     'Tricycle': Colors.orange,
     'FX/Van': Colors.amber,
-    'Ferry': Colors.lightBlue,
+    'Boat': Colors.lightBlue,
   };
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -1160,7 +1160,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         return Icons.two_wheeler;
       case 'FX/Van':
         return Icons.directions_car;
-      case 'Ferry':
+      case 'Boat':
         return Icons.directions_boat;
       default:
         return Icons.directions_walk;
@@ -1181,7 +1181,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
         return 15.0;
       case 'FX/Van':
         return 30.0;
-      case 'Ferry':
+      case 'Boat':
         return 20.0;
       default:
         return 5.0;

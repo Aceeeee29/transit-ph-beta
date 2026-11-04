@@ -36,13 +36,15 @@ class TripJoiner {
         ),
       );
       final note = step?.instruction.trim() ?? '';
+      // Only rider-shared routes are called "community route".
+      final kind = route.isFromOpenStreetMap ? '' : 'community route ';
       routeSteps.add(
         OrsStep(
           instruction:
               mode == 'Walk'
-                  ? 'Walk along the community route $label'
+                  ? 'Walk along the $kind$label'
                       '${note.isEmpty ? '' : ' — "$note"'}'
-                  : 'Ride $mode along the community route $label'
+                  : 'Ride $mode along the $kind$label'
                       '${note.isEmpty ? '' : ' — "$note"'}',
           distanceMeters: meters,
           durationSeconds: meters / 1000 / _speedKmh(mode) * 3600,
@@ -53,7 +55,8 @@ class TripJoiner {
                   : step?.actualFare ?? PhFareCalculator.compute(mode, meters),
           wayPointStart: offset + range.start,
           wayPointEnd: offset + range.end,
-          isCommunity: true,
+          isCommunity: !route.isFromOpenStreetMap,
+          isContributorFare: mode != 'Walk' && step?.actualFare != null,
           fromName: FollowLegs.riderStepEnds(route, i).from,
           toName: FollowLegs.riderStepEnds(route, i).to,
         ),
@@ -90,6 +93,7 @@ class TripJoiner {
     wayPointStart: step.wayPointStart,
     wayPointEnd: step.wayPointEnd,
     isCommunity: step.isCommunity,
+    isContributorFare: step.isContributorFare,
     fromName: step.fromName,
     toName: toName,
     isEstimatedPath: step.isEstimatedPath,
@@ -107,7 +111,7 @@ class TripJoiner {
     'Walk' => 5,
     'Tricycle' => 12,
     'Jeepney' => 17,
-    'Ferry' => 18,
+    'Boat' => 18,
     'Bus' => 26,
     'FX/Van' => 28,
     'Train' => 40,

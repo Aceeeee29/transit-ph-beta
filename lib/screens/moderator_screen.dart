@@ -625,7 +625,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         return Colors.orange.shade600;
       case 'FX/Van':
         return Colors.amber.shade700;
-      case 'Ferry':
+      case 'Boat':
         return Colors.lightBlue.shade600;
       default:
         return _accent;

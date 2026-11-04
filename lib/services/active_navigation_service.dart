@@ -15,6 +15,7 @@ import 'follow_alert_notifier.dart';
 import 'follow_legs.dart';
 import 'route_follow_engine.dart';
 import 'route_follow_guidance.dart';
+import 'route_metrics_service.dart';
 import 'routing_service.dart';
 import 'supabase_route_service.dart';
 
@@ -221,6 +222,18 @@ class ActiveNavigationService extends ChangeNotifier {
   /// The last time you moved at vehicle speed (faster than walking).
   DateTime? _lastVehicleSpeedAt;
 
+  /// Progress along the current ride over the last few minutes, to see
+  /// how fast it really goes (see [trafficDelayMinutes]).
+  final List<({DateTime at, double meters, int leg})> _rideSamples = [];
+  static const _trafficWindow = Duration(minutes: 5);
+
+  /// Less than this much history is too little to judge traffic by.
+  static const _trafficMinSpan = Duration(minutes: 2);
+
+  /// The ETA assumes at least this speed, so a jeep waiting at a stop
+  /// doesn't turn "20 min" into "3 hr".
+  static const _slowestRideKmh = 4.0;
+
   Timer? _idleTimer;
   LatLng? _idleAnchor;
   DateTime _lastMovedAt = DateTime.now();
@@ -281,6 +294,88 @@ class ActiveNavigationService extends ChangeNotifier {
       stepIndex: leg.index,
       point: snapshot.progressPoint,
     );
+  }
+
+  /// Extra minutes the rest of the current ride needs at the speed it
+  /// actually went over the last few minutes, when that's clearly slower
+  /// than the usual speed the ETA assumes: traffic. 0 on a walk step, off
+  /// the line, too early to tell, or at about the usual speed.
+  ///
+  /// Measured as time passes, not per fix, so a jeep stuck in traffic
+  /// counts as slow even when the GPS sends nothing new.
+  int get trafficDelayMinutes {
+    final target = _target;
+    final leg = _legProgress;
+    if (target == null || leg == null || _rideSamples.isEmpty) return 0;
+    if (leg.index >= target.steps.length) return 0;
+    final mode = target.steps[leg.index].mode;
+    if (mode == null || mode == 'Walk') return 0;
+    final first = _rideSamples.first;
+    if (first.leg != leg.index) return 0;
+    final span = DateTime.now().difference(first.at);
+    if (span < _trafficMinSpan) return 0;
+
+    final km = (_rideSamples.last.meters - first.meters) / 1000;
+    final kmh = km / (span.inSeconds / 3600);
+    final usualKmh = RouteMetricsService.speedKmhForMode(mode);
+    // Within 20% of the usual speed isn't worth changing the ETA for.
+    if (kmh >= usualKmh * 0.8) return 0;
+    final realKmh = math.max(kmh, _slowestRideKmh);
+    final kmLeft = leg.metersLeft / 1000;
+    return (kmLeft * 60 / realKmh - kmLeft * 60 / usualKmh).ceil();
+  }
+
+  /// Keeps the last few minutes of progress on the current ride step.
+  void _sampleRide(RouteFollowSnapshot snapshot) {
+    final leg = _legProgress;
+    final steps = _target?.steps ?? const <FollowStep>[];
+    final mode =
+        leg != null && leg.index < steps.length ? steps[leg.index].mode : null;
+    if (leg == null || mode == null || mode == 'Walk') {
+      _rideSamples.clear();
+      return;
+    }
+    // A new ride starts its own history.
+    if (_rideSamples.isNotEmpty && _rideSamples.last.leg != leg.index) {
+      _rideSamples.clear();
+    }
+    // Off the line, progress doesn't move; skip rather than count it slow.
+    if (snapshot.status != RouteFollowStatus.onRoute) return;
+    final now = DateTime.now();
+    _rideSamples
+      ..add((at: now, meters: snapshot.progressMeters, leg: leg.index))
+      ..removeWhere((s) => now.difference(s.at) > _trafficWindow);
+  }
+
+  /// Which way the route line runs where you are, in degrees from north,
+  /// while you're on the line during a ride step. The arrow faces this way
+  /// instead of the compass: in a jeep the phone is often held sideways,
+  /// and in traffic the ride is too slow for the GPS direction to count.
+  /// Null on a walk step, off the line, or before progress.
+  double? get rideLineHeading {
+    final target = _target;
+    final snapshot = followSnapshot;
+    final leg = _legProgress;
+    if (target == null || snapshot == null || leg == null) return null;
+    if (!snapshot.hasProgress ||
+        snapshot.hasArrived ||
+        snapshot.status != RouteFollowStatus.onRoute) {
+      return null;
+    }
+    if (leg.index >= target.steps.length) return null;
+    final mode = target.steps[leg.index].mode;
+    if (mode == null || mode == 'Walk') return null;
+
+    // The first stretch ahead long enough to have a clear direction:
+    // drawn lines can have points a metre apart.
+    final path = target.path;
+    final from = snapshot.progressPoint;
+    for (var i = snapshot.progressSegment + 1; i < path.length; i++) {
+      if (const Distance().as(LengthUnit.Meter, from, path[i]) >= 8) {
+        return const Distance().bearing(from, path[i]);
+      }
+    }
+    return null;
   }
 
   /// What the ride in [onBoardRide] is, in words, like "Bus (VGC Terminal
@@ -388,6 +483,9 @@ class ActiveNavigationService extends ChangeNotifier {
   }
 
   void _checkIdle() {
+    // Stuck in traffic, the GPS may send nothing new (it waits for 3 m of
+    // movement), so redraw the ETA once a minute anyway.
+    if (_rideSamples.isNotEmpty) _followTicks.tick();
     if (_isSimulating || hasArrived || _positionSubscription == null) return;
     if (DateTime.now().difference(_lastMovedAt) < _idleTimeout) return;
     _stopTracking();
@@ -527,6 +625,7 @@ class ActiveNavigationService extends ChangeNotifier {
       engine.expectedJoinMeters =
           _guidance.target != null ? _guidance.targetAlongMeters : null;
       _updateLeg(engine, snapshot);
+      _sampleRide(snapshot);
       _updateConnector(LatLng(position.latitude, position.longitude));
       _trackDeviation(snapshot, here, _speedMps(position));
     }
@@ -629,6 +728,7 @@ class ActiveNavigationService extends ChangeNotifier {
   void _resetGuidance() {
     _guidance = FollowGuidance.none;
     _legProgress = null;
+    _rideSamples.clear();
     _getOffAlertedLeg = null;
     _fetchedConnector = null;
     _fetchedConnectorEngine = null;

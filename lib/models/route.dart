@@ -74,6 +74,11 @@ class Route {
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
 
+  /// Imported from OpenStreetMap (ids "osm-bus-…", "osm-jeep-…"), not drawn
+  /// by a rider. Searches still use it like a rider route, but it isn't
+  /// labelled "Community route" or "Rider-verified", since no rider made it.
+  bool get isFromOpenStreetMap => id.startsWith('osm-');
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -166,7 +171,8 @@ class Route {
           (json['steps'] as List)
               .map(
                 (s) => Step(
-                  mode: s['mode'],
+                  // Routes saved before the rename say "Ferry".
+                  mode: s['mode'] == 'Ferry' ? 'Boat' : s['mode'],
                   instruction: s['instruction'],
                   details: s['details'],
                   is24_7: s['is24_7'] as bool? ?? true,

@@ -835,7 +835,7 @@ class RoutePreview extends StatelessWidget {
         return Icons.pedal_bike;
       case 'FX/Van':
         return Icons.directions_car;
-      case 'Ferry':
+      case 'Boat':
         return Icons.directions_boat;
       default:
         return Icons.directions_walk;
@@ -857,7 +857,7 @@ class RoutePreview extends StatelessWidget {
         return Colors.orange;
       case 'FX/Van':
         return Colors.amber;
-      case 'Ferry':
+      case 'Boat':
         return Colors.lightBlue;
       default:
         return Colors.green;

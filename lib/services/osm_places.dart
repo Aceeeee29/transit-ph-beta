@@ -111,7 +111,6 @@ class OsmPlaces {
         categories: [category],
         lat: lat,
         lng: lng,
-        description: '',
         rank: (props['rank'] as int?) ?? 100,
       );
     }

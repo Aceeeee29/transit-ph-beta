@@ -190,7 +190,7 @@ class ModeSequence extends StatelessWidget {
         return Icons.two_wheeler_rounded;
       case 'FX/Van':
         return Icons.airport_shuttle_rounded;
-      case 'Ferry':
+      case 'Boat':
         return Icons.directions_boat_rounded;
       default:
         return Icons.directions_bus_rounded;

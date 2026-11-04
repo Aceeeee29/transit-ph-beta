@@ -21,23 +21,16 @@ extension _HomeScreenSections on _HomeScreenState {
           children: [
             Row(
               children: [
-                Container(
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/icon/app_icon.png',
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: AppColors.buttonGradient,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.directions_transit_filled,
-                    color: Colors.white,
-                    size: 22,
-                  ),
+                  cacheWidth: 120,
+                  fit: BoxFit.cover,
                 ),
+              ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

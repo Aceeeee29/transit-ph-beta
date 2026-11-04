@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../services/login_throttle.dart';
 import '../services/user_profile_bootstrap_service.dart';
 import '../widgets/auth/auth_text_field.dart';
 import 'signup_screen.dart';
@@ -14,7 +15,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -36,8 +37,15 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Either sign-in is running: both buttons wait for it.
   bool get _isBusy => _isLoading || _isGoogleLoading;
 
+  @override
+  void initState() {
+    super.initState();
+    // Pick up a lock left over from before the app was closed.
+    refreshLock();
+  }
+
   Future<void> _login() async {
-    if (_isBusy) return;
+    if (_isBusy || isLocked) return;
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() => _errorMessage = 'Please enter email and password');
       return;
@@ -49,11 +57,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      if (await refreshLock()) return;
+
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
+      await LoginThrottle.reset();
 
       try {
         await UserProfileBootstrapService.ensureUserProfileExists(
@@ -65,13 +76,18 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       // AuthGate handles navigation
     } on FirebaseAuthException catch (e) {
+      await noteSignInFailure(e.code);
+      if (!mounted) return;
+      // The countdown shows on the button; the box says what went wrong.
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
+      if (!mounted) return;
       setState(
         () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
-      setState(() => _isLoading = false);
+      // Signing in replaces this screen, so it may be gone by now.
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -147,6 +163,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'The email or password is incorrect.';
       case 'network-request-failed':
         return 'Network error. Check your connection and try again.';
+      case 'too-many-requests':
+        return 'Too many tries. Wait a few minutes, then try again.';
       default:
         return 'An error occurred. Please try again.';
     }
@@ -309,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
 
                       // Error message
-                      if (_errorMessage != null) ...[
+                      if (_errorMessage != null || isLocked) ...[
                         const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
@@ -333,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(width: 7),
                               Expanded(
                                 child: Text(
-                                  _errorMessage!,
+                                  _errorMessage ?? LoginThrottle.lockMessage,
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: _danger,
@@ -351,13 +369,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Sign in button
                       GestureDetector(
-                        onTap: _isBusy ? null : _login,
+                        onTap: _isBusy || isLocked ? null : _login,
                         child: Container(
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
                             gradient:
-                                _isLoading
+                                _isLoading || isLocked
                                     ? null
                                     : const LinearGradient(
                                       colors: [
@@ -367,10 +385,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                       begin: Alignment.centerLeft,
                                       end: Alignment.centerRight,
                                     ),
-                            color: _isLoading ? _border : null,
+                            color: _isLoading || isLocked ? _border : null,
                             borderRadius: BorderRadius.circular(13),
                             boxShadow:
-                                _isLoading
+                                _isLoading || isLocked
                                     ? null
                                     : [
                                       BoxShadow(
@@ -389,6 +407,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                     child: CircularProgressIndicator(
                                       color: Colors.white,
                                       strokeWidth: 2.5,
+                                    ),
+                                  )
+                                  : isLocked
+                                  ? Text(
+                                    'Try again in '
+                                    '${LoginThrottle.formatLock(lockLeft)}',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textSecondary,
                                     ),
                                   )
                                   : const Text(

@@ -160,11 +160,8 @@ class PlaceDetailsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final category = place.categories.first;
     final typeLabel = place.categories.map((c) => c.singularLabel).join(', ');
-    // Places read from the map have neither.
-    final locationParts = [
-      if (place.city.isNotEmpty) place.city,
-      if (place.address != null) place.address!,
-    ];
+    // No address or description: the map's own places have neither, so
+    // every pin shows the same short card.
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 12),
       child: Row(
@@ -201,38 +198,6 @@ class PlaceDetailsSection extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (locationParts.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.place_outlined,
-                        color: _textSecondary,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          locationParts.join(' · '),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: _textSecondary, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                if (place.description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  TranslatedText(
-                    place.description,
-                    style: TextStyle(
-                      color: _textPrimary,
-                      fontSize: 13,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 10),
                 _distanceLabel(),
                 if (onDirections != null) ...[

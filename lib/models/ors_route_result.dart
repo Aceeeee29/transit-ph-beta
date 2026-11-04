@@ -107,6 +107,10 @@ class OrsStep {
   /// True for rides taken from an admin-approved community route.
   final bool isCommunity;
 
+  /// [estimatedFare] is the fare the route's contributor entered, not a
+  /// formula estimate.
+  final bool isContributorFare;
+
   /// Where the step starts and ends ("Monumento"), when known; the follow
   /// card says "Ride to Monumento".
   final String? fromName;
@@ -126,6 +130,7 @@ class OrsStep {
     this.wayPointStart = 0,
     this.wayPointEnd = 0,
     this.isCommunity = false,
+    this.isContributorFare = false,
     this.fromName,
     this.toName,
     this.isEstimatedPath = false,
@@ -140,6 +145,7 @@ class OrsStep {
     'wayPointStart': wayPointStart,
     'wayPointEnd': wayPointEnd,
     'isCommunity': isCommunity,
+    if (isContributorFare) 'isContributorFare': true,
     if (fromName != null) 'fromName': fromName,
     if (toName != null) 'toName': toName,
     if (isEstimatedPath) 'isEstimatedPath': true,
@@ -154,6 +160,7 @@ class OrsStep {
     wayPointStart: json['wayPointStart'] as int? ?? 0,
     wayPointEnd: json['wayPointEnd'] as int? ?? 0,
     isCommunity: json['isCommunity'] as bool? ?? false,
+    isContributorFare: json['isContributorFare'] as bool? ?? false,
     fromName: json['fromName'] as String?,
     toName: json['toName'] as String?,
     isEstimatedPath: json['isEstimatedPath'] as bool? ?? false,

@@ -78,7 +78,8 @@ class Place {
   final List<PlaceCategory> categories;
   final double lat;
   final double lng;
-  final String description;
+
+  /// Not shown on the pin card; place search still matches on it.
   final String? address;
 
   /// How prominent OpenStreetMap rates the place (lower is more), for the
@@ -92,7 +93,6 @@ class Place {
     required this.categories,
     required this.lat,
     required this.lng,
-    required this.description,
     this.address,
     this.rank = 0,
   });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 import '../theme/app_colors.dart';
 
@@ -7,6 +8,16 @@ class EmailVerificationScreen extends StatefulWidget {
   final User user;
 
   const EmailVerificationScreen({super.key, required this.user});
+
+  static String _pendingKey(String uid) => 'verification_email_pending_$uid';
+
+  /// Sign-up calls this instead of sending the email itself, so the rider
+  /// sees the terms first. Saved on the phone so it still goes out if the
+  /// app closes on the terms screen.
+  static Future<void> sendOnFirstOpen(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pendingKey(uid), true);
+  }
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -17,6 +28,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   bool _isLoading = false;
   bool _isSigningOut = false;
   String? _message;
+  // Red box when true, green when false. Set with every message.
+  bool _isError = false;
 
   // ─── Color tokens ──────────────────────────────────────────────────────────
   static Color get _bg => AppColors.bg;
@@ -30,6 +43,31 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   static const _danger = Color(0xFFE05C6A);
   static const _green = Color(0xFF3EC97A);
 
+  @override
+  void initState() {
+    super.initState();
+    _sendIfPending();
+  }
+
+  // Only right after sign-up. Later visits use the Resend button, so
+  // opening the app doesn't send a new email every time.
+  Future<void> _sendIfPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = EmailVerificationScreen._pendingKey(widget.user.uid);
+    if (prefs.getBool(key) != true) return;
+    try {
+      await widget.user.sendEmailVerification();
+      await prefs.remove(key);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _message =
+            'Could not send the verification email. Tap Resend to try again.';
+        _isError = true;
+      });
+    }
+  }
+
   Future<void> _resendVerificationEmail() async {
     if (_isLoading) return;
     setState(() {
@@ -41,10 +79,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       await widget.user.sendEmailVerification();
       setState(() {
         _message = 'Verification email sent. Check your inbox or spam.';
+        _isError = false;
       });
     } catch (e) {
       setState(() {
         _message = 'Failed to send verification email. Please try again.';
+        _isError = true;
       });
     } finally {
       setState(() {
@@ -68,6 +108,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         if (mounted) {
           setState(() {
             _message = 'Email verified successfully! Redirecting...';
+            _isError = false;
           });
           // Small delay to show the message
           await Future.delayed(const Duration(seconds: 1));
@@ -83,11 +124,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         setState(() {
           _message =
               'Email not yet verified. Please check your email and click the verification link.';
+          _isError = true;
         });
       }
     } catch (e) {
       setState(() {
         _message = 'Failed to check verification status. Please try again.';
+        _isError = true;
       });
     } finally {
       setState(() {
@@ -112,9 +155,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       );
     }
   }
-
-  bool get _isError =>
-      _message != null && _message!.toLowerCase().contains('failed');
 
   @override
   Widget build(BuildContext context) {

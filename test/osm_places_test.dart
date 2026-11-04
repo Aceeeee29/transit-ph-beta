@@ -12,7 +12,6 @@ Place _place(String id, String name, double lat, double lng) => Place(
   categories: const [PlaceCategory.mall],
   lat: lat,
   lng: lng,
-  description: '',
 );
 
 void main() {

@@ -174,7 +174,11 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
       peekHeight: _drawerPeekHeight,
       header: RouteDrawerHeader(
         primary: time,
-        secondary: [distance, if (fare != null) fare].join(' · '),
+        secondary: [
+          if (remaining?.slowed ?? false) 'Slower than usual',
+          distance,
+          if (fare != null) fare,
+        ].join(' · '),
         isFollowing: _isNavigationStarted,
         hasArrived: _hasArrived,
         isStarting: _isStarting,

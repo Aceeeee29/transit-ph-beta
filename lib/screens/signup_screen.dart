@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_profile_bootstrap_service.dart';
+import 'email_verification_screen.dart';
 import '../widgets/auth/auth_text_field.dart';
 import '../theme/app_colors.dart';
 import '../utils/password_rules.dart';
@@ -111,13 +112,6 @@ class _SignupScreenState extends State<SignupScreen> {
             password: _passwordController.text,
           );
 
-      // Send email verification
-      try {
-        await userCredential.user!.sendEmailVerification();
-      } catch (_) {
-        // Continue anyway, as user can resend later
-      }
-
       // Create user document in Firestore
       try {
         await UserProfileBootstrapService.createUserProfile(
@@ -130,12 +124,11 @@ class _SignupScreenState extends State<SignupScreen> {
         throw Exception('Failed to create user profile');
       }
 
-      // Sign out to require manual login
-      await FirebaseAuth.instance.signOut();
-
-      // Navigate back to login
+      // Stay signed in. The sign-in gate shows the terms first, then the
+      // verification screen, which sends the email when it opens.
+      await EmailVerificationScreen.sendOnFirstOpen(userCredential.user!.uid);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() {

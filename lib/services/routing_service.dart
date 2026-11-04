@@ -8,6 +8,7 @@ import '../config.dart';
 import '../models/ors_route_result.dart';
 import '../repositories/route_cache_repository.dart';
 import '../repositories/walk_path_repository.dart';
+import 'ride_path_cleanup.dart';
 import 'supabase_route_service.dart';
 import 'walk_ride_join.dart';
 import 'transport_mode_inference.dart';
@@ -42,6 +43,9 @@ class RoutingService {
 
   // OSRM public demo server — free, no API key needed
   static const _osrmBase = 'https://router.project-osrm.org/route/v1';
+
+  /// The same server's map matching (see [_osrmMatch]).
+  static const _osrmMatchBase = 'https://router.project-osrm.org/match/v1';
 
   /// The demo server routes cars only (a "foot" request comes back as a car
   /// route, along one-way streets at car speed). Walks go to FOSSGIS's
@@ -903,6 +907,86 @@ class RoutingService {
     }
   }
 
+  /// How far a stop may sit from the road the vehicle takes. Stops in the
+  /// transit feed are often a few dozen metres off it, on a side street.
+  static const _matchRadiusMeters = 40;
+
+  /// A path along the roads that passes *near* [points], in order.
+  ///
+  /// [_osrmRoute] drives to every point exactly, so a stop pinned on a side
+  /// street pulled the line into that street and back out. Map matching
+  /// instead finds the likeliest road path through the points, treating
+  /// each one as "somewhere within [_matchRadiusMeters]". Null when it
+  /// can't match them in one piece, so the caller falls back to routing.
+  static Future<List<LatLng>?> _osrmMatch(
+    List<LatLng> points,
+    String profile,
+  ) async {
+    if (points.length < 3) return null;
+    final via = _sampleWaypoints(points, _maxOsrmWaypoints);
+    try {
+      final coords = via.map((p) => '${p.longitude},${p.latitude}').join(';');
+      final radiuses = List.filled(via.length, _matchRadiusMeters).join(';');
+      final uri = Uri.parse(
+        '$_osrmMatchBase/$profile/$coords?overview=full&geometries=geojson'
+        '&radiuses=$radiuses&gaps=ignore',
+      );
+      final response = await http
+          .get(
+            uri,
+            headers: {'User-Agent': 'TransitPH/1.0 (transit-routing-app)'},
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (data['code'] != 'Ok') return null;
+      // More than one piece means part of the ride couldn't be matched.
+      final matchings = data['matchings'] as List?;
+      if (matchings == null || matchings.length != 1) return null;
+      // Both ends matched, or the ride would start or stop short.
+      final tracepoints = data['tracepoints'] as List?;
+      if (tracepoints == null ||
+          tracepoints.first == null ||
+          tracepoints.last == null) {
+        return null;
+      }
+
+      final geometry = matchings[0]['geometry'] as Map<String, dynamic>;
+      final path = [
+        for (final c in geometry['coordinates'] as List)
+          LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+      ];
+      if (path.length < 2 ||
+          _shouldRejectSnappedPath(
+            from: via.first,
+            to: via.last,
+            points: path,
+            referenceKm: _polylineDistanceKm(via),
+          )) {
+        return null;
+      }
+      return path;
+    } catch (e) {
+      debugPrint('[OSRM] Match failed ($profile): $e');
+      return null;
+    }
+  }
+
+  /// A ride's road path through [points] (its stops, or its shape's
+  /// points): matched to the roads when possible, otherwise routed through
+  /// each point, then with any side trips into side streets cut out
+  /// ([RidePathCleanup]).
+  static Future<List<LatLng>?> _ridePathThrough(
+    List<LatLng> points,
+    String profile,
+  ) async {
+    final path =
+        await _osrmMatch(points, profile) ??
+        await _osrmRoute(points, profile);
+    return path == null ? null : RidePathCleanup.removeSpurs(path);
+  }
+
   /// Evenly thins [points] to at most [max], always keeping both ends.
   static List<LatLng> _sampleWaypoints(List<LatLng> points, int max) {
     if (points.length <= max) return points;
@@ -953,7 +1037,7 @@ class RoutingService {
         return 'foot';
       case 'Train':
         return 'driving';
-      case 'Ferry':
+      case 'Boat':
         return 'driving';
       default:
         return 'driving'; // Jeepney, Bus, FX/Van, Tricycle
@@ -1177,6 +1261,7 @@ class RoutingService {
           estimatedFare:
               leg.communityFare ?? PhFareCalculator.compute(mode, distM),
           isCommunity: leg.isCommunity,
+          isContributorFare: leg.isContributorFare,
           fromName: boardName,
           toName: alightName,
           wayPointStart: vehicleStartIdx,
@@ -1313,7 +1398,7 @@ class RoutingService {
     if (_isTrainRouteType(routeType)) return 'Train';
     if (routeType == 4) {
       return _allowFerrySuggestions
-          ? 'Ferry'
+          ? 'Boat'
           : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
 
@@ -1354,7 +1439,7 @@ class RoutingService {
     }
     if (joinedName.contains('ferry') || joinedName.contains('pier')) {
       return _allowFerrySuggestions
-          ? 'Ferry'
+          ? 'Boat'
           : (preferredMode == 'Auto' ? 'Jeepney' : preferredMode);
     }
     if (joinedName.contains('mrt') ||
@@ -1378,7 +1463,7 @@ class RoutingService {
       'Train',
       'Tricycle',
       'FX/Van',
-      'Ferry',
+      'Boat',
     };
     if (validModes.contains(preferredMode) && preferredMode != 'Walk') {
       return preferredMode;
@@ -1446,7 +1531,7 @@ class RoutingService {
         if (mode == 'Train') return clipped;
         // Road shapes in our feed are station-level (1–3 km between points),
         // so drawn raw they cut corners. Route through them to follow roads.
-        final roadFollowed = await _osrmRoute(
+        final roadFollowed = await _ridePathThrough(
           clipped,
           _osrmProfileForMode(mode),
         );
@@ -1461,7 +1546,7 @@ class RoutingService {
     if (leg.viaStops.isNotEmpty) {
       final stopPath = [board, ...leg.viaStops, alight];
       if (mode == 'Train') return stopPath;
-      final roadFollowed = await _osrmRoute(
+      final roadFollowed = await _ridePathThrough(
         stopPath,
         _osrmProfileForMode(mode),
       );
@@ -1475,7 +1560,7 @@ class RoutingService {
     if (snapped != null && snapped.length >= 2) {
       // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry
       // and causes the straight-line bug.
-      return snapped;
+      return RidePathCleanup.removeSpurs(snapped);
     }
 
     // Ultimate fallback
@@ -1571,7 +1656,7 @@ class RoutingService {
         return 15.0;
       case 'FX/Van':
         return 30.0;
-      case 'Ferry':
+      case 'Boat':
         return 20.0;
       default:
         return 20.0;

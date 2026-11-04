@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.2.1 — November 5, 2026
+
+- Safer sign-in: after a wrong password, Sign In waits 15 seconds, then
+  longer after each wrong try (up to 15 minutes), even if you close the
+  app. Same on the moderator login, which also now accepts passwords
+  exactly as typed and explains its errors
+- Signing up keeps you signed in and shows the terms first; the
+  verification email is sent once you've accepted them
+- "Email not yet verified" now shows in red
+- Ferry is now called Boat
+- A trip that rides most of a rider route now uses the fare the rider
+  entered for it, marked "(contributor fare)"
+- While following a route, the time left goes up when your ride is
+  slower than usual (traffic), with "Slower than usual"
+- On a jeep or bus, the arrow and map point along the route, even when
+  stopped in traffic or with the phone held sideways
+- Rides from the transit data no longer draw spikes into side streets
+- New bus, jeepney and UV Express routes from OpenStreetMap are waiting
+  for moderator review; once approved, search uses them (they aren't
+  labelled as rider routes)
+
+## v1.2.0 — November 2, 2026
+
+- New app icon and splash screen, in a softer blue
+- Place cards on the map are shorter and the same for every pin: name,
+  type, distance and Directions. The extra address line and description
+  are gone
+- The translate bubble now snaps to the left or right edge when you let
+  go (flick it to throw it to a side), and stays where you left it, even
+  after closing the app
+
 ## v1.0.38 — October 29, 2026
 
 - Already riding a bus or jeep from a rider route while following it?

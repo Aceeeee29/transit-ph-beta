@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/camanava_places.dart';
 import '../models/route.dart' as route_model;
+import 'fare_matrix.dart';
 import 'route_follow_engine.dart';
 import 'transport_mode_inference.dart';
 import 'walk_distances.dart';
@@ -27,11 +28,18 @@ class TransitLeg {
   final double alightLon;
 
   /// Set only for legs taken from an approved community route: the
-  /// contributor's own drawn path between board and alight, their paid fare
-  /// (only when the whole step is ridden), and a ready-made instruction.
+  /// contributor's own drawn path between board and alight, the fare (see
+  /// [_communityLegFare]), and a ready-made instruction.
   final List<LatLng>? communityPath;
   final double? communityFare;
   final String? communityLabel;
+
+  /// The route was imported from OpenStreetMap, not drawn by a rider: it
+  /// doesn't count as a community route for badges ([isCommunity]).
+  final bool communityFromOsm;
+
+  /// [communityFare] is the fare the contributor entered, not a formula.
+  final bool isContributorFare;
 
   /// The trip's stops strictly between board and alight, in riding order.
   /// Used to draw legs whose trip has no GTFS shape along the vehicle's
@@ -57,10 +65,14 @@ class TransitLeg {
     this.communityPath,
     this.communityFare,
     this.communityLabel,
+    this.isContributorFare = false,
+    this.communityFromOsm = false,
     this.viaStops = const [],
   });
 
-  bool get isCommunity => communityLabel != null;
+  /// Ridden on a route a rider shared: shows the "Community route" and
+  /// "Rider-verified" labels.
+  bool get isCommunity => communityLabel != null && !communityFromOsm;
 }
 
 /// You're already riding one of the rider routes, so a new search should
@@ -107,6 +119,9 @@ class CommunityRoute {
     required this.endLocation,
     required this.steps,
   });
+
+  /// See [route_model.Route.isFromOpenStreetMap].
+  bool get isFromOpenStreetMap => id.startsWith('osm-');
 
   /// Splits the drawn path into per-step geometry using [stepBoundaries]
   /// (the path index where each step ends). Returns null when the route
@@ -279,6 +294,9 @@ class _CommunityTrip {
   final String note;
   final double? actualFare;
 
+  /// Imported from OpenStreetMap ([route_model.Route.isFromOpenStreetMap]).
+  final bool fromOsm;
+
   const _CommunityTrip({
     required this.path,
     required this.reversed,
@@ -286,6 +304,7 @@ class _CommunityTrip {
     required this.routeLabel,
     required this.note,
     this.actualFare,
+    this.fromOsm = false,
   });
 }
 
@@ -1153,7 +1172,7 @@ class SupabaseRouteService {
         routeShortName: route?['route_short_name'] as String?,
         routeLongName: route?['route_long_name'] as String?,
       );
-      if (!allowFerry && inferredMode == 'Ferry') continue;
+      if (!allowFerry && inferredMode == 'Boat') continue;
       tripStopSequences[tripId] = [
         for (final row in seq) row['stop_id'].toString(),
       ];
@@ -1292,7 +1311,7 @@ class SupabaseRouteService {
       for (var i = 0; i < route.steps.length; i++) {
         final step = route.steps[i];
         if (step.mode == 'Walk') continue;
-        if (!allowFerry && step.mode == 'Ferry') continue;
+        if (!allowFerry && step.mode == 'Boat') continue;
         final path = step.path;
         if (path.length < 2 || !_pathTouchesBounds(path, bounds)) continue;
 
@@ -1344,6 +1363,7 @@ class SupabaseRouteService {
           routeLabel: forwardLabel,
           note: step.instruction.trim(),
           actualFare: step.actualFare,
+          fromOsm: route.isFromOpenStreetMap,
         );
         if (allowReversedCommunityLegs) {
           communityTrips[reverseTripId] = _CommunityTrip(
@@ -1353,6 +1373,7 @@ class SupabaseRouteService {
             routeLabel: reverseLabel,
             note: step.instruction.trim(),
             actualFare: step.actualFare,
+            fromOsm: route.isFromOpenStreetMap,
           );
         }
 
@@ -1361,7 +1382,7 @@ class SupabaseRouteService {
         // (place names, Firestore IDs) must never go into these fields.
         final routeType = switch (step.mode) {
           'Train' => 2,
-          'Ferry' => 4,
+          'Boat' => 4,
           _ => 3,
         };
         final speedKmh = _fallbackSpeedForMode(step.mode);
@@ -1451,7 +1472,7 @@ class SupabaseRouteService {
     final speedKmh = _fallbackSpeedForMode(step.mode);
     final routeType = switch (step.mode) {
       'Train' => 2,
-      'Ferry' => 4,
+      'Boat' => 4,
       _ => 3,
     };
 
@@ -1576,10 +1597,12 @@ class SupabaseRouteService {
   ) {
     // Already riding it (see OnBoardRide): you just stay on.
     final alreadyOn = boardStop['on_board'] == true;
+    // Only rider-shared routes are called "community route".
+    final kind = trip.fromOsm ? '' : 'community route ';
     var text =
         alreadyOn
-            ? 'Stay on the ${trip.mode} (community route ${trip.routeLabel})'
-            : 'Ride ${trip.mode} along the community route ${trip.routeLabel}';
+            ? 'Stay on the ${trip.mode} ($kind${trip.routeLabel})'
+            : 'Ride ${trip.mode} along the $kind${trip.routeLabel}';
     if (alightStop['named'] == true) {
       text += ', get off at ${alightStop['stop_name']}';
     }
@@ -1605,7 +1628,9 @@ class SupabaseRouteService {
     final lo = math.min(boardIndex, alightIndex);
     final hi = math.max(boardIndex, alightIndex);
     final segment = trip.path.sublist(lo, hi + 1);
-    final wholeStep = lo == 0 && hi == trip.path.length - 1;
+    final onBoard = boardStop['on_board'] == true;
+    final fare =
+        onBoard ? null : _communityLegFare(trip, _polylineKm(segment) * 1000);
 
     return TransitLeg(
       tripId: start.tripId!,
@@ -1621,15 +1646,39 @@ class SupabaseRouteService {
       alightLat: (alightStop['stop_lat'] as num).toDouble(),
       alightLon: (alightStop['stop_lon'] as num).toDouble(),
       communityPath: trip.reversed ? segment.reversed.toList() : segment,
-      // The contributor's fare covers the whole step; partial rides fall
-      // back to the LTFRB formula downstream. If you're already on this
-      // ride, you've already paid, so staying on adds nothing.
-      communityFare:
-          boardStop['on_board'] == true
-              ? 0
-              : (wholeStep ? trip.actualFare : null),
+      // If you're already on this ride, you've already paid, so staying on
+      // adds nothing.
+      communityFare: onBoard ? 0 : fare?.php,
       communityLabel: _communityInstruction(trip, boardStop, alightStop),
+      isContributorFare: fare?.fromContributor ?? false,
+      communityFromOsm: trip.fromOsm,
     );
+  }
+
+  /// A ride this much of a step's length or more pays the contributor's
+  /// fare. The search boards you at the nearest point on the line (points
+  /// are ~300 m apart), so a ride along nearly all of it still starts a
+  /// little after the step's first point.
+  static const _contributorFareShare = 0.7;
+
+  /// The fare for riding [rideMeters] of [trip]: the contributor's fare
+  /// for most of the step; for a short hop the LTFRB formula, but never
+  /// more than the contributor's fare. Null (formula downstream) when the
+  /// contributor gave no fare.
+  static ({double php, bool fromContributor})? _communityLegFare(
+    _CommunityTrip trip,
+    double rideMeters,
+  ) {
+    final contributorFare = trip.actualFare;
+    if (contributorFare == null || contributorFare <= 0) return null;
+    final stepMeters = _polylineKm(trip.path) * 1000;
+    if (stepMeters <= 0 || rideMeters / stepMeters >= _contributorFareShare) {
+      return (php: contributorFare, fromContributor: true);
+    }
+    final formula = PhFareCalculator.compute(trip.mode, rideMeters);
+    return formula >= contributorFare
+        ? (php: contributorFare, fromContributor: true)
+        : (php: formula, fromContributor: false);
   }
 
   static bool _pathTouchesBounds(
@@ -2051,7 +2100,7 @@ class SupabaseRouteService {
     required String? routeLongName,
   }) {
     if (_isTrainRouteType(routeType)) return 'Train';
-    if (routeType == 4) return 'Ferry';
+    if (routeType == 4) return 'Boat';
 
     if (isEdsaCarouselLeg(
       routeId: routeId,
@@ -2087,7 +2136,7 @@ class SupabaseRouteService {
       return 'Train';
     }
     if (name.contains('ferry') || name.contains('pier')) {
-      return 'Ferry';
+      return 'Boat';
     }
     if (name.contains('tric') || name.contains('trike')) {
       return 'Tricycle';
@@ -2268,7 +2317,7 @@ class SupabaseRouteService {
         return 28.0;
       case 'Train':
         return 40.0;
-      case 'Ferry':
+      case 'Boat':
         return 18.0;
       case 'Tricycle':
         return 12.0;

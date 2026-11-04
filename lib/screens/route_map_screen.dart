@@ -612,7 +612,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   void _applyPosition(Position position, LatLng display) {
     _currentPosition = position;
     _displayPosition = display;
-    _facing.onFix(position);
+    _facing
+      ..onRideLine(
+        _isNavigationStarted
+            ? ActiveNavigationService.instance.rideLineHeading
+            : null,
+      )
+      ..onFix(position);
     // GPS heading is noise when barely moving (often reported as 0, which
     // spun the map north); keep the last good heading until moving again.
     if (position.speed >= _minHeadingSpeedMps) {
@@ -1169,8 +1175,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   /// While following: the distance left and an ETA from each remaining
-  /// step's typical speed. Null when not following.
-  ({double meters, int minutes})? _remainingTrip() {
+  /// step's typical speed, plus any traffic delay on the current ride.
+  /// Null when not following.
+  ({double meters, int minutes, bool slowed})? _remainingTrip() {
     final snapshot = _followSnapshot;
     final line = _pathLine;
     if (snapshot == null || !snapshot.hasProgress || line == null) return null;
@@ -1187,7 +1194,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               : 'Jeepney';
       minutes += left / 1000 / RouteMetricsService.speedKmhForMode(mode) * 60;
     }
-    return (meters: snapshot.remainingMeters, minutes: minutes.ceil());
+    final delay = ActiveNavigationService.instance.trafficDelayMinutes;
+    return (
+      meters: snapshot.remainingMeters,
+      minutes: minutes.ceil() + delay,
+      slowed: delay > 0,
+    );
   }
 
   /// With the discount on, the card shows the discounted total and this

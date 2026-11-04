@@ -110,7 +110,7 @@ class RouteMetricsService {
         return _tricycleSpeedKmh;
       case 'fx/van':
         return _vanSpeedKmh;
-      case 'ferry':
+      case 'boat':
         return _ferrySpeedKmh;
       default:
         return _walkingSpeedKmh;
@@ -340,7 +340,7 @@ class RouteMetricsService {
         return 0.15; // Motorcycle
       case 'fx/van':
         return 0.12; // Shared van
-      case 'ferry':
+      case 'boat':
         return 0.05; // Boat
       default:
         return 0.1; // Default

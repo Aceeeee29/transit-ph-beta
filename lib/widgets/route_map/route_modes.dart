@@ -19,7 +19,7 @@ class RouteModes {
         return Colors.orange.shade600;
       case 'FX/Van':
         return Colors.amber.shade700;
-      case 'Ferry':
+      case 'Boat':
         return Colors.lightBlue.shade600;
       default:
         return Colors.blue.shade600;
@@ -40,7 +40,7 @@ class RouteModes {
         return Icons.two_wheeler_rounded;
       case 'FX/Van':
         return Icons.airport_shuttle_rounded;
-      case 'Ferry':
+      case 'Boat':
         return Icons.directions_boat_rounded;
       default:
         return Icons.directions_bus_rounded;

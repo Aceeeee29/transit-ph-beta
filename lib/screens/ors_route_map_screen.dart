@@ -417,7 +417,13 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   void _applyPosition(Position position, LatLng display) {
     _currentPosition = position;
     _displayPosition = display;
-    _facing.onFix(position);
+    _facing
+      ..onRideLine(
+        _isNavigationStarted
+            ? ActiveNavigationService.instance.rideLineHeading
+            : null,
+      )
+      ..onFix(position);
     // GPS heading is noise when barely moving; keep the last good heading.
     if (position.speed >= _minHeadingSpeedMps) {
       _displayHeading = _normalizeHeading(position.heading);
@@ -940,14 +946,16 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     final snapshot = _followSnapshot;
     final int minutes;
     final double meters;
+    var trafficDelay = 0;
     if (snapshot != null && snapshot.hasProgress) {
-      // Time left scales the route's estimate by the distance left.
+      // Time left scales the route's estimate by the distance left, plus
+      // any traffic slowing the current ride.
       final total = widget.result.distanceMeters;
       final share = total > 0 ? snapshot.remainingMeters / total : 1.0;
-      minutes = (widget.result.durationSeconds * share / 60).ceil().clamp(
-        1,
-        1 << 20,
-      );
+      trafficDelay = ActiveNavigationService.instance.trafficDelayMinutes;
+      minutes = ((widget.result.durationSeconds * share / 60).ceil() +
+              trafficDelay)
+          .clamp(1, 1 << 20);
       meters = snapshot.remainingMeters;
     } else {
       minutes = math.max(1, (widget.result.durationSeconds / 60).ceil());
@@ -961,6 +969,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       header: RouteDrawerHeader(
         primary: RouteMetricsService.formatEta(minutes),
         secondary:
+            '${trafficDelay > 0 ? 'Slower than usual · ' : ''}'
             '${RouteMetricsService.formatDistanceMeters(meters)}'
             ' · ${_totalFareLabel()}',
         byline:
@@ -1093,7 +1102,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
       fare:
           mode == 'Walk' || fare <= 0
               ? null
-              : 'Fare: PHP ${fare.toStringAsFixed(0)} (estimated)'
+              : 'Fare: PHP ${fare.toStringAsFixed(0)} '
+                  '(${step.isContributorFare ? 'contributor fare' : 'estimated'})'
                   '${showsDiscount ? '\n${FareDiscountToggle.defaultLabel}: PHP ${_applyFareDiscount(fare, mode).toStringAsFixed(0)}' : ''}',
       extras: [
         if (step.isCommunity) ...[

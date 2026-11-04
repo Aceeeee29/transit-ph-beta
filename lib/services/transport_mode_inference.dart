@@ -55,13 +55,13 @@ class PhRoadDatabase {
     'tutuban': 'Train', 'alabang station': 'Train', 'calamba station': 'Train',
 
     // ── FERRY ─────────────────────────────────────────────────────────────────
-    'pasig river ferry': 'Ferry', 'pasig river': 'Ferry',
-    'manila bay': 'Ferry', 'manila north harbor': 'Ferry',
-    'manila south harbor': 'Ferry', 'north harbor': 'Ferry',
-    'south harbor': 'Ferry', 'batangas port': 'Ferry',
-    'pier 15': 'Ferry', 'pier 4': 'Ferry', 'pier 2': 'Ferry', 'pier 1': 'Ferry',
-    'ro-ro': 'Ferry', 'roro': 'Ferry',
-    'superferry': 'Ferry', 'oceanjet': 'Ferry', 'weesam': 'Ferry',
+    'pasig river ferry': 'Boat', 'pasig river': 'Boat',
+    'manila bay': 'Boat', 'manila north harbor': 'Boat',
+    'manila south harbor': 'Boat', 'north harbor': 'Boat',
+    'south harbor': 'Boat', 'batangas port': 'Boat',
+    'pier 15': 'Boat', 'pier 4': 'Boat', 'pier 2': 'Boat', 'pier 1': 'Boat',
+    'ro-ro': 'Boat', 'roro': 'Boat',
+    'superferry': 'Boat', 'oceanjet': 'Boat', 'weesam': 'Boat',
 
     // ── EXPRESSWAYS → FX/Van ─────────────────────────────────────────────────
     // Confirmed: jeepneys/tricycles cannot use these roads legally.
@@ -526,7 +526,7 @@ class TransitModeInferrer {
     //    Road-based Overpass results are only used when there is NO dominantMode
     //    (i.e. the caller didn't know what mode to use and is relying purely on
     //    inference). When dominantMode IS set, it wins over road-based results.
-    if (overpassMode == 'Train' || overpassMode == 'Ferry')
+    if (overpassMode == 'Train' || overpassMode == 'Boat')
       return overpassMode!;
 
     // 4. Road DB — keyword match against PhRoadDatabase
@@ -537,7 +537,7 @@ class TransitModeInferrer {
     if (_any(text, _trainKws)) return 'Train';
 
     // 6. Hard infrastructure: Ferry
-    if (_any(text, _ferryKws)) return 'Ferry';
+    if (_any(text, _ferryKws)) return 'Boat';
 
     // 7. Expressway → FX/Van (physical road restriction, always applies)
     if (_any(text, _expressWayKws)) return 'FX/Van';

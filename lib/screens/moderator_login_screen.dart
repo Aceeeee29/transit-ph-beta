@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/login_throttle.dart';
 import 'auth_gate.dart';
 
 class ModeratorLoginScreen extends StatefulWidget {
@@ -10,7 +11,8 @@ class ModeratorLoginScreen extends StatefulWidget {
   State<ModeratorLoginScreen> createState() => _ModeratorLoginScreenState();
 }
 
-class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
+class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
+    with LoginLockCountdown {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -30,8 +32,15 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
   static const _danger = Color(0xFFFF6B7A);
   static const _gold = Color(0xFFFFB547);
 
+  @override
+  void initState() {
+    super.initState();
+    // Pick up a lock left over from before the app was closed.
+    refreshLock();
+  }
+
   Future<void> _moderatorLogin() async {
-    if (_isLoading) return;
+    if (_isLoading || isLocked) return;
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       setState(() => _errorMessage = 'Please enter your credentials');
       return;
@@ -43,12 +52,16 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
     });
 
     try {
-      // 1. Authenticate with Firebase
+      if (await refreshLock()) return;
+
+      // 1. Authenticate with Firebase. The password isn't trimmed, same as
+      // the normal login and signup, so a space in it still matches.
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
+            password: _passwordController.text,
           );
+      await LoginThrottle.reset();
 
       // 2. Verify the user has moderator or admin role in Firestore
       final userDoc =
@@ -70,9 +83,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
           .replaceAll(' ', '_');
 
       final isPrivilegedRole =
-          role == 'moderator' ||
-          role == 'superadmin' ||
-          role == 'super_admin';
+          role == 'moderator' || role == 'superadmin' || role == 'super_admin';
 
       if (!isPrivilegedRole) {
         // Not a moderator — sign them out immediately
@@ -93,11 +104,16 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
         );
       }
     } on FirebaseAuthException catch (e) {
+      await noteSignInFailure(e.code);
+      if (!mounted) return;
+      // The countdown shows on the button; the box says what went wrong.
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
+      if (!mounted) return;
       setState(() => _errorMessage = 'An unexpected error occurred');
     } finally {
-      setState(() => _isLoading = false);
+      // A successful login replaces this screen, so it may be gone by now.
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -107,10 +123,17 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
         return 'No account found for that email.';
       case 'wrong-password':
         return 'Incorrect password.';
+      case 'invalid-credential':
+      case 'invalid-login-credentials':
+        return 'The email or password is incorrect.';
       case 'invalid-email':
         return 'The email address is not valid.';
       case 'user-disabled':
         return 'This account has been disabled.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
+      case 'too-many-requests':
+        return 'Too many tries. Wait a few minutes, then try again.';
       default:
         return 'Authentication failed. Please try again.';
     }
@@ -287,7 +310,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                       ),
 
                       // Error message
-                      if (_errorMessage != null) ...[
+                      if (_errorMessage != null || isLocked) ...[
                         const SizedBox(height: 14),
                         Container(
                           width: double.infinity,
@@ -311,7 +334,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                               const SizedBox(width: 7),
                               Expanded(
                                 child: Text(
-                                  _errorMessage!,
+                                  _errorMessage ?? LoginThrottle.lockMessage,
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: _danger,
@@ -329,13 +352,13 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
 
                       // Sign in button
                       GestureDetector(
-                        onTap: _isLoading ? null : _moderatorLogin,
+                        onTap: _isLoading || isLocked ? null : _moderatorLogin,
                         child: Container(
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
                             gradient:
-                                _isLoading
+                                _isLoading || isLocked
                                     ? null
                                     : const LinearGradient(
                                       colors: [
@@ -345,10 +368,10 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                                       begin: Alignment.centerLeft,
                                       end: Alignment.centerRight,
                                     ),
-                            color: _isLoading ? _border : null,
+                            color: _isLoading || isLocked ? _border : null,
                             borderRadius: BorderRadius.circular(13),
                             boxShadow:
-                                _isLoading
+                                _isLoading || isLocked
                                     ? null
                                     : [
                                       BoxShadow(
@@ -367,6 +390,16 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen> {
                                     child: CircularProgressIndicator(
                                       color: Colors.white,
                                       strokeWidth: 2.5,
+                                    ),
+                                  )
+                                  : isLocked
+                                  ? Text(
+                                    'Try again in '
+                                    '${LoginThrottle.formatLock(lockLeft)}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textSecondary,
                                     ),
                                   )
                                   : Row(

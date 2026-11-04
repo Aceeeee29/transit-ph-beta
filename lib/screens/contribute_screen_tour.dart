@@ -190,7 +190,7 @@ extension _ContributeScreenTour on _ContributeScreenState {
         title: 'Pick the vehicle first',
         body:
             'Choose how this part of the trip is done before you tap: '
-            'Jeepney, Bus, Train, Tricycle, FX/Van, Walk or Ferry. Each '
+            'Jeepney, Bus, Train, Tricycle, FX/Van, Walk or Boat. Each '
             'vehicle draws in its own color, so riders see where to transfer.',
         target: _tourModesKey,
         onShow: between,
@@ -226,7 +226,7 @@ extension _ContributeScreenTour on _ContributeScreenState {
           SpotlightPoint(
             Icons.route_rounded,
             'Snap to road',
-            'The line follows the roads. Turn it off for footpaths, ferry '
+            'The line follows the roads. Turn it off for footpaths, boat '
                 'terminals and other places off the road.',
           ),
           SpotlightPoint(

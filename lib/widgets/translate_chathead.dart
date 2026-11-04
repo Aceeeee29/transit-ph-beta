@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,53 +45,111 @@ class TranslateChatHead extends StatefulWidget {
 class _TranslateChatHeadState extends State<TranslateChatHead> {
   static const double _bubbleSize = 58;
   static const double _edgePadding = 12;
-  Offset? _offset;
+  static const _onRightKey = 'translate_bubble_on_right';
+  static const _heightKey = 'translate_bubble_height';
 
-  Offset _bottomRightStart(BoxConstraints constraints) {
-    return Offset(
-      constraints.maxWidth - _bubbleSize - _edgePadding,
-      constraints.maxHeight - _bubbleSize - _edgePadding,
-    );
+  // The bubble rests on the left or right edge, never in the middle.
+  // Kept for the whole app run, so it doesn't jump back to the corner
+  // when it's turned off and on again.
+  static bool _onRight = true;
+  // How far down it sits: 0 is the top of its space, 1 the bottom. A share
+  // of the height, not pixels, so it still fits after the screen changes.
+  static double _height = 1;
+  static bool _spotLoaded = false;
+
+  // Where the finger has it. Null when it rests on an edge.
+  Offset? _dragOffset;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpot();
+  }
+
+  Future<void> _loadSpot() async {
+    if (_spotLoaded) return;
+    _spotLoaded = true;
+    final prefs = await SharedPreferences.getInstance();
+    _onRight = prefs.getBool(_onRightKey) ?? true;
+    _height = (prefs.getDouble(_heightKey) ?? 1).clamp(0.0, 1.0);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _saveSpot() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onRightKey, _onRight);
+    await prefs.setDouble(_heightKey, _height);
+  }
+
+  /// Sends the bubble to an edge when it's let go. A quick flick goes to
+  /// the side it was thrown to; otherwise to the nearest side.
+  void _snapToSide(
+    double flingSpeed,
+    double minX,
+    double maxX,
+    double minY,
+    double maxY,
+  ) {
+    final at = _dragOffset;
+    if (at == null) return;
+    setState(() {
+      _onRight =
+          flingSpeed.abs() > 800 ? flingSpeed > 0 : at.dx > (minX + maxX) / 2;
+      _height = maxY > minY ? (at.dy - minY) / (maxY - minY) : 1;
+      _dragOffset = null;
+    });
+    _saveSpot();
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _offset ??= _bottomRightStart(constraints);
-
-        final clampedX = _offset!.dx.clamp(
-          _edgePadding,
+        const minX = _edgePadding;
+        const minY = _edgePadding;
+        final maxX = math.max(
+          minX,
           constraints.maxWidth - _bubbleSize - _edgePadding,
         );
-        final clampedY = _offset!.dy.clamp(
-          _edgePadding,
+        final maxY = math.max(
+          minY,
           constraints.maxHeight - _bubbleSize - _edgePadding,
         );
-        _offset = Offset(clampedX.toDouble(), clampedY.toDouble());
+        final dragging = _dragOffset != null;
+        final position =
+            _dragOffset ??
+            Offset(_onRight ? maxX : minX, minY + (maxY - minY) * _height);
 
         return Stack(
           children: [
-            Positioned(
-              left: _offset!.dx,
-              top: _offset!.dy,
+            AnimatedPositioned(
+              // Follows the finger exactly, then glides to the edge.
+              duration:
+                  dragging ? Duration.zero : const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              left: position.dx,
+              top: position.dy,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => setState(() => _dragOffset = position),
                 onPanUpdate: (details) {
                   setState(() {
-                    final next = _offset! + details.delta;
-                    _offset = Offset(
-                      next.dx.clamp(
-                        _edgePadding,
-                        constraints.maxWidth - _bubbleSize - _edgePadding,
-                      ),
-                      next.dy.clamp(
-                        _edgePadding,
-                        constraints.maxHeight - _bubbleSize - _edgePadding,
-                      ),
+                    final next = _dragOffset! + details.delta;
+                    _dragOffset = Offset(
+                      next.dx.clamp(minX, maxX),
+                      next.dy.clamp(minY, maxY),
                     );
                   });
                 },
+                onPanEnd:
+                    (details) => _snapToSide(
+                      details.velocity.pixelsPerSecond.dx,
+                      minX,
+                      maxX,
+                      minY,
+                      maxY,
+                    ),
+                onPanCancel: () => _snapToSide(0, minX, maxX, minY, maxY),
                 onTap: () => _openTranslator(context),
                 child: _TranslateBubble(size: _bubbleSize),
               ),

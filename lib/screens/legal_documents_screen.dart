@@ -245,7 +245,7 @@ class LegalDocumentsScreen extends StatelessWidget {
               paragraphs: [
                 'We may update these Terms. When the changes are important, the app asks you to accept them again.',
                 'These Terms are governed by the laws of the Philippines.',
-                'Questions? Reach us through Settings → Post Feedback.',
+                'Questions? Reach us through Settings → Delete Account.',
               ],
             ),
           ],

@@ -152,7 +152,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
         return Icons.pedal_bike;
       case 'FX/Van':
         return Icons.directions_car;
-      case 'Ferry':
+      case 'Boat':
         return Icons.directions_boat;
       default:
         return Icons.directions_walk;
@@ -173,7 +173,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
         return Colors.orange;
       case 'FX/Van':
         return Colors.amber;
-      case 'Ferry':
+      case 'Boat':
         return Colors.lightBlue;
       default:
         return Colors.green;

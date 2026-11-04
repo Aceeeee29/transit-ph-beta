@@ -453,7 +453,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
                         'The line between the points you tap follows the '
                         'roads instead of going straight, also when you '
                         'drag the dots. Turn it off for off-road points '
-                        '(ferry terminals, footpaths).',
+                        '(boat terminals, footpaths).',
                   ),
                   if (_snapToRoadEnabled && lineMode != 'Walk')
                     _toggleChip(

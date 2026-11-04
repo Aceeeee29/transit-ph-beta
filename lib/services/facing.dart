@@ -6,7 +6,8 @@ import 'package:geolocator/geolocator.dart';
 
 /// Which way the traveler faces, in degrees from north (null until known):
 /// the phone's compass on foot, the GPS direction of travel on a ride
-/// (the phone may be held sideways in a jeep).
+/// (the phone may be held sideways in a jeep), and the route line's
+/// direction while riding a followed route ([onRideLine]).
 ///
 /// The compass reports many times a second and jitters, so it's smoothed,
 /// and a change of under [_step] degrees isn't passed on.
@@ -25,6 +26,7 @@ class Facing extends ValueNotifier<double?> {
   StreamSubscription<CompassEvent>? _compass;
   double? _smoothed;
   double _speed = 0;
+  double? _rideLine;
 
   /// Listens to the compass; [dispose] stops it.
   void start() {
@@ -34,9 +36,20 @@ class Facing extends ValueNotifier<double?> {
     );
   }
 
+  /// Following a ride step: [heading] is where the route line runs, and
+  /// the traveler faces that way even stopped in traffic, where the speed
+  /// is too low for the GPS direction and the compass would show the way
+  /// the phone is held. Null on foot or off the line: back to the compass
+  /// and GPS direction. Call before [onFix].
+  void onRideLine(double? heading) {
+    _rideLine = heading;
+    if (heading != null) _publish(heading);
+  }
+
   /// A GPS fix: on a ride, its direction of travel is the facing.
   void onFix(Position position) {
     _speed = position.speed;
+    if (_rideLine != null) return;
     final course = position.heading;
     if (_speed >= rideSpeedMps && course.isFinite && course >= 0) {
       _publish(course);
@@ -51,7 +64,7 @@ class Facing extends ValueNotifier<double?> {
         smoothed == null
             ? _normalize(raw)
             : _normalize(smoothed + difference(smoothed, raw) * _smoothing);
-    if (_speed < rideSpeedMps) _publish(_smoothed!);
+    if (_rideLine == null && _speed < rideSpeedMps) _publish(_smoothed!);
   }
 
   void _publish(double heading) {

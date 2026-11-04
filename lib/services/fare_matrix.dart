@@ -35,7 +35,7 @@ class FareRule {
   /// next ₱5.
   String get estimateRange {
     final high = (fareForKm(typicalKm) / 5).ceil() * 5.0;
-    return '${PhFareCalculator.peso(base)} – ${PhFareCalculator.peso(high)}';
+    return '${PhFareCalculator.peso(base)} – ${PhFareCalculator.peso(high)}+';
   }
 }
 
@@ -147,7 +147,7 @@ class PhFareCalculator {
           trainMin,
           trainMax,
         );
-      case 'ferry':
+      case 'boat':
         return ferryFlat;
       default:
         return jeepney.fareForKm(km);
