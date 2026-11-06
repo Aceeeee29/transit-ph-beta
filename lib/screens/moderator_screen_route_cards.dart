@@ -615,18 +615,28 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
     _refreshModeratorState();
   }
 
-  Future<int?> _confirmRestrictUserSection(User user) async {
+  /// Asks how long to restrict [user] and why. The reason and note are
+  /// shown to the rider, so a restriction can't go out without one.
+  Future<RestrictChoice?> _confirmRestrictUserSection(User user) async {
     var typedKeyword = '';
     var selectedDays = ModerationService.maxRestrictionDays;
+    LockoutReason? selectedReason;
+    var note = '';
 
-    final selectedRestrictionDays = await showDialog<int>(
+    final choice = await showDialog<RestrictChoice>(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withOpacity(0.35),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final canRestrict = typedKeyword.trim().toUpperCase() == 'RESTRICT';
+            final reason = selectedReason;
+            // 1. A reason is picked. 2. "Other" has a note saying what it
+            // was. 3. RESTRICT is typed.
+            final canRestrict =
+                reason != null &&
+                (!reason.needsNote || note.trim().isNotEmpty) &&
+                typedKeyword.trim().toUpperCase() == 'RESTRICT';
 
             return Dialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -732,6 +742,84 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: _border),
                         ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<LockoutReason>(
+                            value: selectedReason,
+                            isExpanded: true,
+                            dropdownColor: _surface,
+                            hint: Text(
+                              'Reason (shown to the rider)',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            items:
+                                LockoutReason.all
+                                    .map(
+                                      (r) => DropdownMenuItem<LockoutReason>(
+                                        value: r,
+                                        child: Text(
+                                          r.label,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (value) {
+                              selectedReason = value;
+                              setDialogState(() {});
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _border),
+                        ),
+                        child: TextField(
+                          minLines: 2,
+                          maxLines: 4,
+                          maxLength: 500,
+                          onChanged: (value) {
+                            note = value;
+                            setDialogState(() {});
+                          },
+                          style: TextStyle(color: _textPrimary, fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText:
+                                reason?.needsNote == true
+                                    ? 'Say what they did (required)'
+                                    : 'Note to the rider (optional)',
+                            hintStyle: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 13,
+                            ),
+                            border: InputBorder.none,
+                            counterText: '',
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _border),
+                        ),
                         child: TextField(
                           onChanged: (value) {
                             typedKeyword = value;
@@ -786,9 +874,11 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                             child: GestureDetector(
                               onTap:
                                   canRestrict
-                                      ? () => Navigator.of(
-                                        context,
-                                      ).pop(selectedDays)
+                                      ? () => Navigator.of(context).pop((
+                                        days: selectedDays,
+                                        reason: reason,
+                                        note: note.trim(),
+                                      ))
                                       : null,
                               child: Container(
                                 height: 40,
@@ -833,7 +923,7 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
       },
     );
 
-    return selectedRestrictionDays;
+    return choice;
   }
 
   Widget _buildPendingPostsTabSection() {

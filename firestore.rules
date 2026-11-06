@@ -102,6 +102,20 @@ service cloud.firestore {
       match /routeHistory/{historyId} {
         allow read, write: if isSelf(uid);
       }
+
+      // Why the rider was banned or restricted, shown to them on the
+      // locked-out popup. Kept here instead of on the profile because any
+      // signed-in account can read profiles. The rider reads their own;
+      // only staff write it. Moderators only restrict, and only regular
+      // riders, the same as on the profile above.
+      match /moderation/{docId} {
+        allow read: if isSelf(uid) || isStaff();
+        allow write: if isSuperAdmin() || (
+          isModerator() &&
+          get(/databases/$(database)/documents/users/$(uid)).data.get('role', 'user') == 'user' &&
+          request.resource.data.get('action', '') == 'restrict'
+        );
+      }
     }
 
     // ── POSTS ─────────────────────────────────────────────────────────────────
@@ -493,6 +507,46 @@ service cloud.firestore {
       allow update: if isStaff();
       // The author too, when deleting their account.
       allow delete: if isStaff() || (
+        isAuth() && resource.data.userId == request.auth.uid
+      );
+    }
+
+    // ── APPEALS ───────────────────────────────────────────────────────────────
+    // A banned or restricted rider asking staff to undo it. The id is
+    // "<uid>_<lockoutId>", so each ban or restriction gets one appeal: a
+    // second one for the same lockout hits the existing doc, which only
+    // staff can change.
+    match /appeals/{appealId} {
+      // The id check lets the rider look up their own appeal before it
+      // exists (to know whether to show the Appeal button).
+      allow read: if isAuth() && (
+        appealId.matches(request.auth.uid + '_.+') ||
+        isStaff() ||
+        resource.data.userId == request.auth.uid
+      );
+      // Only while actually locked out, as themselves, still waiting.
+      allow create: if isAuth() &&
+        !notBanned() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.lockoutId is string &&
+        appealId == request.auth.uid + '_' + request.resource.data.lockoutId &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() > 0 &&
+        request.resource.data.message.size() <= 1000 &&
+        request.resource.data.keys().hasOnly(['userId', 'userName', 'userEmail',
+          'lockoutId', 'action', 'reasonLabel', 'note', 'message', 'status',
+          'createdAt']);
+      // Superadmins decide any appeal; moderators only restriction ones
+      // (they can't lift a ban), and only the decision fields.
+      allow update: if isSuperAdmin() || (
+        isModerator() &&
+        resource.data.get('action', '') == 'restrict' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'reply', 'reviewedBy', 'reviewedAt'])
+      );
+      // The rider too, when deleting their account.
+      allow delete: if isSuperAdmin() || (
         isAuth() && resource.data.userId == request.auth.uid
       );
     }

@@ -92,6 +92,10 @@ class AccountDeletionService {
         'feedback',
         () => _deleteWhere(db.collection('feedbacks'), 'userId', uid),
       );
+      await _step(
+        'appeals',
+        () => _deleteWhere(db.collection('appeals'), 'userId', uid),
+      );
       final profile = db.collection('users').doc(uid);
       for (final sub in const ['achievements', 'badges', 'routeHistory']) {
         await _step(sub, () => _deleteAll(profile.collection(sub)));

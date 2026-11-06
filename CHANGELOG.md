@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.2.2 — November 6, 2026
+
+- A banned account now says "Account Banned" (it used to say
+  "restricted"), and a restricted one shows until when
+- Banned or restricted riders see why: the reason, the part of the Terms
+  it breaks, and a note from the team
+- Riders can appeal a ban or restriction once from that popup, and see
+  the decision there the next time they open the app
+- Moderators pick a reason when restricting someone, and review
+  restriction appeals in the Moderator panel's Feedback tab (ban appeals
+  go to the superadmin)
+- A banned account with an old, ended restriction date can no longer
+  sign in
+- The popup no longer shows if the restriction was already lifted, and
+  closes by itself if it's lifted while open
+- New languages: Korean (한국어), Chinese (简体中文) and Japanese (日本語)
+- Email sign-ups now verify their email before the terms
+- The fare guide shows just the fare range for bus, tricycle and FX/van
+
 ## v1.2.1 — November 5, 2026
 
 - Safer sign-in: after a wrong password, Sign In waits 15 seconds, then

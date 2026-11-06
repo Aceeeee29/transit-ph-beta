@@ -54,10 +54,6 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     PhFareCalculator.busOrdinary.estimateRange,
                     Icons.directions_bus_filled,
                     _danger,
-                    detail:
-                        'first ${_km(PhFareCalculator.busOrdinary.baseKm)}, '
-                        'then +${PhFareCalculator.peso(PhFareCalculator.busOrdinary.perKm)}/km '
-                        '(aircon +${PhFareCalculator.peso(PhFareCalculator.busAircon.perKm)}/km)',
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
@@ -73,7 +69,6 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     PhFareCalculator.tricycle.estimateRange,
                     Icons.pedal_bike,
                     const Color(0xFFE89A3C),
-                    detail: _ruleDetail(PhFareCalculator.tricycle),
                   ),
                   const SizedBox(height: 8),
                   _fareRow(
@@ -81,7 +76,6 @@ class HomeFareMatrixDialog extends StatelessWidget {
                     PhFareCalculator.fxVan.estimateRange,
                     Icons.directions_car,
                     const Color(0xFFD4A017),
-                    detail: _ruleDetail(PhFareCalculator.fxVan),
                   ),
                 ],
               ),

@@ -6,16 +6,29 @@ import 'translation_service.dart';
 /// on-device ML Kit engine that powers the Quick Translator, so it only
 /// works on Android/iOS — elsewhere (web/desktop) it silently stays English.
 class AppLanguageService {
+  // The label is what Settings shows and saves. The Korean, Chinese and
+  // Japanese ones carry the language's own name, so a rider who can't read
+  // English can still find theirs in the list. Every code here must be one
+  // ML Kit can translate (see TranslationService._asTranslateLanguage).
   static const Map<String, String> _labelToCode = {
     'English': 'en',
     'Filipino': 'tl',
     'Spanish': 'es',
+    'Korean (한국어)': 'ko',
+    'Chinese (简体中文)': 'zh',
+    'Japanese (日本語)': 'ja',
   };
   static const Map<String, String> _codeToLabel = {
     'en': 'English',
     'tl': 'Filipino',
     'es': 'Spanish',
+    'ko': 'Korean (한국어)',
+    'zh': 'Chinese (简体中文)',
+    'ja': 'Japanese (日本語)',
   };
+
+  /// Every language the app can switch to, in the order Settings lists them.
+  static List<String> get labels => _labelToCode.keys.toList();
 
   static final ValueNotifier<String> languageCode = ValueNotifier<String>('en');
   static final Map<String, String> _cache = {};

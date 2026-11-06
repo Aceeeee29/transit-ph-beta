@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/post.dart';
 import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
+import '../models/lockout.dart';
+import '../services/lockout_service.dart';
 import '../services/moderation_service.dart';
 import '../models/route_issue_report.dart';
 import '../services/route_metrics_service.dart';
@@ -15,6 +19,10 @@ import '../theme/app_colors.dart';
 part 'moderator_screen_route_cards.dart';
 part 'moderator_screen_route_reports.dart';
 part 'moderator_screen_user_management.dart';
+part 'moderator_screen_appeals.dart';
+
+/// What the moderator picked in the Restrict dialog.
+typedef RestrictChoice = ({int days, LockoutReason reason, String note});
 
 class ModeratorScreen extends StatefulWidget {
   final Future<void> Function()? onRoutesModerated;
@@ -32,6 +40,11 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   late final ValueNotifier<List<route_model.Route>> _routesNotifier;
   final TextEditingController _userSearchController = TextEditingController();
   String _userSearchQuery = '';
+
+  // Riders' ban and restriction appeals, kept live for the Feedback tab and
+  // its badge.
+  StreamSubscription<List<Appeal>>? _appealsSubscription;
+  List<Appeal> _appeals = const [];
 
   // Items with an action still saving ('route:<id>', 'user:<uid>'...).
   // Their buttons ignore taps until it ends, so a double tap can't approve
@@ -84,10 +97,17 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     _routesNotifier = ModerationService.pendingRoutesNotifier;
     _postsNotifier.addListener(_onDataChanged);
     _routesNotifier.addListener(_onDataChanged);
+    _appealsSubscription = LockoutService.watchAppeals().listen(
+      (appeals) {
+        if (mounted) setState(() => _appeals = appeals);
+      },
+      onError: (Object e) => debugPrint('[Moderator] appeals failed: $e'),
+    );
   }
 
   @override
   void dispose() {
+    _appealsSubscription?.cancel();
     _postsNotifier.removeListener(_onDataChanged);
     _routesNotifier.removeListener(_onDataChanged);
     _userSearchController.dispose();
@@ -137,7 +157,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     return 'Restricted (${daysLeft}d left)';
   }
 
-  Future<int?> _confirmRestrictUser(User user) async {
+  Future<RestrictChoice?> _confirmRestrictUser(User user) async {
     return this._confirmRestrictUserSection(user);
   }
 
@@ -243,7 +263,10 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             const Tab(text: 'Trust'),
             _tabWithBadge('Posts', pendingPostsCount),
             const Tab(text: 'Users'),
-            const Tab(text: 'Feedback'),
+            _tabWithBadge(
+              'Feedback',
+              _appeals.where((a) => a.status == AppealStatus.pending).length,
+            ),
             const Tab(text: 'Reports'),
           ],
         ),
@@ -444,12 +467,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             spacing: 8,
             runSpacing: 6,
             children: [
+              // Only approved routes are listed here, so no status badge.
               _buildTrustConfidenceChip(route),
-              _metaChip(
-                Icons.verified,
-                route.approvalStatus.name.toUpperCase(),
-                route.isApproved ? _success : _warning,
-              ),
               _metaChip(
                 Icons.directions_rounded,
                 '${route.steps.length} steps',

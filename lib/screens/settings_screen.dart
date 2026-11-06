@@ -10,6 +10,7 @@ import '../models/feedback.dart' as feedback_model;
 import '../screens/legal_documents_screen.dart';
 import '../screens/onboarding_screen.dart';
 import '../services/account_deletion_service.dart';
+import '../services/app_language_service.dart';
 import '../services/map_tab_controller.dart';
 import '../repositories/route_cache_repository.dart';
 import '../services/media_service.dart';
@@ -96,7 +97,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             preferences['routeApprovalUpdates'] as bool? ?? false;
         newDiscussions = preferences['newDiscussions'] as bool? ?? false;
         distanceUnit = preferences['distanceUnit'] as String? ?? 'Miles';
-        language = preferences['language'] as String? ?? 'English';
+        // A language the list doesn't have (say, saved by a newer app
+        // version) would crash the dropdown, so it shows as English.
+        final savedLanguage = preferences['language'] as String?;
+        language =
+            AppLanguageService.labels.contains(savedLanguage)
+                ? savedLanguage!
+                : 'English';
         showEmailInProfile =
             preferences['showEmailInProfile'] as bool? ?? false;
         _isLoadingPreferences = false;
@@ -801,7 +808,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Language',
                   subtitle: 'Choose your preferred language',
                   value: language,
-                  items: ['English', 'Filipino', 'Spanish'],
+                  items: AppLanguageService.labels,
                   onChanged: (val) {
                     if (val != null) _updateLanguage(val);
                   },

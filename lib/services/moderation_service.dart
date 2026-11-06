@@ -7,6 +7,8 @@ import '../models/notification.dart';
 import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
+import '../models/lockout.dart';
+import 'lockout_service.dart';
 import '../services/notifications_service.dart';
 import '../services/post_service.dart' show PostLifetime;
 import '../services/route_service.dart';
@@ -99,6 +101,10 @@ class ModerationService {
   /// actions outside the moderator screen (e.g. on feed posts).
   static final ValueNotifier<bool> isStaffNotifier = ValueNotifier(false);
 
+  /// Whether the signed-in user is a superadmin. Only they can decide ban
+  /// appeals; moderators decide restriction appeals.
+  static final ValueNotifier<bool> isSuperAdminNotifier = ValueNotifier(false);
+
   /// Initialize all real-time listeners
   static void init() {
     if (_initialized) return;
@@ -121,6 +127,7 @@ class ModerationService {
       _roleSubscription = null;
       _roleWatchUid = null;
       isStaffNotifier.value = false;
+      isSuperAdminNotifier.value = false;
       _stopDataListeners(clearData: true);
       return;
     }
@@ -136,8 +143,11 @@ class ModerationService {
         .snapshots()
         .listen(
           (doc) {
-            final isStaff = _isStaffRole(doc.data()?['role']);
+            final role = doc.data()?['role'];
+            final isStaff = _isStaffRole(role);
             isStaffNotifier.value = isStaff;
+            // Same test as the Firestore rules' isSuperAdmin().
+            isSuperAdminNotifier.value = role == 'superadmin';
             if (isStaff && !_dataListenersRunning) {
               _startDataListeners();
             } else if (!isStaff && _dataListenersRunning) {
@@ -395,19 +405,40 @@ class ModerationService {
 
   // ── User moderation ────────────────────────────────────────────────────────
 
-  static Future<void> restrictUser(String uid, {required int days}) async {
+  /// Restricts [uid] for [days] and saves why, so the rider sees the
+  /// reason and can appeal. Both writes go in one batch, so there's never
+  /// a restriction without a reason or a reason without a restriction.
+  /// Returns false when the save failed.
+  static Future<bool> restrictUser(
+    String uid, {
+    required int days,
+    required LockoutReason reason,
+    String note = '',
+  }) async {
     final sanitizedDays = days.clamp(1, maxRestrictionDays) as int;
     final restrictedUntil = DateTime.now().toUtc().add(
       Duration(days: sanitizedDays),
     );
 
     try {
-      await _firestore.collection('users').doc(uid).update({
+      final batch = _firestore.batch();
+      batch.update(_firestore.collection('users').doc(uid), {
         'isBanned': false,
         'status': 'restricted',
         'restrictedAt': FieldValue.serverTimestamp(),
         'restrictedUntil': Timestamp.fromDate(restrictedUntil),
       });
+      batch.set(
+        LockoutService.recordRef(uid),
+        LockoutRecord.newRecord(
+          action: 'restrict',
+          reason: reason,
+          note: note,
+          byUid: _auth.currentUser?.uid ?? '',
+          until: restrictedUntil,
+        ),
+      );
+      await batch.commit();
       final index = usersNotifier.value.indexWhere((u) => u.uid == uid);
       if (index != -1) {
         final user = usersNotifier.value[index];
@@ -415,10 +446,17 @@ class ModerationService {
         user.restrictedUntil = restrictedUntil.toLocal();
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      debugPrint('[Moderation] restrict failed: $e');
+      return false;
+    }
   }
 
-  static Future<void> liftUserRestriction(String uid) async {
+  /// Lifts a restriction (or a ban, for a superadmin). An appeal still
+  /// waiting from this rider is closed as lifted, so it doesn't stay in
+  /// the list after the matter is settled.
+  static Future<bool> liftUserRestriction(String uid) async {
     try {
       await _firestore.collection('users').doc(uid).update({
         'isBanned': false,
@@ -433,16 +471,12 @@ class ModerationService {
         user.restrictedUntil = null;
         usersNotifier.value = List<User>.from(usersNotifier.value);
       }
-    } catch (_) {}
-  }
-
-  // Backward-compatible wrappers for older call sites.
-  static Future<void> banUser(String uid) async {
-    await restrictUser(uid, days: maxRestrictionDays);
-  }
-
-  static Future<void> unbanUser(String uid) async {
-    await liftUserRestriction(uid);
+    } catch (e) {
+      debugPrint('[Moderation] lift failed: $e');
+      return false;
+    }
+    await LockoutService.closePendingAppeals(uid);
+    return true;
   }
 
   // ── Feedback management ────────────────────────────────────────────────────

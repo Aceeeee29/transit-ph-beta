@@ -193,18 +193,28 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                             );
                             return;
                           }
+                          final bool saved;
                           if (user.hasActiveRestriction) {
-                            await ModerationService.liftUserRestriction(
+                            saved = await ModerationService.liftUserRestriction(
                               user.uid!,
                             );
                           } else {
-                            final restrictionDays = await _confirmRestrictUser(
-                              user,
-                            );
-                            if (restrictionDays == null) return;
-                            await ModerationService.restrictUser(
+                            final choice = await _confirmRestrictUser(user);
+                            if (choice == null) return;
+                            saved = await ModerationService.restrictUser(
                               user.uid!,
-                              days: restrictionDays,
+                              days: choice.days,
+                              reason: choice.reason,
+                              note: choice.note,
+                            );
+                          }
+                          if (!saved && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Couldn\'t save that. Check your connection and try again.',
+                                ),
+                              ),
                             );
                           }
                           _refreshModeratorState();
@@ -226,14 +236,17 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
         ModerationService.getFeedbacks()
             .where((f) => f.type == feedback_model.FeedbackType.feedback)
             .toList();
+    // Appeals come first: a locked-out rider is waiting on them.
+    final appealRows = _appealRows();
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: feedbacks.length,
+        itemCount: appealRows.length + feedbacks.length,
         itemBuilder: (context, index) {
-          final feedback = feedbacks[index];
+          if (index < appealRows.length) return appealRows[index];
+          final feedback = feedbacks[index - appealRows.length];
           final statusColor =
               feedback.status == feedback_model.FeedbackStatus.pending
                   ? _warning
