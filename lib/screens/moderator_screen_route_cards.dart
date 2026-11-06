@@ -466,14 +466,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
   }
 
   Future<void> _deleteFeedbackWithConfirmationSection(
-    feedback_model.Feedback feedback, {
-    required bool fromDismiss,
-  }) async {
-    final title = fromDismiss ? 'Dismiss Feedback' : 'Delete Feedback';
-    final message =
-        fromDismiss
-            ? 'This will dismiss and permanently delete this feedback. Continue?'
-            : 'This will permanently delete this resolved feedback. Continue?';
+    feedback_model.Feedback feedback,
+  ) async {
+    const title = 'Delete Feedback';
+    const message = 'This will permanently delete this feedback. Continue?';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -605,13 +601,9 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
 
     await ModerationService.deleteFeedback(feedback.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          fromDismiss ? 'Feedback dismissed and deleted' : 'Feedback deleted',
-        ),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Feedback deleted')));
     _refreshModeratorState();
   }
 

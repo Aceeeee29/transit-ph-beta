@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.3 — November 7, 2026
+
+- Reporting a post as "Other" now asks you to say what's wrong
+- Post reports are now saved under the right account, so you can no
+  longer report your own post
+- Feedback you send no longer includes your email: moderators can't see
+  who sent it
+- Route trust can now reach 100. A route needs at least 5 riders'
+  answers before they count fully, so one rider can't push a route to
+  the top or bottom alone
+- Moderator panel: the Feedback tab has a Pending / Resolved / Dismissed
+  filter, and Dismiss keeps the feedback (marked dismissed) instead of
+  deleting it
+- Moderator panel: the Reports tab looks like the other tabs, the Users
+  tab only tags restricted riders, and appeals no longer show the
+  rider's email
+
 ## v1.2.2 — November 6, 2026
 
 - A banned account now says "Account Banned" (it used to say

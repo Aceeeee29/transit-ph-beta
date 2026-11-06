@@ -46,6 +46,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   StreamSubscription<List<Appeal>>? _appealsSubscription;
   List<Appeal> _appeals = const [];
 
+  // Feedback tab filter. Null shows every status.
+  feedback_model.FeedbackStatus? _feedbackFilter;
+
   // Items with an action still saving ('route:<id>', 'user:<uid>'...).
   // Their buttons ignore taps until it ends, so a double tap can't approve
   // twice (two notifications) or approve and reject at once.
@@ -97,12 +100,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     _routesNotifier = ModerationService.pendingRoutesNotifier;
     _postsNotifier.addListener(_onDataChanged);
     _routesNotifier.addListener(_onDataChanged);
-    _appealsSubscription = LockoutService.watchAppeals().listen(
-      (appeals) {
-        if (mounted) setState(() => _appeals = appeals);
-      },
-      onError: (Object e) => debugPrint('[Moderator] appeals failed: $e'),
-    );
+    _appealsSubscription = LockoutService.watchAppeals().listen((appeals) {
+      if (mounted) setState(() => _appeals = appeals);
+    }, onError: (Object e) => debugPrint('[Moderator] appeals failed: $e'));
   }
 
   @override
@@ -126,6 +126,10 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     setState(() => _userSearchQuery = value);
   }
 
+  void _setFeedbackFilter(feedback_model.FeedbackStatus? value) {
+    setState(() => _feedbackFilter = value);
+  }
+
   void _clearUserSearchQuery() {
     _userSearchController.clear();
     _setUserSearchQuery('');
@@ -139,17 +143,13 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }
 
   Future<void> _deleteFeedbackWithConfirmation(
-    feedback_model.Feedback feedback, {
-    required bool fromDismiss,
-  }) async {
-    await this._deleteFeedbackWithConfirmationSection(
-      feedback,
-      fromDismiss: fromDismiss,
-    );
+    feedback_model.Feedback feedback,
+  ) async {
+    await this._deleteFeedbackWithConfirmationSection(feedback);
   }
 
+  /// Only called for restricted users. Unrestricted users get no tag.
   String _buildRestrictionLabel(User user) {
-    if (!user.hasActiveRestriction) return 'Active';
     final until = user.restrictedUntil;
     if (until == null) return 'Restricted';
     final remaining = until.difference(DateTime.now());

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/post.dart';
 import '../../services/post_actions_service.dart';
@@ -23,7 +24,31 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
     'Other',
   ];
 
+  static const _other = 'Other';
+
   String? _selectedReason;
+  // What the rider types when they pick Other. Staff need it to know what
+  // the problem is.
+  final _otherController = TextEditingController();
+
+  @override
+  void dispose() {
+    _otherController.dispose();
+    super.dispose();
+  }
+
+  bool get _canReport {
+    final reason = _selectedReason;
+    if (reason == null) return false;
+    return reason != _other || _otherController.text.trim().isNotEmpty;
+  }
+
+  /// The saved reason. Other becomes "Other: (what they typed)".
+  String get _reportReason {
+    final reason = _selectedReason!;
+    if (reason != _other) return reason;
+    return '$_other: ${_otherController.text.trim()}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,27 +76,67 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               iconBg: FeedColors.danger.withOpacity(0.1),
               iconColor: FeedColors.danger,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Why are you reporting this post?',
-                    style: TextStyle(
-                      color: FeedColors.textSecondary,
-                      fontSize: 13,
+            // Scrolls so the text box stays reachable above the keyboard.
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Why are you reporting this post?',
+                      style: TextStyle(
+                        color: FeedColors.textSecondary,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  ..._reasons.map(
-                    (reason) => _ReasonOption(
-                      reason: reason,
-                      isSelected: _selectedReason == reason,
-                      onTap: () => setState(() => _selectedReason = reason),
+                    const SizedBox(height: 10),
+                    ..._reasons.map(
+                      (reason) => _ReasonOption(
+                        reason: reason,
+                        isSelected: _selectedReason == reason,
+                        onTap: () => setState(() => _selectedReason = reason),
+                      ),
                     ),
-                  ),
-                ],
+                    if (_selectedReason == _other)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: TextField(
+                          controller: _otherController,
+                          autofocus: true,
+                          maxLines: 3,
+                          minLines: 2,
+                          maxLength: 200,
+                          textCapitalization: TextCapitalization.sentences,
+                          onChanged: (_) => setState(() {}),
+                          style: TextStyle(
+                            color: FeedColors.textPrimary,
+                            fontSize: 14,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: "Tell us what's wrong with this post",
+                            hintStyle: TextStyle(
+                              color: FeedColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                            filled: true,
+                            fillColor: FeedColors.surface,
+                            contentPadding: const EdgeInsets.all(12),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: FeedColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: FeedColors.accent,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             Padding(
@@ -89,13 +154,15 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                     child: FeedDialogDangerButton(
                       label: 'Report',
                       onTap:
-                          _selectedReason == null
+                          !_canReport
                               ? null
                               : () {
                                 PostActionsService.reportPost(
                                   widget.post,
-                                  _selectedReason!,
-                                  'currentUser@example.com',
+                                  _reportReason,
+                                  // The real rider, so "can't report your
+                                  // own post" and account deletion work.
+                                  FirebaseAuth.instance.currentUser?.uid ?? '',
                                 );
                                 Navigator.of(context).pop();
                                 ScaffoldMessenger.of(context).showSnackBar(

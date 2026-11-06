@@ -1196,7 +1196,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   id:
                                       DateTime.now().millisecondsSinceEpoch
                                           .toString(),
-                                  userId: widget.userEmail,
+                                  // The account ID, not the email, so staff
+                                  // don't see who sent it. Account deletion
+                                  // also finds feedback by this ID.
+                                  userId:
+                                      firebase_auth
+                                          .FirebaseAuth
+                                          .instance
+                                          .currentUser
+                                          ?.uid ??
+                                      '',
                                   type: feedback_model.FeedbackType.feedback,
                                   content: content,
                                   targetType:

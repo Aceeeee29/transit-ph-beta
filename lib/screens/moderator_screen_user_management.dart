@@ -154,21 +154,16 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _metaChip(Icons.badge_outlined, user.role.name, _accent),
-                      _metaChip(
-                        user.hasActiveRestriction
-                            ? Icons.block_outlined
-                            : Icons.verified_user_outlined,
-                        _buildRestrictionLabel(user),
-                        user.hasActiveRestriction ? _danger : _success,
-                      ),
-                    ],
-                  ),
+                  // Only restricted users get a tag. Everyone listed here is
+                  // a regular user, so a role tag would say nothing.
+                  if (user.hasActiveRestriction) ...[
+                    const SizedBox(height: 10),
+                    _metaChip(
+                      Icons.block_outlined,
+                      _buildRestrictionLabel(user),
+                      _danger,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -231,22 +226,98 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
     );
   }
 
+  /// Status filter at the top of the Feedback tab, like the dashboard's.
+  Widget _feedbackFilterRow() {
+    const options = <feedback_model.FeedbackStatus?, String>{
+      null: 'All statuses',
+      feedback_model.FeedbackStatus.pending: 'Pending',
+      feedback_model.FeedbackStatus.resolved: 'Resolved',
+      feedback_model.FeedbackStatus.dismissed: 'Dismissed',
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<feedback_model.FeedbackStatus?>(
+            value: _feedbackFilter,
+            isExpanded: true,
+            dropdownColor: _surface,
+            borderRadius: BorderRadius.circular(12),
+            icon: Icon(Icons.expand_more_rounded, color: _textSecondary),
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            items: [
+              for (final entry in options.entries)
+                DropdownMenuItem(
+                  value: entry.key,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.filter_list_rounded,
+                        size: 18,
+                        color: _textSecondary,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(entry.value),
+                    ],
+                  ),
+                ),
+            ],
+            onChanged: _setFeedbackFilter,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFeedbacksTabSection() {
+    final filter = _feedbackFilter;
     final feedbacks =
         ModerationService.getFeedbacks()
             .where((f) => f.type == feedback_model.FeedbackType.feedback)
+            .where((f) => filter == null || f.status == filter)
             .toList();
     // Appeals come first: a locked-out rider is waiting on them.
-    final appealRows = _appealRows();
+    final appealRows = _appealRows(filter);
+    // Row 0 is the filter. Then appeals, then feedback (or a note when the
+    // filter leaves no feedback).
+    final feedbackRows = feedbacks.isEmpty ? 1 : feedbacks.length;
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refreshModeratorPanel,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: appealRows.length + feedbacks.length,
+        itemCount: 1 + appealRows.length + feedbackRows,
         itemBuilder: (context, index) {
-          if (index < appealRows.length) return appealRows[index];
-          final feedback = feedbacks[index - appealRows.length];
+          if (index == 0) return _feedbackFilterRow();
+          if (index <= appealRows.length) return appealRows[index - 1];
+          if (feedbacks.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Text(
+                  filter == null
+                      ? 'No feedback yet'
+                      : 'No ${filter.name} feedback',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            );
+          }
+          final feedback = feedbacks[index - 1 - appealRows.length];
           final statusColor =
               feedback.status == feedback_model.FeedbackStatus.pending
                   ? _warning
@@ -334,8 +405,8 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
+                    // No sender shown: riders send feedback anonymously.
                     children: [
-                      _metaChip(Icons.person_outline, feedback.userId, _accent),
                       _metaChip(
                         Icons.schedule_outlined,
                         _formatDate(feedback.timestamp),
@@ -372,18 +443,19 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                           label: 'Dismiss',
                           color: _textSecondary,
                           lockItem: 'feedback:${feedback.id}',
+                          // Dismiss keeps the feedback, marked dismissed,
+                          // so it still shows under the Dismissed filter.
                           onTap: () async {
-                            await _deleteFeedbackWithConfirmation(
-                              feedback,
-                              fromDismiss: true,
+                            await ModerationService.updateFeedbackStatus(
+                              feedback.id,
+                              feedback_model.FeedbackStatus.dismissed,
                             );
+                            _refreshModeratorState();
                           },
                         ),
                       ],
                     ),
-                  ],
-                  if (feedback.status ==
-                      feedback_model.FeedbackStatus.resolved) ...[
+                  ] else ...[
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -392,10 +464,7 @@ extension _ModeratorScreenManagementSections on _ModeratorScreenState {
                           color: _danger,
                           lockItem: 'feedback:${feedback.id}',
                           onTap: () async {
-                            await _deleteFeedbackWithConfirmation(
-                              feedback,
-                              fromDismiss: false,
-                            );
+                            await _deleteFeedbackWithConfirmation(feedback);
                           },
                         ),
                       ],

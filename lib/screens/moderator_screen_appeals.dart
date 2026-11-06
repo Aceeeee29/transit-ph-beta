@@ -18,15 +18,24 @@ extension _ModeratorScreenAppeals on _ModeratorScreenState {
   static const _decidedShown = 10;
 
   /// The appeals section's rows: a heading, then one card per appeal.
-  /// Empty when there are no appeals at all.
-  List<Widget> _appealRows() {
+  /// Empty when no appeal matches [filter]. Pending shows waiting appeals,
+  /// Resolved shows decided ones (lifted or upheld), Dismissed shows none.
+  List<Widget> _appealRows(feedback_model.FeedbackStatus? filter) {
+    final showWaiting =
+        filter == null || filter == feedback_model.FeedbackStatus.pending;
+    final showDecided =
+        filter == null || filter == feedback_model.FeedbackStatus.resolved;
     final waiting =
-        _appeals.where((a) => a.status == AppealStatus.pending).toList();
+        showWaiting
+            ? _appeals.where((a) => a.status == AppealStatus.pending).toList()
+            : const <Appeal>[];
     final decided =
-        _appeals
-            .where((a) => a.status != AppealStatus.pending)
-            .take(_decidedShown)
-            .toList();
+        showDecided
+            ? _appeals
+                .where((a) => a.status != AppealStatus.pending)
+                .take(_decidedShown)
+                .toList()
+            : const <Appeal>[];
     if (waiting.isEmpty && decided.isEmpty) return const [];
 
     return [
@@ -74,10 +83,8 @@ extension _ModeratorScreenAppeals on _ModeratorScreenState {
     final canDecide =
         waiting &&
         (!appeal.isBan || ModerationService.isSuperAdminNotifier.value);
-    final who =
-        appeal.userName.isNotEmpty
-            ? appeal.userName
-            : (appeal.userEmail.isNotEmpty ? appeal.userEmail : appeal.userId);
+    // Never the email: moderators shouldn't see riders' emails here.
+    final who = appeal.userName.isNotEmpty ? appeal.userName : 'Rider';
 
     return _panelCard(
       child: Padding(
@@ -291,10 +298,7 @@ extension _ModeratorScreenAppeals on _ModeratorScreenState {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(color: _textSecondary),
-                ),
+                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
