@@ -151,7 +151,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     );
   }
 
-  // ─── Step navigation header (jump straight to any of the 3 parts) ───────
+  // Step navigation header (jump straight to any of the 3 parts)
 
   Widget _buildStepHeader() {
     return Row(
@@ -226,7 +226,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     );
   }
 
-  // ─── Active step content ────────────────────────────────────────────────
+  // Active step content
 
   Widget _buildStepContent() {
     switch (_activeStep) {
@@ -353,7 +353,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   onSelected: (selected) {
-                    // Single-select within Other Tags; User Tags are untouched.
+                    // Single-select within Other Tags. User Tags are untouched.
                     final next =
                         widget.selectedRouteTags
                             .where((t) => !widget.otherTagOptions.contains(t))
@@ -414,7 +414,7 @@ class _RouteFormStepperState extends State<RouteFormStepper> {
     );
   }
 
-  // ─── Controls ───────────────────────────────────────────────────────────
+  // Controls
 
   Widget _buildControls() {
     return Row(

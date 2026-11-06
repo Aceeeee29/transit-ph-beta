@@ -221,7 +221,7 @@ class ScheduleWindowService {
 
     final nowMinute = now.hour * 60 + now.minute;
     if (end < start) {
-      // Overnight window, e.g. 22:00-04:00
+      // Overnight window, like 22:00-04:00
       final active = nowMinute >= start || nowMinute <= end;
       return active ? _WindowStatus.active : _WindowStatus.beforeStart;
     }

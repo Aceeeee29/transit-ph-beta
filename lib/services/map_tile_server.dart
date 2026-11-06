@@ -28,7 +28,7 @@ class MapTileServer {
 
   Future<String>? _starting;
 
-  /// The server's address, e.g. http://127.0.0.1:41234. Started on first
+  /// The server's address, like http://127.0.0.1:41234. Started on first
   /// use and kept for the rest of the run.
   Future<String> baseUrl() => _starting ??= _start();
 
@@ -93,7 +93,7 @@ class MapTileServer {
   }
 
   /// MapLibre asks for "Noto Sans Regular" (sometimes with fallbacks after a
-  /// comma); the bundled files use "_" for spaces.
+  /// comma). The bundled files use "_" for spaces.
   Future<Uint8List?> _glyphs(String fontStack, String range) async {
     final font = fontStack.split(',').first.trim();
     final file = '${font.replaceAll(' ', '_')}/$range';
@@ -127,7 +127,7 @@ class MapTileServer {
     return response.bodyBytes;
   }
 
-  /// MapLibre asks for ofm@2x.json and .png on this kind of screen; the
+  /// MapLibre asks for ofm@2x.json and .png on this kind of screen. The
   /// bundled icons are the 2x set, served for any size asked.
   Future<Uint8List?> _sprite(String name) async {
     final ext = name.endsWith('.png') ? 'png' : 'json';

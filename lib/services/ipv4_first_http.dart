@@ -8,7 +8,7 @@ import 'dart:io';
 /// IPv4 answered in 1.6 s). Dart tries the addresses in the order DNS gives
 /// them, so these servers never answered on such a connection. Installed
 /// once at startup, this covers every request made from Dart (routing,
-/// place search, weather, Supabase); Firebase and the map have their own
+/// place search, weather, Supabase). Firebase and the map have their own
 /// native networking.
 class Ipv4FirstHttpOverrides extends HttpOverrides {
   @override

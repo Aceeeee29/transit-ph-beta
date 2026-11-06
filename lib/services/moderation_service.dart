@@ -45,7 +45,7 @@ class ModerationService {
     final raw = contributorId?.trim();
     if (raw == null || raw.isEmpty) return null;
 
-    // Already a UID — return directly
+    // Already a UID. Return directly
     if (!raw.contains('@')) return raw;
 
     // Check current user FIRST so self-approval always resolves correctly,
@@ -82,7 +82,7 @@ class ModerationService {
   static ValueNotifier<List<feedback_model.Feedback>> feedbacksNotifier =
       ValueNotifier([]);
 
-  // ── New: pending routes notifier ──────────────────────────────────────────
+  // New: pending routes notifier
   static ValueNotifier<List<route_model.Route>> pendingRoutesNotifier =
       ValueNotifier([]);
 
@@ -97,12 +97,12 @@ class ModerationService {
   static bool _initialized = false;
   static const int maxRestrictionDays = 7;
 
-  /// Whether the signed-in user is a moderator or admin; drives staff-only
-  /// actions outside the moderator screen (e.g. on feed posts).
+  /// Whether the signed-in user is a moderator or admin. Drives staff-only
+  /// actions outside the moderator screen (like on feed posts).
   static final ValueNotifier<bool> isStaffNotifier = ValueNotifier(false);
 
   /// Whether the signed-in user is a superadmin. Only they can decide ban
-  /// appeals; moderators decide restriction appeals.
+  /// appeals. Moderators decide restriction appeals.
   static final ValueNotifier<bool> isSuperAdminNotifier = ValueNotifier(false);
 
   /// Initialize all real-time listeners
@@ -202,8 +202,8 @@ class ModerationService {
           feedbacksNotifier.value = feedbacks;
         });
 
-    // ── Listen only to pending routes ──────────────────────────────────────
-    // Note: no orderBy here — combining where() + orderBy() on different
+    // Listen only to pending routes
+    // No orderBy here. Combining where() + orderBy() on different
     // fields requires a Firestore composite index which may not exist yet.
     // We sort client-side instead.
     _routesSubscription = _firestore
@@ -228,7 +228,7 @@ class ModerationService {
             pendingRoutesNotifier.value = routes;
           },
           onError: (error) {
-            // Ignore listener errors; notifier will receive updates on next valid snapshot.
+            // Ignore listener errors. Notifier will receive updates on next valid snapshot.
           },
         );
   }
@@ -252,7 +252,7 @@ class ModerationService {
     }
   }
 
-  // ── Route moderation ───────────────────────────────────────────────────────
+  // Route moderation
 
   static Future<void> approveRoute(String routeId) async {
     try {
@@ -311,7 +311,7 @@ class ModerationService {
     } catch (_) {}
   }
 
-  // ── Post moderation ────────────────────────────────────────────────────────
+  // Post moderation
 
   static Future<void> approvePost(String postId) async {
     try {
@@ -403,7 +403,7 @@ class ModerationService {
     } catch (_) {}
   }
 
-  // ── User moderation ────────────────────────────────────────────────────────
+  // User moderation
 
   /// Restricts [uid] for [days] and saves why, so the rider sees the
   /// reason and can appeal. Both writes go in one batch, so there's never
@@ -479,7 +479,7 @@ class ModerationService {
     return true;
   }
 
-  // ── Feedback management ────────────────────────────────────────────────────
+  // Feedback management
 
   static List<feedback_model.Feedback> getFeedbacks() {
     return feedbacksNotifier.value;
@@ -534,7 +534,7 @@ class ModerationService {
     } catch (_) {}
   }
 
-  // ── Getters ────────────────────────────────────────────────────────────────
+  // Getters
 
   static List<Post> getPendingPosts() {
     return postsNotifier.value

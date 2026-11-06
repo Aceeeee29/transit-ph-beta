@@ -282,7 +282,7 @@ class Step {
   /// steps saved before this existed, treated as [StepBoarding.flexible].
   final StepBoarding? boarding;
 
-  /// Recognised stops on this step; optional even when [boarding] is
+  /// Recognised stops on this step. Optional even when [boarding] is
   /// designated.
   final List<RouteStop> stops;
 
@@ -307,7 +307,7 @@ class Step {
   });
 
   /// Default pickup rule for a new step of [mode]: buses, trains and FX/vans
-  /// mostly stop at designated places; jeepneys and tricycles stop on
+  /// mostly stop at designated places. Jeepneys and tricycles stop on
   /// request almost anywhere.
   static StepBoarding defaultBoardingFor(String mode) {
     switch (mode) {
@@ -320,7 +320,7 @@ class Step {
     }
   }
 
-  /// Passengers can only board/get off at [stops] — or, when none are
+  /// Passengers can only board/get off at [stops], or, when none are
   /// mapped yet, only at the step's two ends (its terminals). Trains always
   /// work this way. Steps saved before [boarding] existed stay flexible.
   bool get usesDesignatedStops =>

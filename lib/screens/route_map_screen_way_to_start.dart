@@ -83,7 +83,7 @@ extension _RouteMapScreenWayToStart on _RouteMapScreenState {
               .map(CommunityRoute.fromRoute)
               .whereType<CommunityRoute>()
               .toList();
-      // Rider routes first; the transit data fills in where none go.
+      // Rider routes first. The transit data fills in where none go.
       var options = await RoutingService.getRouteAlternatives(
         origin: here,
         destination: start,

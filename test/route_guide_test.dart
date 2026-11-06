@@ -55,7 +55,7 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.text('18.4 km · ₱64 est.'), findsOne);
         expect(find.byTooltip('Whole route'), findsOne);
-        // The guide shows before Start; the X only while following.
+        // The guide shows before Start. The X only while following.
         expect(
           find.text('Suggested by Erling Haaland'),
           following ? findsNothing : findsOne,

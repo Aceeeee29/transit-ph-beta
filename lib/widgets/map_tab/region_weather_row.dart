@@ -108,8 +108,8 @@ class WeatherChip extends StatefulWidget {
   /// The latest weather, shared by every chip (Home and the Map tab).
   static final current = ValueNotifier<WeatherData?>(null);
 
-  /// The current weather, fetched at most every 15 minutes app-wide;
-  /// [force] fetches now (e.g. right after location was allowed). A failed
+  /// The current weather, fetched at most every 15 minutes app-wide.
+  /// [force] fetches now (like right after location was allowed). A failed
   /// fetch isn't kept, so the next call tries again.
   static Future<WeatherData?> load({bool force = false}) {
     final fresh =
@@ -133,7 +133,7 @@ class WeatherChip extends StatefulWidget {
     Geolocator.getServiceStatusStream().listen((status) {
       if (status == ServiceStatus.enabled) _loadIfMissing();
     }, onError: (_) {});
-    // A fetch made offline fails; try again once the phone reconnects.
+    // A fetch made offline fails. Try again once the phone reconnects.
     Connectivity().onConnectivityChanged.listen((results) {
       if (results.any((r) => r != ConnectivityResult.none)) _loadIfMissing();
     }, onError: (_) {});

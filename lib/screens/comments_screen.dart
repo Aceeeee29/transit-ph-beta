@@ -52,7 +52,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
     super.dispose();
   }
 
-  // ─── Submit ───────────────────────────────────────────────────────────────
+  // Submit
 
   Future<void> _submit() async {
     final text = _controller.text.trim();
@@ -80,7 +80,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
       timestamp: DateTime.now(),
     );
 
-    // Optimistic update — show immediately
+    // Show it right away, before the server answers
     setState(() {
       if (_replyingTo != null) {
         final idx = _comments.indexWhere((c) => c.id == _replyingTo!.id);
@@ -181,7 +181,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
     }
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

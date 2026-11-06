@@ -189,7 +189,7 @@ class _StepStopsEditorScreenState extends State<StepStopsEditorScreen> {
                 MapLine(widget.path, color: widget.color, width: 6),
               ],
               // Grey ring: a stop where passengers can't board, only get
-              // off (or the reverse) — still shown, just marked as
+              // off (or the reverse). Still shown, just marked as
               // restricted.
               dots: [
                 for (var i = 0; i < _stops.length; i++)

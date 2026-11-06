@@ -29,7 +29,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
       instruction: step.instruction,
       isCompleted: _isStepCompleted(idx),
       distance: stepKm > 0 ? RouteMetricsService.formatDistance(stepKm) : null,
-      // The regular fare is always shown; the discounted one is added when
+      // The regular fare is always shown. The discounted one is added when
       // the discount toggle is on and the ride gives it.
       fare:
           isTransport
@@ -375,7 +375,7 @@ extension _RouteMapScreenSections on _RouteMapScreenState {
   }
 
   Widget _buildMapSectionSection(LatLng center) {
-    // Place pins sit under the route, its stops and markers; the
+    // Place pins sit under the route, its stops and markers. The
     // traveler's dot on top of everything.
     return TransitMap(
       controller: _map,

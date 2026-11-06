@@ -8,12 +8,12 @@ import '../translated_text.dart';
 import '../../theme/app_colors.dart';
 
 /// Pin sizes. Kept small so a pin is hard to hit by accident while drawing
-/// or panning; the selected one grows so it's easy to find again.
+/// or panning. The selected one grows so it's easy to find again.
 const double placePinSize = 24.0;
 const double placePinSelectedSize = 36.0;
 
 /// One neutral color for every place pin and category chip, so the map
-/// stays calm; the icon tells the kind of place.
+/// stays calm. The icon tells the kind of place.
 const Color placeNeutralColor = Color(0xFF4A5568);
 
 /// A place-of-interest pin: the category icon on a neutral dot.
@@ -69,7 +69,7 @@ double placePinScaleForZoom(double zoom) {
 }
 
 /// Markers for [places], tappable. The selected place always shows at full
-/// size; the rest follow [scale] and disappear when it is near zero.
+/// size. The rest follow [scale] and disappear when it is near zero.
 List<Marker> placeMarkers({
   required Iterable<Place> places,
   required double scale,

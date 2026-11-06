@@ -7,12 +7,12 @@
 //
 // Base fares: jeepney ₱14, bus ₱18, tricycle ₱16, FX/UV ₱40. Each mode's
 // per-km rate was scaled by the same percentage as its base fare change from
-// the previous LTFRB rates (e.g. jeepney ₱13 → ₱14 is +7.7%, so ₱1.80/km →
+// the previous LTFRB rates (like jeepney ₱13 → ₱14 is +7.7%, so ₱1.80/km →
 // ₱1.94/km). LRT/MRT fares are unchanged.
 // =============================================================================
 import '../models/ors_route_result.dart';
 
-/// [base] covers the first [baseKm] kilometres; every km after that adds
+/// [base] covers the first [baseKm] kilometres. Every km after that adds
 /// [perKm]. [typicalKm] is the long end of an everyday CAMANAVA ride on this
 /// mode, used only for the "₱18 – ₱30" estimate shown in the Fare Matrix.
 class FareRule {
@@ -49,7 +49,7 @@ class PhFareCalculator {
       fare <= 0 ? fare : (fare * studentDiscount).ceilToDouble();
 
   /// The 20% discount is given on jeepneys and buses only (EDSA Carousel
-  /// included); tricycles, trains, FX/vans and ferries charge everyone the
+  /// included). Tricycles, trains, FX/vans and ferries charge everyone the
   /// same.
   static bool givesDiscount(String mode) {
     final m = mode.toLowerCase();
@@ -76,7 +76,7 @@ class PhFareCalculator {
     return base - off < 0 ? 0 : base - off;
   }
 
-  /// A trip's estimated [fare] as riders see it, e.g. "₱14–18": a range,
+  /// A trip's estimated [fare] as riders see it, like "₱14–18": a range,
   /// since the real fare depends on where you board and get off.
   static String tripEstimateLabel(double fare) {
     if (!fare.isFinite) return '₱—';
@@ -162,7 +162,7 @@ class PhFareCalculator {
     return '₱${(fare * 0.9).round()}-₱${(fare * 1.1).round()}';
   }
 
-  /// "₱14" or "₱1.94" — whole pesos drop the decimals.
+  /// "₱14" or "₱1.94". Whole pesos drop the decimals.
   static String peso(double amount) =>
       amount == amount.roundToDouble()
           ? '₱${amount.toStringAsFixed(0)}'

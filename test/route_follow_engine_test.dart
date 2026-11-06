@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:transitph_beta/services/route_follow_engine.dart';
 
-// Monumento-ish origin; offsets are in metres east (x) / north (y).
+// Monumento-ish origin. Offsets are in metres east (x) / north (y).
 const _origin = LatLng(14.6575, 120.9839);
 
 LatLng _at(double eastM, double northM) {
@@ -18,7 +18,7 @@ LatLng _at(double eastM, double northM) {
 
 void main() {
   group('RouteFollowEngine', () {
-    // 1 km straight north, with only its two end vertices — progress must
+    // 1 km straight north, with only its two end vertices. Progress must
     // still be smooth along a sparse segment.
     final straight = [_at(0, 0), _at(0, 1000)];
 
@@ -73,7 +73,7 @@ void main() {
     });
 
     // Out along x = 0, back along x = 25 (opposite side of the road), ending
-    // where it started — like a jeepney loop.
+    // where it started, like a jeepney loop.
     final loop = [
       _at(0, 0),
       _at(0, 400),

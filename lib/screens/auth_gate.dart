@@ -20,7 +20,7 @@ class AuthGate extends StatelessWidget {
   static const _privacyPolicyVersion = '2026-10-19';
   static const _termsVersion = '2026-10-19';
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
@@ -30,7 +30,7 @@ class AuthGate extends StatelessWidget {
   static const _danger = Color(0xFFE05C6A);
   static const _maxRestrictionDuration = Duration(days: 7);
 
-  // ─── Shared loading scaffold ───────────────────────────────────────────────
+  // Shared loading scaffold
   static Widget _loadingScaffold() {
     return Scaffold(
       backgroundColor: _bg,
@@ -136,7 +136,7 @@ class AuthGate extends StatelessWidget {
 
   // Accounts the server has confirmed past consent / onboarding this run.
   // A write the phone shows before the server refuses it can briefly drop
-  // those fields; without this the screen flickered between consent and
+  // those fields. Without this the screen flickered between consent and
   // Home and the rider couldn't use the app.
   static final Set<String> _confirmedLegal = {};
   static final Set<String> _confirmedTutorial = {};
@@ -223,7 +223,7 @@ class AuthGate extends StatelessWidget {
         if (snapshot.hasData) {
           final user = snapshot.data!;
 
-          // ── Keep user role/restriction state live so moderation applies immediately ─
+          // Keep user role/restriction state live so moderation applies immediately
           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream:
                 FirebaseFirestore.instance
@@ -252,11 +252,11 @@ class AuthGate extends StatelessWidget {
                 );
               } else {
                 // Deleting the account removes the profile just before the
-                // sign-in account; signing out here would stop that.
+                // sign-in account. Signing out here would stop that.
                 if (AccountDeletionService.inProgress) {
                   return _loadingScaffold();
                 }
-                // Document may not exist yet — race between auth event and
+                // Document may not exist yet. Race between auth event and
                 // Firestore write completing. Wait 2 s then retry once.
                 return FutureBuilder<DocumentSnapshot>(
                   future: Future.delayed(const Duration(seconds: 2)).then(
@@ -283,7 +283,7 @@ class AuthGate extends StatelessWidget {
                       );
                     }
 
-                    // Still no document after retry — sign out
+                    // Still no document after retry. Sign out
                     if (AccountDeletionService.inProgress) {
                       return _loadingScaffold();
                     }
@@ -768,7 +768,7 @@ class _AppealDialogState extends State<_AppealDialog> {
   bool _sending = false;
   String? _error;
 
-  // "It wasn't me" is too little to review; ask for a real sentence.
+  // "It wasn't me" is too little to review. Ask for a real sentence.
   static const _minLength = 10;
 
   @override

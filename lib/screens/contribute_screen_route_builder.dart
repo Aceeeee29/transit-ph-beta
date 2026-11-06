@@ -19,7 +19,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
       final orsDistM = i < _stepOrsDistM.length ? _stepOrsDistM[i] : null;
       final orsDurS = i < _stepOrsDurS.length ? _stepOrsDurS[i] : null;
 
-      // A snap that reported 0 m would save the route as "0 m"; measure the
+      // A snap that reported 0 m would save the route as "0 m". Measure the
       // drawn step instead.
       if (orsDistM != null && orsDistM > 0 && orsDurS != null && orsDurS > 0) {
         totalDistKm += orsDistM / 1000;
@@ -275,7 +275,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     );
   }
 
-  /// Distance · time · fare of what's drawn so far, e.g. "1.2 km · 14 min ·
+  /// Distance · time · fare of what's drawn so far, like "1.2 km · 14 min ·
   /// ₱14". Road-measured numbers once every step has them.
   String _routeMetricsLine() {
     // The step still being drawn counts too, in its chosen vehicle: it runs
@@ -876,7 +876,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
     return parts.join(' · ');
   }
 
-  // ─── Nearby-places mode ────────────────────────────────────────────────
+  // Nearby-places mode
 
   List<Place> get _visibleNearbyPlaces {
     if (_nearbySelected.isEmpty) return camanavaPlaces;

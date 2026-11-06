@@ -5,7 +5,7 @@ double kmBetween(LatLng a, LatLng b) {
   return const Distance(roundResult: false).as(LengthUnit.Kilometer, a, b);
 }
 
-/// Human-readable distance label, e.g. `500 m`, `1.2 km`, `3.5 km`.
+/// Human-readable distance label, like `500 m`, `1.2 km`, `3.5 km`.
 String formatDistanceKm(double km) {
   if (km < 1.0) {
     final meters = (km * 1000).round();

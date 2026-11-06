@@ -18,7 +18,7 @@ class FollowLegInfo {
   /// Where the step starts, when known.
   final String? from;
 
-  /// The step's fare after any discount ("₱13"); null on foot.
+  /// The step's fare after any discount ("₱13"). Null on foot.
   final String? fare;
 
   const FollowLegInfo({

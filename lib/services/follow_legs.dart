@@ -36,7 +36,7 @@ class FollowLegs {
   /// How far before the end of a ride the "Get off soon" hint shows.
   static const getOffWarnMeters = 300.0;
 
-  /// Rides shorter than this get no hint; it would show from the start.
+  /// Rides shorter than this get no hint. It would show from the start.
   static const getOffMinLegMeters = 600.0;
 
   /// Where step [index] of a rider route starts and ends, when known: its

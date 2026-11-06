@@ -95,7 +95,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  /// Where routes start; empty means "Your location".
+  /// Where routes start. Empty means "Your location".
   final TextEditingController _originController = TextEditingController();
   final FocusNode _originFocusNode = FocusNode();
   List<String> _originSuggestions = [];
@@ -122,14 +122,14 @@ class _SearchScreenState extends State<SearchScreen> {
     'Accessible',
   };
 
-  // ─── Color tokens ─────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
   static Color get _textPrimary => AppColors.textPrimary;
   static Color get _textSecondary => AppColors.textSecondary;
 
-  // ─── Route state ──────────────────────────────────────────────────────────
+  // Route state
   OrsRouteResult? _orsResult;
   bool _isLoadingOrs = false;
   bool _orsError = false;
@@ -151,7 +151,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   int? _pendingAlternativeIndex;
 
-  /// The route list refresh started on open; route generation waits for it
+  /// The route list refresh started on open. Route generation waits for it
   /// only when no routes came with the screen (see _fetchOrsRouteSection).
   Future<void>? _routesRefresh;
 
@@ -189,7 +189,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _walkOptionMinutes = null;
   }
 
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
+  // Lifecycle
 
   @override
   void initState() {
@@ -220,7 +220,7 @@ class _SearchScreenState extends State<SearchScreen> {
       // Picked on the map, so its spot is known: no need to look it up.
       final point = widget.initialDestinationPoint;
       if (point != null) _geocodeCache[destination.toLowerCase()] = point;
-      // Handed a destination (e.g. the map's Directions): that already
+      // Handed a destination (like the map's Directions): that already
       // asked for routes, so search right away.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -256,7 +256,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _recentSearches = searches);
   }
 
-  // ─── Philippines-biased geocoding ─────────────────────────────────────────
+  // Philippines-biased geocoding
 
   /// Places found this session. Searching again (another option, a retry,
   /// swapping ends) skips Nominatim, which allows one request per second.
@@ -331,10 +331,10 @@ class _SearchScreenState extends State<SearchScreen> {
   static bool _inPhilippines(double lat, double lng) =>
       lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0;
 
-  // ─── Search logic ─────────────────────────────────────────────────────────
+  // Search logic
 
   /// [showSuggestions] false updates the results without reopening the
-  /// suggestions list (e.g. after a background refresh).
+  /// suggestions list (like after a background refresh).
   void _onSearch(String query, {bool showSuggestions = true}) {
     if (query.trim().isEmpty) {
       setState(() {
@@ -512,7 +512,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _onRecentSearchTap(String query) async {
     _searchController.text = query;
     _onSearch(query);
-    // Moves it to the top; in the background, like _onSearchSubmitted.
+    // Moves it to the top. In the background, like _onSearchSubmitted.
     unawaited(
       SearchService.addRecentSearch(query).then((_) => _loadRecentSearches()),
     );
@@ -739,7 +739,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return false;
   }
 
-  // ─── Route generation ─────────────────────────────────────────────────────
+  // Route generation
 
   Future<void> _fetchOrsRoute() async {
     await this._fetchOrsRouteSection();
@@ -813,7 +813,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ─── Generated options ────────────────────────────────────────────────────
+  // Generated options
 
   /// Builds option [index] if it isn't the one already built, then opens it
   /// on the map.
@@ -1025,7 +1025,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return fare <= 0 ? 'Free' : '₱${fare.round()}';
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

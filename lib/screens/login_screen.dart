@@ -24,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
   bool _isPasswordVisible = false;
   bool _isGoogleLoading = false;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -78,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
     } on FirebaseAuthException catch (e) {
       await noteSignInFailure(e.code);
       if (!mounted) return;
-      // The countdown shows on the button; the box says what went wrong.
+      // The countdown shows on the button. The box says what went wrong.
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
       if (!mounted) return;
@@ -188,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               children: [
-                // ── Brand header ───────────────────────────────────────────
+                // Brand header
                 Container(
                   width: 72,
                   height: 72,
@@ -213,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
                       'assets/icon/app_icon.png',
                       height: 72,
                       width: 72,
-                      // The file is 1024 px; decode only what's shown.
+                      // The file is 1024 px. Decode only what's shown.
                       cacheWidth: 216,
                       fit: BoxFit.cover,
                     ),
@@ -236,7 +236,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
                 ),
                 const SizedBox(height: 28),
 
-                // ── Card ───────────────────────────────────────────────────
+                // Card
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
@@ -516,7 +516,7 @@ class _LoginScreenState extends State<LoginScreen> with LoginLockCountdown {
 
                 const SizedBox(height: 20),
 
-                // ── Sign up link ───────────────────────────────────────────
+                // Sign up link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

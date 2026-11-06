@@ -275,7 +275,7 @@ class _Layers {
     ];
   }
 
-  // ─── Features ─────────────────────────────────────────────────────────────
+  // Features
 
   static Map<String, dynamic> collection(Iterable<Map<String, dynamic>> f) => {
     'type': 'FeatureCollection',

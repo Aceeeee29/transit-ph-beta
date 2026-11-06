@@ -28,7 +28,7 @@ class Facing extends ValueNotifier<double?> {
   double _speed = 0;
   double? _rideLine;
 
-  /// Listens to the compass; [dispose] stops it.
+  /// Listens to the compass. [dispose] stops it.
   void start() {
     _compass ??= FlutterCompass.events?.listen(
       _onCompass,

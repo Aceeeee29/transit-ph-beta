@@ -102,7 +102,7 @@ void main() {
     );
 
     /// Rides north to 500 m, leaves 150 m east for 500 m, comes back at
-    /// 1100 m and continues; one fix per [stepM] metres at [speed].
+    /// 1100 m and continues. One fix per [stepM] metres at [speed].
     List<RideDeviation> ride(double speed) {
       navigation.start(
         FollowTarget.generated(

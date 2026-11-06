@@ -72,7 +72,7 @@ class LinkSafetyService {
     // Rule: too many subdomains (>3) = +1 risk
     List<String> parts = host.split('.');
     if (parts.length > 4) {
-      // e.g., a.b.c.d.com has 5 parts
+      // For example, a.b.c.d.com has 5 parts
       riskScore += 1;
       reasons.add('Too many subdomains (>3)');
     }

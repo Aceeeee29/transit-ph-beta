@@ -125,7 +125,7 @@ class CommunityRoute {
 
   /// Splits the drawn path into per-step geometry using [stepBoundaries]
   /// (the path index where each step ends). Returns null when the route
-  /// can't be split reliably, e.g. older routes saved without boundaries.
+  /// can't be split reliably, like older routes saved without boundaries.
   static CommunityRoute? fromRoute(route_model.Route route) {
     if (!route.isApproved) return null;
     final path = route.pathPoints;
@@ -260,7 +260,7 @@ class _GraphEdge {
   final String? routeColor;
   final int? routeType;
 
-  /// Search-only preference multiplier; [costSeconds] stays the real time.
+  /// Search-only preference multiplier. [costSeconds] stays the real time.
   final double weightFactor;
 
   const _GraphEdge({
@@ -282,7 +282,7 @@ class _GraphEdge {
 
 /// One riding step of a community route, in one direction.
 class _CommunityTrip {
-  /// Always in the contributor's drawn direction; [reversed] flips riding.
+  /// Always in the contributor's drawn direction. [reversed] flips riding.
   final List<LatLng> path;
   final bool reversed;
   final String mode;
@@ -290,7 +290,7 @@ class _CommunityTrip {
   /// "Start → End" in riding direction.
   final String routeLabel;
 
-  /// The contributor's own instruction (e.g. the jeep's signboard).
+  /// The contributor's own instruction (like the jeep's signboard).
   final String note;
   final double? actualFare;
 
@@ -681,7 +681,7 @@ class SupabaseRouteService {
 
   /// Pure, isolate-safe: repeatedly runs Dijkstra with growing edge
   /// penalties to approximate k-shortest diverse paths. No network or
-  /// instance state — safe to run off the main isolate via [compute].
+  /// instance state, safe to run off the main isolate via [compute].
   static List<DijkstraTripPlanResult> _runDijkstraAlternatives(
     _DijkstraComputeArgs args,
   ) {
@@ -1266,7 +1266,7 @@ class SupabaseRouteService {
     }
   }
 
-  // ── Community routes ──────────────────────────────────────────────────────
+  // Community routes
 
   /// Riding a contributed route backwards is a guess (one-way streets,
   /// different pickup points), so it's allowed but discouraged and labelled.
@@ -1316,7 +1316,7 @@ class SupabaseRouteService {
         if (path.length < 2 || !_pathTouchesBounds(path, bounds)) continue;
 
         // Designated stops (plus the step's two ends) when the contributor
-        // listed them; otherwise boardable every ~300 m, or station ends
+        // listed them. Otherwise boardable every ~300 m, or station ends
         // only for trains.
         final stopNodes = _designatedStopNodes(step);
         final nodePathIndices =
@@ -1521,7 +1521,7 @@ class SupabaseRouteService {
 
   /// The boardable points of a step with designated stops, in order along
   /// its path: the step's two ends plus each stop, at the nearest path
-  /// vertex — just the ends when no stops are mapped yet. Null for
+  /// vertex, just the ends when no stops are mapped yet. Null for
   /// flexible pickup.
   static List<({int pathIndex, String? name, bool pickup, bool dropoff})>?
   _designatedStopNodes(CommunityRouteStep step) {
@@ -1587,7 +1587,7 @@ class SupabaseRouteService {
     return best;
   }
 
-  /// The contributor's note (e.g. where to wait for the jeep) describes
+  /// The contributor's note (like where to wait for the jeep) describes
   /// boarding at the start of their step, so it's only shown when the
   /// rider boards there too.
   static String _communityInstruction(
@@ -1662,7 +1662,7 @@ class SupabaseRouteService {
   static const _contributorFareShare = 0.7;
 
   /// The fare for riding [rideMeters] of [trip]: the contributor's fare
-  /// for most of the step; for a short hop the LTFRB formula, but never
+  /// for most of the step. For a short hop the LTFRB formula, but never
   /// more than the contributor's fare. Null (formula downstream) when the
   /// contributor gave no fare.
   static ({double php, bool fromContributor})? _communityLegFare(
@@ -1849,7 +1849,7 @@ class SupabaseRouteService {
   }
 
   /// Road distance is roughly 1.3× the straight line between stops in
-  /// Metro Manila; used when a leg has no drawn path to measure.
+  /// Metro Manila. Used when a leg has no drawn path to measure.
   static const _roadDetourFactor = 1.3;
 
   /// The fare (before discounts) an option shows in the list.
@@ -2326,7 +2326,7 @@ class SupabaseRouteService {
     }
   }
 
-  // ── Transit stops along a drawn path (stop suggestions) ───────────────────
+  // Transit stops along a drawn path (stop suggestions)
 
   /// GTFS stops within [maxMeters] of [path], in order along it, for
   /// suggesting a contributed step's stops. Stops with the same name close
@@ -2386,13 +2386,13 @@ class SupabaseRouteService {
     return found;
   }
 
-  // ── Find nearest stops to a LatLng (sorted by distance) ───────────────────
+  // Find nearest stops to a LatLng (sorted by distance)
   static Future<List<Map<String, dynamic>>> findNearestStops(
     LatLng point, {
     double radiusKm = 0.5,
     int limit = 4,
   }) async {
-    // Parallel searches for the same trip ask for the same stops; share the
+    // Parallel searches for the same trip ask for the same stops. Share the
     // one query and hand each caller its own copies of the rows.
     final key = '${point.latitude},${point.longitude}|$radiusKm|$limit';
     final rows =
@@ -2447,7 +2447,7 @@ class SupabaseRouteService {
     return mapped.take(safeLimit).toList();
   }
 
-  // ── Find a trip plan via Supabase RPC (server-side, no row-limit issues) ──
+  // Find a trip plan via Supabase rpc (server-side, no row-limit issues)
   //
   // Calls the `find_trip_plan` PostgreSQL function which handles both
   // direct and 1-transfer routing entirely in the DB.
@@ -2508,7 +2508,7 @@ class SupabaseRouteService {
     return null;
   }
 
-  // ── Build a single TransitLeg ──────────────────────────────────────────────
+  // Build a single TransitLeg
   static Future<TransitLeg?> _buildLeg({
     required String tripId,
     required String boardStopId,
@@ -2575,7 +2575,7 @@ class SupabaseRouteService {
     );
   }
 
-  // ── Get shape polyline for a trip ─────────────────────────────────────────
+  // Get shape polyline for a trip
   static Future<List<LatLng>> getShapePolyline(String shapeId) async {
     final normalized = _normalizeShapeId(shapeId);
     if (normalized == null || normalized.isEmpty) return [];
@@ -2596,7 +2596,7 @@ class SupabaseRouteService {
         .toList();
   }
 
-  // ── Get all stops along a trip ────────────────────────────────────────────
+  // Get all stops along a trip
   static Future<List<Map<String, dynamic>>> getStopsForTrip(
     String tripId,
   ) async {
@@ -2628,7 +2628,7 @@ class SupabaseRouteService {
     }).toList();
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // Helpers
   static double _haversineKm(LatLng a, LatLng b) {
     const r = 6371.0;
     final dLat = _rad(b.latitude - a.latitude);

@@ -4,13 +4,13 @@ import '../translated_text.dart';
 import '../../theme/app_colors.dart';
 
 /// The big search pill across the top of the Map tab, Google Maps style.
-/// The whole bar is one tap target; the round buttons on its right side are
+/// The whole bar is one tap target. The round buttons on its right side are
 /// separate actions (contribute a route, tutorial).
 class MapSearchBar extends StatelessWidget {
   final String hintText;
   final VoidCallback onTap;
 
-  /// Replaces the app pin on the left, e.g. a back arrow out of a mode.
+  /// Replaces the app pin on the left, like a back arrow out of a mode.
   final Widget? leading;
   final List<MapSearchBarAction> actions;
 

@@ -56,7 +56,7 @@ class SearchHelpSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Section 1: Recommended format ─────────────────────────────────
+                // Section 1: Recommended format
                 _sectionTitle('✅ Recommended Format'),
                 const SizedBox(height: 8),
                 _card(
@@ -109,7 +109,7 @@ class SearchHelpSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Section 2: What to avoid ──────────────────────────────────────
+                // Section 2: What to avoid
                 _sectionTitle('❌ Inputs That May Fail'),
                 const SizedBox(height: 8),
                 _card(
@@ -157,7 +157,7 @@ class SearchHelpSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Section 3: Community vs Generated ────────────────────────────
+                // Section 3: Community vs Generated
                 _sectionTitle('🗺️ Community Routes vs Generated Routes'),
                 const SizedBox(height: 8),
                 _card(
@@ -184,7 +184,7 @@ class SearchHelpSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Section 4: Starting point tips ───────────────────────────────
+                // Section 4: Starting point tips
                 _sectionTitle('📍 Starting Point Tips'),
                 const SizedBox(height: 8),
                 _card(
@@ -211,7 +211,7 @@ class SearchHelpSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Section 5: Fare disclaimer ────────────────────────────────────
+                // Section 5: Fare disclaimer
                 _sectionTitle('💰 About Estimated Fares'),
                 const SizedBox(height: 8),
                 _card(
@@ -271,7 +271,7 @@ class SearchHelpSheet extends StatelessWidget {
     );
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
+  // Private helpers
 
   Widget _sectionTitle(String title) => Text(
     title,

@@ -20,7 +20,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static const _bg = Color(0xFF0F1928);
   static const _surface = Color(0xFF172032);
   static const _surfaceAlt = Color(0xFF1E2D45);
@@ -86,7 +86,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
           role == 'moderator' || role == 'superadmin' || role == 'super_admin';
 
       if (!isPrivilegedRole) {
-        // Not a moderator — sign them out immediately
+        // Not a moderator. Sign them out immediately
         await FirebaseAuth.instance.signOut();
         setState(
           () =>
@@ -96,7 +96,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
         return;
       }
 
-      // 3. Role confirmed — clear the entire stack and let AuthGate route
+      // 3. Role confirmed: clear the entire stack and let AuthGate route
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const AuthGate()),
@@ -106,7 +106,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
     } on FirebaseAuthException catch (e) {
       await noteSignInFailure(e.code);
       if (!mounted) return;
-      // The countdown shows on the button; the box says what went wrong.
+      // The countdown shows on the button. The box says what went wrong.
       setState(() => _errorMessage = _getErrorMessage(e.code));
     } catch (e) {
       if (!mounted) return;
@@ -219,7 +219,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               children: [
-                // ── Shield icon ────────────────────────────────────────────
+                // Shield icon
                 Container(
                   width: 72,
                   height: 72,
@@ -259,7 +259,7 @@ class _ModeratorLoginScreenState extends State<ModeratorLoginScreen>
                 ),
                 const SizedBox(height: 28),
 
-                // ── Card ───────────────────────────────────────────────────
+                // Card
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(

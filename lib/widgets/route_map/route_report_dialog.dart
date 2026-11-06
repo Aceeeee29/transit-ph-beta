@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
-// ─── Color tokens ─────────────────────────────────────────────────────────────
+// Color tokens
 Color get _bg => AppColors.bg;
 Color get _surface => AppColors.surface;
 Color get _surfaceAlt => AppColors.surfaceAlt;

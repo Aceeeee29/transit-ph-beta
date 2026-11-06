@@ -21,7 +21,7 @@ void main() {
     );
     await frames();
 
-    // The tour opens on first use; its last card offers the example, a
+    // The tour opens on first use. Its last card offers the example, a
     // finished route, over the rider's empty map.
     expect(find.text('Try the example'), findsNothing);
     while (find.text('Next').evaluate().isNotEmpty) {

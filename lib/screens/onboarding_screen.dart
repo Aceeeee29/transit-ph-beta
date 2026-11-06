@@ -86,7 +86,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           .doc(widget.user.uid)
           .update({'hasSeenTutorial': true});
     } catch (_) {
-      // Shown again next time; better than holding the rider here.
+      // Shown again next time. Better than holding the rider here.
     }
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/main', arguments: false);

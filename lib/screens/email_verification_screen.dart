@@ -31,7 +31,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   // Red box when true, green when false. Set with every message.
   bool _isError = false;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -219,7 +219,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               child: Column(
                 children: [
-                  // ── Header ─────────────────────────────────────────────
+                  // Header
                   Container(
                     padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
@@ -276,7 +276,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        // ── Status message ────────────────────────────────
+                        // Status message
                         if (_message != null) ...[
                           Container(
                             width: double.infinity,
@@ -325,7 +325,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                           const SizedBox(height: 16),
                         ],
 
-                        // ── Primary CTA ───────────────────────────────────
+                        // Primary cta
                         GestureDetector(
                           onTap: _isLoading ? null : _checkVerification,
                           child: Container(
@@ -392,7 +392,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
                         const SizedBox(height: 10),
 
-                        // ── Resend button ─────────────────────────────────
+                        // Resend button
                         GestureDetector(
                           onTap: _isLoading ? null : _resendVerificationEmail,
                           child: Container(
@@ -428,7 +428,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
                         const SizedBox(height: 16),
 
-                        // ── Sign out link ─────────────────────────────────
+                        // Sign out link
                         GestureDetector(
                           onTap: _signOut,
                           child: const Text(

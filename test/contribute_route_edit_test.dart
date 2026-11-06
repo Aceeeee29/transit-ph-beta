@@ -11,8 +11,8 @@ void main() {
       route_model.Step(mode: 'Bus', instruction: 'Bus', details: ''),
       route_model.Step(mode: 'Jeepney', instruction: 'Jeep', details: ''),
     ];
-    // Step 0 has detailed geometry (e.g. staying on the expressway);
-    // step 1 is a simple line.
+    // Step 0 has detailed geometry (like staying on the expressway).
+    // Step 1 is a simple line.
     const p = [
       LatLng(14.700, 120.990),
       LatLng(14.695, 120.995),

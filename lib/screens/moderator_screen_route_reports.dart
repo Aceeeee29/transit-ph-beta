@@ -1,7 +1,7 @@
 part of 'moderator_screen.dart';
 
 /// Riders' route reports still showing: each shows for a day on every route
-/// on its road. Keep holds one until removed; Remove takes it down now.
+/// on its road. Keep holds one until removed. Remove takes it down now.
 /// The cards use the same pieces as the other tabs so the panel looks the same.
 extension _ModeratorScreenRouteReports on _ModeratorScreenState {
   static Color get _surfaceAlt => _ModeratorScreenState._surfaceAlt;

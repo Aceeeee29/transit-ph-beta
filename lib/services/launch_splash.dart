@@ -9,7 +9,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 class LaunchSplash {
   LaunchSplash._();
 
-  // On a network Firestore can't reach, the account check takes ~10 s; past
+  // On a network Firestore can't reach, the account check takes ~10 s. Past
   // this the spinner screen shows instead so the app doesn't look frozen.
   static const _maxHold = Duration(seconds: 6);
 
@@ -23,7 +23,7 @@ class LaunchSplash {
     Timer(_maxHold, release);
   }
 
-  /// Takes the splash down; the screen built now is the first one drawn.
+  /// Takes the splash down. The screen built now is the first one drawn.
   /// Safe to call from build and more than once.
   static void release() {
     if (!_held) return;

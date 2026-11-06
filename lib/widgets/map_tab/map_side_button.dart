@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
 /// A round icon-only map button for the right-side stack (GPS center, hide
-/// pins, report). No labels; the tooltip says what it does.
+/// pins, report). No labels. The tooltip says what it does.
 class MapSideButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
 
-  /// Filled accent, e.g. the GPS button while the camera follows you.
+  /// Filled accent, like the GPS button while the camera follows you.
   final bool active;
   final Color? iconColor;
   final bool busy;

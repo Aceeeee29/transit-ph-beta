@@ -1,7 +1,7 @@
 part of 'contribute_screen.dart';
 
 /// The browse search bar: find a place or a community route, like Google
-/// Maps. A place is shown on the map with "Directions"; a route opens.
+/// Maps. A place is shown on the map with "Directions". A route opens.
 extension _ContributeScreenMapSearch on _ContributeScreenState {
   Future<void> _openMapSearch() async {
     final result = await Navigator.of(context).push<MapSearchResult>(

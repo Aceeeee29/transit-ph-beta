@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-/// Thrown when a Cloudinary upload fails — carries a user-facing message
+/// Thrown when a Cloudinary upload fails. Carries a user-facing message
 /// plus the raw details for logs.
 class CloudinaryUploadException implements Exception {
   final String userMessage;
@@ -17,7 +17,7 @@ class CloudinaryUploadException implements Exception {
   String toString() => 'CloudinaryUploadException: $userMessage $details';
 }
 
-/// Unsigned media uploads to Cloudinary (no backend/API secret needed —
+/// Unsigned media uploads to Cloudinary (no backend/API secret needed,
 /// safe for a client-only Flutter app). Credentials come from .env:
 /// CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET.
 class CloudinaryService {

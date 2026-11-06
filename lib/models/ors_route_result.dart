@@ -111,7 +111,7 @@ class OrsStep {
   /// formula estimate.
   final bool isContributorFare;
 
-  /// Where the step starts and ends ("Monumento"), when known; the follow
+  /// Where the step starts and ends ("Monumento"), when known. The follow
   /// card says "Ride to Monumento".
   final String? fromName;
   final String? toName;

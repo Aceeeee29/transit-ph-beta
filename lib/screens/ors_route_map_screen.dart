@@ -80,7 +80,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   LatLng? _displayPosition;
   double _displayHeading = 0;
 
-  /// Which way the traveler faces; turns the arrow and, while following,
+  /// Which way the traveler faces. Turns the arrow and, while following,
   /// the map.
   final _facing = Facing();
   DateTime _lastTurnAt = DateTime(0);
@@ -93,7 +93,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   bool _isDiscountFareEnabled = false;
   bool _hasManualFareDiscountOverride = false;
 
-  // ─── Map chrome (drawer, place pins) ──────────────────────────────────────
+  // Map chrome (drawer, place pins)
   final DraggableScrollableController _drawerController =
       DraggableScrollableController();
   Place? _selectedPlace;
@@ -220,7 +220,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     );
   }
 
-  /// Where the traveler faces (compass on foot, road on a ride); the last
+  /// Where the traveler faces (compass on foot, road on a ride). The last
   /// GPS direction until the compass reports.
   double get _heading => _facing.value ?? _displayHeading;
 
@@ -308,7 +308,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     widget.destinationName,
   );
 
-  /// True while this route is the active follow session; the session (GPS,
+  /// True while this route is the active follow session. The session (GPS,
   /// progress, guidance, arrival) lives in [ActiveNavigationService].
   bool get _isNavigationStarted =>
       ActiveNavigationService.instance.isFollowing(_followId);
@@ -424,15 +424,15 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
             : null,
       )
       ..onFix(position);
-    // GPS heading is noise when barely moving; keep the last good heading.
+    // GPS heading is noise when barely moving. Keep the last good heading.
     if (position.speed >= _minHeadingSpeedMps) {
       _displayHeading = _normalizeHeading(position.heading);
     }
   }
 
-  // FIX: Throttle 450 ms → 120 ms, dead zone 2.5 m → 1.0 m.
-  // FIX: Accepts heading so the map rotates to keep travel direction up,
-  //      matching Google Maps / Waze behaviour.
+  // Moves the camera at most every 120 ms, and only after a 1 m move, so
+  // it keeps up without jittering. It also turns the map so the way you're
+  // going stays up, like Google Maps or Waze.
   void _maybeMoveCamera(LatLng target, {double heading = 0}) {
     final now = DateTime.now();
 
@@ -581,8 +581,8 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     await _endNavigationAndOfferCorrection();
   }
 
-  /// Ends the session, then — if the vehicle went a different way than this
-  /// route — offers to save the ride as a new route.
+  /// Ends the session, then, if the vehicle went a different way than this
+  /// route, offers to save the ride as a new route.
   Future<void> _endNavigationAndOfferCorrection() async {
     final deviations = ActiveNavigationService.instance.finishDeviations();
     _endNavigation();
@@ -621,7 +621,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   }
 
   /// One colored range per step, sliced from the full geometry using the
-  /// way_point indices; the whole line in blue when steps carry none.
+  /// way_point indices. The whole line in blue when steps carry none.
   List<({int start, int end, Color color})> get _stepRanges {
     final last = widget.result.polyline.length - 1;
     final steps = widget.result.steps;
@@ -694,7 +694,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   }
 
   /// The traveler's arrow, drawn above every other layer. It turns with
-  /// [_facing]; without a compass, with the GPS direction while moving
+  /// [_facing]. Without a compass, with the GPS direction while moving
   /// (a dot when standing).
   MapUser? get _mapUser {
     final at = _displayPosition;
@@ -708,7 +708,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     );
   }
 
-  // ─── Map-tab chrome ────────────────────────────────────────────────────────
+  // Map-tab chrome
 
   /// The place pins: every place, the chips' categories highlighted.
   MapPlaces get _mapPlaces => MapPlaces(
@@ -773,7 +773,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   }
 
   Widget _buildMap() {
-    // Place pins sit under the route and its markers; the traveler's dot
+    // Place pins sit under the route and its markers. The traveler's dot
     // on top of everything.
     return TransitMap(
       controller: _map,
@@ -842,7 +842,7 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
     );
   }
 
-  /// The card while following; how to get back to the route replaces the
+  /// The card while following. How to get back to the route replaces the
   /// step while off it.
   Widget? _buildLegCard() {
     final steps = widget.result.steps;

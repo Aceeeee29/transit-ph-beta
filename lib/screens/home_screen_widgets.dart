@@ -9,7 +9,7 @@ extension _HomeScreenSections on _HomeScreenState {
   static Color get _border => _HomeScreenState._border;
   static const _danger = _HomeScreenState._danger;
 
-  // ─── Header: name, quick tools, weather and "Where to?" ─────────────────────
+  // Header: name, quick tools, weather and "Where to?"
 
   Widget _buildHeaderSection() {
     return SafeArea(
@@ -191,7 +191,7 @@ extension _HomeScreenSections on _HomeScreenState {
     );
   }
 
-  // ─── Recommended routes ──────────────────────────────────────────────────────
+  // Recommended routes
 
   Widget _buildRecommendationsSection() {
     if (_isLoadingRecommendations) {

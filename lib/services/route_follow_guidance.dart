@@ -102,8 +102,8 @@ class FollowGuidance {
 
 /// Decides what to tell a traveler who isn't on the route they're following.
 class FollowGuidancePlanner {
-  /// A boarding point this close counts as "the route passes near you";
-  /// otherwise the traveler is sent to the route's official start.
+  /// A boarding point this close counts as "the route passes near you".
+  /// Otherwise the traveler is sent to the route's official start.
   static const approachRadiusMeters = 500.0;
 
   /// Off-route for at least this long before rerouting, so a brief GPS
@@ -272,7 +272,7 @@ class FollowGuidancePlanner {
   }
 
   /// The pickup (or drop-off) stops of a designated [step] in order along
-  /// the route; a train step without listed stations uses its two ends.
+  /// the route. A train step without listed stations uses its two ends.
   static List<_Target> _stopsOf(
     RouteFollowEngine engine,
     FollowStep step, {
@@ -340,7 +340,7 @@ class FollowGuidancePlanner {
     return segment < steps.first.startIndex ? steps.first : steps.last;
   }
 
-  /// Valid, in-bounds steps; one mode-less step over the whole path when
+  /// Valid, in-bounds steps. One mode-less step over the whole path when
   /// none are usable.
   static List<FollowStep> _normalizeSteps(List<FollowStep> steps, int length) {
     final last = length - 1;

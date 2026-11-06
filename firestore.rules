@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── HELPER FUNCTIONS ──────────────────────────────────────────────────────
+    // Helper functions
 
     function isAuth() {
       return request.auth != null;
@@ -18,8 +18,8 @@ service cloud.firestore {
           .data.get('role', '') == 'superadmin';
     }
 
-    // FIX: Use .get('role', '') to safely handle missing role field,
-    // preventing null-dereference crashes in rule evaluation.
+    // .get('role', '') so a user with no role field doesn't make the
+    // rule fail.
     function isModerator() {
       return isAuth() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -37,7 +37,7 @@ service cloud.firestore {
     }
 
     // Banned and restricted riders can still read, but not post, comment,
-    // add routes or file reports. The app also checks; this stops a
+    // add routes or file reports. The app also checks. This stops a
     // modified app or a direct API call.
     function notBanned() {
       let me = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
@@ -54,7 +54,7 @@ service cloud.firestore {
         'tempSuperadminUntil', 'tempSuperadminBy'];
     }
 
-    // ── USERS ─────────────────────────────────────────────────────────────────
+    // Users
     match /users/{uid} {
       allow read: if isAuth();
       allow create: if isSelf(uid) &&
@@ -105,8 +105,8 @@ service cloud.firestore {
 
       // Why the rider was banned or restricted, shown to them on the
       // locked-out popup. Kept here instead of on the profile because any
-      // signed-in account can read profiles. The rider reads their own;
-      // only staff write it. Moderators only restrict, and only regular
+      // signed-in account can read profiles. The rider reads their own.
+      // Only staff write it. Moderators only restrict, and only regular
       // riders, the same as on the profile above.
       match /moderation/{docId} {
         allow read: if isSelf(uid) || isStaff();
@@ -118,9 +118,9 @@ service cloud.firestore {
       }
     }
 
-    // ── POSTS ─────────────────────────────────────────────────────────────────
+    // Posts
     match /posts/{postId} {
-      // FIX: Pending posts are now only visible to their own author.
+      // Pending posts are only visible to their author.
       // The author sees every post of their own, rejected ones too (so
       // deleting their account can find them all).
       allow read: if isAuth() && (
@@ -129,7 +129,7 @@ service cloud.firestore {
         request.auth.uid == resource.data.userId
       );
 
-      // Posted as yourself; new posts are live (approved) or waiting
+      // Posted as yourself. New posts are live (approved) or waiting
       // (pending), never pre-rejected or under someone else's name.
       allow create: if isAuth() && hasValidPostContent(request.resource.data) && (
         isStaff() || (
@@ -139,7 +139,7 @@ service cloud.firestore {
         )
       );
 
-      // FIX: Added field-level validation for post votes.
+      // Checks on post votes.
       // Vote counters can only move by 1 per operation and voter arrays
       // are constrained to transitions involving the requesting UID.
       // The author edits the post itself but not who wrote it, its review
@@ -223,7 +223,7 @@ service cloud.firestore {
       }
     }
 
-    // ── ROUTES ────────────────────────────────────────────────────────────────
+    // Routes
     // One rider's feedback (routeFeedback, saved in the same transaction)
     // moves each yes/no pair by exactly one.
     function feedbackPairStep(before, after, yes, no) {
@@ -254,7 +254,7 @@ service cloud.firestore {
 
     match /routes/{routeId} {
       allow read: if isAuth();
-      // Riders add routes as themselves, waiting for review; only staff
+      // Riders add routes as themselves, waiting for review. Only staff
       // add one that's already approved.
       allow create: if isAuth() && (
         isStaff() || (
@@ -290,7 +290,7 @@ service cloud.firestore {
         ) ||
         isFeedbackSummaryStep(routeId) ||
         // Closing their account: the contributor hands the route over as
-        // "Former rider" (only these fields; it stays for everyone).
+        // "Former rider" (only these fields, it stays for everyone).
         (
           resource.data.contributorId == request.auth.uid &&
           request.resource.data.get('contributorId', null) == null &&
@@ -366,7 +366,7 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Route audit logs are visible to staff; regular users can only write
+      // Route audit logs are visible to staff. Regular users can only write
       // self-authored commuter feedback log entries.
       match /auditLogs/{logId} {
         allow read: if isStaff();
@@ -382,21 +382,21 @@ service cloud.firestore {
     }
 
     // Collection-group reads of route audit logs (the dashboard counts each
-    // moderator's approvals from them). Read-only; writes stay on the rule above.
+    // moderator's approvals from them). Read-only. Writes stay on the rule above.
     match /{path=**}/auditLogs/{logId} {
       allow read: if isStaff();
     }
 
     // Collection-group reads of post comments: finding someone's comments
     // across all posts when their account is deleted or closed. Comments
-    // are readable anyway; writes stay on the rule under posts.
+    // are readable anyway. Writes stay on the rule under posts.
     match /{path=**}/comments/{commentId} {
       allow read: if isAuth();
     }
 
-    // ── QUICK ROUTE LINKS (24h token-based access) ─────────────────────────
+    // Quick route links (24h token-based access)
     match /quick_route_links/{token} {
-      // Token docs are never listable; only direct token lookup is allowed.
+      // Token docs are never listable. Only direct token lookup is allowed.
       allow list: if false;
       allow get: if resource.data.expiresAt is timestamp &&
         resource.data.expiresAt > request.time;
@@ -414,7 +414,7 @@ service cloud.firestore {
       allow delete: if isStaff() || (isAuth() && resource.data.ownerId == request.auth.uid);
     }
 
-    // ── QUICK ROUTES (temporary, private-by-link) ─────────────────────────
+    // Quick routes (temporary, private-by-link)
     match /quick_routes/{quickRouteId} {
       allow list: if false;
       allow get: if resource.data.expiresAt is timestamp &&
@@ -431,7 +431,7 @@ service cloud.firestore {
       allow delete: if isStaff();
     }
 
-    // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+    // Notifications
     match /notifications/{notifId} {
       allow read, update: if isAuth() && (
         resource.data.userId == request.auth.uid || isSuperAdmin()
@@ -441,9 +441,9 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || isSuperAdmin()
       );
 
-      // FIX: Moderators can create notifications for any userId, including
-      // themselves (e.g. self-approval of a submitted route). Non-moderators
-      // still cannot target themselves to prevent self-spam.
+      // Moderators can notify anyone, themselves too (like when they
+      // approve their own route). Others can't notify themselves, so they
+      // can't spam their own inbox.
       // A rider only sends the kinds the app sends, to the person they're
       // about: a vote/comment/reply goes to that post's author, a route
       // report to that route's contributor. Older app versions leave
@@ -478,9 +478,9 @@ service cloud.firestore {
       );
     }
 
-    // ── ROUTE REPORTS ─────────────────────────────────────────────────────────
+    // Route reports
     // Shown on every route on the same road, so every rider reads them.
-    // A rider files one as themselves, for at most a day; only staff keep
+    // A rider files one as themselves, for at most a day. Only staff keep
     // one longer or remove it.
     match /route_reports/{reportId} {
       allow read: if isAuth();
@@ -496,10 +496,10 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
-    // ── FEEDBACKS (reports) ───────────────────────────────────────────────────
+    // Feedbacks (reports)
     match /feedbacks/{feedbackId} {
       allow create: if isAuth();
-      // FIX: Users can now read their own feedback to see its status.
+      // Riders can read their own feedback to see its status.
       allow read: if isAuth() && (
         resource.data.userId == request.auth.uid ||
         isStaff()
@@ -511,7 +511,7 @@ service cloud.firestore {
       );
     }
 
-    // ── APPEALS ───────────────────────────────────────────────────────────────
+    // Appeals
     // A banned or restricted rider asking staff to undo it. The id is
     // "<uid>_<lockoutId>", so each ban or restriction gets one appeal: a
     // second one for the same lockout hits the existing doc, which only
@@ -537,7 +537,7 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(['userId', 'userName', 'userEmail',
           'lockoutId', 'action', 'reasonLabel', 'note', 'message', 'status',
           'createdAt']);
-      // Superadmins decide any appeal; moderators only restriction ones
+      // Superadmins decide any appeal. Moderators only restriction ones
       // (they can't lift a ban), and only the decision fields.
       allow update: if isSuperAdmin() || (
         isModerator() &&
@@ -551,11 +551,11 @@ service cloud.firestore {
       );
     }
 
-    // ── LOCATIONS ─────────────────────────────────────────────────────────────
+    // Locations
     match /locations/{locationId} {
       allow read: if isAuth();
       allow create: if isAuth();
-      // FIX: Restricted update/delete to creator or moderator only.
+      // Only the creator or staff can update or delete one.
       allow update: if isAuth() && (
         resource.data.userId == request.auth.uid || isStaff()
       );
@@ -564,22 +564,22 @@ service cloud.firestore {
       );
     }
 
-    // ── ANNOUNCEMENTS (superadmin only writes) ──────────────────────────────
+    // Announcements (superadmin only writes)
     match /announcements/{announcementId} {
       allow read: if isAuth();
       allow create, update, delete: if isSuperAdmin();
     }
 
-    // ── APP CONFIG (superadmin only writes) ─────────────────────────────────
+    // App config (superadmin only writes)
     match /app_config/{configId} {
       // Allow startup update checks before authentication for this single doc.
       allow read: if configId == 'update_checker' || isAuth();
       allow create, update, delete: if isSuperAdmin();
     }
 
-    // ── ROUTE CACHE (per-user) ──────────────────────────────────────────────
+    // Route cache (per-user)
     // Searches can show where someone travels: owner only. (The app keeps
-    // its route cache on the phone now; nothing reads this collection.)
+    // its route cache on the phone now. Nothing reads this collection.)
     match /route_cache/{cacheId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;

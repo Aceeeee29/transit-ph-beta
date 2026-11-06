@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'New to Area',
   };
 
-  // ─── Color tokens ────────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static const _accent = AppColors.accent;
@@ -64,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static Color get _border => AppColors.border;
   static const _danger = Color(0xFFE05C6A);
 
-  // ─── Lifecycle ───────────────────────────────────────────────────────────────
+  // Lifecycle
 
   @override
   void initState() {
@@ -82,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  /// Weather loaded elsewhere (e.g. the Map tab after location was allowed).
+  /// Weather loaded elsewhere (like the Map tab after location was allowed).
   void _onSharedWeather() {
     final weather = WeatherChip.current.value;
     if (weather != null && mounted) setState(() => _weatherData = weather);
@@ -113,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
         await prefs.setInt(_totalUsersKey, count);
         return;
       } catch (_) {
-        // Try again shortly; the line keeps the last known count meanwhile.
+        // Try again shortly. The line keeps the last known count meanwhile.
       }
     }
   }
@@ -140,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Home is built before the routes finish loading; rank them once they
+    // Home is built before the routes finish loading. Rank them once they
     // arrive (and whenever they're reloaded).
     if (!identical(widget.routes, oldWidget.routes)) _loadRecommendations();
   }
@@ -209,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(context: context, builder: (_) => const HomeFareMatrixDialog());
   }
 
-  // ─── Ranking ─────────────────────────────────────────────────────────────────
+  // Ranking
 
   int _tagMatchScore(route_model.Route route) {
     if (_userTags.isEmpty || route.audienceTags.isEmpty) return 0;
@@ -256,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return matched.take(8).toList();
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

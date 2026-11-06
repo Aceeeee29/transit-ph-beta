@@ -15,7 +15,7 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
       return;
     }
 
-    // Tapped a live suggestion — coordinates included, no re-geocode needed.
+    // Tapped a live suggestion. Coordinates included, no re-geocode needed.
     if (result is LocationSearchResult) {
       _onLocationPicked(result.latitude, result.longitude, result.name);
       return;
@@ -157,7 +157,7 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
         if (entry.key < _stepOrsDurS.length) _stepOrsDurS[entry.key] = null;
       }
     });
-    // History holds saved steps only; an open step's edits are undone
+    // History holds saved steps only. An open step's edits are undone
     // point by point instead.
     if (!_hasOpenStep) _saveToHistory();
   }
@@ -204,7 +204,7 @@ extension _ContributeScreenEditSections on _ContributeScreenState {
   }
 
   /// Boundary [index] is the start of step [index] and the end of step
-  /// [index] - 1; moving it re-routes only the pieces touching it.
+  /// [index] - 1. Moving it re-routes only the pieces touching it.
   Future<void> _onBoundaryWaypointDragEndSection(
     int index,
     LatLng updatedPoint,

@@ -263,7 +263,7 @@ class _FeedScreenState extends State<FeedScreen> {
       if (!mounted) return;
 
       if (serverVote != optimisticVote) {
-        // Reconcile with the server's actual result (e.g. state changed
+        // Reconcile with the server's actual result (like state changed
         // elsewhere between our optimistic guess and this response).
         setState(() => _applyLocalVoteState(post, optimisticVote, serverVote));
       }
@@ -286,7 +286,7 @@ class _FeedScreenState extends State<FeedScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      // Roll back the optimistic update — the request never landed.
+      // Roll back the optimistic update. The request never landed.
       setState(() => _applyLocalVoteState(post, optimisticVote, previousVote));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

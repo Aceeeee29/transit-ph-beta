@@ -23,7 +23,7 @@ class RoutePreview extends StatelessWidget {
          'onEdit and onSubmit are required when readOnly is false',
        );
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -55,7 +55,7 @@ class RoutePreview extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _bg,
-      // ─── AppBar ────────────────────────────────────────────────────────────
+      // AppBar
       appBar: AppBar(
         backgroundColor: _surface,
         foregroundColor: _textPrimary,
@@ -148,7 +148,7 @@ class RoutePreview extends StatelessWidget {
 
       body: Column(
         children: [
-          // ─── Map ─────────────────────────────────────────────────────────
+          // Map
           Expanded(
             child: TransitMap(
               controller: TransitMapController(),
@@ -160,7 +160,7 @@ class RoutePreview extends StatelessWidget {
             ),
           ),
 
-          // ─── Details panel ────────────────────────────────────────────────
+          // Details panel
           Container(
             decoration: BoxDecoration(
               color: _surface,
@@ -178,7 +178,7 @@ class RoutePreview extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Route title ──────────────────────────────────────────
+                  // Route title
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -262,7 +262,7 @@ class RoutePreview extends StatelessWidget {
 
                   const SizedBox(height: 14),
 
-                  // ── Metrics row ──────────────────────────────────────────
+                  // Metrics row
                   Container(
                     padding: const EdgeInsets.symmetric(
                       vertical: 12,
@@ -301,7 +301,7 @@ class RoutePreview extends StatelessWidget {
 
                   const SizedBox(height: 16),
 
-                  // ── Steps summary ────────────────────────────────────────
+                  // Steps summary
                   Text(
                     'STEPS',
                     style: TextStyle(
@@ -402,7 +402,7 @@ class RoutePreview extends StatelessWidget {
                   if (!readOnly && onSubmit != null) ...[
                     const SizedBox(height: 16),
 
-                    // ── Submit button ────────────────────────────────────────
+                    // Submit button
                     GestureDetector(
                       onTap: () async {
                         final confirm = await showDialog<bool>(
@@ -663,7 +663,7 @@ class RoutePreview extends StatelessWidget {
     );
   }
 
-  // ─── Metric cell ────────────────────────────────────────────────────────────
+  // Metric cell
   Widget _metricCell({
     required IconData icon,
     required Color color,
@@ -701,7 +701,7 @@ class RoutePreview extends StatelessWidget {
     return Container(width: 1, height: 40, color: _border);
   }
 
-  // ─── Map helpers (functions unchanged) ────────────────────────────────────
+  // Map helpers (functions unchanged)
   /// Each step in its mode's color on a dark edge.
   List<MapLine> _buildLines() {
     final lines = <MapLine>[];
@@ -842,7 +842,7 @@ class RoutePreview extends StatelessWidget {
     }
   }
 
-  // _getModeIcon renamed to _getModeIconData above — kept for polylines
+  // _getModeIcon renamed to _getModeIconData above. Kept for polylines
   Color _getModeColor(String mode) {
     switch (mode) {
       case 'Walk':

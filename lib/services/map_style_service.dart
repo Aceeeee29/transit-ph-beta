@@ -26,7 +26,7 @@ enum Appearance { light, dark, auto, system }
 
 /// The base-map look and the app's appearance, chosen in Settings and kept
 /// on the device. Every map screen draws its base through `AppBaseMap`,
-/// which listens to [changes]; the app's colors follow [isDark].
+/// which listens to [changes]. The app's colors follow [isDark].
 class MapStyleService with WidgetsBindingObserver {
   MapStyleService._();
   static final instance = MapStyleService._();
@@ -119,12 +119,12 @@ class MapStyleService with WidgetsBindingObserver {
     };
   }
 
-  // ─── Vector styles ──────────────────────────────────────────────────────────
+  // Vector styles
 
   final Map<String, Future<Style?>> _styles = {};
 
   /// The style for [look] by day, or the night style (dark appearance,
-  /// either look). Loaded once; null when it can't be loaded.
+  /// either look). Loaded once. Null when it can't be loaded.
   Future<Style?> styleFor({required MapLook look, required bool night}) {
     final key = night ? 'night' : look.name;
     return _styles[key] ??= _loadStyle(key).then((style) {
@@ -135,8 +135,8 @@ class MapStyleService with WidgetsBindingObserver {
   }
 
   /// Reads OpenFreeMap's styles bundled with the app (no download, so the
-  /// map shows right away, offline too); tiles come from [MapTilePack].
-  /// Clean is Positron by day and Dark at night, recolored to the app;
+  /// map shows right away, offline too). Tiles come from [MapTilePack].
+  /// Clean is Positron by day and Dark at night, recolored to the app.
   /// Classic is Liberty (colorful, with icons) as it comes.
   Future<Style?> _loadStyle(String key) async {
     try {
@@ -167,11 +167,11 @@ class MapStyleService with WidgetsBindingObserver {
     }
   }
 
-  // ─── MapLibre styles ────────────────────────────────────────────────────────
+  // MapLibre styles
 
   /// The same looks as [styleFor] for the MapLibre map, as style JSON, with
   /// its tiles, fonts and icons from [MapTileServer] and 3D buildings.
-  /// [extraLayers] (e.g. the Map tab's pins) go on top, with [extraSources].
+  /// [extraLayers] (like the Map tab's pins) go on top, with [extraSources].
   Future<String> maplibreStyle({
     required MapLook look,
     required bool night,
@@ -197,7 +197,7 @@ class MapStyleService with WidgetsBindingObserver {
   }
 
   /// [style] pointed at the phone's tile server at [baseUrl]. Liberty has 3D
-  /// buildings already; the clean styles get them in [buildingColor].
+  /// buildings already. The clean styles get them in [buildingColor].
   @visibleForTesting
   static Map<String, dynamic> maplibreStyleFrom(
     Map<String, dynamic> style, {
@@ -309,7 +309,7 @@ class MapStyleService with WidgetsBindingObserver {
     }
     return {
       ...style,
-      // The renderer caches drawn tiles by theme id; OpenFreeMap's styles
+      // The renderer caches drawn tiles by theme id. OpenFreeMap's styles
       // have none, so day and night would share (and mix) one cache.
       'id': night ? 'transitph-night' : 'transitph-day',
       'metadata': {
@@ -366,7 +366,7 @@ class MapStyleService with WidgetsBindingObserver {
   };
 
   /// Night: OpenFreeMap's dark style is nearly black with roads barely
-  /// visible; these blue-grays (after Google Maps' night mode, close to the
+  /// visible. These blue-grays (after Google Maps' night mode, close to the
   /// app's navy text) keep roads readable.
   static const _nightColors = <String, String>{
     'background': '#242f3e',

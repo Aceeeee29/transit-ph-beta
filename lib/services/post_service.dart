@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 
-/// How long a post stays in the feed. New posts get [standard]; moderators
+/// How long a post stays in the feed. New posts get [standard]. Moderators
 /// can change it per post, counted from when they set it.
 enum PostLifetime {
   days3('3 days', Duration(days: 3)),

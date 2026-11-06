@@ -24,7 +24,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -173,7 +173,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  // ─── Visibility toggle helper ──────────────────────────────────────────────
+  // Visibility toggle helper
   Widget _passwordRule(String label, bool passes) {
     const passColor = Color(0xFF2E9E5B);
     return Padding(
@@ -283,7 +283,7 @@ class _SignupScreenState extends State<SignupScreen> {
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               children: [
-                // ── Header ────────────────────────────────────────────────
+                // Header
                 Container(
                   width: 64,
                   height: 64,
@@ -325,7 +325,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // ── Form card ─────────────────────────────────────────────
+                // Form card
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
@@ -540,7 +540,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 20),
 
-                // ── Sign in link ───────────────────────────────────────────
+                // Sign in link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -5,7 +5,7 @@ class RouteGuide {
 
   static const names = ['Juan', 'Neneng', 'Erling Haaland', 'Alberto'];
 
-  /// The guide for a trip; the same trip always gets the same one. [trip] is
+  /// The guide for a trip. The same trip always gets the same one. [trip] is
   /// any text that identifies it (a simple hash, stable across app runs,
   /// unlike String.hashCode).
   static String nameFor(String trip) {

@@ -109,7 +109,7 @@ class RouteBackButton extends StatelessWidget {
 }
 
 /// The route drawer's resting part, the same on every route view. The
-/// centered time ([primary]) over distance and fare; an X to stop
+/// centered time ([primary]) over distance and fare. An X to stop
 /// on the left while following, and the whole-route button on the right.
 /// Before Start (and once arrived) a full-width Start (Done) button sits
 /// under it.
@@ -120,7 +120,7 @@ class RouteDrawerHeader extends StatelessWidget {
   /// "6.3 km · ₱26 est.".
   final String? secondary;
 
-  /// Who suggested the route, e.g. "Suggested by Juan". Not while following.
+  /// Who suggested the route, like "Suggested by Juan". Not while following.
   final String? byline;
 
   final bool isFollowing;

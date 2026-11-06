@@ -84,7 +84,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
           Uri.parse(videoUrl),
         );
       } else if (!kIsWeb) {
-        // Legacy posts stored a local file path — still playable on-device.
+        // Legacy posts stored a local file path. Still playable on-device.
         _videoController = VideoPlayerController.file(File(videoUrl));
       } else {
         setState(() => _videoError = 'Unsupported video source.');
@@ -218,7 +218,7 @@ class _FeedPostCardState extends State<FeedPostCard> {
   }
 }
 
-// ─── Private sub-widgets ──────────────────────────────────────────────────────
+// Private sub-widgets
 
 class _PostHeader extends StatelessWidget {
   final Post post;

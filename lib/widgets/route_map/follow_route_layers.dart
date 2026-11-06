@@ -121,7 +121,7 @@ class FollowRouteLayers {
   static const detourColor = Color(0xFFE8833A);
 
   /// The path the vehicle is actually taking while off the route. Shown
-  /// as it goes; afterwards the rider can offer it as a correction.
+  /// as it goes. Afterwards the rider can offer it as a correction.
   static List<MapLine> detourLines(List<LatLng>? detour) {
     if (detour == null || detour.length < 2) return const [];
     return [

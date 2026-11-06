@@ -97,7 +97,7 @@ class WalkRideJoin {
   }
 
   /// [name] kept unless the stop moved more than [_renameAfterM] from
-  /// [was]; then "the stop near X" becomes "the spot near X".
+  /// [was]. Then "the stop near X" becomes "the spot near X".
   static String renamed(String name, LatLng was, LatLng now) {
     if (_m(was, now) <= _renameAfterM) return name;
     const prefix = 'the stop near ';

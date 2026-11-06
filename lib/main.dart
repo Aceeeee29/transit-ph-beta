@@ -20,7 +20,7 @@ import 'config.dart';
 import 'theme/app_colors.dart';
 
 /// The app's theme, light or dark (Settings > Appearance). Most screens
-/// take their colors from [AppColors]; this covers Material's own widgets
+/// take their colors from [AppColors]. This covers Material's own widgets
 /// (dialogs, sheets, menus, fields, snack bars).
 ThemeData buildTheme({bool dark = false}) {
   final palette = dark ? AppPalette.dark : AppPalette.light;
@@ -91,7 +91,7 @@ void main() async {
   // connection with broken IPv6 doesn't hang every request.
   if (!kIsWeb) HttpOverrides.global = Ipv4FirstHttpOverrides();
 
-  // Load .env first — everything else depends on it
+  // Load .env first. Everything else depends on it
   await dotenv.load();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -112,10 +112,10 @@ void main() async {
   unawaited(SettingsService.loadPreferences());
 
   // Map look (classic or clean) and light or dark appearance, kept on the
-  // device; loaded before the first frame so the app opens in its colors.
+  // device. Loaded before the first frame so the app opens in its colors.
   await MapStyleService.instance.load();
   // Saved OpenStreetMap pictures from older versions (some are their
-  // "Access blocked" notice); nothing reads them any more.
+  // "Access blocked" notice). Nothing reads them any more.
   unawaited(OfflineTileService.removeOldPictureTiles());
 
   runApp(const TransitPHApp());

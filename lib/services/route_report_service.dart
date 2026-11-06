@@ -140,7 +140,7 @@ class RouteReportService {
     _active = null;
   }
 
-  // ─── Same road ─────────────────────────────────────────────────────────────
+  // Same road
 
   /// How much of [route] (meters, along it) runs on [reported]'s road.
   static double sharedMeters(List<LatLng> route, List<LatLng> reported) {
@@ -200,7 +200,7 @@ class RouteReportService {
     return [for (var i = 0; i < max; i++) path[(i * step).round()]];
   }
 
-  // ─── Contributors ──────────────────────────────────────────────────────────
+  // Contributors
 
   static Future<void> _notifyContributors(RouteIssueReport report) async {
     try {

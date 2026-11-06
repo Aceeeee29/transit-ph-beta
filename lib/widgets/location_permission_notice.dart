@@ -35,7 +35,7 @@ Future<bool> ensureLocationAccess(
 
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      // Android never reports a permanent denial from checkPermission; after
+      // Android never reports a permanent denial from checkPermission. After
       // two "Don't allow"s it still says denied, and requestPermission then
       // returns deniedForever without showing anything. Time the request to
       // tell that silent refusal apart from the user answering the prompt.
@@ -49,7 +49,7 @@ Future<bool> ensureLocationAccess(
         _osStoppedPrompting = true;
       }
       // If the user just said no to the OS prompt, respect that for now
-      // instead of stacking a second dialog on top; the next location action
+      // instead of stacking a second dialog on top. The next location action
       // asks again.
       if (permission != LocationPermission.deniedForever || osShowedPrompt) {
         return _isGranted(permission);
@@ -99,7 +99,7 @@ Future<void> _showLocationDialog(
   required String actionLabel,
   required Future<bool> Function() onAction,
 }) async {
-  // Screens call this from initState; wait for the first frame so the
+  // Screens call this from initState. Wait for the first frame so the
   // dialog isn't pushed while the screen's own route is still being built.
   await WidgetsBinding.instance.endOfFrame;
   if (!context.mounted) return;

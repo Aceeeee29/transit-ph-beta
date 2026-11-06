@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'cloudinary_service.dart';
 
-/// Thrown when a profile photo upload fails — carries a user-facing message
+/// Thrown when a profile photo upload fails. Carries a user-facing message
 /// plus the raw details for logs.
 class MediaUploadException implements Exception {
   final String userMessage;

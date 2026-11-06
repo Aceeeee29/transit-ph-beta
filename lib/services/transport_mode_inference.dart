@@ -10,16 +10,16 @@ export 'fare_matrix.dart';
 //   https://wiki.openstreetmap.org/wiki/Metro_Manila/Bus_routes
 //   https://wiki.openstreetmap.org/wiki/Metro_Manila/Jeepney_and_UV_Express_routes
 //
-// NOTE: This DB is now a FALLBACK behind Overpass API live queries.
+// This list is only a fallback now. Live Overpass queries come first.
 //       It handles cases where Overpass returns no data (unmapped roads,
 //       timeout, offline).  Only include roads with high confidence for ONE mode.
-//       Contested roads (bus + jeepney) are omitted — let Overpass or
+//       Contested roads (bus + jeepney) are omitted. Let Overpass or
 //       dominantMode handle them.
 // =============================================================================
 
 class PhRoadDatabase {
   static const Map<String, String> _roadModes = {
-    // ── TRAIN LINES & STATIONS ───────────────────────────────────────────────
+    // Train lines & stations
     'metro rail transit': 'Train', 'light rail transit': 'Train',
     'philippine national railways': 'Train',
     'mrt-3': 'Train', 'mrt3': 'Train', 'mrt': 'Train',
@@ -54,7 +54,7 @@ class PhRoadDatabase {
     // PNR
     'tutuban': 'Train', 'alabang station': 'Train', 'calamba station': 'Train',
 
-    // ── FERRY ─────────────────────────────────────────────────────────────────
+    // Ferry
     'pasig river ferry': 'Boat', 'pasig river': 'Boat',
     'manila bay': 'Boat', 'manila north harbor': 'Boat',
     'manila south harbor': 'Boat', 'north harbor': 'Boat',
@@ -63,7 +63,7 @@ class PhRoadDatabase {
     'ro-ro': 'Boat', 'roro': 'Boat',
     'superferry': 'Boat', 'oceanjet': 'Boat', 'weesam': 'Boat',
 
-    // ── EXPRESSWAYS → FX/Van ─────────────────────────────────────────────────
+    // Expressways → FX/Van
     // Confirmed: jeepneys/tricycles cannot use these roads legally.
     'south luzon expressway': 'FX/Van', 'slex': 'FX/Van',
     'north luzon expressway': 'FX/Van', 'nlex': 'FX/Van',
@@ -79,7 +79,7 @@ class PhRoadDatabase {
     'daang hari': 'FX/Van', // P2P-only corridor
     'susana heights road': 'FX/Van', // SLEX access
     'east service road': 'FX/Van', // SLEX service road
-    // ── BUS-DOMINANT ROADS ────────────────────────────────────────────────────
+    // Bus-dominant roads
     // Confirmed by named bus routes in OSM Metro Manila/Bus_routes.
     'epifanio de los santos': 'Bus', 'edsa': 'Bus',
     // Macapagal / PITX / Coastal (bus routes 1,4,5,6,7,22,23,26-32,34,43)
@@ -89,7 +89,7 @@ class PhRoadDatabase {
     'coastal road': 'Bus',
     // Osmeña Highway / Ayala-Alabang (bus routes 10,11,12,24,25,P2P)
     'osmena highway': 'Bus', 'osmeña highway': 'Bus',
-    // C-5 Road — corrected: major bus corridor (routes 4,15,18,38-42,55)
+    // C-5 Road is a major bus corridor (routes 4,15,18,38-42,55)
     'c-5 road': 'Bus', 'circumferential road 5': 'Bus',
     // Road 10 / Bonifacio Drive (routes 22,35,36,44,45,46)
     'road 10': 'Bus', 'bonifacio drive': 'Bus', 'mel lopez boulevard': 'Bus',
@@ -153,7 +153,7 @@ class PhRoadDatabase {
     'mckinley road': 'Bus', 'mckinley parkway': 'Bus', 'upper mckinley': 'Bus',
     'malabon-navotas road': 'Bus', 'maharlika highway': 'Bus',
 
-    // ── JEEPNEY-DOMINANT ROADS ────────────────────────────────────────────────
+    // Jeepney-dominant roads
     // Confirmed by route descriptions in OSM Jeepney_and_UV_Express_routes.
     // Camanava / Valenzuela feeders
     'samson road': 'Jeepney',
@@ -288,14 +288,14 @@ class PhRoadDatabase {
 /// Infers the Philippine transit mode for each ORS step.
 ///
 /// Priority chain:
-///   1. Walk         — depart/arrive keywords or <= 350 m
-///   2. overpassMode — live Overpass API result (highest confidence)
-///   3. Road DB      — PhRoadDatabase keyword match (fallback)
-///   4. Train        — station/rail keywords (hard infrastructure)
-///   5. Ferry        — pier/port keywords (hard infrastructure)
-///   6. Expressway   — tollway/highway keywords -> FX/Van
-///   7. dominantMode — user's chosen vehicle (anchors ambiguous roads)
-///   8. Distance     — heuristic fallback
+///   1. Walk: depart/arrive keywords or <= 350 m
+///   2. overpassMode: live Overpass API result (highest confidence)
+///   3. Road DB: PhRoadDatabase keyword match (fallback)
+///   4. Train: station/rail keywords (hard infrastructure)
+///   5. Ferry: pier/port keywords (hard infrastructure)
+///   6. Expressway: tollway/highway keywords -> FX/Van
+///   7. dominantMode: user's chosen vehicle (anchors ambiguous roads)
+///   8. Distance: heuristic fallback
 class TransitModeInferrer {
   static const _walkMax = 350.0;
   static const _tricycleMax = 1500.0;
@@ -336,17 +336,17 @@ class TransitModeInferrer {
   /// Applies mode inference, fare calculation, and step merging.
   ///
   /// After inferring a mode for every raw ORS step, consecutive steps that
-  /// share the same [suggestedMode] are **merged into one** — because "Turn
+  /// share the same [suggestedMode] are merged into one, because "Turn
   /// left → Turn right → Continue straight" in the same vehicle is NOT a
   /// transfer, it is just one continuous ride.
   ///
-  /// A new step is only created when the mode actually changes (e.g.
+  /// A new step is only created when the mode actually changes (like
   /// Walk → Jeepney → Bus).
   ///
-  /// [dominantMode]  — the transport mode the user selected (e.g. 'Jeepney').
+  /// [dominantMode]: the transport mode the user selected (like 'Jeepney').
   ///                   Anchors ambiguous steps after all other signals fail.
   ///
-  /// [overpassModes] — live Overpass API results, one per raw step.
+  /// [overpassModes]: live Overpass API results, one per raw step.
   ///                   When non-null, takes precedence over the road DB.
   static List<OrsStep> inferModes(
     List<OrsStep> steps, {
@@ -356,7 +356,7 @@ class TransitModeInferrer {
     if (steps.isEmpty) return steps;
     final totalDist = steps.fold(0.0, (s, e) => s + e.distanceMeters);
 
-    // Pass 1 — assign a mode to every raw ORS step
+    // Pass 1: assign a mode to every raw ORS step
     final labeled =
         steps.asMap().entries.map((entry) {
           final i = entry.key;
@@ -386,7 +386,7 @@ class TransitModeInferrer {
           );
         }).toList();
 
-    // Pass 2 — merge consecutive steps that share the same mode
+    // Pass 2: merge consecutive steps that share the same mode
     return _mergeConsecutiveSameMode(labeled);
   }
 
@@ -394,15 +394,15 @@ class TransitModeInferrer {
   /// a single step.
   ///
   /// Merged step properties:
-  ///   • instruction    — most descriptive road name found across the group,
-  ///                      prefixed with the vehicle label (e.g. "Ride Jeepney
+  ///   • instruction: most descriptive road name found across the group,
+  ///                      prefixed with the vehicle label (like "Ride Jeepney
   ///                      via España Blvd → Quezon Ave → EDSA")
-  ///   • distanceMeters — sum of all merged steps
-  ///   • durationSeconds— sum of all merged steps
-  ///   • estimatedFare  — recalculated from total merged distance (fare is
-  ///                      NOT additive — you pay once for the whole ride)
-  ///   • wayPointStart  — from the first step in the group
-  ///   • wayPointEnd    — from the last step in the group
+  ///   • distanceMeters: sum of all merged steps
+  ///   • durationSeconds: sum of all merged steps
+  ///   • estimatedFare: recalculated from total merged distance (fare is
+  ///                      NOT additive. You pay once for the whole ride)
+  ///   • wayPointStart: from the first step in the group
+  ///   • wayPointEnd: from the last step in the group
   static List<OrsStep> _mergeConsecutiveSameMode(List<OrsStep> steps) {
     if (steps.isEmpty) return steps;
 
@@ -510,7 +510,7 @@ class TransitModeInferrer {
     // 2. Very short → Walk
     if (dist <= _walkMax) return 'Walk';
 
-    // 3. Overpass — ONLY hard-override for Train and Ferry.
+    // 3. Overpass: ONLY hard-override for Train and Ferry.
     //
     //    Train and Ferry are fixed physical infrastructure: if Overpass says
     //    a road is a rail line or ferry route, that is always true regardless
@@ -520,7 +520,7 @@ class TransitModeInferrer {
     //    a hard override. Many PH roads have BOTH bus AND jeepney route
     //    relations in OSM. If the user selected Jeepney and we're on EDSA,
     //    Overpass returns 'Bus' (higher priority in OSM), which would silently
-    //    ignore the user's choice. That's wrong — the user knows which vehicle
+    //    ignore the user's choice. That's wrong. The user knows which vehicle
     //    they want to take.
     //
     //    Road-based Overpass results are only used when there is NO dominantMode
@@ -529,7 +529,7 @@ class TransitModeInferrer {
     if (overpassMode == 'Train' || overpassMode == 'Boat')
       return overpassMode!;
 
-    // 4. Road DB — keyword match against PhRoadDatabase
+    // 4. Road DB: keyword match against PhRoadDatabase
     final dbMode = PhRoadDatabase.lookupMode(text);
     if (dbMode != null) return dbMode;
 
@@ -542,13 +542,13 @@ class TransitModeInferrer {
     // 7. Expressway → FX/Van (physical road restriction, always applies)
     if (_any(text, _expressWayKws)) return 'FX/Van';
 
-    // 8. Dominant mode anchor — user's chosen vehicle wins.
+    // 8. Dominant mode anchor: user's chosen vehicle wins.
     //    This sits ABOVE the road-based Overpass result intentionally:
     //    if the user picked Jeepney, roads with OSM bus relations still
     //    return Jeepney because that's the vehicle they're riding.
     if (dominantMode != null && dominantMode != 'Walk') return dominantMode;
 
-    // 9. Road-based Overpass result — only reached when dominantMode is null.
+    // 9. Road-based Overpass result: only reached when dominantMode is null.
     //    At this point we have no user preference, so Overpass is our best
     //    inference for what mode serves this road.
     if (overpassMode != null) return overpassMode;

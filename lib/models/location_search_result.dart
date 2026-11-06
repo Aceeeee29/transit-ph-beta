@@ -1,4 +1,4 @@
-/// Result picked from the location search UI — carries coordinates so the
+/// Result picked from the location search UI. Carries coordinates so the
 /// caller can jump straight to the point without re-geocoding.
 class LocationSearchResult {
   final String name;

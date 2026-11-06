@@ -32,7 +32,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
   int _activeStep = 0;
   List<File?> _stepImages = [];
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
   static const _accent = Color(0xFF0B8FD6);
@@ -180,7 +180,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
     }
   }
 
-  // ─── Styled text field ─────────────────────────────────────────────────────
+  // Styled text field
   Widget _styledField({
     required String label,
     required String hint,
@@ -294,7 +294,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
             ),
             child: Column(
               children: [
-                // ── Step header (always visible) ──────────────────────
+                // Step header (always visible)
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(
@@ -436,7 +436,7 @@ class _RouteStepperWidgetState extends State<RouteStepperWidget> {
                   ),
                 ),
 
-                // ── Expanded content (when active) ────────────────────
+                // Expanded content (when active)
                 if (isActive) ...[
                   Divider(color: _border, height: 1),
                   Padding(

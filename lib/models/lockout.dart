@@ -48,7 +48,7 @@ class LockoutReason {
 
 /// Why and how a rider is locked out: users/{uid}/moderation/current.
 /// Kept off the profile itself because any signed-in account can read
-/// profiles; only the rider and staff can read this one.
+/// profiles. Only the rider and staff can read this one.
 class LockoutRecord {
   /// 'ban' or 'restrict'.
   final String action;

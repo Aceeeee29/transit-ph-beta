@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Every wrong password locks the sign-in button for a while: 15 seconds
 /// the first time, then double each time after, up to 15 minutes. The count
 /// is saved so closing the app doesn't reset it. Firebase has its own limit
-/// on the server; this only makes the app behave well before that kicks in.
+/// on the server. This only makes the app behave well before that kicks in.
 class LoginThrottle {
   static const _failsKey = 'login_throttle_fails';
   static const _lockedUntilKey = 'login_throttle_locked_until';
@@ -24,7 +24,7 @@ class LoginThrottle {
   // A day with no wrong tries starts the count fresh.
   static const _forgetAfter = Duration(hours: 24);
 
-  /// Shown while locked when there's no other error to show, e.g. after
+  /// Shown while locked when there's no other error to show, like after
   /// reopening the app mid-lock.
   static const lockMessage =
       'Sign-in is paused after a wrong try. Wait for the timer, then try again.';
@@ -71,7 +71,7 @@ class LoginThrottle {
     final fails = prefs.getInt(_failsKey) ?? 0;
     await prefs.setInt(_failsKey, fails + 1);
     // 15s, 30s, 1m, 2m, 4m, 8m, then 15m. The cap on the shift keeps the
-    // number small; the min() does the real capping.
+    // number small. The min() does the real capping.
     final seconds = math.min(
       _firstLock.inSeconds << math.min(fails, 10),
       _longestLock.inSeconds,

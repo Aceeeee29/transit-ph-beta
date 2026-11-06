@@ -192,7 +192,7 @@ class HomeFareMatrixDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // The fare keeps its full width; the details wrap instead.
+          // The fare keeps its full width. The details wrap instead.
           TranslatedText(
             fare,
             textAlign: TextAlign.right,

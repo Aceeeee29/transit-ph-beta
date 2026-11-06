@@ -77,7 +77,7 @@ class SettingsService {
     await _cachePreferences(sanitized);
   }
 
-  /// The copy kept on the phone; no network, so it's safe before the first
+  /// The copy kept on the phone. No network, so it's safe before the first
   /// frame.
   static Future<Map<String, dynamic>> loadCachedPreferences() =>
       _loadCachedPreferences();

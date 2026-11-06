@@ -61,7 +61,7 @@ class _MainScreenState extends State<MainScreen> {
   List<Post> posts = [];
   List<route_model.Route> routes = [];
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _surface => AppColors.surface;
   static const _accent = Color(0xFF0B8FD6);
   static Color get _accentSoft => AppColors.accentSoft;
@@ -95,7 +95,7 @@ class _MainScreenState extends State<MainScreen> {
     _loadData();
     _startConnectivityMonitoring();
     // Rebuild whenever the signed-in user's profile (name, photo) changes,
-    // e.g. after editing it in Settings, so it propagates live to every
+    // For example, after editing it in Settings, so it propagates live to every
     // tab (Feed, Contribute, etc.) instead of only on the next unrelated
     // rebuild.
     _userSubscription = FirebaseAuth.instance.userChanges().listen((_) {
@@ -110,7 +110,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   /// Settings asked for the Contribute tour: show Contribute on the Map
-  /// tab; ContributeScreen plays it once it's there.
+  /// tab. ContributeScreen plays it once it's there.
   void _onContributeTourRequested() {
     final mapTab = MapTabController.instance;
     if (!mounted || !mapTab.contributeTourRequested.value) return;
@@ -161,8 +161,8 @@ class _MainScreenState extends State<MainScreen> {
         _offlineTimer?.cancel();
         _leaveOffline();
       } else {
-        // Switching wifi to mobile data passes through "none" for a moment;
-        // only a lasting drop locks the app.
+        // Switching wifi to mobile data passes through "none" for a moment.
+        // Only a lasting drop locks the app.
         _offlineTimer?.cancel();
         _offlineTimer = Timer(const Duration(seconds: 3), _enterOffline);
       }
@@ -210,7 +210,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   /// A route opened from Downloaded Routes (or one being followed) is on
-  /// screen; otherwise offline shows only the list.
+  /// screen. Otherwise offline shows only the list.
   bool get _viewingRoute =>
       _selectedIndex == 2 && MapTabController.instance.current != null;
 
@@ -265,7 +265,7 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  /// Offline there's nowhere to go back to (e.g. the search a route came
+  /// Offline there's nowhere to go back to (like the search a route came
   /// from), so it only closes.
   void _closeRoute() {
     final mapTab = MapTabController.instance;
@@ -359,7 +359,7 @@ class _MainScreenState extends State<MainScreen> {
       if (widget.isAdmin) ModeratorScreen(onRoutesModerated: _loadData),
     ];
 
-    // ─── Nav items ────────────────────────────────────────────────────────────
+    // Nav items
     final navItems = <_NavItem>[
       const _NavItem(
         icon: Icons.search_outlined,
@@ -392,7 +392,7 @@ class _MainScreenState extends State<MainScreen> {
 
     final mapTab = MapTabController.instance;
     return PopScope(
-      // Back steps out one level at a time; only a second back on Home
+      // Back steps out one level at a time. Only a second back on Home
       // leaves the app.
       canPop: _exitArmed && (_offline ? !_viewingRoute : _selectedIndex == 0),
       onPopInvokedWithResult: (didPop, _) {
@@ -446,7 +446,7 @@ class _MainScreenState extends State<MainScreen> {
             if (activeTarget == null) return content;
 
             // The banner already consumes the top status-bar inset via its own
-            // SafeArea, so strip it before the tab content below — otherwise
+            // SafeArea, so strip it before the tab content below. Otherwise
             // each tab's own AppBar reserves that space a second time, leaving
             // a dead gap under the banner.
             return Column(

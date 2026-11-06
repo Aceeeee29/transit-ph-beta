@@ -4,7 +4,7 @@ import '../../models/route.dart' as route_model;
 import '../../screens/step_stops_editor_screen.dart';
 import '../../theme/app_colors.dart';
 
-// ─── Shared colors ────────────────────────────────────────────────────────────
+// Shared colors
 
 class ContributeColors {
   static Color get bg => AppColors.bg;
@@ -17,7 +17,7 @@ class ContributeColors {
   static Color get border => AppColors.border;
 }
 
-// ─── Shared dialog header ─────────────────────────────────────────────────────
+// Shared dialog header
 
 class _DialogHeader extends StatelessWidget {
   final Widget icon;
@@ -71,7 +71,7 @@ class _DialogHeader extends StatelessWidget {
   }
 }
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+// Shared helpers
 
 Widget _iconBox({required Color color, required IconData icon}) {
   return Container(
@@ -159,7 +159,7 @@ Widget _ghostButton({required String label, required VoidCallback onTap}) {
   );
 }
 
-// ─── Step Dialog ──────────────────────────────────────────────────────────────
+// Step Dialog
 
 class StepDialog extends StatefulWidget {
   final String mode;
@@ -238,7 +238,7 @@ class _StepDialogState extends State<StepDialog> {
     super.dispose();
   }
 
-  /// Converts [TimeOfDay] → "HH:mm" for storage.
+  /// Turns a [TimeOfDay] into "HH:mm" for saving.
   String _fmt24(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
@@ -492,7 +492,7 @@ class _StepDialogState extends State<StepDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Header ───────────────────────────────────────────────────
+            // Header
             _DialogHeader(
               icon: _iconBox(
                 color: modeColor,
@@ -508,7 +508,7 @@ class _StepDialogState extends State<StepDialog> {
                       : 'Add step details & schedule',
             ),
 
-            // ── Scrollable body ───────────────────────────────────────────
+            // Scrollable body
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -647,7 +647,7 @@ class _StepDialogState extends State<StepDialog> {
                       ),
                     ],
 
-                    // Time range + alternate route — animated reveal
+                    // Time range and alternate route (animated when shown)
                     AnimatedSize(
                       duration: const Duration(milliseconds: 250),
                       curve: Curves.easeInOut,
@@ -764,7 +764,7 @@ class _StepDialogState extends State<StepDialog> {
               ),
             ),
 
-            // ── Footer ───────────────────────────────────────────────────
+            // Footer
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
@@ -804,7 +804,7 @@ class _StepDialogState extends State<StepDialog> {
   }
 }
 
-// ─── Private helper widgets ───────────────────────────────────────────────────
+// Private helper widgets
 
 class _FieldLabel extends StatelessWidget {
   final String label;

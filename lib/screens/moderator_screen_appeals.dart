@@ -1,7 +1,7 @@
 part of 'moderator_screen.dart';
 
 /// Riders' appeals against a ban or restriction, shown at the top of the
-/// Feedback tab. Moderators decide restriction appeals; ban appeals are
+/// Feedback tab. Moderators decide restriction appeals. Ban appeals are
 /// for a superadmin (the Firestore rules say the same).
 extension _ModeratorScreenAppeals on _ModeratorScreenState {
   static Color get _surfaceAlt => _ModeratorScreenState._surfaceAlt;

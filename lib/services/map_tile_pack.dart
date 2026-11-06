@@ -20,7 +20,7 @@ class MapTilePack {
 
   static Future<MapTilePack?>? _loading;
 
-  /// Null when the pack can't be read; the map then downloads every tile.
+  /// Null when the pack can't be read. The map then downloads every tile.
   static Future<MapTilePack?> load() => _loading ??= _load();
 
   final File _file;
@@ -65,7 +65,7 @@ class MapTilePack {
       final file = File('${dir.path}/camanava_${header['builtAt']}.tiles');
       if (!await file.exists() || await file.length() != bytes.length) {
         await dir.create(recursive: true);
-        // An app update brings a newer pack; drop the old copy.
+        // An app update brings a newer pack. Drop the old copy.
         await for (final old in dir.list()) {
           if (old is File) await old.delete();
         }
@@ -141,7 +141,7 @@ class PackedVectorTileProvider extends VectorTileProvider {
     var url = await _currentTileUrl(pack);
     var response = await _download(url, tile);
     if (response.statusCode == 404 && !_refreshedThisRun) {
-      // Old map data is taken down after a while; look up the new address.
+      // Old map data is taken down after a while. Look up the new address.
       final fresh = await _refreshTileUrl();
       if (fresh != null && fresh != url) {
         url = fresh;
@@ -215,7 +215,7 @@ class PackedVectorTileProvider extends VectorTileProvider {
         debugPrint('[MapTilePack] Could not look up the tile address: $e');
         return _tileUrl;
       } finally {
-        // A failed lookup may be retried later; a successful one stands.
+        // A failed lookup may be retried later. A successful one stands.
         if (!_refreshedThisRun) _refreshing = null;
       }
     }();

@@ -40,7 +40,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -72,7 +72,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     super.dispose();
   }
 
-  // ─── All original functions unchanged ──────────────────────────────────────
+  // All original functions unchanged
 
   Future<void> _createPost() async {
     if (_isPublishing) return;
@@ -186,7 +186,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     return (name: null, photoUrl: null);
   }
 
-  // ─── UI Helpers ────────────────────────────────────────────────────────────
+  // UI Helpers
 
   String _categoryLabel(PostCategory cat) => switch (cat) {
     PostCategory.discussion => 'Discussion',
@@ -217,7 +217,7 @@ class _CreatePostDialogState extends State<CreatePostDialog>
     _ => _accent,
   };
 
-  // ─── Build ─────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

@@ -26,7 +26,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   late Future<List<NotificationModel>> _notificationsFuture;
   bool _isMarkingAllRead = false;
 
-  // ─── Color tokens (matches design system) ──────────────────────────────────
+  // Color tokens (matches design system)
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -74,7 +74,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  // ─── Notification type helpers ─────────────────────────────────────────────
+  // Notification type helpers
   IconData _notifIcon(String type) => switch (type) {
     'upvote' || 'like' => Icons.thumb_up_rounded,
     'downvote' => Icons.thumb_down_rounded,
@@ -156,7 +156,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       try {
         await NotificationsService.markAsRead(notification.id);
       } catch (_) {
-        // Non-fatal — continue to navigation.
+        // Non-fatal. Continue to navigation.
       }
       if (mounted) {
         setState(() {
@@ -168,7 +168,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     if (!mounted) return;
 
-    // ── Post notifications (like / upvote / downvote / comment / reply) ──
+    // Post notifications (like / upvote / downvote / comment / reply)
     if (_postNotificationTypes.contains(notification.type)) {
       final postId = notification.postId?.trim();
       if (postId == null || postId.isEmpty) {
@@ -179,7 +179,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
-    // ── Route approval notifications ──
+    // Route approval notifications
     if (_routeNotificationTypes.contains(notification.type)) {
       final routeId = notification.routeId?.trim();
       if (routeId == null || routeId.isEmpty) {
@@ -283,7 +283,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      // ─── AppBar ────────────────────────────────────────────────────────
+      // AppBar
       appBar: AppBar(
         backgroundColor: _surface,
         foregroundColor: _textPrimary,
@@ -343,18 +343,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       ),
 
-      // ─── Body ──────────────────────────────────────────────────────────
+      // Body
       body: FutureBuilder<List<NotificationModel>>(
         future: _notificationsFuture,
         builder: (context, snapshot) {
-          // ── Loading ──
+          // Loading
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
             );
           }
 
-          // ── Error ──
+          // Error
           if (snapshot.hasError) {
             return _refreshableCenteredContent(
               Column(
@@ -393,7 +393,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
 
-          // ── Empty ──
+          // Empty
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return _refreshableCenteredContent(
               Column(
@@ -436,7 +436,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
 
-          // ── Notifications list ──
+          // Notifications list
           final notifications = snapshot.data!;
           final unreadCount = notifications.where((n) => !n.isRead).length;
 
@@ -601,7 +601,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   children: [
                                     // The label takes the free space (its pill
                                     // stays its own size), so the time sits flush
-                                    // right; Flexible + Spacer left a gap there.
+                                    // right. Flexible + Spacer left a gap there.
                                     Expanded(
                                       child: Align(
                                         alignment: Alignment.centerLeft,

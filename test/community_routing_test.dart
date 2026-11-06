@@ -113,7 +113,7 @@ void main() {
 
     test('drops the contributor note when boarding mid-route', () async {
       // The note ("Ride the jeep signed …") is about where the step
-      // starts; boarding ~2 km in, it no longer applies.
+      // starts. Boarding ~2 km in, it no longer applies.
       final alternatives =
           await SupabaseRouteService.planWithCommunityRoutesOnly(
             origin: const LatLng(14.6380, 120.9870),

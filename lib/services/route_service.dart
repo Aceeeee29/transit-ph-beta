@@ -257,7 +257,7 @@ class RouteService {
     }
   }
 
-  /// Get only APPROVED community routes — what regular users see.
+  /// Get only approved community routes, the ones regular users see.
   /// We filter client-side (not in the query) so that legacy routes
   /// without an approvalStatus field are correctly defaulted to approved
   /// by fromJson, rather than being excluded by Firestore's where clause.
@@ -296,7 +296,7 @@ class RouteService {
         );
   }
 
-  /// Get PENDING routes — for the moderator review tab
+  /// Get pending routes for the moderator review tab
   static Future<List<route_model.Route>> getPendingRoutes() async {
     try {
       final querySnapshot =
@@ -324,7 +324,7 @@ class RouteService {
     }
   }
 
-  /// Get all routes contributed by a specific user (all statuses — for profile)
+  /// Get all routes contributed by a specific user (all statuses, for profile)
   /// Supports both UID and email-based contributor IDs for legacy compatibility.
   static Future<List<route_model.Route>> getRoutesByUser(
     String userId, {
@@ -411,7 +411,7 @@ class RouteService {
     }
   }
 
-  /// Save a new route — always starts as PENDING, awaiting moderator approval
+  /// Save a new route. It starts as pending until a moderator approves it
   static Future<void> saveRoute(route_model.Route route) async {
     try {
       await _checkPendingLimit(route.contributorId, route.id);
@@ -473,7 +473,7 @@ class RouteService {
     }
   }
 
-  /// Approve a route — called by moderator
+  /// Approve a route. Only moderators call this
   static Future<void> approveRoute(String routeId) async {
     try {
       String? contributorId;
@@ -551,7 +551,7 @@ class RouteService {
 
   /// What an approved correction replaces in the route it corrects: the
   /// line, its steps (with their stops and points) and the measures derived
-  /// from them. Everything else — votes, reports, contributor — stays.
+  /// from them. Everything else (votes, reports, contributor) stays.
   static const _correctionKeys = [
     'pathPoints',
     'stepBoundaries',
@@ -616,7 +616,7 @@ class RouteService {
     return true;
   }
 
-  /// Reject a route — called by moderator
+  /// Reject a route. Only moderators call this
   static Future<void> rejectRoute(String routeId) async {
     try {
       String? contributorId;

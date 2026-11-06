@@ -38,7 +38,7 @@ class _DownloadedRoutesScreenState extends State<DownloadedRoutesScreen> {
     _routesFuture = _loadAllOfflineRoutes();
   }
 
-  /// Routes the user started following, saved automatically; filled in by
+  /// Routes the user started following, saved automatically. Filled in by
   /// [_loadAllOfflineRoutes] alongside the downloads.
   List<FollowedRouteEntry> _recent = const [];
 

@@ -5,7 +5,7 @@ import '../models/route.dart' as route_model;
 import 'active_navigation_service.dart';
 import 'route_follow_engine.dart';
 
-/// Snaps a ridden path to roads; returns null to use the raw points.
+/// Snaps a ridden path to roads. Returns null to use the raw points.
 typedef RideSnapper = Future<List<LatLng>?> Function(List<LatLng> points);
 
 /// Turns the ways a vehicle actually went (recorded while following) into a
@@ -162,7 +162,7 @@ class RideCorrection {
     required List<int> boundaries,
   }) {
     // Steps left with no line (the trip ended off the route before them)
-    // are dropped; the last kept step runs to the end of the ride.
+    // are dropped. The last kept step runs to the end of the ride.
     final keptSteps = <route_model.Step>[];
     final keptBoundaries = <int>[];
     var previous = 0;

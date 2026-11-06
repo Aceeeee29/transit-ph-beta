@@ -28,7 +28,7 @@ class FollowTarget {
   final List<LatLng> path;
   final List<FollowStep> steps;
 
-  /// Exactly one of these is set; used to reopen the right screen.
+  /// Exactly one of these is set. Used to reopen the right screen.
   final route_model.Route? route;
   final OrsRouteResult? generatedRoute;
 
@@ -94,12 +94,12 @@ class FollowTarget {
 
 /// A stretch where the vehicle left the followed route and later came back
 /// (or the trip ended first), with the path it actually took. Kept on the
-/// device only; the rider can offer it as a correction afterwards.
+/// device only. The rider can offer it as a correction afterwards.
 class RideDeviation {
   /// Distance along the route where the vehicle left it.
   final double fromMeters;
 
-  /// Where it rejoined; null when the trip ended before rejoining.
+  /// Where it rejoined. Null when the trip ended before rejoining.
   final double? toMeters;
   final List<LatLng> points;
   final double lengthMeters;
@@ -114,11 +114,11 @@ class RideDeviation {
 
 /// Owns the in-progress "follow route" session: what is followed, the GPS
 /// stream, progress along it, and guidance back to it. Living here rather
-/// than in a screen means leaving the screen (e.g. via back) keeps tracking
+/// than in a screen means leaving the screen (like via back) keeps tracking
 /// and progress, and the session can be resumed from the persistent banner.
 ///
-/// [notifyListeners] fires on session changes (start, stop, arrival);
-/// per-fix updates and fetched walking paths go through [followUpdates] so
+/// [notifyListeners] fires on session changes (start, stop, arrival).
+/// Per-fix updates and fetched walking paths go through [followUpdates] so
 /// app-wide listeners such as the banner don't rebuild on every GPS fix.
 class ActiveNavigationService extends ChangeNotifier {
   ActiveNavigationService._();
@@ -162,7 +162,7 @@ class ActiveNavigationService extends ChangeNotifier {
                 defType: 'drawable',
               ),
               setOngoing: true,
-              // Keeps fixes flowing with the screen off; held only while a
+              // Keeps fixes flowing with the screen off. Held only while a
               // route is followed and released on stop, arrival or idle.
               enableWakeLock: true,
             ),
@@ -210,7 +210,7 @@ class ActiveNavigationService extends ChangeNotifier {
   bool _isSimulating = false;
 
   /// Off-route stretches shorter than this, or not at vehicle speed, are
-  /// noise or the rider walking — not a different way the vehicle goes.
+  /// noise or the rider walking, not a different way the vehicle goes.
   static const _minDeviationMeters = 300.0;
   static const _traceSpacingMeters = 10.0;
 
@@ -256,7 +256,7 @@ class ActiveNavigationService extends ChangeNotifier {
   bool get hasArrived => followSnapshot?.hasArrived ?? false;
   FollowGuidance get guidance => _guidance;
 
-  /// The step being travelled and what's left of it; null before progress.
+  /// The step being travelled and what's left of it. Null before progress.
   FollowLegProgress? get legProgress => _legProgress;
 
   /// The rider-route vehicle you're riding right now, or null if we can't
@@ -339,7 +339,7 @@ class ActiveNavigationService extends ChangeNotifier {
     if (_rideSamples.isNotEmpty && _rideSamples.last.leg != leg.index) {
       _rideSamples.clear();
     }
-    // Off the line, progress doesn't move; skip rather than count it slow.
+    // Off the line, progress doesn't move. Skip rather than count it slow.
     if (snapshot.status != RouteFollowStatus.onRoute) return;
     final now = DateTime.now();
     _rideSamples
@@ -401,7 +401,7 @@ class ActiveNavigationService extends ChangeNotifier {
 
   bool get isSimulating => _isSimulating;
 
-  /// Tracking was paused after a long time without movement; reopening the
+  /// Tracking was paused after a long time without movement. Reopening the
   /// route resumes it ([resumeTracking]).
   bool get isPausedForIdle => _isPausedForIdle;
 
@@ -493,7 +493,7 @@ class ActiveNavigationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Android 13+ hides the tracking notification without this; tracking
+  /// Android 13+ hides the tracking notification without this. Tracking
   /// itself works either way.
   void _requestNotificationPermission() {
     if (!Platform.isAndroid) return;
@@ -579,7 +579,7 @@ class ActiveNavigationService extends ChangeNotifier {
     final wasArrived = hasArrived;
     _ingest(position);
     if (!wasArrived && hasArrived) {
-      // Nothing left to track; stop the GPS until the user finishes.
+      // Nothing left to track. Stop the GPS until the user finishes.
       _stopTracking();
       final inBackground =
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
@@ -632,7 +632,7 @@ class ActiveNavigationService extends ChangeNotifier {
     _followTicks.tick();
   }
 
-  /// Which step the traveler is on; buzzes once near the end of each ride.
+  /// Which step the traveler is on. Buzzes once near the end of each ride.
   void _updateLeg(RouteFollowEngine engine, RouteFollowSnapshot snapshot) {
     final steps = _target?.steps ?? const <FollowStep>[];
     if (!snapshot.hasProgress) {
@@ -655,7 +655,7 @@ class ActiveNavigationService extends ChangeNotifier {
     FollowAlertNotifier.showGetOffSoon(steps[leg.index].endName);
   }
 
-  /// Records the path taken while off the route; when the vehicle rejoins
+  /// Records the path taken while off the route. When the vehicle rejoins
   /// (or arrives), keeps it as a [RideDeviation] if it was a real ride.
   void _trackDeviation(
     RouteFollowSnapshot snapshot,

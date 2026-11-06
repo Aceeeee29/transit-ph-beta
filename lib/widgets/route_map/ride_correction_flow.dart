@@ -17,7 +17,7 @@ enum _RideChoice { correction, newRoute }
 /// After a follow ends: when the vehicle went a different way than the
 /// route, offers to turn the ride into a suggested correction of the route
 /// (saved routes only) or a new route. Either opens the editor with the
-/// ride already applied, so the rider can check it before submitting; both
+/// ride already applied, so the rider can check it before submitting. Both
 /// go to moderator review. A one-time detour can just be dismissed.
 class RideCorrectionFlow {
   static Future<void> offer(

@@ -19,7 +19,7 @@ class RebuiltContributionRoute {
 
 /// One step's line as pieces between its control points (start, via
 /// points, end). Editing a control point re-routes only the pieces that
-/// touch it; every other piece keeps its exact geometry.
+/// touch it. Every other piece keeps its exact geometry.
 class StepGeometry {
   final List<LatLng> controls;
   final List<List<LatLng>> pieces;
@@ -106,7 +106,7 @@ class StepGeometry {
     return piece.last;
   }
 
-  /// Moves control [k] to [to]; re-routes the (up to two) touching pieces.
+  /// Moves control [k] to [to]. Re-routes the (up to two) touching pieces.
   /// The point lands where the routed line actually reaches (on the road,
   /// for vehicles), so both pieces meet there.
   Future<StepGeometry> moveControl(int k, LatLng to, PieceRouter route) async {
@@ -214,7 +214,7 @@ class ContributeRouteEditService {
   /// Routes one piece: along roads for [mode] when [snapToRoadEnabled]
   /// (straight if the routing services fail), otherwise a straight line.
   /// Vehicle pieces end where the road does, which moves an off-road tap
-  /// onto the road; walking pieces keep the exact tapped points, since
+  /// onto the road. Walking pieces keep the exact tapped points, since
   /// footpaths and terminals can be off the mapped roads.
   static PieceRouter pieceRouter({
     required String mode,

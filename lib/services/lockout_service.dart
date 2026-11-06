@@ -136,7 +136,7 @@ class LockoutService {
     );
   }
 
-  // ── Staff ─────────────────────────────────────────────────────────────────
+  // Staff
 
   /// Every appeal, waiting ones first, then newest first.
   static Stream<List<Appeal>> watchAppeals() {

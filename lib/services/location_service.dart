@@ -39,7 +39,7 @@ class LocationService {
     }
   }
 
-  /// Location is on and allowed; never shows a prompt.
+  /// Location is on and allowed. Never shows a prompt.
   static Future<bool> hasAccess() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return false;
@@ -63,7 +63,7 @@ class LocationService {
 
   /// Shows the OS location prompt if the user hasn't answered it yet.
   /// Deliberately silent after a permanent denial so the app doesn't nag on
-  /// every launch; features explain how to re-enable it when they need it.
+  /// every launch. Features explain how to re-enable it when they need it.
   static Future<void> requestPermissionIfUndecided() async {
     try {
       final permission = await Geolocator.checkPermission();

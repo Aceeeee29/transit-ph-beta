@@ -10,7 +10,7 @@ import 'map_tile_pack.dart';
 
 /// Saves the map around a downloaded route so it shows offline. These are
 /// OpenFreeMap's vector tiles (which allow saving for offline use), kept in
-/// [RouteTileStore]; CAMANAVA is already bundled with the app, so only the
+/// [RouteTileStore]. CAMANAVA is already bundled with the app, so only the
 /// parts outside it are downloaded. Vector tiles stop at zoom 14 and the
 /// map enlarges them beyond that, so a route needs few of them.
 class OfflineTileService {
@@ -51,7 +51,7 @@ class OfflineTileService {
 
   /// Earlier versions saved OpenStreetMap's map pictures here. Their
   /// servers forbid bulk saving and blocked the app, so some of those
-  /// pictures are just their "Access blocked" notice; nothing reads the
+  /// pictures are just their "Access blocked" notice. Nothing reads the
   /// folder any more.
   static Future<void> removeOldPictureTiles() async {
     try {

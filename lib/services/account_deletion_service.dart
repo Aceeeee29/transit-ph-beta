@@ -72,8 +72,8 @@ class AccountDeletionService {
   }
 
   /// Deletes everything listed above. Call [reauthenticate] first. A step
-  /// that fails (e.g. older security rules) is logged and skipped so the
-  /// rest still goes; the sign-in account is deleted last.
+  /// that fails (like older security rules) is logged and skipped so the
+  /// rest still goes. The sign-in account is deleted last.
   static Future<void> deleteCurrentAccount() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -171,7 +171,7 @@ class AccountDeletionService {
         db.collectionGroup('comments').where('userId', isEqualTo: uid),
       );
 
-  /// Routes not live yet go; approved ones stay for everyone, credited to
+  /// Routes not live yet go. Approved ones stay for everyone, credited to
   /// "Former rider".
   static Future<void> _releaseRoutes(FirebaseFirestore db, String uid) async {
     final routes =

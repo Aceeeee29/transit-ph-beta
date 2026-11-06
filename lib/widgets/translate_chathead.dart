@@ -82,7 +82,7 @@ class _TranslateChatHeadState extends State<TranslateChatHead> {
   }
 
   /// Sends the bubble to an edge when it's let go. A quick flick goes to
-  /// the side it was thrown to; otherwise to the nearest side.
+  /// the side it was thrown to. Otherwise to the nearest side.
   void _snapToSide(
     double flingSpeed,
     double minX,

@@ -196,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ─── Color tokens
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -206,7 +206,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static Color get _textSecondary => AppColors.textSecondary;
   static Color get _border => AppColors.border;
 
-  // ─── Section card wrapper
+  // Section card wrapper
   Widget _section({
     required String title,
     required IconData icon,
@@ -262,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── Toggle row
+  // Toggle row
   Widget _toggleRow({
     required String title,
     required String subtitle,
@@ -329,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Appearance.system: 'System',
   };
 
-  // ─── Dropdown row
+  // Dropdown row
   Widget _dropdownRow<T>({
     required String title,
     required String subtitle,
@@ -413,7 +413,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── Info row
+  // Info row
   Widget _infoRow({
     required String label,
     required String value,
@@ -460,7 +460,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── Ghost action button
+  // Ghost action button
   Widget _actionRow({
     required String label,
     required IconData icon,
@@ -542,7 +542,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
-      // ─── AppBar
+      // AppBar
       appBar: AppBar(
         backgroundColor: _surface,
         foregroundColor: _textPrimary,
@@ -603,14 +603,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Page title
+            // Page title
             TranslatedText(
               'Customize your experience',
               style: TextStyle(fontSize: 13, color: _textSecondary),
             ),
             const SizedBox(height: 20),
 
-            // ─── Account
+            // Account
             _section(
               title: 'Account',
               icon: Icons.person_outline_rounded,
@@ -767,7 +767,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ─── Notifications
+            // Notifications
             _section(
               title: 'Notifications',
               icon: Icons.notifications_outlined,
@@ -799,7 +799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ─── Preferences
+            // Preferences
             _section(
               title: 'Preferences',
               icon: Icons.tune_rounded,
@@ -882,7 +882,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ─── Privacy
+            // Privacy
             _section(
               title: 'Privacy',
               icon: Icons.shield_outlined,
@@ -933,7 +933,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ─── About
+            // About
             _section(
               title: 'About',
               icon: Icons.info_outline_rounded,
@@ -1002,7 +1002,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ─── Log out
+            // Log out
             _logoutButton(),
             const SizedBox(height: 8),
             Center(child: _deleteAccountLink()),

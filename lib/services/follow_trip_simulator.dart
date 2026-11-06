@@ -25,9 +25,9 @@ class FollowTripSimulator {
   Timer? _timer;
   final _random = math.Random();
 
-  /// [speedKmh] is the travel speed along the route; [timeScale] speeds the
+  /// [speedKmh] is the travel speed along the route. [timeScale] speeds the
   /// playback up without changing the reported speed. With [startAway] the
-  /// trip begins off the route and walks to it; with [detour] it leaves the
+  /// trip begins off the route and walks to it. With [detour] it leaves the
   /// route partway and comes back further on, at [speedKmh].
   void start({
     required List<LatLng> path,

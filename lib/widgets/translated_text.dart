@@ -4,7 +4,7 @@ import '../services/app_language_service.dart';
 /// Drop-in replacement for [Text] that auto-translates its string into the
 /// app's selected language (Settings > Preferences > Language) using the
 /// on-device ML Kit engine. Shows the original English text immediately and
-/// swaps in the translation once it resolves; falls back silently to
+/// swaps in the translation once it resolves. Falls back silently to
 /// English if translation isn't available.
 class TranslatedText extends StatefulWidget {
   final String text;

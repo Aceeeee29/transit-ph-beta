@@ -20,11 +20,11 @@ class CamanavaBounds {
 ///
 /// This is a hand-compiled community dataset for the beta. Most entries have
 /// now been re-pinned via the in-app tap-to-copy coord chip (Sep 2026).
-/// A few remain approximate/pending — see inline notes below.
+/// A few remain approximate/pending. See inline notes below.
 /// Categories map to the toggleable map filters (Attractions, Schools,
 /// Hospitals, Malls, Parks).
 const List<Place> camanavaPlaces = [
-  // ── Attractions · historical & tourist spots ──────────────────────────────
+  // Attractions · historical & tourist spots
   Place(
     id: 'bonifacio-monument',
     name: 'Bonifacio Monument',
@@ -53,7 +53,7 @@ const List<Place> camanavaPlaces = [
     lng: 120.945047,
     address: 'M. Naval St., Navotas',
   ),
-  // NOTE: 'navotas-fish-port' (Navotas Fish Port Complex) removed per request.
+  // 'navotas-fish-port' (Navotas Fish Port Complex) removed per request.
   Place(
     id: 'pio-valenzuela-shrine',
     name: 'Pio Valenzuela Shrine',
@@ -63,9 +63,9 @@ const List<Place> camanavaPlaces = [
     lng: 120.944992,
     address: 'Pariancillo Villa, Valenzuela',
   ),
-  // NOTE: 'malabon-zoo' (Malabon Zoo & Wildlife Park) removed per request.
+  // 'malabon-zoo' (Malabon Zoo & Wildlife Park) removed per request.
 
-  // ── Schools ─────────────────────────────────────────────────────────────
+  // Schools
   Place(
     id: 'mcu',
     name: 'Manila Central University',
@@ -138,7 +138,7 @@ const List<Place> camanavaPlaces = [
     lng: 120.971437,
     address: 'Maysan Rd., Valenzuela',
   ),
-  // NOTE: 'plv' (Pamantasan ng Lungsod ng Valenzuela) removed per request;
+  // 'plv' (Pamantasan ng Lungsod ng Valenzuela) removed per request.
   // OpenStreetMap's pin is at the right spot.
   Place(
     id: 'valenzuela-nhs',
@@ -149,12 +149,12 @@ const List<Place> camanavaPlaces = [
     lng: 120.984830,
     address: 'Marulas, Valenzuela',
   ),
-  // NOTE: 'olfu' (Our Lady of Fatima University) removed per request;
+  // 'olfu' (Our Lady of Fatima University) removed per request.
   // OpenStreetMap's pin is at the right spot.
 
-  // ── Hospitals ───────────────────────────────────────────────────────────
-  // NOTE: 'our-lady-of-grace' (Our Lady of Grace Hospital) removed per
-  // request; OpenStreetMap's pin is at the right spot.
+  // Hospitals
+  // 'our-lady-of-grace' (Our Lady of Grace Hospital) removed per
+  // request. OpenStreetMap's pin is at the right spot.
   Place(
     id: 'mcu-fdtm',
     name: 'MCU-FDTMF Hospital',
@@ -182,8 +182,8 @@ const List<Place> camanavaPlaces = [
     lng: 120.950643,
     address: 'Brgy. San Agustin, Malabon',
   ),
-  // NOTE: 'navotas-city-hospital' (Navotas City Hospital) removed per
-  // request; OpenStreetMap's pin is at the right spot.
+  // 'navotas-city-hospital' (Navotas City Hospital) removed per
+  // request. OpenStreetMap's pin is at the right spot.
   Place(
     id: 'fatima-medical',
     name: 'Fatima University Medical Center',
@@ -203,7 +203,7 @@ const List<Place> camanavaPlaces = [
     address: 'A. Pablo St., Valenzuela',
   ),
 
-  // ── Malls ───────────────────────────────────────────────────────────────
+  // Malls
   Place(
     id: 'sm-sangandaan',
     name: 'SM Center Sangandaan',
@@ -222,10 +222,10 @@ const List<Place> camanavaPlaces = [
     lng: 120.984256,
     address: 'Rizal Ave. Ext., Monumento, Caloocan',
   ),
-  // NOTE: 'monumento-mall' (Monumento Mall) and 'caloocan-mall' (Caloocan
+  // 'monumento-mall' (Monumento Mall) and 'caloocan-mall' (Caloocan
   // Mall) removed per request: they were 27 m apart, and OpenStreetMap's
   // pins there (North mall, LRT Caloocan Mall, Jackman Plaza) are used.
-  // NOTE: 'sm-malabon' (SM Center Malabon) removed per request.
+  // 'sm-malabon' (SM Center Malabon) removed per request.
   Place(
     id: 'vmall-monumento',
     name: 'VMall Monumento',
@@ -253,8 +253,8 @@ const List<Place> camanavaPlaces = [
     lng: 120.976647,
     address: 'McArthur Hwy., Karuhatan, Valenzuela',
   ),
-  // NOTE: 'victory-central-mall' (Victory Central Mall Valenzuela) removed
-  // per request; its spot was only a guess.
+  // 'victory-central-mall' (Victory Central Mall Valenzuela) removed
+  // per request. Its spot was only a guess.
   Place(
     id: 'fisher-mall-malabon',
     name: 'Fisher Mall Malabon',
@@ -265,9 +265,9 @@ const List<Place> camanavaPlaces = [
     address: 'Dagat-Dagatan Ave., Longos, Malabon',
   ),
 
-  // ── Parks ───────────────────────────────────────────────────────────────
-  // NOTE: 'navotas-centennial-park' (Navotas Centennial Park) removed per
-  // request; OpenStreetMap's "Navotas City Park" pin is used.
+  // Parks
+  // 'navotas-centennial-park' (Navotas Centennial Park) removed per
+  // request. OpenStreetMap's "Navotas City Park" pin is used.
   Place(
     id: 'valenzuela-peoples-park',
     name: 'Valenzuela People\'s Park',
@@ -277,7 +277,7 @@ const List<Place> camanavaPlaces = [
     lng: 120.969967,
     address: 'Malinta, Valenzuela',
   ),
-  // NOTE: 'caloocan-city-hall-plaza' removed per request, replaced below.
+  // 'caloocan-city-hall-plaza' removed per request, replaced below.
   Place(
     id: 'caloocan-city-peoples-park',
     name: 'Caloocan City People\'s Park',

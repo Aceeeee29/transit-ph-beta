@@ -4,7 +4,7 @@ import 'translation_service.dart';
 /// Drives on-the-fly translation of the app's own UI text, keyed to the
 /// user's Settings > Preferences > Language choice. Reuses the same
 /// on-device ML Kit engine that powers the Quick Translator, so it only
-/// works on Android/iOS — elsewhere (web/desktop) it silently stays English.
+/// works on Android/iOS. Elsewhere (web/desktop) it silently stays English.
 class AppLanguageService {
   // The label is what Settings shows and saves. The Korean, Chinese and
   // Japanese ones carry the language's own name, so a rider who can't read
@@ -35,7 +35,7 @@ class AppLanguageService {
 
   static bool get isEnglish => languageCode.value == 'en';
 
-  /// Display label for the currently selected language (e.g. "Filipino").
+  /// Display label for the currently selected language (like "Filipino").
   static String get currentLanguageLabel =>
       _codeToLabel[languageCode.value] ?? 'English';
 

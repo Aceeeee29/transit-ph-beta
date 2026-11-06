@@ -19,7 +19,7 @@ class WalkPathRepository {
   /// Walks older than this are forgotten, in case streets changed.
   static const _keepFor = Duration(days: 30);
 
-  /// At most this many walks are kept; the oldest go first.
+  /// At most this many walks are kept. The oldest go first.
   static const _maxKept = 500;
 
   /// To find a saved walk, we round the start and end points to a grid.

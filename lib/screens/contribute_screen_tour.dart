@@ -66,7 +66,7 @@ extension _ContributeScreenTour on _ContributeScreenState {
 
   /// The example route, either between steps (vehicle chips and Finish
   /// showing) or with its jeepney ride still being drawn (Save step, Undo,
-  /// Snap to road and Expressways showing; Expressways hides for a walk).
+  /// Snap to road and Expressways showing. Expressways hides for a walk).
   void _tourShowExample({required bool drawingStep}) {
     final example = TutorialService.getExampleRoute();
     final all = example.steps;

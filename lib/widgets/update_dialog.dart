@@ -38,11 +38,11 @@ class UpdateDialog {
   }
 }
 
-// ── Download state machine ────────────────────────────────────────────────────
+// Download state machine
 
 enum _DownloadState { idle, downloading, error }
 
-// ── Widget ───────────────────────────────────────────────────────────────────
+// Widget
 
 class _UpdateAlertDialog extends StatefulWidget {
   const _UpdateAlertDialog({required this.info});
@@ -58,7 +58,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
   String? _errorMessage;
   CancelToken? _cancelToken;
 
-  // ── Download & install ────────────────────────────────────────────────────
+  // Download & install
 
   // Set before the install-permission check, which can return before the
   // button changes: a quick second tap started a second download into the
@@ -76,7 +76,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
   }
 
   Future<void> _download() async {
-    // iOS cannot sideload APKs — open the App Store URL instead.
+    // iOS cannot sideload APKs. Open the App Store URL instead.
     if (Platform.isIOS) {
       await _openUrl();
       return;
@@ -162,7 +162,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
-        // User deliberately cancelled — return to idle so they can retry.
+        // User deliberately cancelled. Return to idle so they can retry.
         if (mounted) setState(() => _state = _DownloadState.idle);
       } else if (mounted) {
         setState(() {
@@ -187,7 +187,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
       final raf = await file.open(mode: FileMode.read);
       final header = await raf.read(4);
       await raf.close();
-      // APK files are ZIP archives — the magic number is PK\x03\x04.
+      // APK files are ZIP archives. The magic number is PK\x03\x04.
       return header.length == 4 &&
           header[0] == 0x50 && // P
           header[1] == 0x4B && // K
@@ -214,7 +214,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +278,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     );
   }
 
-  // ── Content per state ─────────────────────────────────────────────────────
+  // Content per state
 
   Widget _buildContent() {
     switch (_state) {
@@ -350,7 +350,7 @@ class _UpdateAlertDialogState extends State<_UpdateAlertDialog> {
     }
   }
 
-  // ── Actions per state ─────────────────────────────────────────────────────
+  // Actions per state
 
   /// Side by side, equal widths, so neither can run off the dialog.
   Widget _buildActions() {

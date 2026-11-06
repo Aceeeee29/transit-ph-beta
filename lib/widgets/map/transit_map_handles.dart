@@ -12,10 +12,10 @@ int _handlesKey(List<MapHandle> handles) => Object.hashAll(
   handles.map((h) => Object.hash(h.id, h.point, h.image, h.label)),
 );
 
-/// Dragging [TransitMap.handles]. MapLibre draws them; a touch that lands
+/// Dragging [TransitMap.handles]. MapLibre draws them. A touch that lands
 /// on one is taken by Flutter instead of the map (so the map doesn't pan),
 /// and a copy of the handle follows the finger. Where each handle sits on
-/// screen is looked up whenever the camera settles; while the map moves,
+/// screen is looked up whenever the camera settles. While the map moves,
 /// touches go to the map.
 extension _TransitMapHandles on _TransitMapState {
   void _onHandlesChanged() {

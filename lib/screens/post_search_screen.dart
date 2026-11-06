@@ -20,7 +20,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   bool _isSearching = false;
   bool _showOmnibox = false;
 
-  // ─── Color tokens (matches design system) ──────────────────────────────────
+  // Color tokens (matches design system)
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -30,7 +30,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   static Color get _textSecondary => AppColors.textSecondary;
   static Color get _border => AppColors.border;
 
-  // ─── Category helpers ───────────────────────────────────────────────────────
+  // Category helpers
   Color _categoryColor(PostCategory cat) => switch (cat) {
     PostCategory.safetyAlert => const Color(0xFFE05C6A),
     PostCategory.delayReport => const Color(0xFFE89A3C),
@@ -57,7 +57,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   }
 
   void _loadRecentSearches() {
-    // For now, load from a simple list; in real app, use shared prefs
+    // For now, load from a simple list. In real app, use shared prefs
     setState(() {
       _recentSearches = []; // Initialize empty
     });
@@ -180,7 +180,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
     super.dispose();
   }
 
-  // ─── Section label helper ───────────────────────────────────────────────────
+  // Section label helper
   Widget _sectionLabel(String label) {
     return Text(
       label.toUpperCase(),
@@ -197,7 +197,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      // ─── AppBar ──────────────────────────────────────────────────────────
+      // AppBar
       appBar: AppBar(
         backgroundColor: _surface,
         foregroundColor: _textPrimary,
@@ -254,7 +254,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
       ),
       body: Column(
         children: [
-          // ─── Search Bar (Omnibox) ─────────────────────────────────────
+          // Search Bar (Omnibox)
           Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             color: _surface,
@@ -410,7 +410,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
             ),
           ),
 
-          // ─── Content ─────────────────────────────────────────────────
+          // Content
           Expanded(
             child:
                 _isSearching
@@ -477,7 +477,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Recent Searches Section ────────────────────────────────
+          // Recent Searches Section
           if (_recentSearches.isNotEmpty) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -560,7 +560,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
             const SizedBox(height: 24),
           ],
 
-          // ─── Trending Hashtags Section ───────────────────────────────
+          // Trending Hashtags Section
           Row(
             children: [
               _sectionLabel('Trending Hashtags'),
@@ -716,7 +716,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Card header ────────────────────────────────────────
+            // Card header
             Row(
               children: [
                 CircleAvatar(
@@ -788,7 +788,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ─── Post content ──────────────────────────────────────
+            // Post content
             Text(
               post.content,
               style: TextStyle(fontSize: 14, color: _textPrimary, height: 1.5),
@@ -796,7 +796,7 @@ class _PostSearchScreenState extends State<PostSearchScreen> {
               overflow: TextOverflow.ellipsis,
             ),
 
-            // ─── Images ───────────────────────────────────────────
+            // Images
             if (post.imageUrls.isNotEmpty) ...[
               const SizedBox(height: 10),
               SizedBox(

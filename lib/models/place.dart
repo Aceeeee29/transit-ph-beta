@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Categories used by the CAMANAVA "Nearby Places" map filters.
-/// [tourist] holds the leisure/sightseeing spots — heritage sites, churches,
+/// [tourist] holds the leisure/sightseeing spots: heritage sites, churches,
 /// markets and attractions.
 enum PlaceCategory { tourist, school, hospital, mall, park }
 
@@ -69,7 +69,7 @@ extension PlaceCategoryX on PlaceCategory {
 
 /// A point of interest inside CAMANAVA used by the "Nearby Places" module.
 ///
-/// A place can belong to several categories (e.g. Malabon Zoo is both an
+/// A place can belong to several categories (like Malabon Zoo is both an
 /// attraction and a park), so [categories] is a list.
 class Place {
   final String id;
@@ -79,11 +79,11 @@ class Place {
   final double lat;
   final double lng;
 
-  /// Not shown on the pin card; place search still matches on it.
+  /// Not shown on the pin card. Place search still matches on it.
   final String? address;
 
   /// How prominent OpenStreetMap rates the place (lower is more), for the
-  /// places read from the map (`OsmPlaces`); 0 for our own.
+  /// places read from the map (`OsmPlaces`). 0 for our own.
   final int rank;
 
   const Place({

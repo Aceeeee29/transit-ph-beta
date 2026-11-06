@@ -50,7 +50,7 @@ part 'contribute_screen_maplibre.dart';
 part 'contribute_screen_route_builder.dart';
 part 'contribute_screen_tour.dart';
 
-/// What the Map tab is currently showing. The map itself is shared — only the
+/// What the Map tab is currently showing. The map itself is shared. Only the
 /// overlay UI and draw behaviour swap when the user toggles.
 enum MapTabMode { contribute, nearby }
 
@@ -91,7 +91,7 @@ class ContributeScreen extends StatefulWidget {
   /// "Directions" to a place found on the map: plan a trip there.
   final void Function(String name, LatLng? point)? onOpenDirections;
 
-  /// A route to start from that is submitted as a new route (e.g. a ride
+  /// A route to start from that is submitted as a new route (like a ride
   /// recorded while following), unlike [routeToEdit] which updates one.
   final route_model.Route? draftRoute;
 
@@ -152,7 +152,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       DraggableScrollableController();
   bool _snapToRoadEnabled = true;
 
-  /// The contributor's "Allow expressways" choice; null follows the mode's
+  /// The contributor's "Allow expressways" choice. Null follows the mode's
   /// default. Not saved with the route: the drawn line itself is what
   /// records where the vehicle goes.
   bool? _expresswayOverride;
@@ -202,7 +202,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   String _lastLocationSearchQuery = '';
   String? _activeQuickRouteToken;
 
-  // ─── Nearby-places mode state ───────────────────────────────────────────────
+  // Nearby-places mode state
   Position? _nearbyPosition;
   bool _nearbyIsLocating = false;
   Place? _nearbySelectedPlace;
@@ -210,10 +210,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
       MapTabController.instance.placeCategories.value;
   LatLng? _debugCoord;
 
-  // ─── Zoom slider state ───────────────────────────────────────────────────────
+  // Zoom slider state
   double _currentZoom = CamanavaBounds.initialZoom;
 
-  // ─── Color tokens
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -223,20 +223,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
   static Color get _textSecondary => AppColors.textSecondary;
   static Color get _border => AppColors.border;
 
-  // ─── Map chrome layout ──────────────────────────────────────────────────────
+  // Map chrome layout
   /// The drawer at rest: its handle plus the area/weather row.
   static const double _drawerPeekHeight = 80.0;
 
   /// Keeps bottom overlays clear of the right-side buttons.
   static const double _sideButtonsInset = 12 + MapSideButton.size + 12;
 
-  // ─── CAMANAVA and Metro Manila boundaries ───────────────────────────────────
-  // NOTE: these are hand-tuned approximate rectangles, not survey-grade
+  // CAMANAVA and Metro Manila boundaries
+  // These are hand-tuned approximate rectangles, not survey-grade
   // administrative boundaries. CAMANAVA's northern edge is intentionally
   // tightened to exclude North Caloocan (a separate, non-contiguous part of
   // Caloocan City). Because North Caloocan sits at similar latitudes to
   // Valenzuela, this rectangle-based approach may clip a small sliver of
-  // Valenzuela's northernmost tip — a known tradeoff of using rectangles
+  // Valenzuela's northernmost tip. A known tradeoff of using rectangles
   // instead of true polygon boundaries.
   final Map<String, LatLngBounds> philippineRegions = {
     // Muntinlupa to North Caloocan, Navotas to Marikina.
@@ -248,11 +248,11 @@ class _ContributeScreenState extends State<ContributeScreen> {
       const LatLng(
         14.60,
         120.92,
-      ), // tightened north edge — excludes North Caloocan
+      ), // north edge pulled in to leave out North Caloocan
       const LatLng(14.74, 121.03),
     ),
     'Caloocan': LatLngBounds(
-      // South Caloocan only — North Caloocan is a separate, non-contiguous area
+      // South Caloocan only. North Caloocan is a separate, non-contiguous area
       const LatLng(14.62, 120.96),
       const LatLng(14.68, 121.01),
     ),
@@ -304,7 +304,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     'Boat': Colors.lightBlue,
   };
 
-  // ─── Lifecycle ───────────────────────────────────────────────────────────────
+  // Lifecycle
 
   @override
   void initState() {
@@ -369,7 +369,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() => _nearbyPosition = position);
   }
 
-  /// Programmatic mode flip — used by the in-screen toggle.
+  /// Programmatic mode flip. Used by the in-screen toggle.
   void _switchMapMode(MapTabMode mode) {
     if (_mapMode == mode) return;
     setState(() => _mapMode = mode);
@@ -492,7 +492,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
   }
 
-  /// Settings → "Contribute tutorial" asks for the tour; it plays once
+  /// Settings → "Contribute tutorial" asks for the tour. It plays once
   /// Contribute is on screen. True when it started it.
   bool _takeTutorialRequest() {
     final request = MapTabController.instance.contributeTourRequested;
@@ -503,7 +503,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   void _onTutorialRequested() {
-    // MainScreen switches to Contribute in the same frame; look after it.
+    // MainScreen switches to Contribute in the same frame. Look after it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _takeTutorialRequest();
     });
@@ -549,7 +549,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     super.dispose();
   }
 
-  // ─── Map interaction ─────────────────────────────────────────────────────────
+  // Map interaction
 
   void _onMapTap(LatLng point) async {
     if (_mapMode == MapTabMode.nearby) {
@@ -620,7 +620,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     }
   }
 
-  /// Removes the open step's last tapped point (and its piece); discards
+  /// Removes the open step's last tapped point (and its piece). Discards
   /// the step when only one piece is left.
   void _undoOpenStepPoint() {
     if (!_hasOpenStep) return;
@@ -776,7 +776,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     await this._openLocationSearchScreenSection();
   }
 
-  // ─── Region border polygon (for the selected-region outline) ────────────────
+  // Region border polygon (for the selected-region outline)
 
   List<Polygon> get _regionBoundaryPolygons {
     if (selectedRegion == null) return [];
@@ -800,7 +800,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     ];
   }
 
-  // ─── Dialog launchers ────────────────────────────────────────────────────────
+  // Dialog launchers
 
   /// The drawn line of step [index] (or of the step being added, which runs
   /// from the previous step's end to the end of the path).
@@ -847,7 +847,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
             stepPath: _stepPath(index),
             onCancel: () {},
             onSaved: (updated) {
-              // The dialog edits details only; keep the line's points.
+              // The dialog edits details only. Keep the line's points.
               setState(
                 () =>
                     steps[index] = updated.copyWith(
@@ -890,7 +890,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       return;
     }
 
-    // Every other step keeps its exact line; only the gap is reconnected
+    // Every other step keeps its exact line. Only the gap is reconnected
     // by re-routing the first piece of the step that followed.
     final geometries = [
       for (var i = 0; i < steps.length; i++) _stepGeometrySection(i),
@@ -1034,7 +1034,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     return shouldDiscard ?? false;
   }
 
-  // ─── History controls ────────────────────────────────────────────────────────
+  // History controls
 
   void _onUndo() {
     // While drawing a step, undo takes back its last point first.
@@ -1130,9 +1130,9 @@ class _ContributeScreenState extends State<ContributeScreen> {
     pins.value = !pins.value;
   }
 
-  // ─── Route utilities ─────────────────────────────────────────────────────────
+  // Route utilities
 
-  /// setState bridge for extension part files (e.g. contribute_screen_route_builder).
+  /// setState bridge for extension part files (like contribute_screen_route_builder).
   void _setUiState(VoidCallback fn) => setState(fn);
 
   /// Called once per newly-submitted (non-edit) route so the Profile counters
@@ -1143,7 +1143,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
       await GamificationService.incrementRoutesContributed(user);
       await GamificationService.recalculateUserStats(user);
     } catch (_) {
-      // Stats are best-effort; never block the submit flow on them.
+      // Stats are best-effort. Never block the submit flow on them.
     }
   }
 
@@ -1311,7 +1311,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
     setState(() => _selectedRouteTags = tags);
   }
 
-  // ─── Submit ──────────────────────────────────────────────────────────────────
+  // Submit
 
   void _submit({bool forceModeration = false}) async {
     await _whileSendingRoute(
@@ -1333,20 +1333,20 @@ class _ContributeScreenState extends State<ContributeScreen> {
     _submit(forceModeration: true);
   }
 
-  // ─── Preview route ───────────────────────────────────────────────────────────
+  // Preview route
 
   void _onPreviewRoute() {
     this._onPreviewRouteSection();
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
     final isNearby = _mapMode == MapTabMode.nearby;
     final hasRouteProgress = pathPoints.isNotEmpty || steps.isNotEmpty;
     // Only as its own screen (editing a route or a correction). In the Map
-    // tab MainScreen handles back; this callback still fires when it blocks
+    // tab MainScreen handles back. This callback still fires when it blocks
     // the pop, and popping here would close MainScreen (a black screen).
     final guardPop = _isStandaloneEditor && hasRouteProgress;
     return Stack(

@@ -79,7 +79,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     );
   }
 
-  // ─── Color tokens ──────────────────────────────────────────────────────────
+  // Color tokens
   static Color get _bg => AppColors.bg;
   static Color get _surface => AppColors.surface;
   static Color get _surfaceAlt => AppColors.surfaceAlt;
@@ -177,7 +177,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     );
   }
 
-  // ─── Pending route count badge ─────────────────────────────────────────────
+  // Pending route count badge
   Widget _tabWithBadge(String label, int count) {
     return Tab(
       child: Row(
@@ -285,7 +285,7 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     );
   }
 
-  // ─── Pending Routes Tab ────────────────────────────────────────────────────
+  // Pending Routes Tab
 
   Widget _buildPendingRoutesTab() {
     final pendingRoutes = _routesNotifier.value;
@@ -677,19 +677,19 @@ class _ModeratorScreenState extends State<ModeratorScreen>
         .toList();
   }
 
-  // ─── Reported Posts Tab ────────────────────────────────────────────────────
+  // Reported Posts Tab
 
   Widget _buildPendingPostsTab() {
     return this._buildPendingPostsTabSection();
   }
 
-  // ─── Users Tab ─────────────────────────────────────────────────────────────
+  // Users Tab
 
   Widget _buildUsersTab() {
     return this._buildUsersTabSection();
   }
 
-  // ─── Feedbacks Tab ─────────────────────────────────────────────────────────
+  // Feedbacks Tab
 
   Widget _buildFeedbacksTab() {
     return this._buildFeedbacksTabSection();

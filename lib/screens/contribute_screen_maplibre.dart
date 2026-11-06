@@ -9,7 +9,7 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
 
   bool get _isBrowsing => _mapMode == MapTabMode.nearby;
 
-  // ─── Camera ───────────────────────────────────────────────────────────────
+  // Camera
 
   /// Moves the camera to [center] at [zoom].
   void _moveCamera(LatLng center, double zoom) {
@@ -36,7 +36,7 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
     _map.tiltTo(tilted ? _tilt3d : 0);
   }
 
-  // ─── The map ──────────────────────────────────────────────────────────────
+  // The map
 
   Widget _buildMapLayerSection() {
     final browsing = _isBrowsing;
@@ -114,7 +114,7 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
 
   /// The route being drawn: each step in its mode's color on a dark edge.
   /// The step still being drawn counts too (it runs to the end of the
-  /// line); without it a new step showed only dots until Save step.
+  /// line). Without it a new step showed only dots until Save step.
   List<MapLine> get _routeLines {
     final result = <MapLine>[];
     for (int i = 0; i < _stepCount; i++) {
@@ -192,7 +192,7 @@ extension _ContributeScreenMapLibre on _ContributeScreenState {
     ];
   }
 
-  // ─── Pins ─────────────────────────────────────────────────────────────────
+  // Pins
 
   /// Places in the highlighted categories (all when none are), for the
   /// drawer's list.

@@ -51,7 +51,7 @@ class AppPalette {
 
 /// Brand colors, plus the current [AppPalette] (Settings > Appearance).
 /// The blue is a deepened version of the logo's sky-blue so white text on
-/// it stays readable; it reads well on the dark palette too, so it is the
+/// it stays readable. It reads well on the dark palette too, so it is the
 /// same in both.
 class AppColors {
   AppColors._();

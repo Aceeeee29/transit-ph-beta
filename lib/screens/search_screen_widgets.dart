@@ -6,7 +6,7 @@ extension _SearchScreenSections on _SearchScreenState {
   static Color get _textPrimary => _SearchScreenState._textPrimary;
   static Color get _textSecondary => _SearchScreenState._textSecondary;
 
-  // ─── Top: where you start and the search field ────────────────────────────
+  // Top: where you start and the search field
 
   Widget _buildSearchBarSection() {
     return Container(
@@ -102,8 +102,8 @@ extension _SearchScreenSections on _SearchScreenState {
     );
   }
 
-  /// Where routes start. Left empty it reads "Your location" and uses GPS;
-  /// type a place to start somewhere else, clear it to go back.
+  /// Where routes start. Left empty it reads "Your location" and uses GPS.
+  /// Type a place to start somewhere else, clear it to go back.
   ///
   /// If you're riding a rider route with Follow Route on, it reads "On the
   /// Bus (VGC Terminal → STI College Caloocan)" instead, because the
@@ -213,7 +213,7 @@ extension _SearchScreenSections on _SearchScreenState {
     );
   }
 
-  // ─── Results ──────────────────────────────────────────────────────────────
+  // Results
 
   Widget _buildSearchResultsSection() {
     final community = _sortContributedRoutes(

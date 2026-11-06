@@ -27,14 +27,14 @@ class SpotlightStep {
   final GlobalKey? target;
 
   /// A part of the screen with no widget of its own (an area of the map),
-  /// in the overlay's coordinates; [SpotlightTutorial.rectOf] measures the
+  /// in the overlay's coordinates. [SpotlightTutorial.rectOf] measures the
   /// widgets around it. Null while those aren't laid out yet.
   final Rect? Function(RenderBox overlay)? area;
 
   /// Room left around the lit part.
   final double margin;
 
-  /// Puts the screen in the state this step talks about (e.g. a step being
+  /// Puts the screen in the state this step talks about (like a step being
   /// drawn), before the lit part is measured.
   final VoidCallback? onShow;
 
@@ -60,7 +60,7 @@ class SpotlightTutorial extends StatefulWidget {
 
   final String finishLabel;
 
-  /// A second way to close from the last card (e.g. "Try the example"),
+  /// A second way to close from the last card (like "Try the example"),
   /// called right after [onComplete].
   final String? extraLabel;
   final VoidCallback? onExtra;
@@ -295,8 +295,8 @@ class _SpotlightTutorialState extends State<SpotlightTutorial>
           final bottom = size.height - padding.bottom - 8;
           final above = hole.top - gap - top;
           final below = bottom - hole.bottom - gap;
-          // The side with more room; the card scrolls if even that is short.
-          // Kept on screen; on a very short screen the top limit wins.
+          // The side with more room. The card scrolls if even that is short.
+          // Kept on screen. On a very short screen the top limit wins.
           double within(double v, double lo, double hi) =>
               v < lo ? lo : (v > hi ? (hi < lo ? lo : hi) : v);
           if (below >= above) {

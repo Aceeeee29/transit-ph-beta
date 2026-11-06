@@ -54,7 +54,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
     super.dispose();
   }
 
-  // ─── Optimistic submit ────────────────────────────────────────────────────
+  // Optimistic submit
 
   Future<void> _submit() async {
     final text = _controller.text.trim();
@@ -82,7 +82,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       timestamp: DateTime.now(),
     );
 
-    // ── Optimistic update: show immediately ──────────────────────────────
+    // Optimistic update: show immediately
     setState(() {
       if (_replyingTo != null) {
         final idx = _comments.indexWhere((c) => c.id == _replyingTo!.id);
@@ -110,7 +110,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       }
     });
 
-    // ── Persist in background ────────────────────────────────────────────
+    // Persist in background
     try {
       await PostActionsService.addComment(comment);
       await widget.onCommentPosted();
@@ -181,7 +181,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
     }
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

@@ -5,7 +5,7 @@ import 'package:latlong2/latlong.dart';
 /// cancelled service…), kept in Firestore `route_reports` so every route
 /// on the same road shows it, not just the one it was filed on.
 ///
-/// A report shows for a day ([expiresAt]); a moderator can keep it longer
+/// A report shows for a day ([expiresAt]). A moderator can keep it longer
 /// ([kept]) or remove it.
 class RouteIssueReport {
   final String id;

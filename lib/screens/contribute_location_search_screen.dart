@@ -42,7 +42,7 @@ class _ContributeLocationSearchScreenState
   void _submitQuery() {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
-    // Manual submit — caller geocodes the raw query.
+    // Manual submit. Caller geocodes the raw query.
     Navigator.of(context).pop(query);
   }
 

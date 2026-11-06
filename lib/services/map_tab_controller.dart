@@ -18,8 +18,8 @@ class MapTabRoute {
   /// Distinguishes two openings of the same route, so the view restarts.
   final int serial;
 
-  /// Where back goes after the route closes, e.g. the search it was
-  /// picked from; null means the map.
+  /// Where back goes after the route closes, like the search it was
+  /// picked from. Null means the map.
   final void Function(BuildContext context)? onBack;
 
   const MapTabRoute._({
@@ -45,7 +45,7 @@ class MapTabController extends ChangeNotifier {
   MapTabRoute? get current => _current;
   int _serial = 0;
 
-  /// The page that hosts the Map tab; opening a route pops back to it.
+  /// The page that hosts the Map tab. Opening a route pops back to it.
   Route<dynamic>? hostRoute;
 
   /// The highlighted place categories (the chips): their pins show at
@@ -119,7 +119,7 @@ class MapTabController extends ChangeNotifier {
   }
 
   /// The route view's back: closes the route, then returns to where it was
-  /// opened from (e.g. the search options) when that was recorded.
+  /// opened from (like the search options) when that was recorded.
   void back(BuildContext context) {
     final onBack = _current?.onBack;
     close();

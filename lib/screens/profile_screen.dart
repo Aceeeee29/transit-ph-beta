@@ -210,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// ─── Pinned tab bar sliver delegate ──────────────────────────────────────────
+// Pinned tab bar sliver delegate
 
 class _ProfileTabBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget tabBar;
@@ -238,7 +238,7 @@ class _ProfileTabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-// ─── Profile header card ─────────────────────────────────────────────────────
+// Profile header card
 
 class _ProfileHeaderCard extends StatelessWidget {
   final gamification_user.User user;

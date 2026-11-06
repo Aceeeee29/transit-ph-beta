@@ -347,7 +347,7 @@ class RouteMetricsService {
     }
   }
 
-  /// Minutes in a saved ETA ("25", "25 min", "1 h 5 min"); null when it is
+  /// Minutes in a saved ETA ("25", "25 min", "1 h 5 min"). Null when it is
   /// missing, unreadable or 0.
   static int? parseEtaMinutes(String? text) {
     final raw = text?.trim().toLowerCase() ?? '';

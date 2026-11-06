@@ -10,15 +10,15 @@ class RouteOptionRow extends StatelessWidget {
   final List<String> modes;
   final String? tag;
 
-  /// Tints the tag, e.g. for options built from community routes.
+  /// Tints the tag, like for options built from community routes.
   final bool tagHighlighted;
 
   /// Adds a "Community route" badge after [tag], so an option keeps its label
   /// (Fastest, Budget, …) when it also uses community routes.
   final bool community;
 
-  /// The option riding most on rider-shared routes (see the search screen);
-  /// shown in green instead of the [community] badge.
+  /// The option riding most on rider-shared routes (see the search screen).
+  /// Shown in green instead of the [community] badge.
   final bool verified;
   final VoidCallback? onTap;
   final bool busy;

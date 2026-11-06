@@ -341,7 +341,7 @@ extension _SearchScreenRouteGenerationSections on _SearchScreenState {
 
       final originName = await originNameFuture;
       if (alternatives.isEmpty && walkMinutes != null) {
-        // Walking is the only sensible option; it's drawn when opened.
+        // Walking is the only sensible option. It's drawn when opened.
         if (_isStaleRouteRequest(requestId)) return;
         setState(() {
           _isLoadingOrs = false;

@@ -24,7 +24,7 @@ class RouteFollowSnapshot {
   final LatLng progressPoint;
   final double totalMeters;
 
-  /// When [status] last changed, e.g. how long the traveler has been away.
+  /// When [status] last changed, like how long the traveler has been away.
   final DateTime statusSince;
 
   const RouteFollowSnapshot({
@@ -45,7 +45,7 @@ class RouteFollowSnapshot {
   double get remainingMeters => math.max(0, totalMeters - progressMeters);
 
   /// The position to draw: on the line while the traveler is on the route,
-  /// so normal GPS scatter doesn't show them beside it; raw GPS otherwise,
+  /// so normal GPS scatter doesn't show them beside it. Raw GPS otherwise,
   /// so a real deviation stays visible.
   LatLng get displayPosition =>
       status == RouteFollowStatus.onRoute && matchedPosition != null
@@ -72,7 +72,7 @@ class RouteFollowEngine {
   static const searchBehindMeters = 60.0;
   static const searchAheadMeters = 600.0;
 
-  /// Fast travel between fixes (e.g. GPS dropping out under a flyover)
+  /// Fast travel between fixes (like GPS dropping out under a flyover)
   /// widens the forward search by this speed times the gap.
   static const _maxTravelSpeedMps = 25.0;
 

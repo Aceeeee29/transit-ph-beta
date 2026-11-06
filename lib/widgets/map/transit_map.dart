@@ -18,7 +18,7 @@ import 'map_pin_images.dart';
 part 'transit_map_handles.dart';
 part 'transit_map_layers.dart';
 
-// ─── What goes on the map ───────────────────────────────────────────────────
+// What goes on the map
 
 enum MapLineStyle { solid, dotted, dashed }
 
@@ -65,7 +65,7 @@ class MapIcon {
   final LatLng point;
   final String image;
 
-  /// Pins stand on their point; everything else is centered on it.
+  /// Pins stand on their point. Everything else is centered on it.
   final bool anchorBottom;
   final String? label;
   final String? id;
@@ -90,7 +90,7 @@ class MapHandle {
   final double size;
   final ValueChanged<LatLng> onDragEnd;
 
-  /// Long-press instead of dragging; without it a long press starts a drag.
+  /// Long-press instead of dragging. Without it a long press starts a drag.
   final VoidCallback? onLongPress;
 
   const MapHandle({
@@ -105,7 +105,7 @@ class MapHandle {
 }
 
 /// The place pins. Highlighted categories (the chips) show at every zoom,
-/// smaller far out; the rest from street level. The open place shows even
+/// smaller far out. The rest from street level. The open place shows even
 /// with the pins off.
 class MapPlaces {
   final List<Place> places;
@@ -126,7 +126,7 @@ class MapUser {
   final LatLng position;
   final double accuracyMeters;
 
-  /// Where they face, in degrees from north; null shows the dot.
+  /// Where they face, in degrees from north. Null shows the dot.
   final double? headingDegrees;
   final double speedMps;
 
@@ -156,7 +156,7 @@ class TransitMapCamera {
   });
 }
 
-// ─── Camera ─────────────────────────────────────────────────────────────────
+// Camera
 
 /// Moves a [TransitMap]'s camera. Calls made before the map is ready wait
 /// for it.
@@ -299,7 +299,7 @@ class TransitMapController {
   }
 
   /// Shows all of [points] inside [padding] (logical pixels), no closer
-  /// than [maxZoom]; with [flat], north up and untilted.
+  /// than [maxZoom]. With [flat], north up and untilted.
   Future<void> fitPoints(
     List<LatLng> points, {
     EdgeInsets padding = const EdgeInsets.all(40),
@@ -397,14 +397,14 @@ class TransitMapController {
 
 ml.LatLng _toMl(LatLng p) => ml.LatLng(p.latitude, p.longitude);
 
-// ─── The map ────────────────────────────────────────────────────────────────
+// The map
 
 /// The app's map: the base map (clean, classic or night, from the phone's
 /// own tile server) drawn by MapLibre, which pans and zooms smoothly and
 /// can tilt into 3D, with the app's pins, lines and markers over it.
 ///
-/// Zoom numbers everywhere in the app are the old map's (flutter_map's);
-/// this widget converts ([TransitMapController.zoomOffset]).
+/// Zoom numbers everywhere in the app are the old map's (flutter_map's).
+/// This widget converts ([TransitMapController.zoomOffset]).
 class TransitMap extends StatefulWidget {
   final TransitMapController controller;
   final LatLng initialCenter;
@@ -532,7 +532,7 @@ class _TransitMapState extends State<TransitMap>
   Future<void> _sending = Future.value();
   bool _sendScheduled = false;
 
-  // ─── Drag handles (transit_map_handles.dart) ──────────────────────────────
+  // Drag handles (transit_map_handles.dart)
   _Drag? _drag;
   final _dragAt = ValueNotifier<Offset>(Offset.zero);
 
@@ -763,7 +763,7 @@ class _TransitMapState extends State<TransitMap>
     _sendUser(force: true);
   }
 
-  // ─── Keeping the view inside an area ──────────────────────────────────────
+  // Keeping the view inside an area
 
   Size _viewSize = Size.zero;
 
@@ -807,7 +807,7 @@ class _TransitMapState extends State<TransitMap>
   }
 
   /// Where the center may go at MapLibre [zoom] for the view to stay in
-  /// the area; on an axis where the view is wider, the middle.
+  /// the area. On an axis where the view is wider, the middle.
   ml.LatLngBounds? _centerLimitsAt(double zoom) {
     final area = widget.keepInside;
     final view = _insideView;
@@ -894,7 +894,7 @@ class _TransitMapState extends State<TransitMap>
     );
   }
 
-  // ─── Taps and gestures ────────────────────────────────────────────────────
+  // Taps and gestures
 
   /// A tap: a marker or pin under the finger (with some room around the
   /// small ones), else the map itself.
@@ -974,7 +974,7 @@ class _TransitMapState extends State<TransitMap>
     widget.onUserGesture?.call();
   }
 
-  // ─── Sending the overlays ─────────────────────────────────────────────────
+  // Sending the overlays
 
   void _scheduleSend() {
     if (!_styleReady || _sendScheduled) return;
@@ -1071,13 +1071,13 @@ class _TransitMapState extends State<TransitMap>
     );
   }
 
-  // ─── The traveler's dot ───────────────────────────────────────────────────
+  // The traveler's dot
 
   /// About one GPS interval, linear: each glide ends as the next fix
   /// arrives, so the dot moves continuously instead of hop-and-stop.
   static const _glideTime = Duration(milliseconds: 900);
 
-  /// Further than this is a real jump (e.g. resuming after a gap): no glide.
+  /// Further than this is a real jump (like resuming after a gap): no glide.
   static const _snapMeters = 150.0;
   static const _distance = Distance();
 
@@ -1134,7 +1134,7 @@ class _TransitMapState extends State<TransitMap>
     }
     final moved = _distance.as(LengthUnit.Meter, shown, next);
     if (moved == 0) {
-      // Same spot; the heading or accuracy may still have changed.
+      // Same spot. The heading or accuracy may still have changed.
       if (old?.headingDegrees != user!.headingDegrees ||
           old?.accuracyMeters != user.accuracyMeters ||
           old?.speedMps != user.speedMps) {
@@ -1142,7 +1142,7 @@ class _TransitMapState extends State<TransitMap>
       }
       return;
     }
-    // Standing still: GPS wanders a few metres between fixes; hold the dot
+    // Standing still: GPS wanders a few metres between fixes. Hold the dot
     // unless the fix moved further than its own accuracy suggests.
     final stillDeadband = math.max(4.0, user!.accuracyMeters * 0.5);
     if (user.speedMps < MapUser.stillSpeedMps && moved < stillDeadband) {
@@ -1165,7 +1165,7 @@ class _TransitMapState extends State<TransitMap>
   }
 
   /// About 30 times a second while gliding: each is a message to the map.
-  /// One at a time; one asked for meanwhile goes when it's done, with the
+  /// One at a time. One asked for meanwhile goes when it's done, with the
   /// dot where it is by then.
   void _sendUser({bool force = false}) {
     final controller = _ml;

@@ -55,7 +55,7 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
     );
   }
 
-  /// The card while following; how to get back to the route replaces the
+  /// The card while following. How to get back to the route replaces the
   /// step while off it.
   Widget? _buildLegCard() {
     final steps = widget.route.steps;

@@ -6,7 +6,7 @@ import '../translated_text.dart';
 import '../../theme/app_colors.dart';
 
 /// The always-visible row of place-category chips under the search bar.
-/// Selected chips are highlighted on the map; none is how it opens, and
+/// Selected chips are highlighted on the map. None is how it opens, and
 /// "All" selects (or clears) every category.
 class PlaceCategoryChips extends StatelessWidget {
   final Set<PlaceCategory> selected;

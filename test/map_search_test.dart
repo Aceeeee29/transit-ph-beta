@@ -42,7 +42,7 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), query);
-    // Past the debounce; the OpenStreetMap lookup fails fast in tests.
+    // Past the debounce. The OpenStreetMap lookup fails fast in tests.
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     await tester.tap(tapOn);

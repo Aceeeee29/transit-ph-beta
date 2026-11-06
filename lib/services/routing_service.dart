@@ -24,9 +24,9 @@ class RoutingException implements Exception {
 /// Supabase/GTFS routing with OSRM road snapping.
 ///
 /// Priority:
-///   1. GTFS direct route        — one trip, road-snapped via OSRM
-///   2. GTFS 1-transfer route    — two trips, road-snapped via OSRM
-///   3. Fallback direct route    — estimated walk/ride, road-snapped via OSRM
+///   1. GTFS direct route: one trip, road-snapped via OSRM
+///   2. GTFS 1-transfer route: two trips, road-snapped via OSRM
+///   3. Fallback direct route: estimated walk/ride, road-snapped via OSRM
 ///
 /// OSRM public API is used for road snapping only (free, no key required).
 class RoutingService {
@@ -41,7 +41,7 @@ class RoutingService {
   static const _candidateStopsLimit = 4;
   static const _allowFerrySuggestions = false;
 
-  // OSRM public demo server — free, no API key needed
+  // OSRM public demo server. Free, no API key needed
   static const _osrmBase = 'https://router.project-osrm.org/route/v1';
 
   /// The same server's map matching (see [_osrmMatch]).
@@ -49,15 +49,15 @@ class RoutingService {
 
   /// The demo server routes cars only (a "foot" request comes back as a car
   /// route, along one-way streets at car speed). Walks go to FOSSGIS's
-  /// walking server, also free and keyless; it names every profile
+  /// walking server, also free and keyless. It names every profile
   /// "driving" in the URL.
   static const _osrmFootBase =
       'https://routing.openstreetmap.de/routed-foot/route/v1/driving';
 
-  // ── Public API ───────────────────────────────────────────────────────────────
+  // Public API
 
   /// Full GTFS-backed routing for the navigation screen.
-  /// Do NOT call this for simple map drawing — use [snapToRoad] instead.
+  /// Do NOT call this for simple map drawing. Use [snapToRoad] instead.
   static Future<OrsRouteResult> getRoute({
     required String originName,
     required LatLng origin,
@@ -216,8 +216,8 @@ class RoutingService {
   }
 
   /// Whether a [mode] vehicle normally uses expressways when suggesting its
-  /// path: buses and FX/vans do; jeepneys and tricycles normally don't.
-  /// Only a default for suggestions — a contributor's drawn route is never
+  /// path: buses and FX/vans do. Jeepneys and tricycles normally don't.
+  /// Only a default for suggestions. A contributor's drawn route is never
   /// re-routed by it.
   static bool defaultAllowsExpressways(String mode) =>
       mode == 'Bus' || mode == 'FX/Van';
@@ -335,7 +335,7 @@ class RoutingService {
   static String _estimatedNote(bool estimated) =>
       estimated ? ' (exact path unavailable)' : '';
 
-  /// Road path through [points] in order — e.g. a recorded ride — for
+  /// Road path through [points] in order (like a recorded ride) for
   /// turning it into route geometry. Null when routing fails.
   static Future<List<LatLng>?> snapThrough(
     List<LatLng> points, {
@@ -358,14 +358,14 @@ class RoutingService {
     }
   }
 
-  // ── GTFS routing with fallback ────────────────────────────────────────────────
+  // GTFS routing with fallback
 
   static Future<OrsRouteResult> _getGtfsRoute({
     required LatLng origin,
     required LatLng destination,
     required String preferredMode,
   }) async {
-    // ── Step 1: Nearest stop candidates ───────────────────────────────────────
+    // Step 1: Nearest stop candidates
     List<List<Map<String, dynamic>>> candidates;
     try {
       candidates = await Future.wait([
@@ -419,7 +419,7 @@ class RoutingService {
     final destStopData =
         destCandidates.isNotEmpty ? destCandidates.first : null;
 
-    // ── Fallback A: no stops at all — walk-only route ─────────────────────────
+    // Fallback A: no stops at all, walk-only route
     if (originStopData == null || destStopData == null) {
       debugPrint('[RoutingService] No stops found — using walk fallback');
       return _buildFallbackRoute(
@@ -449,7 +449,7 @@ class RoutingService {
       );
     }
 
-    // ── Step 2: GTFS trip plan (Dijkstra first, then heuristic fallback) ─────
+    // Step 2: GTFS trip plan (Dijkstra first, then heuristic fallback)
     TripPlan? plan;
     Map<String, dynamic>? selectedOriginStop;
     Map<String, dynamic>? selectedDestStop;
@@ -520,7 +520,7 @@ class RoutingService {
       debugPrint('[RoutingService] Trip plan error: $e');
     }
 
-    // ── Fallback B: no GTFS connection — estimated direct route ───────────────
+    // Fallback B: no GTFS connection, estimated direct route
     if (plan == null) {
       debugPrint('[RoutingService] No GTFS connection — using direct fallback');
       return _buildFallbackRoute(
@@ -555,7 +555,7 @@ class RoutingService {
 
     debugPrint('[RoutingService] Plan: ${plan.legs.length} leg(s)');
 
-    // ── Step 3: Road-snap each leg via OSRM ──────────────────────────────────
+    // Step 3: Road-snap each leg via OSRM
     final shapePolylines = Future.wait(
       plan.legs.map(
         (leg) =>
@@ -574,7 +574,7 @@ class RoutingService {
     );
   }
 
-  // ── Fallback route (no GTFS data) ─────────────────────────────────────────────
+  // Fallback route (no GTFS data)
 
   static Future<OrsRouteResult> _buildFallbackRoute({
     required LatLng origin,
@@ -591,7 +591,7 @@ class RoutingService {
 
     final bool hasStops = originStop != null && destStop != null;
 
-    // ── Walk-in (origin → nearest stop) ──────────────────────────────────────
+    // Walk-in (origin → nearest stop)
     if (hasStops) {
       final walkInKm = _haversineKm(origin, originStop);
       if (walkInKm > _minWalkSegmentKm) {
@@ -622,7 +622,7 @@ class RoutingService {
       combinedPolyline.add(origin);
     }
 
-    // ── Main estimated ride / walk ────────────────────────────────────────────
+    // Main estimated ride / walk
     final ridePtA = hasStops ? originStop : origin;
     final ridePtB = hasStops ? destStop : destination;
     final rideMode =
@@ -678,7 +678,7 @@ class RoutingService {
       ),
     );
 
-    // ── Walk-out (dest stop → destination) ────────────────────────────────────
+    // Walk-out (dest stop → destination)
     if (hasStops) {
       final walkOutKm = _haversineKm(destStop, destination);
       if (walkOutKm > _minWalkSegmentKm) {
@@ -709,7 +709,7 @@ class RoutingService {
       }
     }
 
-    // ── Totals + BBox ─────────────────────────────────────────────────────────
+    // Totals + BBox
     final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
     final totalDurS = steps.fold(0.0, (s, e) => s + e.durationSeconds);
 
@@ -736,7 +736,7 @@ class RoutingService {
     );
   }
 
-  // ── OpenRouteService (low-volume snapping) ────────────────────────────────────
+  // OpenRouteService (low-volume snapping)
 
   static const _orsBase = 'https://api.openrouteservice.org/v2/directions';
 
@@ -745,7 +745,7 @@ class RoutingService {
   static DateTime? _orsCooldownUntil;
 
   /// Road path between two points via OpenRouteService, or null so the
-  /// caller can fall back to OSRM. Walking uses ORS's foot profile; vehicles
+  /// caller can fall back to OSRM. Walking uses ORS's foot profile. Vehicles
   /// use the car profile, avoiding expressways and tollways unless
   /// [allowExpressways].
   static Future<List<LatLng>?> _orsRoute(
@@ -759,7 +759,7 @@ class RoutingService {
     try {
       key = Config.openRouteServiceApiKey;
     } catch (_) {
-      return null; // .env not loaded (e.g. in tests)
+      return null; // .env isn't loaded (like in tests)
     }
     if (key.isEmpty) return null;
     final cooldown = _orsCooldownUntil;
@@ -809,7 +809,7 @@ class RoutingService {
     }
   }
 
-  // ── OSRM road snapping ────────────────────────────────────────────────────────
+  // OSRM road snapping
 
   static Future<List<LatLng>?> _osrmSnap(
     LatLng from,
@@ -1044,7 +1044,7 @@ class RoutingService {
     }
   }
 
-  // ── Build OrsRouteResult from GTFS legs ──────────────────────────────────────
+  // Build OrsRouteResult from GTFS legs
 
   static Future<OrsRouteResult> _buildResult({
     required LatLng origin,
@@ -1130,7 +1130,7 @@ class RoutingService {
     final walkOutEstimated = walkOut?.estimated ?? false;
     bool transferEstimated(int i) => transferLegs[i]?.estimated ?? false;
 
-    // ── Join walks and rides where they meet ────────────────────────────────
+    // Join walks and rides where they meet
     // A jeepney or tricycle can be flagged down anywhere on its road, so
     // board where the street walk first reaches the ride's line and get
     // off where the next walk last leaves it, instead of walking along the
@@ -1195,7 +1195,7 @@ class RoutingService {
       joinAlight(legs.length - 1, walk, (w) => walkOutPts = w);
     }
 
-    // ── Walk-in ───────────────────────────────────────────────────────────────
+    // Walk-in
     if (walkInPts case final walkInPts?) {
       final walkInDistM = _walkLegMeters(walkInPts, walkInEstimated);
       combinedPolyline.addAll(walkInPts);
@@ -1216,7 +1216,7 @@ class RoutingService {
       combinedPolyline.add(origin);
     }
 
-    // ── Vehicle legs ──────────────────────────────────────────────────────────
+    // Vehicle legs
     for (int i = 0; i < legs.length; i++) {
       final leg = legs[i];
       final polyline = rides[i];
@@ -1242,8 +1242,8 @@ class RoutingService {
         leg.alightStopName,
         alightName,
       );
-      // The contributor's note is about boarding at their step's start;
-      // boarding was moved, so it no longer applies.
+      // The contributor's note is about boarding at their step's start.
+      // Boarding was moved, so it no longer applies.
       if (boardMoved[i]) {
         communityLabel = communityLabel?.replaceFirst(RegExp(r' — ".*"$'), '');
       }
@@ -1269,7 +1269,7 @@ class RoutingService {
         ),
       );
 
-      // ── Transfer walk ──────────────────────────────────────────────────────
+      // Transfer walk
       if (i < legs.length - 1) {
         final nextLeg = legs[i + 1];
         final transferRouteLabel = _routeLabelForLeg(nextLeg) ?? 'next line';
@@ -1320,7 +1320,7 @@ class RoutingService {
       }
     }
 
-    // ── Walk-out ──────────────────────────────────────────────────────────────
+    // Walk-out
     if (walkOutPts case final walkOutPts?) {
       final walkOutDistM = _walkLegMeters(walkOutPts, walkOutEstimated);
       final startIdx = combinedPolyline.length - 1;
@@ -1348,7 +1348,7 @@ class RoutingService {
       );
     }
 
-    // ── Totals + BBox ─────────────────────────────────────────────────────────
+    // Totals + BBox
     final totalDistM = steps.fold(0.0, (s, e) => s + e.distanceMeters);
     final transfers = steps.where((s) => s.suggestedMode != 'Walk').length;
     final totalDurS =
@@ -1376,7 +1376,7 @@ class RoutingService {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  // Helpers
 
   /// The ride mode for [leg] (Jeepney, Bus, Train, …), as route steps use.
   static String modeForLeg(TransitLeg leg) => _inferModeFromRoute(
@@ -1516,7 +1516,7 @@ class RoutingService {
     );
 
     // 1. The GTFS shape is the route's real path, so it decides which roads
-    //    the leg follows for every mode — OSRM's fastest-car path between two
+    //    the leg follows for every mode. OSRM's fastest-car path between two
     //    stops can leave the jeep's actual route entirely.
     final shapeId = leg.shapeId;
     if (shapeId != null && shapeId.isNotEmpty) {
@@ -1542,7 +1542,7 @@ class RoutingService {
     // 2. No shape: route through the trip's own stops in order. OSRM's
     //    fastest path between just the two end stops can take different
     //    roads than the vehicle does, and a timeout there leaves a straight
-    //    line; the stop-to-stop line is still close to the real route.
+    //    line. The stop-to-stop line is still close to the real route.
     if (leg.viaStops.isNotEmpty) {
       final stopPath = [board, ...leg.viaStops, alight];
       if (mode == 'Train') return stopPath;
@@ -1558,8 +1558,8 @@ class RoutingService {
     // 3. Nothing known between the two stops: OSRM between them.
     final snapped = await _osrmSnap(board, alight, _osrmProfileForMode(mode));
     if (snapped != null && snapped.length >= 2) {
-      // FIX: DO NOT clip OSRM routes. Clipping breaks the geometry
-      // and causes the straight-line bug.
+      // Don't clip the OSRM route. Clipping broke the line and drew a
+      // straight line instead of the road.
       return RidePathCleanup.removeSpurs(snapped);
     }
 
