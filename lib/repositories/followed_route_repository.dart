@@ -148,21 +148,13 @@ class FollowedRouteRepository {
   }
 }
 
-/// JSON for storing a [route_model.Route] on the device. [Route.toJson]
-/// holds a Firestore [Timestamp] (editedAt), which plain jsonEncode can't
-/// write, so it is stored as milliseconds and restored on read.
+/// JSON for storing a [route_model.Route] on the device. Older versions saved
+/// editedAt as a wrapped Timestamp, and those routes are still on phones, so
+/// [decode] has to keep reading that form.
 class RouteStorageCodec {
   static const _timestampKey = '__timestampMillis';
 
-  static String encode(route_model.Route route) => jsonEncode(
-    route.toJson(),
-    toEncodable: (value) {
-      if (value is Timestamp) {
-        return {_timestampKey: value.millisecondsSinceEpoch};
-      }
-      throw JsonUnsupportedObjectError(value);
-    },
-  );
+  static String encode(route_model.Route route) => jsonEncode(route.toJson());
 
   static route_model.Route decode(String raw) {
     final json = jsonDecode(raw) as Map<String, dynamic>;

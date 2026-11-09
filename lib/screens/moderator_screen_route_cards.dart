@@ -373,8 +373,17 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         child: GestureDetector(
                           onTap:
                               () => _runOnce('route:${route.id}', () async {
-                                await ModerationService.rejectRoute(route.id);
-                                await widget.onRoutesModerated?.call();
+                                final choice = await showRejectReasonsDialog(
+                                  context,
+                                );
+                                if (choice == null) return;
+                                await _decideRoute(
+                                  () => ModerationService.rejectRoute(
+                                    route.id,
+                                    reasonCodes: choice.codes,
+                                    note: choice.note,
+                                  ),
+                                );
                               }),
                           child: Container(
                             height: 42,
@@ -413,8 +422,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         child: GestureDetector(
                           onTap:
                               () => _runOnce('route:${route.id}', () async {
-                                await ModerationService.approveRoute(route.id);
-                                await widget.onRoutesModerated?.call();
+                                await _decideRoute(
+                                  () =>
+                                      ModerationService.approveRoute(route.id),
+                                );
                               }),
                           child: Container(
                             height: 42,

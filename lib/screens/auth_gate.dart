@@ -17,7 +17,8 @@ class AuthGate extends StatelessWidget {
 
   const AuthGate({super.key, this.quickRouteToken});
 
-  static const _privacyPolicyVersion = '2026-10-19';
+  // Raised when routes moved to Supabase, so riders see the policy again.
+  static const _privacyPolicyVersion = '2026-11-09';
   static const _termsVersion = '2026-10-19';
 
   // Color tokens

@@ -6,7 +6,7 @@ import 'package:transitph_beta/models/route.dart' as route_model;
 import 'package:transitph_beta/repositories/followed_route_repository.dart';
 
 void main() {
-  test('an edited route (with a Firestore Timestamp) round-trips', () {
+  test('an edited route round-trips', () {
     final editedAt = DateTime(2026, 9, 30, 14, 5);
     final route = route_model.Route(
       id: 'r1',
@@ -35,10 +35,24 @@ void main() {
     expect(decoded.createdAt, isNull);
     expect(decoded.updatedAt, isNull);
     expect(decoded.reports, isEmpty);
-    // What Download used before: plain jsonEncode can't write the Timestamp.
-    expect(
-      () => jsonEncode(route.toJson()),
-      throwsA(isA<JsonUnsupportedObjectError>()),
-    );
+    // Plain jsonEncode works now too, since routes-api needs it.
+    expect(() => jsonEncode(route.toJson()), returnsNormally);
+  });
+
+  test('a route downloaded by an older version still opens', () {
+    // Older versions stored editedAt as a wrapped Timestamp on the phone.
+    final editedAt = DateTime(2026, 9, 30, 14, 5);
+    final stored = jsonEncode({
+      'id': 'r1',
+      'startLocation': 'STI Caloocan',
+      'endLocation': 'MCU Carousel',
+      'shortDescription': 'Jeep along EDSA',
+      'steps': <dynamic>[],
+      'pathPoints': <dynamic>[],
+      'reports': <dynamic>[],
+      'editedAt': {'__timestampMillis': editedAt.millisecondsSinceEpoch},
+    });
+
+    expect(RouteStorageCodec.decode(stored).editedAt, editedAt);
   });
 }

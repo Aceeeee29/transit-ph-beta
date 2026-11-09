@@ -469,9 +469,7 @@ service cloud.firestore {
             (
               request.resource.data.type == 'route_reported' &&
               request.resource.data.get('fromUserId', null) == request.auth.uid &&
-              request.resource.data.get('routeId', null) is string &&
-              get(/databases/$(database)/documents/routes/$(request.resource.data.routeId))
-                .data.get('contributorId', '') == request.resource.data.userId
+              request.resource.data.get('routeId', null) is string
             )
           )
         )

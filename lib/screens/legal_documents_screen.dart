@@ -81,7 +81,7 @@ class LegalDocumentsScreen extends StatelessWidget {
         return _DocumentContent(
           title: 'Privacy Policy',
           summary:
-              'Last updated: October 19, 2026. This policy explains what '
+              'Last updated: November 9, 2026. This policy explains what '
               'TransitPH collects, why, who else handles it, and your '
               'choices. TransitPH is run by the TransitPH team and follows '
               'the Philippine Data Privacy Act of 2012 (Republic Act No. '
@@ -112,9 +112,9 @@ class LegalDocumentsScreen extends StatelessWidget {
             _DocumentSection(
               heading: '3. Services That Handle Your Data',
               paragraphs: [
-                'Google Firebase stores accounts, routes, posts, reports and settings, and sends notifications.',
+                'Google Firebase stores accounts, posts, reports and settings, and sends notifications.',
                 'Cloudinary stores the photos and videos you upload.',
-                'Supabase holds public transit data (stops and lines). The points you search from and to are sent to it to find nearby stops.',
+                'Supabase holds public transit data (stops and lines) and the routes riders submit, with your account ID, name, votes and route feedback. The points you search from and to are sent to it to find nearby stops.',
                 'Map and routing services built on OpenStreetMap data (OpenFreeMap, OSRM, the FOSSGIS routing servers, OpenRouteService and Nominatim) receive map areas and the start, end and drawn points needed to show maps, draw lines along roads and find places.',
                 'Open-Meteo receives your approximate location to show the weather. Your phone\'s own location service turns coordinates into place names.',
                 'Translation runs on your device; the text is not sent anywhere.',
@@ -169,7 +169,7 @@ class LegalDocumentsScreen extends StatelessWidget {
         return _DocumentContent(
           title: 'Terms and Conditions',
           summary:
-              'Last updated: October 19, 2026. These terms cover your use of '
+              'Last updated: November 9, 2026. These terms cover your use of '
               'TransitPH, a free community commuting app run by the TransitPH '
               'team, including route search, following routes, and sharing '
               'routes and posts.',
@@ -223,6 +223,7 @@ class LegalDocumentsScreen extends StatelessWidget {
               heading: '7. Map Data and Other Services',
               paragraphs: [
                 'Maps and some routes use OpenStreetMap data © OpenStreetMap contributors, available under the Open Database License. Tap the ⓘ on a map to see the credits.',
+                'Some routes are based on 2013 transit data from the Department of Transportation and Communications (Data provided by DOTC). TransitPH isn\'t affiliated with or endorsed by DOTC.',
                 'Some features rely on outside services (for example maps, routing and weather). We are not responsible for their availability or accuracy.',
               ],
             ),

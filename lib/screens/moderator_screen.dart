@@ -13,6 +13,7 @@ import '../services/route_metrics_service.dart';
 import '../services/route_report_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
+import '../widgets/moderation/reject_reasons_dialog.dart';
 import '../widgets/route_preview.dart';
 import 'contribute_screen.dart';
 import '../theme/app_colors.dart';
@@ -48,6 +49,10 @@ class _ModeratorScreenState extends State<ModeratorScreen>
 
   // Feedback tab filter. Null shows every status.
   feedback_model.FeedbackStatus? _feedbackFilter;
+
+  // Kept here, because this screen rebuilds often and a fetch inside build
+  // would call the server every time. Pull-to-refresh replaces it.
+  late Future<List<route_model.Route>> _trustRoutes;
 
   // Items with an action still saving ('route:<id>', 'user:<uid>'...).
   // Their buttons ignore taps until it ends, so a double tap can't approve
@@ -100,6 +105,9 @@ class _ModeratorScreenState extends State<ModeratorScreen>
     _routesNotifier = ModerationService.pendingRoutesNotifier;
     _postsNotifier.addListener(_onDataChanged);
     _routesNotifier.addListener(_onDataChanged);
+    _trustRoutes = RouteService.getAllRoutes();
+    // Nothing tells us about new routes live, so check when the screen opens.
+    ModerationService.refreshPendingRoutes();
     _appealsSubscription = LockoutService.watchAppeals().listen((appeals) {
       if (mounted) setState(() => _appeals = appeals);
     }, onError: (Object e) => debugPrint('[Moderator] appeals failed: $e'));
@@ -136,10 +144,50 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }
 
   Future<void> _refreshModeratorPanel() async {
-    await widget.onRoutesModerated?.call();
-    // Keep pull-to-refresh responsive even when realtime listeners are already up-to-date.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    if (mounted) setState(() {});
+    final trustRoutes = RouteService.getAllRoutes();
+    await Future.wait<void>([
+      if (widget.onRoutesModerated != null) widget.onRoutesModerated!(),
+      ModerationService.refreshPendingRoutes(),
+      trustRoutes,
+    ]);
+    if (!mounted) return;
+    // Braces matter here. A one-line arrow would return the Future from the
+    // assignment, and setState throws when its callback returns a Future.
+    setState(() {
+      _trustRoutes = trustRoutes;
+    });
+  }
+
+  /// Runs a moderator decision. If it can't be saved, say so. The route stays
+  /// in the list, so nothing looks done when it isn't.
+  Future<void> _decideRoute(Future<void> Function() decision) async {
+    try {
+      await decision();
+    } catch (e) {
+      debugPrint('[Moderator] Decision failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't save that decision. Check your connection and try again.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Saved. A problem reloading the screens below isn't a failed decision, so
+    // it stays outside the message above.
+    try {
+      await widget.onRoutesModerated?.call();
+    } catch (e) {
+      debugPrint('[Moderator] Reload after decision failed: $e');
+    }
+    if (!mounted) return;
+    final trustRoutes = RouteService.getAllRoutes();
+    setState(() {
+      _trustRoutes = trustRoutes;
+    });
   }
 
   Future<void> _deleteFeedbackWithConfirmation(
@@ -367,6 +415,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
               routeToEdit: route,
               onRouteSubmitted: (updated) async {
                 await RouteService.updateRoute(updated);
+                // Its checks and details changed, so reload the queue.
+                unawaited(ModerationService.refreshPendingRoutes());
                 if (!editorContext.mounted) return;
                 // Back to the review list, past the stale preview.
                 Navigator.of(editorContext)
@@ -380,8 +430,8 @@ class _ModeratorScreenState extends State<ModeratorScreen>
   }
 
   Widget _buildRouteTrustTab() {
-    return StreamBuilder<List<route_model.Route>>(
-      stream: RouteService.watchAllRoutes(),
+    return FutureBuilder<List<route_model.Route>>(
+      future: _trustRoutes,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'routes_api.dart';
+
 /// Thrown when signing in again (needed before deleting) didn't work.
 class ReauthException implements Exception {
   final String message;
@@ -22,8 +24,6 @@ class ReauthException implements Exception {
 /// hence [reauthenticate] first.
 class AccountDeletionService {
   AccountDeletionService._();
-
-  static const formerRiderName = 'Former rider';
 
   /// True while [deleteCurrentAccount] runs: the profile is removed just
   /// before the sign-in account, and AuthGate must not sign out in between.
@@ -83,7 +83,10 @@ class AccountDeletionService {
     try {
       await _step('posts', () => _deletePosts(db, uid));
       await _step('comments', () => _deleteComments(db, uid));
-      await _step('routes', () => _releaseRoutes(db, uid));
+      // Routes not live yet go. Live ones stay for everyone, credited to
+      // "Former rider". This needs the login, so it runs before the account
+      // is deleted below.
+      await _step('routes', () => RoutesApi.call('close_account'));
       await _step(
         'notifications',
         () => _deleteWhere(db.collection('notifications'), 'userId', uid),
@@ -170,34 +173,4 @@ class AccountDeletionService {
       _deleteAll(
         db.collectionGroup('comments').where('userId', isEqualTo: uid),
       );
-
-  /// Routes not live yet go. Approved ones stay for everyone, credited to
-  /// "Former rider".
-  static Future<void> _releaseRoutes(FirebaseFirestore db, String uid) async {
-    final routes =
-        await db
-            .collection('routes')
-            .where('contributorId', isEqualTo: uid)
-            .get();
-    for (final route in routes.docs) {
-      final approved = route.data()['approvalStatus'] == 'approved';
-      if (!approved) {
-        try {
-          await route.reference.delete();
-          continue;
-        } catch (e) {
-          debugPrint('[AccountDeletion] route ${route.id} delete failed: $e');
-        }
-      }
-      await _step(
-        'route ${route.id}',
-        () => route.reference.update({
-          'contributorId': null,
-          'contributorName': formerRiderName,
-          'contributorClosed': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }),
-      );
-    }
-  }
 }

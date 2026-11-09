@@ -1,7 +1,55 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
-enum RouteApprovalStatus { pending, approved, rejected }
+enum RouteApprovalStatus { pending, approved, rejected, withdrawn }
+
+enum RouteVerification { unverified, verified }
+
+/// Reads a date from any form it's been saved in: a Firestore Timestamp from
+/// older data, ISO text from Supabase, or milliseconds. Text that isn't a date
+/// counts as no date, so one bad value can't lose a whole route.
+DateTime? _date(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is String) return DateTime.tryParse(value)?.toLocal();
+  if (value is num) {
+    return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+  }
+  return null;
+}
+
+/// The latest thing that happened to a route, and why. A rejected contributor
+/// reads their reasons from this.
+class RouteDecision {
+  final String decision;
+  final List<String> reasonCodes;
+  final String? note;
+  final String? actor;
+  final DateTime? createdAt;
+
+  const RouteDecision({
+    required this.decision,
+    this.reasonCodes = const [],
+    this.note,
+    this.actor,
+    this.createdAt,
+  });
+
+  factory RouteDecision.fromJson(Map<String, dynamic> json) => RouteDecision(
+    decision: json['decision'] as String? ?? '',
+    reasonCodes: List<String>.from(json['reason_codes'] as List? ?? const []),
+    note: json['note'] as String?,
+    actor: json['actor'] as String?,
+    createdAt: _date(json['created_at']),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'decision': decision,
+    'reason_codes': reasonCodes,
+    'note': note,
+    'actor': actor,
+    'created_at': createdAt?.toUtc().toIso8601String(),
+  };
+}
 
 class Route {
   final String id;
@@ -39,6 +87,15 @@ class Route {
   /// corrects. Approving it merges its line into that route.
   final String? correctionOf;
 
+  /// Routes from before this existed were approved by a person, so they count
+  /// as verified.
+  final RouteVerification verification;
+  final RouteDecision? latestDecision;
+  final int revision;
+
+  /// Set for a route whose contributor closed their account ("Former rider").
+  final String? contributorName;
+
   Route({
     required this.id,
     required this.startLocation,
@@ -70,6 +127,10 @@ class Route {
     this.editedAt,
     this.editCount = 0,
     this.correctionOf,
+    this.verification = RouteVerification.verified,
+    this.latestDecision,
+    this.revision = 1,
+    this.contributorName,
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
@@ -140,9 +201,15 @@ class Route {
       'downvotes': downvotes,
       'approvalStatus': approvalStatus.name,
       'isEdited': isEdited,
-      'editedAt': editedAt != null ? Timestamp.fromDate(editedAt!) : null,
+      // Plain text, because this now goes through jsonEncode to routes-api. A
+      // Firestore Timestamp would make that throw.
+      'editedAt': editedAt?.toUtc().toIso8601String(),
       'editCount': editCount,
       if (correctionOf != null) 'correctionOf': correctionOf,
+      'verification': verification.name,
+      'revision': revision,
+      if (latestDecision != null) 'latestDecision': latestDecision!.toJson(),
+      if (contributorName != null) 'contributorName': contributorName,
     };
   }
 
@@ -162,19 +229,24 @@ class Route {
       return double.tryParse(value.toString());
     }
 
+    // Old routes can be missing any of these. One of them must not stop the
+    // whole list of routes from loading.
     return Route(
-      id: json['id'],
-      startLocation: json['startLocation'],
-      endLocation: json['endLocation'],
-      shortDescription: json['shortDescription'],
+      id: json['id']?.toString() ?? '',
+      startLocation: json['startLocation'] as String? ?? '',
+      endLocation: json['endLocation'] as String? ?? '',
+      shortDescription: json['shortDescription'] as String? ?? '',
       steps:
-          (json['steps'] as List)
+          (json['steps'] as List? ?? const [])
               .map(
                 (s) => Step(
                   // Routes saved before the rename say "Ferry".
-                  mode: s['mode'] == 'Ferry' ? 'Boat' : s['mode'],
-                  instruction: s['instruction'],
-                  details: s['details'],
+                  mode:
+                      s['mode'] == 'Ferry'
+                          ? 'Boat'
+                          : s['mode'] as String? ?? '',
+                  instruction: s['instruction'] as String? ?? '',
+                  details: s['details'] as String? ?? '',
                   is24_7: s['is24_7'] as bool? ?? true,
                   startTime: s['startTime'] as String?,
                   endTime: s['endTime'] as String?,
@@ -199,7 +271,7 @@ class Route {
       endLat: asNullableDouble(json['endLat']),
       endLng: asNullableDouble(json['endLng']),
       pathPoints:
-          (json['pathPoints'] as List)
+          (json['pathPoints'] as List? ?? const [])
               .map(
                 (p) => LatLng(
                   asNullableDouble(p['lat']) ?? 0.0,
@@ -221,13 +293,13 @@ class Route {
               ? (json['distanceMeters'] as num).toDouble()
               : null,
       reports:
-          (json['reports'] as List)
+          (json['reports'] as List? ?? const [])
               .map(
                 (r) => Report(
                   type: r['type'],
                   description: r['description'],
                   timestamp: DateTime.fromMillisecondsSinceEpoch(
-                    r['timestamp'],
+                    (r['timestamp'] as num).toInt(),
                   ),
                 ),
               )
@@ -245,25 +317,28 @@ class Route {
           json['downvotes'] is int
               ? json['downvotes']
               : int.tryParse(json['downvotes']?.toString() ?? '0') ?? 0,
-      createdAt:
-          json['createdAt'] != null
-              ? (json['createdAt'] as Timestamp).toDate()
-              : null,
-      updatedAt:
-          json['updatedAt'] != null
-              ? (json['updatedAt'] as Timestamp).toDate()
-              : null,
+      createdAt: _date(json['createdAt']),
+      updatedAt: _date(json['updatedAt']),
       approvalStatus: parsedStatus,
       isEdited: json['isEdited'] as bool? ?? false,
-      editedAt:
-          json['editedAt'] != null
-              ? (json['editedAt'] as Timestamp).toDate()
-              : null,
+      editedAt: _date(json['editedAt']),
       editCount:
           json['editCount'] is int
               ? json['editCount']
               : int.tryParse(json['editCount']?.toString() ?? '0') ?? 0,
       correctionOf: json['correctionOf'] as String?,
+      verification:
+          json['verification'] == RouteVerification.unverified.name
+              ? RouteVerification.unverified
+              : RouteVerification.verified,
+      latestDecision:
+          json['latestDecision'] is Map
+              ? RouteDecision.fromJson(
+                Map<String, dynamic>.from(json['latestDecision'] as Map),
+              )
+              : null,
+      revision: (json['revision'] as num?)?.toInt() ?? 1,
+      contributorName: json['contributorName'] as String?,
     );
   }
 }

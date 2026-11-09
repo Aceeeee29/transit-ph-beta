@@ -33,6 +33,7 @@ class RouteTrustService {
       route_model.RouteApprovalStatus.approved => _baseApprovalPoints,
       route_model.RouteApprovalStatus.pending => _baseApprovalPoints,
       route_model.RouteApprovalStatus.rejected => 0,
+      route_model.RouteApprovalStatus.withdrawn => 0,
     };
 
     final fareYes = feedbackSummary['fareAccurateYes'] ?? 0;

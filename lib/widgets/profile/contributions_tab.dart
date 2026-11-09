@@ -5,7 +5,7 @@ import '../../services/route_service.dart';
 import 'profile_colors.dart';
 import 'route_contribution_card.dart';
 
-class ContributionsTab extends StatelessWidget {
+class ContributionsTab extends StatefulWidget {
   final String userEmail;
   final String distanceUnit;
 
@@ -16,12 +16,42 @@ class ContributionsTab extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<ContributionsTab> createState() => _ContributionsTabState();
+}
+
+class _ContributionsTabState extends State<ContributionsTab> {
+  late Future<List<route_model.Route>> _routes = _load();
+
+  Future<List<route_model.Route>> _load() {
     final uid =
-        firebase_auth.FirebaseAuth.instance.currentUser?.uid ?? userEmail;
+        firebase_auth.FirebaseAuth.instance.currentUser?.uid ??
+        widget.userEmail;
+    return RouteService.getRoutesByUser(uid, userEmail: widget.userEmail);
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    // Braces matter here. setState throws if its callback returns a Future.
+    setState(() {
+      _routes = _load();
+    });
+  }
+
+  // Reloads whenever the profile rebuilds, so a route sent from Contribute
+  // shows up here. Supabase doesn't tell the app about changes by itself.
+  @override
+  void didUpdateWidget(ContributionsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _routes = _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userEmail = widget.userEmail;
+    final distanceUnit = widget.distanceUnit;
 
     return FutureBuilder<List<route_model.Route>>(
-      future: RouteService.getRoutesByUser(uid, userEmail: userEmail),
+      future: _routes,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -32,7 +62,7 @@ class ContributionsTab extends StatelessWidget {
           );
         }
         if (snapshot.hasError) {
-          return _ErrorState(error: snapshot.error);
+          return const _ErrorState();
         }
         final routes = snapshot.data ?? [];
         if (routes.isEmpty) {
@@ -46,6 +76,7 @@ class ContributionsTab extends StatelessWidget {
                 route: routes[index],
                 userEmail: userEmail,
                 distanceUnit: distanceUnit,
+                onEdited: _reload,
               ),
         );
       },
@@ -54,8 +85,7 @@ class ContributionsTab extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  final Object? error;
-  const _ErrorState({this.error});
+  const _ErrorState();
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +116,7 @@ class _ErrorState extends StatelessWidget {
             ),
           ),
           Text(
-            '$error',
+            'Check your connection and try again.',
             style: TextStyle(fontSize: 12, color: ProfileColors.textSecondary),
           ),
         ],

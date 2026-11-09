@@ -230,9 +230,10 @@ extension _ContributeScreenSections on _ContributeScreenState {
       );
 
       // An edit is done once it's sent for review: back to where it was
-      // opened from.
+      // opened from. Plain pop on purpose. maybePop would ask "Discard this
+      // route?" for a route that's already saved.
       if (isEdit) {
-        if (mounted) await Navigator.of(context).maybePop();
+        if (mounted) Navigator.of(context).pop();
         return;
       }
 

@@ -1,8 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
+
 import '../models/notification.dart';
 import '../models/route.dart' as route_model;
+import '../models/route_rejection_reason.dart';
 import '../services/notifications_service.dart';
+import 'route_rows.dart';
+import 'routes_api.dart';
 
 /// The rider already has [RouteService.maxPendingRoutesPerUser] routes
 /// waiting for review. Its text is shown to them as is.
@@ -15,11 +26,325 @@ class PendingRouteLimitException implements Exception {
       'waiting for review. You can send more once a moderator reviews them.';
 }
 
+typedef PublishedRowsReader =
+    Future<List<Map<String, dynamic>>> Function({
+      String? contributorId,
+      String? routeId,
+    });
+
+/// Rider and OpenStreetMap routes live in Supabase. Anyone can read published
+/// ones directly, and every change goes through the `routes-api` server
+/// function, so a modified app can't skip its rules.
+///
+/// Notifications and contribution stats stay in Firestore. The moderator's app
+/// writes those after a decision succeeds.
 class RouteService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static const int _staleReviewDays = 45;
-  static const int _routeFeedbackCooldownDays = 30;
 
+  /// How many routes one rider may have waiting for review at once. The server
+  /// enforces it. This is only for the message.
+  static const maxPendingRoutesPerUser = 3;
+
+  // Leaves out the geometry columns. The path is already in data.
+  static const _rowColumns =
+      'id,source,contributor_id,contributor_name,status,verification,'
+      'correction_of,data,views,upvotes,downvotes,feedback_summary,revision,'
+      'created_at,updated_at,published_at,rejected_at';
+
+  // Supabase returns at most this many rows per request.
+  static const _pageSize = 1000;
+  static const _readTimeout = Duration(seconds: 20);
+  static const _cacheFileName = 'published_routes.json';
+
+  // Opening one route asks for its vote, feedback and summary separately, and
+  // a route list asks for every card's summary. These keep that to one call.
+  static const _rememberFor = Duration(seconds: 60);
+  static final _openResults =
+      <String, ({DateTime at, Future<Map<String, dynamic>> result})>{};
+  static final _summaries =
+      <String, ({DateTime at, Map<String, int> summary})>{};
+
+  @visibleForTesting
+  static Future<void> Function(NotificationModel)? notifyHook;
+  @visibleForTesting
+  static Future<void> Function(String uid)? statsHook;
+  @visibleForTesting
+  static String? Function()? currentUidHook;
+  @visibleForTesting
+  static Future<File> Function()? cacheFileHook;
+  @visibleForTesting
+  static PublishedRowsReader? publishedReader;
+
+  @visibleForTesting
+  static void resetForTesting() {
+    notifyHook = null;
+    statsHook = null;
+    currentUidHook = null;
+    cacheFileHook = null;
+    publishedReader = null;
+    _openResults.clear();
+    _summaries.clear();
+  }
+
+  static String? _currentUid() =>
+      (currentUidHook ?? () => FirebaseAuth.instance.currentUser?.uid)();
+
+  // Reading routes
+
+  static Future<List<Map<String, dynamic>>> _readPublished({
+    String? contributorId,
+    String? routeId,
+  }) {
+    final reader = publishedReader ?? _readPublishedFromSupabase;
+    return reader(
+      contributorId: contributorId,
+      routeId: routeId,
+    ).timeout(_readTimeout);
+  }
+
+  static Future<List<Map<String, dynamic>>> _readPublishedFromSupabase({
+    String? contributorId,
+    String? routeId,
+  }) async {
+    final rows = <Map<String, dynamic>>[];
+    for (var from = 0; ; from += _pageSize) {
+      var query = Supabase.instance.client
+          .from('transit_routes')
+          .select(_rowColumns)
+          .eq('status', 'published');
+      if (contributorId != null) {
+        query = query.eq('contributor_id', contributorId);
+      }
+      if (routeId != null) query = query.eq('id', routeId);
+      // The id keeps the order fixed between pages when dates are equal.
+      final page = await query
+          .order('created_at', ascending: false, nullsFirst: false)
+          .order('id')
+          .range(from, from + _pageSize - 1);
+      rows.addAll(page);
+      if (page.length < _pageSize) return rows;
+    }
+  }
+
+  /// One bad row must not lose every other route.
+  static List<route_model.Route> _routesFrom(Iterable<dynamic> rows) {
+    final routes = <route_model.Route>[];
+    for (final row in rows) {
+      try {
+        routes.add(RouteRows.toRoute(Map<String, dynamic>.from(row as Map)));
+      } catch (e) {
+        debugPrint('[RouteService] Skipped a route that would not parse: $e');
+      }
+    }
+    return routes;
+  }
+
+  static Future<File> _cacheFile() async {
+    final hook = cacheFileHook;
+    if (hook != null) return hook();
+    final directory = await getApplicationSupportDirectory();
+    return File('${directory.path}/$_cacheFileName');
+  }
+
+  static Future<void> _saveToPhone(List<Map<String, dynamic>> rows) async {
+    try {
+      await (await _cacheFile()).writeAsString(jsonEncode(rows));
+    } catch (e) {
+      debugPrint('[RouteService] Could not save routes for offline: $e');
+    }
+  }
+
+  static Future<List<dynamic>> _loadFromPhone() async {
+    try {
+      final file = await _cacheFile();
+      if (!await file.exists()) return const [];
+      return jsonDecode(await file.readAsString()) as List<dynamic>;
+    } catch (e) {
+      debugPrint('[RouteService] Could not read saved routes: $e');
+      return const [];
+    }
+  }
+
+  /// Published routes, the ones regular users see. Firestore used to keep an
+  /// offline copy by itself and Supabase doesn't, so the last list is saved on
+  /// the phone. Without that, a bad connection would empty search's rider
+  /// routes.
+  static Future<List<route_model.Route>> getAllRoutes() async {
+    try {
+      final rows = await _readPublished();
+      for (final row in rows) {
+        _rememberSummary(row['id'] as String, RouteRows.feedbackSummary(row));
+      }
+      await _saveToPhone(rows);
+      return _routesFrom(rows);
+    } catch (e) {
+      debugPrint('[RouteService] Using saved routes: $e');
+      return _routesFrom(await _loadFromPhone());
+    }
+  }
+
+  /// The moderator queue, newest first. A failure throws, so the screen can
+  /// keep what it has instead of showing an empty queue.
+  static Future<List<route_model.Route>> getPendingRoutes() async {
+    return _routesFrom(await RoutesApi.call('queue') as List<dynamic>);
+  }
+
+  /// Your own routes at any status, or someone else's published ones.
+  ///
+  /// A failure throws. Returning an empty list would look like "no routes", and
+  /// recalculateUserStats would then save zeroed stats.
+  static Future<List<route_model.Route>> getRoutesByUser(
+    String userId, {
+    String? userEmail,
+  }) async {
+    final uid = userId.trim();
+    if (uid.isEmpty) return [];
+    if (uid == _currentUid()) {
+      return _routesFrom(await RoutesApi.call('my_routes') as List<dynamic>);
+    }
+    return _routesFrom(await _readPublished(contributorId: uid));
+  }
+
+  /// A published route, or one of your own at any status. A rejected route's
+  /// notification opens it, and riders can't read those directly.
+  static Future<route_model.Route?> getRouteById(String routeId) async {
+    try {
+      final published = _routesFrom(await _readPublished(routeId: routeId));
+      if (published.isNotEmpty) return published.first;
+      if (_currentUid() == null) return null;
+      final mine = _routesFrom(
+        await RoutesApi.call('my_routes') as List<dynamic>,
+      );
+      for (final route in mine) {
+        if (route.id == routeId) return route;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Sending routes
+
+  /// Save a new route. It starts as pending until a moderator approves it.
+  /// Failures reach the screen, which keeps the rider's drawing.
+  static Future<void> saveRoute(route_model.Route route) async {
+    await RoutesApi.call('submit', {'route': route.toJson()});
+  }
+
+  /// Update an existing route. Any edit goes back for review.
+  static Future<void> updateRoute(route_model.Route route) async {
+    await RoutesApi.call('resubmit', {'route': route.toJson()});
+  }
+
+  static Future<void> deleteRoute(String routeId) async {
+    await RoutesApi.call('delete', {'routeId': routeId});
+  }
+
+  // Moderator decisions
+
+  /// Sends a decision. Returns null when someone already decided, or removed
+  /// the route. That's a double tap or two moderators at once, so it isn't an
+  /// error, and nobody should be notified a second time.
+  static Future<Map<String, dynamic>?> _decide(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final result = await RoutesApi.call('decide', body);
+      return Map<String, dynamic>.from(result as Map);
+    } on RoutesApiException catch (e) {
+      if (e.code == 'conflict' || e.code == 'not_found') return null;
+      rethrow;
+    }
+  }
+
+  static Future<void> _notify(NotificationModel notification) async {
+    try {
+      await (notifyHook ?? NotificationsService.addNotification)(notification);
+    } catch (e) {
+      // The decision is already saved. A failed notice must not undo it.
+      debugPrint('[RouteService] Notification failed: $e');
+    }
+  }
+
+  static Future<void> _addStats(String uid) async {
+    try {
+      await (statsHook ?? _incrementApprovedContributionStats)(uid);
+    } catch (e) {
+      debugPrint('[RouteService] Contribution stats failed: $e');
+    }
+  }
+
+  /// Approve a route. Only moderators call this, and the server checks.
+  static Future<void> approveRoute(String routeId) async {
+    final result = await _decide({'routeId': routeId, 'decision': 'approve'});
+    if (result == null) return;
+
+    final recipientId = await _resolveNotificationRecipientId(
+      result['contributorId'] as String?,
+    );
+    if (recipientId == null || recipientId.isEmpty) return;
+
+    await _addStats(recipientId);
+
+    final title = result['title'] as String? ?? 'your submitted route';
+    final mergedInto = result['mergedInto'] as String?;
+    await _notify(
+      NotificationModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userId: recipientId,
+        type: 'route_approved',
+        routeId: mergedInto ?? routeId,
+        timestamp: DateTime.now(),
+        message:
+            mergedInto != null
+                ? 'Your correction to $title was approved and is now live.'
+                : 'Your submitted route ($title) was approved and is now live.',
+      ),
+    );
+  }
+
+  /// Reject a route. The server keeps it, so the contributor can read why and
+  /// resubmit.
+  static Future<void> rejectRoute(
+    String routeId, {
+    required List<String> reasonCodes,
+    String? note,
+  }) async {
+    final trimmedNote = note?.trim();
+    final hasNote = trimmedNote != null && trimmedNote.isNotEmpty;
+    final result = await _decide({
+      'routeId': routeId,
+      'decision': 'reject',
+      'reasonCodes': reasonCodes,
+      if (hasNote) 'note': trimmedNote,
+    });
+    if (result == null) return;
+
+    final recipientId = await _resolveNotificationRecipientId(
+      result['contributorId'] as String?,
+    );
+    if (recipientId == null || recipientId.isEmpty) return;
+
+    final title = result['title'] as String? ?? 'your submitted route';
+    final reasons = reasonCodes
+        .map((code) => RouteRejectionReason.byCode(code)?.label ?? code)
+        .join(', ');
+    await _notify(
+      NotificationModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userId: recipientId,
+        type: 'route_rejected',
+        routeId: routeId,
+        timestamp: DateTime.now(),
+        message:
+            'Your route ($title) was rejected: $reasons.'
+            '${hasNote ? ' Note: $trimmedNote' : ''}',
+      ),
+    );
+  }
+
+  /// Older routes can hold an email instead of a uid.
   static Future<String?> _resolveNotificationRecipientId(
     String? contributorId,
   ) async {
@@ -48,76 +373,6 @@ class RouteService {
     } catch (_) {}
 
     return null;
-  }
-
-  static String? _extractContributorIdentifier(
-    Map<String, dynamic>? routeData,
-  ) {
-    if (routeData == null) return null;
-
-    final identifiers = [
-      routeData['contributorId'],
-      routeData['userId'],
-      routeData['contributorEmail'],
-      routeData['userEmail'],
-      routeData['email'],
-    ];
-
-    for (final candidate in identifiers) {
-      final normalized = (candidate as String?)?.trim();
-      if (normalized != null && normalized.isNotEmpty) {
-        return normalized;
-      }
-    }
-
-    return null;
-  }
-
-  static DocumentReference<Map<String, dynamic>> _routeDoc(String routeId) {
-    return _firestore.collection('routes').doc(routeId);
-  }
-
-  static DocumentReference<Map<String, dynamic>> _routeVoteDoc(
-    String routeId,
-    String userId,
-  ) {
-    return _routeDoc(routeId).collection('routeVotes').doc(userId);
-  }
-
-  static DocumentReference<Map<String, dynamic>> _routeViewDoc(
-    String routeId,
-    String userId,
-  ) {
-    return _routeDoc(routeId).collection('routeViews').doc(userId);
-  }
-
-  static DocumentReference<Map<String, dynamic>> _routeFeedbackDoc(
-    String routeId,
-    String userId,
-  ) {
-    return _routeDoc(routeId).collection('routeFeedback').doc(userId);
-  }
-
-  static Future<String> _currentActorIdOrSystem() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    return (uid == null || uid.trim().isEmpty) ? 'system' : uid;
-  }
-
-  static Future<void> _writeRouteAuditLog({
-    required String routeId,
-    required String action,
-    required String actorId,
-    Map<String, dynamic>? meta,
-  }) async {
-    try {
-      await _routeDoc(routeId).collection('auditLogs').add({
-        'routeId': routeId,
-        'action': action,
-        'actorId': actorId,
-        'meta': meta ?? const <String, dynamic>{},
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
   }
 
   static Future<void> _incrementApprovedContributionStats(
@@ -202,525 +457,54 @@ class RouteService {
     }
   }
 
-  static Future<void> _markStaleRoutesForReviewIfNeeded({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  }) async {
-    final now = DateTime.now();
-    for (final doc in docs) {
-      final data = doc.data();
-      final routeId = data['id']?.toString() ?? doc.id;
-      final approvalStatus = data['approvalStatus']?.toString();
-      if (approvalStatus != route_model.RouteApprovalStatus.approved.name) {
-        continue;
-      }
+  // Opening a route: views, votes and feedback
 
-      final updatedTs = data['updatedAt'] as Timestamp?;
-      final createdTs = data['createdAt'] as Timestamp?;
-      final referenceTime = (updatedTs ?? createdTs)?.toDate();
-      if (referenceTime == null) continue;
-
-      final ageDays = now.difference(referenceTime).inDays;
-      if (ageDays < _staleReviewDays) continue;
-
-      final alreadyFlagged = data['staleNeedsReview'] == true;
-      if (alreadyFlagged) continue;
-
-      final hasFare = (data['price']?.toString().trim().isNotEmpty ?? false);
-      final hasSchedule =
-          (data['schedule']?.toString().trim().isNotEmpty ?? false);
-
-      final patch = <String, dynamic>{
-        'staleNeedsReview': true,
-        'staleReason':
-            'Auto-flagged: fare/schedule data older than $_staleReviewDays days.',
-        'staleFlaggedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      if (hasFare) {
-        patch['fareExpired'] = true;
-      }
-      if (hasSchedule) {
-        patch['scheduleExpired'] = true;
-      }
-
-      await _routeDoc(routeId).update(patch);
-      await _writeRouteAuditLog(
-        routeId: routeId,
-        action: 'auto_stale_flagged',
-        actorId: 'system',
-        meta: {
-          'staleDays': ageDays,
-          'fareExpired': hasFare,
-          'scheduleExpired': hasSchedule,
-        },
-      );
+  /// One server call per route per minute, however many reads ask for it.
+  /// Calls at the same moment share it too, because the screen loads its parts
+  /// side by side.
+  static Future<Map<String, dynamic>> _openRoute(String routeId) {
+    final saved = _openResults[routeId];
+    if (saved != null && DateTime.now().difference(saved.at) < _rememberFor) {
+      return saved.result;
     }
-  }
 
-  /// Get only approved community routes, the ones regular users see.
-  /// We filter client-side (not in the query) so that legacy routes
-  /// without an approvalStatus field are correctly defaulted to approved
-  /// by fromJson, rather than being excluded by Firestore's where clause.
-  static Future<List<route_model.Route>> getAllRoutes() async {
-    try {
-      final querySnapshot =
-          await _firestore
-              .collection('routes')
-              .orderBy('createdAt', descending: true)
-              .get();
-
-      try {
-        await _markStaleRoutesForReviewIfNeeded(docs: querySnapshot.docs);
-      } catch (_) {}
-
-      return querySnapshot.docs
-          .map((doc) => route_model.Route.fromJson(doc.data()))
-          .where((r) => r.isApproved)
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  static Stream<List<route_model.Route>> watchAllRoutes() {
-    return _firestore
-        .collection('routes')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map(
-          (querySnapshot) =>
-              querySnapshot.docs
-                  .map((doc) => route_model.Route.fromJson(doc.data()))
-                  .where((r) => r.isApproved)
-                  .toList(),
+    final result = RoutesApi.call('open_route', {'routeId': routeId}).then((
+      data,
+    ) {
+      final opened = Map<String, dynamic>.from(data as Map);
+      final summary = opened['summary'];
+      if (summary is Map) {
+        _rememberSummary(
+          routeId,
+          RouteRows.feedbackSummary({'feedback_summary': summary}),
         );
-  }
-
-  /// Get pending routes for the moderator review tab
-  static Future<List<route_model.Route>> getPendingRoutes() async {
-    try {
-      final querySnapshot =
-          await _firestore
-              .collection('routes')
-              .where(
-                'approvalStatus',
-                isEqualTo: route_model.RouteApprovalStatus.pending.name,
-              )
-              .get();
-
-      final routes =
-          querySnapshot.docs
-              .map((doc) => route_model.Route.fromJson(doc.data()))
-              .toList();
-      // Sort newest first client-side
-      routes.sort((a, b) {
-        final aTime = a.createdAt ?? DateTime(2000);
-        final bTime = b.createdAt ?? DateTime(2000);
-        return bTime.compareTo(aTime);
-      });
-      return routes;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Get all routes contributed by a specific user (all statuses, for profile)
-  /// Supports both UID and email-based contributor IDs for legacy compatibility.
-  static Future<List<route_model.Route>> getRoutesByUser(
-    String userId, {
-    String? userEmail,
-  }) async {
-    try {
-      final normalizedId = userId.trim();
-      final normalizedEmail = userEmail?.trim();
-
-      final identifiers = <String>{};
-      if (normalizedId.isNotEmpty) identifiers.add(normalizedId);
-      if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
-        identifiers.add(normalizedEmail);
       }
-
-      if (identifiers.isEmpty) return [];
-
-      final byRouteId = <String, route_model.Route>{};
-
-      for (final contributorIdentifier in identifiers) {
-        final querySnapshot =
-            await _firestore
-                .collection('routes')
-                .where('contributorId', isEqualTo: contributorIdentifier)
-                .get();
-
-        for (final doc in querySnapshot.docs) {
-          final route = route_model.Route.fromJson(doc.data());
-          byRouteId[route.id] = route;
-        }
-      }
-
-      final routes =
-          byRouteId.values.toList()..sort((a, b) {
-            final aTime = a.createdAt ?? DateTime(2000);
-            final bTime = b.createdAt ?? DateTime(2000);
-            return bTime.compareTo(aTime);
-          });
-
-      return routes;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Get a specific route by ID
-  static Future<route_model.Route?> getRouteById(String routeId) async {
-    try {
-      final docSnapshot =
-          await _firestore.collection('routes').doc(routeId).get();
-      if (docSnapshot.exists) {
-        return route_model.Route.fromJson(docSnapshot.data()!);
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// How many routes one rider may have waiting for review at once.
-  static const maxPendingRoutesPerUser = 3;
-
-  /// Throws [PendingRouteLimitException] when [contributorId] already has
-  /// [maxPendingRoutesPerUser] other routes waiting for review. Checked in
-  /// the app only: Firestore rules can't count a user's documents.
-  static Future<void> _checkPendingLimit(
-    String? contributorId,
-    String routeId,
-  ) async {
-    if (contributorId == null || contributorId.isEmpty) return;
-    final pending =
-        await _firestore
-            .collection('routes')
-            .where('contributorId', isEqualTo: contributorId)
-            .where(
-              'approvalStatus',
-              isEqualTo: route_model.RouteApprovalStatus.pending.name,
-            )
-            .get();
-    // Re-sending a route that's already waiting doesn't add one.
-    final others = pending.docs.where((doc) => doc.id != routeId).length;
-    if (others >= maxPendingRoutesPerUser) {
-      throw const PendingRouteLimitException();
-    }
-  }
-
-  /// Save a new route. It starts as pending until a moderator approves it
-  static Future<void> saveRoute(route_model.Route route) async {
-    try {
-      await _checkPendingLimit(route.contributorId, route.id);
-      final data = route.toJson();
-      data['approvalStatus'] = route_model.RouteApprovalStatus.pending.name;
-      data['createdAt'] = FieldValue.serverTimestamp();
-      data['updatedAt'] = FieldValue.serverTimestamp();
-      data['feedbackSummary'] = {
-        'fareAccurateYes': 0,
-        'fareAccurateNo': 0,
-        'scheduleAccurateYes': 0,
-        'scheduleAccurateNo': 0,
-        'stillOperatingYes': 0,
-        'stillOperatingNo': 0,
-      };
-      await _firestore.collection('routes').doc(route.id).set(data);
-      final actorId = await _currentActorIdOrSystem();
-      await _writeRouteAuditLog(
-        routeId: route.id,
-        action: 'route_created',
-        actorId: actorId,
-      );
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Update an existing route
-  static Future<void> updateRoute(route_model.Route route) async {
-    try {
-      final before = await _firestore.collection('routes').doc(route.id).get();
-      final beforeData = before.data() ?? const <String, dynamic>{};
-      final data = route.toJson();
-
-      // Any user edit must be re-reviewed by moderators/super admins.
-      data['approvalStatus'] = route_model.RouteApprovalStatus.pending.name;
-      data['isEdited'] = true;
-      data['editedAt'] = FieldValue.serverTimestamp();
-      data['editCount'] = FieldValue.increment(1);
-      data['updatedAt'] = FieldValue.serverTimestamp();
-      await _firestore.collection('routes').doc(route.id).update(data);
-      final actorId = await _currentActorIdOrSystem();
-      await _writeRouteAuditLog(
-        routeId: route.id,
-        action: 'route_updated',
-        actorId: actorId,
-        meta: {
-          'beforeApprovalStatus': beforeData['approvalStatus'],
-          'afterApprovalStatus': data['approvalStatus'],
-          'changedPrice': beforeData['price'] != data['price'],
-          'changedSchedule': beforeData['schedule'] != data['schedule'],
-          'markedAsEdited': true,
-          'nextEditCount':
-              ((beforeData['editCount'] as num?)?.toInt() ?? 0) + 1,
-        },
-      );
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Approve a route. Only moderators call this
-  static Future<void> approveRoute(String routeId) async {
-    try {
-      String? contributorId;
-      String routeTitle = 'your submitted route';
-      bool wasAlreadyApproved = false;
-
-      final routeSnapshot =
-          await _firestore.collection('routes').doc(routeId).get();
-      if (routeSnapshot.exists) {
-        final routeData = routeSnapshot.data();
-        contributorId = _extractContributorIdentifier(routeData);
-        final currentStatus = (routeData?['approvalStatus'] as String?)?.trim();
-        wasAlreadyApproved =
-            currentStatus == route_model.RouteApprovalStatus.approved.name;
-        final start = routeData?['startLocation'] as String?;
-        final end = routeData?['endLocation'] as String?;
-        if (start != null && end != null) {
-          routeTitle = '$start to $end';
-        }
-
-        final correctionOf = (routeData?['correctionOf'] as String?)?.trim();
-        if (correctionOf != null &&
-            correctionOf.isNotEmpty &&
-            await _mergeCorrection(
-              correctionId: routeId,
-              originalId: correctionOf,
-              correction: routeData!,
-              contributorId: contributorId,
-              routeTitle: routeTitle,
-            )) {
-          return;
-        }
-      }
-
-      await _firestore.collection('routes').doc(routeId).update({
-        'approvalStatus': route_model.RouteApprovalStatus.approved.name,
-        'isEdited': false,
-        'staleNeedsReview': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      final actorId = await _currentActorIdOrSystem();
-      await _writeRouteAuditLog(
-        routeId: routeId,
-        action: 'moderator_approved',
-        actorId: actorId,
-      );
-
-      final recipientId = await _resolveNotificationRecipientId(contributorId);
-      if (recipientId != null && recipientId.isNotEmpty) {
-        if (!wasAlreadyApproved) {
-          try {
-            await _incrementApprovedContributionStats(recipientId);
-          } catch (_) {}
-        }
-
-        try {
-          await NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: recipientId,
-              type: 'route_approved',
-              routeId: routeId,
-              timestamp: DateTime.now(),
-              message:
-                  'Your submitted route ($routeTitle) was approved and is now live.',
-            ),
-          );
-        } catch (_) {}
-      }
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// What an approved correction replaces in the route it corrects: the
-  /// line, its steps (with their stops and points) and the measures derived
-  /// from them. Everything else (votes, reports, contributor) stays.
-  static const _correctionKeys = [
-    'pathPoints',
-    'stepBoundaries',
-    'steps',
-    'startLat',
-    'startLng',
-    'endLat',
-    'endLng',
-    'distance',
-    'distanceMeters',
-    'eta',
-  ];
-
-  /// Merges an approved rider correction into the route it corrects, then
-  /// deletes the correction so it never shows as a duplicate route. Returns
-  /// false (and changes nothing) when the original route no longer exists,
-  /// in which case the correction is approved as a route of its own.
-  static Future<bool> _mergeCorrection({
-    required String correctionId,
-    required String originalId,
-    required Map<String, dynamic> correction,
-    required String? contributorId,
-    required String routeTitle,
-  }) async {
-    final originalRef = _firestore.collection('routes').doc(originalId);
-    if (!(await originalRef.get()).exists) return false;
-
-    await originalRef.update({
-      for (final key in _correctionKeys)
-        if (correction.containsKey(key)) key: correction[key],
-      'editCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
+      return opened;
     });
-    final actorId = await _currentActorIdOrSystem();
-    await _writeRouteAuditLog(
-      routeId: originalId,
-      action: 'correction_merged',
-      actorId: actorId,
-      meta: {'correctionId': correctionId, 'correctedBy': contributorId},
+    _openResults[routeId] = (at: DateTime.now(), result: result);
+    // A failure shouldn't be remembered, so the next read tries again.
+    result.then(
+      (_) {},
+      onError: (_) {
+        _openResults.remove(routeId);
+      },
     );
-    await _firestore.collection('routes').doc(correctionId).delete();
-
-    final recipientId = await _resolveNotificationRecipientId(contributorId);
-    if (recipientId != null && recipientId.isNotEmpty) {
-      try {
-        await _incrementApprovedContributionStats(recipientId);
-      } catch (_) {}
-      try {
-        await NotificationsService.addNotification(
-          NotificationModel(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            userId: recipientId,
-            type: 'route_approved',
-            routeId: originalId,
-            timestamp: DateTime.now(),
-            message:
-                'Your correction to $routeTitle was approved and is now live.',
-          ),
-        );
-      } catch (_) {}
-    }
-    return true;
+    return result;
   }
 
-  /// Reject a route. Only moderators call this
-  static Future<void> rejectRoute(String routeId) async {
-    try {
-      String? contributorId;
-      String routeTitle = 'your submitted route';
-
-      final routeSnapshot =
-          await _firestore.collection('routes').doc(routeId).get();
-      if (routeSnapshot.exists) {
-        final routeData = routeSnapshot.data();
-        contributorId = _extractContributorIdentifier(routeData);
-        final start = routeData?['startLocation'] as String?;
-        final end = routeData?['endLocation'] as String?;
-        if (start != null && end != null) {
-          routeTitle = '$start to $end';
-        }
-      }
-
-      await _firestore.collection('routes').doc(routeId).update({
-        'approvalStatus': route_model.RouteApprovalStatus.rejected.name,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      final actorId = await _currentActorIdOrSystem();
-      await _writeRouteAuditLog(
-        routeId: routeId,
-        action: 'moderator_rejected',
-        actorId: actorId,
-      );
-
-      final recipientId = await _resolveNotificationRecipientId(contributorId);
-      if (recipientId != null && recipientId.isNotEmpty) {
-        try {
-          await NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: recipientId,
-              type: 'route_rejected',
-              routeId: routeId,
-              timestamp: DateTime.now(),
-              message:
-                  'Your submitted route ($routeTitle) was rejected by moderators.',
-            ),
-          );
-        } catch (_) {}
-      }
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Delete a route
-  static Future<void> deleteRoute(String routeId) async {
-    try {
-      await _firestore.collection('routes').doc(routeId).delete();
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Increment view count for a route
-  static Future<void> incrementView(String routeId) async {
-    try {
-      await _firestore.collection('routes').doc(routeId).update({
-        'views': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Increment a route view once per user
+  /// Counts a view once per user. The server knows who's calling, so [userId]
+  /// isn't sent.
   static Future<void> incrementViewForUser(
     String routeId,
     String userId,
   ) async {
-    final routeRef = _routeDoc(routeId);
-    final viewRef = _routeViewDoc(routeId, userId);
-
-    await _firestore.runTransaction((transaction) async {
-      final routeSnap = await transaction.get(routeRef);
-      if (!routeSnap.exists) throw StateError('route_not_found');
-
-      final viewSnap = await transaction.get(viewRef);
-      if (viewSnap.exists) return;
-
-      transaction.set(viewRef, {
-        'userId': userId,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.update(routeRef, {
-        'views': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
+    await _openRoute(routeId);
   }
 
   /// Returns true for upvote, false for downvote, null if no vote
   static Future<bool?> getUserVote(String routeId, String userId) async {
     try {
-      final voteSnap = await _routeVoteDoc(routeId, userId).get();
-      if (!voteSnap.exists) return null;
-      final vote = voteSnap.data()?['vote'] as String?;
+      final vote = (await _openRoute(routeId))['vote'] as String?;
       if (vote == 'up') return true;
       if (vote == 'down') return false;
       return null;
@@ -729,165 +513,20 @@ class RouteService {
     }
   }
 
-  /// Applies an up/down vote
+  /// Applies an up/down vote. Tapping the same vote again removes it, and
+  /// switching needs removing it first (a StateError the screen handles).
   static Future<bool?> setUserVote({
     required String routeId,
     required String userId,
     required bool isUpvote,
   }) async {
-    final routeRef = _routeDoc(routeId);
-    final voteRef = _routeVoteDoc(routeId, userId);
-
-    return _firestore.runTransaction<bool?>((transaction) async {
-      final routeSnap = await transaction.get(routeRef);
-      if (!routeSnap.exists) throw StateError('route_not_found');
-
-      final voteSnap = await transaction.get(voteRef);
-      final existingVote = voteSnap.data()?['vote'] as String?;
-      final nextVote = isUpvote ? 'up' : 'down';
-
-      if (existingVote == null) {
-        transaction.set(voteRef, {
-          'userId': userId,
-          'vote': nextVote,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        transaction.update(routeRef, {
-          isUpvote ? 'upvotes' : 'downvotes': FieldValue.increment(1),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return isUpvote;
-      }
-
-      if (existingVote == nextVote) {
-        transaction.delete(voteRef);
-        transaction.update(routeRef, {
-          isUpvote ? 'upvotes' : 'downvotes': FieldValue.increment(-1),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return null;
-      }
-
-      throw StateError('remove_first');
+    final result = await RoutesApi.call('vote', {
+      'routeId': routeId,
+      'up': isUpvote,
     });
-  }
-
-  /// Increment upvote count
-  static Future<void> incrementUpvote(String routeId) async {
-    try {
-      await _firestore.collection('routes').doc(routeId).update({
-        'upvotes': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Increment downvote count
-  static Future<void> incrementDownvote(String routeId) async {
-    try {
-      await _firestore.collection('routes').doc(routeId).update({
-        'downvotes': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Add a report to a route
-  static Future<void> addReport(
-    String routeId,
-    route_model.Report report,
-  ) async {
-    try {
-      await _firestore.collection('routes').doc(routeId).update({
-        'reports': FieldValue.arrayUnion([
-          {
-            'type': report.type,
-            'description': report.description,
-            'timestamp': report.timestamp.millisecondsSinceEpoch,
-          },
-        ]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Search routes by startLocation and endLocation (approved only)
-  static Future<List<route_model.Route>> searchRoutes(
-    String startLocation,
-    String endLocation,
-  ) async {
-    try {
-      final querySnapshot =
-          await _firestore
-              .collection('routes')
-              .where('startLocation', isEqualTo: startLocation)
-              .where('endLocation', isEqualTo: endLocation)
-              .get();
-
-      return querySnapshot.docs
-          .map((doc) => route_model.Route.fromJson(doc.data()))
-          .where((r) => r.isApproved)
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  static Future<Map<String, int>> getRouteFeedbackSummary(
-    String routeId,
-  ) async {
-    try {
-      final doc = await _routeDoc(routeId).get();
-      final summary =
-          doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
-          const <String, dynamic>{};
-      return {
-        'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
-        'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateYes':
-            (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateNo':
-            (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
-        'stillOperatingYes':
-            (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
-        'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
-      };
-    } catch (_) {
-      return {
-        'fareAccurateYes': 0,
-        'fareAccurateNo': 0,
-        'scheduleAccurateYes': 0,
-        'scheduleAccurateNo': 0,
-        'stillOperatingYes': 0,
-        'stillOperatingNo': 0,
-      };
-    }
-  }
-
-  static Stream<Map<String, int>> watchRouteFeedbackSummary(String routeId) {
-    return _routeDoc(routeId).snapshots().map((doc) {
-      final summary =
-          doc.data()?['feedbackSummary'] as Map<String, dynamic>? ??
-          const <String, dynamic>{};
-      return {
-        'fareAccurateYes': (summary['fareAccurateYes'] as num?)?.toInt() ?? 0,
-        'fareAccurateNo': (summary['fareAccurateNo'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateYes':
-            (summary['scheduleAccurateYes'] as num?)?.toInt() ?? 0,
-        'scheduleAccurateNo':
-            (summary['scheduleAccurateNo'] as num?)?.toInt() ?? 0,
-        'stillOperatingYes':
-            (summary['stillOperatingYes'] as num?)?.toInt() ?? 0,
-        'stillOperatingNo': (summary['stillOperatingNo'] as num?)?.toInt() ?? 0,
-      };
-    });
+    _openResults.remove(routeId);
+    final vote = (result as Map)['vote'] as String?;
+    return vote == null ? null : vote == 'up';
   }
 
   static Future<void> submitRouteQualityFeedback({
@@ -897,78 +536,14 @@ class RouteService {
     required bool scheduleAccurate,
     required bool stillOperating,
   }) async {
-    final routeRef = _routeDoc(routeId);
-    final feedbackRef = _routeFeedbackDoc(routeId, userId);
-
-    await _firestore.runTransaction((transaction) async {
-      final routeSnap = await transaction.get(routeRef);
-      if (!routeSnap.exists) throw StateError('route_not_found');
-      final prevSnap = await transaction.get(feedbackRef);
-
-      if (prevSnap.exists) {
-        final prevData = prevSnap.data() ?? const <String, dynamic>{};
-        final lastFeedbackAt =
-            (prevData['updatedAt'] as Timestamp?) ??
-            (prevData['createdAt'] as Timestamp?);
-
-        if (lastFeedbackAt != null) {
-          final nextAllowedAt = lastFeedbackAt.toDate().add(
-            const Duration(days: _routeFeedbackCooldownDays),
-          );
-          if (DateTime.now().isBefore(nextAllowedAt)) {
-            throw StateError(
-              'feedback_cooldown:${nextAllowedAt.toUtc().toIso8601String()}',
-            );
-          }
-        }
-      }
-
-      final updates = <String, dynamic>{
-        'updatedAt': FieldValue.serverTimestamp(),
-        'feedbackSummary.lastFeedbackAt': FieldValue.serverTimestamp(),
-        'feedbackSummary.fareAccurateYes': FieldValue.increment(
-          fareAccurate ? 1 : 0,
-        ),
-        'feedbackSummary.fareAccurateNo': FieldValue.increment(
-          fareAccurate ? 0 : 1,
-        ),
-        'feedbackSummary.scheduleAccurateYes': FieldValue.increment(
-          scheduleAccurate ? 1 : 0,
-        ),
-        'feedbackSummary.scheduleAccurateNo': FieldValue.increment(
-          scheduleAccurate ? 0 : 1,
-        ),
-        'feedbackSummary.stillOperatingYes': FieldValue.increment(
-          stillOperating ? 1 : 0,
-        ),
-        'feedbackSummary.stillOperatingNo': FieldValue.increment(
-          stillOperating ? 0 : 1,
-        ),
-      };
-
-      transaction.set(feedbackRef, {
-        'routeId': routeId,
-        'userId': userId,
-        'fareAccurate': fareAccurate,
-        'scheduleAccurate': scheduleAccurate,
-        'stillOperating': stillOperating,
-        'updatedAt': FieldValue.serverTimestamp(),
-        if (!prevSnap.exists) 'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.update(routeRef, updates);
+    await RoutesApi.call('quality_feedback', {
+      'routeId': routeId,
+      'fareAccurate': fareAccurate,
+      'scheduleAccurate': scheduleAccurate,
+      'stillOperating': stillOperating,
     });
-
-    await _writeRouteAuditLog(
-      routeId: routeId,
-      action: 'commuter_feedback_submitted',
-      actorId: userId,
-      meta: {
-        'fareAccurate': fareAccurate,
-        'scheduleAccurate': scheduleAccurate,
-        'stillOperating': stillOperating,
-      },
-    );
+    _openResults.remove(routeId);
+    _summaries.remove(routeId);
   }
 
   static Future<Map<String, bool>?> getUserRouteQualityFeedback({
@@ -976,13 +551,12 @@ class RouteService {
     required String userId,
   }) async {
     try {
-      final doc = await _routeFeedbackDoc(routeId, userId).get();
-      if (!doc.exists) return null;
-      final data = doc.data() ?? const <String, dynamic>{};
+      final feedback = (await _openRoute(routeId))['feedback'];
+      if (feedback is! Map) return null;
       return {
-        'fareAccurate': (data['fareAccurate'] as bool?) ?? true,
-        'scheduleAccurate': (data['scheduleAccurate'] as bool?) ?? true,
-        'stillOperating': (data['stillOperating'] as bool?) ?? true,
+        'fareAccurate': feedback['fareAccurate'] as bool? ?? true,
+        'scheduleAccurate': feedback['scheduleAccurate'] as bool? ?? true,
+        'stillOperating': feedback['stillOperating'] as bool? ?? true,
       };
     } catch (_) {
       return null;
@@ -994,20 +568,37 @@ class RouteService {
     required String userId,
   }) async {
     try {
-      final doc = await _routeFeedbackDoc(routeId, userId).get();
-      if (!doc.exists) return null;
-
-      final data = doc.data() ?? const <String, dynamic>{};
-      final lastFeedbackAt =
-          (data['updatedAt'] as Timestamp?) ??
-          (data['createdAt'] as Timestamp?);
-      if (lastFeedbackAt == null) return null;
-
-      return lastFeedbackAt.toDate().add(
-        const Duration(days: _routeFeedbackCooldownDays),
-      );
+      final next = (await _openRoute(routeId))['nextFeedbackAt'] as String?;
+      return next == null ? null : DateTime.tryParse(next)?.toLocal();
     } catch (_) {
       return null;
     }
+  }
+
+  static void _rememberSummary(String routeId, Map<String, int> summary) {
+    _summaries[routeId] = (at: DateTime.now(), summary: summary);
+  }
+
+  static Future<Map<String, int>> getRouteFeedbackSummary(
+    String routeId,
+  ) async {
+    final saved = _summaries[routeId];
+    if (saved != null && DateTime.now().difference(saved.at) < _rememberFor) {
+      return saved.summary;
+    }
+    try {
+      final rows = await _readPublished(routeId: routeId);
+      final summary = RouteRows.feedbackSummary(
+        rows.isEmpty ? const {} : rows.first,
+      );
+      if (rows.isNotEmpty) _rememberSummary(routeId, summary);
+      return summary;
+    } catch (_) {
+      return RouteRows.feedbackSummary(const {});
+    }
+  }
+
+  static Stream<Map<String, int>> watchRouteFeedbackSummary(String routeId) {
+    return Stream.fromFuture(getRouteFeedbackSummary(routeId));
   }
 }

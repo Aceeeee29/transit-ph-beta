@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart' as app_user;
 import '../models/achievement.dart';
 import '../models/badge.dart';
+import '../models/route.dart' as route_model;
 import 'route_service.dart';
 import 'route_metrics_service.dart';
 
@@ -267,10 +268,18 @@ class GamificationService {
     if (uid == null) return;
 
     try {
-      final routes = await RouteService.getRoutesByUser(
-        uid,
-        userEmail: user.email,
-      );
+      // Rejected routes are kept now so riders can fix them. They used to be
+      // deleted, so counting them would inflate these stats.
+      final routes =
+          (await RouteService.getRoutesByUser(uid, userEmail: user.email))
+              .where(
+                (route) =>
+                    route.approvalStatus !=
+                        route_model.RouteApprovalStatus.rejected &&
+                    route.approvalStatus !=
+                        route_model.RouteApprovalStatus.withdrawn,
+              )
+              .toList();
 
       double totalDistance = 0.0;
       double totalCo2Saved = 0.0;

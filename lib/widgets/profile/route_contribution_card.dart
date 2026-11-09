@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/route.dart' as route_model;
+import '../../models/route_rejection_reason.dart';
 import '../../screens/contribute_screen.dart';
 import '../../services/route_service.dart';
 import '../../services/route_metrics_service.dart';
@@ -11,12 +12,39 @@ class RouteContributionCard extends StatelessWidget {
   final String userEmail;
   final String distanceUnit;
 
+  /// Called when the editor closes, so the list can show the new status.
+  final VoidCallback? onEdited;
+
   const RouteContributionCard({
     super.key,
     required this.route,
     required this.userEmail,
     required this.distanceUnit,
+    this.onEdited,
   });
+
+  /// Saving only: the editor confirms and closes itself. (This card can be gone
+  /// by then: an edited route goes back to pending, which rebuilds the list,
+  /// and using its context failed with "Null check operator used on a null
+  /// value".)
+  static void openEditor(
+    BuildContext context, {
+    required route_model.Route route,
+    required String userEmail,
+    VoidCallback? onEdited,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ContributeScreen(
+              onRouteSubmitted: RouteService.updateRoute,
+              routeToEdit: route,
+              contributorId: userEmail,
+            ),
+      ),
+    ).then((_) => onEdited?.call());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +73,16 @@ class RouteContributionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CardHeader(route: route, userEmail: userEmail),
+            _CardHeader(route: route, userEmail: userEmail, onEdited: onEdited),
+            const SizedBox(height: 10),
+            _StatusChip(status: route.approvalStatus),
+            if (route.approvalStatus ==
+                route_model.RouteApprovalStatus.rejected)
+              _RejectionPanel(
+                route: route,
+                userEmail: userEmail,
+                onEdited: onEdited,
+              ),
             const SizedBox(height: 14),
             Divider(color: ProfileColors.border, height: 1),
             const SizedBox(height: 12),
@@ -94,11 +131,135 @@ class RouteContributionCard extends StatelessWidget {
   }
 }
 
+class _StatusChip extends StatelessWidget {
+  final route_model.RouteApprovalStatus status;
+
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      route_model.RouteApprovalStatus.approved => (
+        'Live',
+        const Color(0xFF2E9E5B),
+      ),
+      route_model.RouteApprovalStatus.pending => (
+        'Waiting for review',
+        const Color(0xFFB7791F),
+      ),
+      route_model.RouteApprovalStatus.rejected => (
+        'Rejected',
+        ProfileColors.danger,
+      ),
+      route_model.RouteApprovalStatus.withdrawn => (
+        'Withdrawn',
+        ProfileColors.textSecondary,
+      ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Why the route was rejected, and the way to fix it. Sending it again is the
+/// rider's appeal, so there's no separate appeal flow.
+class _RejectionPanel extends StatelessWidget {
+  final route_model.Route route;
+  final String userEmail;
+  final VoidCallback? onEdited;
+
+  const _RejectionPanel({
+    required this.route,
+    required this.userEmail,
+    this.onEdited,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final decision = route.latestDecision;
+    final reasons = (decision?.reasonCodes ?? const <String>[])
+        .map((code) => RouteRejectionReason.byCode(code)?.label ?? code)
+        .join(', ');
+    final note = decision?.note?.trim() ?? '';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: ProfileColors.danger.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ProfileColors.danger.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Routes rejected before reasons existed have none to show.
+          Text(
+            reasons.isEmpty ? 'No reason was recorded.' : reasons,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: ProfileColors.textPrimary,
+            ),
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              note,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: ProfileColors.textSecondary,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed:
+                () => RouteContributionCard.openEditor(
+                  context,
+                  route: route,
+                  userEmail: userEmail,
+                  onEdited: onEdited,
+                ),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Edit and resubmit'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ProfileColors.accent,
+              side: const BorderSide(color: ProfileColors.accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CardHeader extends StatelessWidget {
   final route_model.Route route;
   final String userEmail;
+  final VoidCallback? onEdited;
 
-  const _CardHeader({required this.route, required this.userEmail});
+  const _CardHeader({
+    required this.route,
+    required this.userEmail,
+    this.onEdited,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -162,21 +323,11 @@ class _CardHeader extends StatelessWidget {
   Widget _editButton(BuildContext context) {
     return GestureDetector(
       onTap:
-          () => Navigator.push(
+          () => RouteContributionCard.openEditor(
             context,
-            MaterialPageRoute(
-              builder:
-                  (_) => ContributeScreen(
-                    // Saving only: the editor confirms and closes itself.
-                    // (This card can be gone by then: an edited route goes
-                    // back to pending, which rebuilds the list, and using
-                    // its context failed with "Null check operator used on
-                    // a null value".)
-                    onRouteSubmitted: RouteService.updateRoute,
-                    routeToEdit: route,
-                    contributorId: userEmail,
-                  ),
-            ),
+            route: route,
+            userEmail: userEmail,
+            onEdited: onEdited,
           ),
       child: Container(
         width: 34,

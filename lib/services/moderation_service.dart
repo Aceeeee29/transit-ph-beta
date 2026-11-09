@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/post.dart';
-import '../models/notification.dart';
 import '../models/user.dart';
 import '../models/route.dart' as route_model;
 import '../models/feedback.dart' as feedback_model;
 import '../models/lockout.dart';
 import 'lockout_service.dart';
-import '../services/notifications_service.dart';
 import '../services/post_service.dart' show PostLifetime;
 import '../services/route_service.dart';
 
@@ -17,65 +15,6 @@ class ModerationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final firebase_auth.FirebaseAuth _auth =
       firebase_auth.FirebaseAuth.instance;
-
-  static Future<void> _writeRouteAuditLog({
-    required String routeId,
-    required String action,
-    Map<String, dynamic>? meta,
-  }) async {
-    final actorId = _auth.currentUser?.uid ?? 'moderator_unknown';
-    try {
-      await _firestore
-          .collection('routes')
-          .doc(routeId)
-          .collection('auditLogs')
-          .add({
-            'routeId': routeId,
-            'action': action,
-            'actorId': actorId,
-            'meta': meta ?? const <String, dynamic>{},
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-    } catch (_) {}
-  }
-
-  static Future<String?> _resolveNotificationRecipientId(
-    String? contributorId,
-  ) async {
-    final raw = contributorId?.trim();
-    if (raw == null || raw.isEmpty) return null;
-
-    // Already a UID. Return directly
-    if (!raw.contains('@')) return raw;
-
-    // Check current user FIRST so self-approval always resolves correctly,
-    // even when the moderator exists in the Firestore users collection.
-    final currentUser = _auth.currentUser;
-    if (currentUser != null &&
-        currentUser.email?.toLowerCase() == raw.toLowerCase()) {
-      return currentUser.uid;
-    }
-
-    // Fall back to Firestore lookup for other contributors stored by email
-    try {
-      final snap =
-          await _firestore
-              .collection('users')
-              .where('email', isEqualTo: raw)
-              .limit(1)
-              .get();
-      if (snap.docs.isNotEmpty) {
-        final data = snap.docs.first.data();
-        final uidFromField = (data['uid'] as String?)?.trim();
-        if (uidFromField != null && uidFromField.isNotEmpty) {
-          return uidFromField;
-        }
-        return snap.docs.first.id;
-      }
-    } catch (_) {}
-
-    return null;
-  }
 
   static ValueNotifier<List<Post>> postsNotifier = ValueNotifier([]);
   static ValueNotifier<List<User>> usersNotifier = ValueNotifier([]);
@@ -89,7 +28,6 @@ class ModerationService {
   static StreamSubscription<QuerySnapshot>? _postsSubscription;
   static StreamSubscription<QuerySnapshot>? _usersSubscription;
   static StreamSubscription<QuerySnapshot>? _feedbacksSubscription;
-  static StreamSubscription<QuerySnapshot>? _routesSubscription;
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   _roleSubscription;
   static String? _roleWatchUid;
@@ -166,9 +104,7 @@ class ModerationService {
         .toLowerCase()
         .replaceAll('-', '_')
         .replaceAll(' ', '_');
-    return role == 'moderator' ||
-        role == 'superadmin' ||
-        role == 'super_admin';
+    return role == 'moderator' || role == 'superadmin' || role == 'super_admin';
   }
 
   static void _startDataListeners() {
@@ -202,35 +138,22 @@ class ModerationService {
           feedbacksNotifier.value = feedbacks;
         });
 
-    // Listen only to pending routes
-    // No orderBy here. Combining where() + orderBy() on different
-    // fields requires a Firestore composite index which may not exist yet.
-    // We sort client-side instead.
-    _routesSubscription = _firestore
-        .collection('routes')
-        .where(
-          'approvalStatus',
-          isEqualTo: route_model.RouteApprovalStatus.pending.name,
-        )
-        .snapshots()
-        .listen(
-          (snapshot) {
-            final routes =
-                snapshot.docs
-                    .map((doc) => route_model.Route.fromJson(doc.data()))
-                    .toList();
-            // Sort newest first client-side
-            routes.sort((a, b) {
-              final aTime = a.createdAt ?? DateTime(2000);
-              final bTime = b.createdAt ?? DateTime(2000);
-              return bTime.compareTo(aTime);
-            });
-            pendingRoutesNotifier.value = routes;
-          },
-          onError: (error) {
-            // Ignore listener errors. Notifier will receive updates on next valid snapshot.
-          },
-        );
+    // Routes moved to Supabase, which we don't listen to live, so the queue
+    // loads here and refreshes after decisions and on pull-to-refresh.
+    unawaited(refreshPendingRoutes());
+  }
+
+  /// Reloads the moderator queue. A failure keeps the current list, because an
+  /// empty one would look like there's nothing left to review.
+  static Future<void> refreshPendingRoutes() async {
+    final uid = _roleWatchUid;
+    try {
+      final routes = await RouteService.getPendingRoutes();
+      // They may have signed out while this was loading.
+      if (uid == _roleWatchUid) pendingRoutesNotifier.value = routes;
+    } catch (e) {
+      debugPrint('[ModerationService] Queue refresh failed: $e');
+    }
   }
 
   static void _stopDataListeners({required bool clearData}) {
@@ -238,11 +161,9 @@ class ModerationService {
     _postsSubscription?.cancel();
     _usersSubscription?.cancel();
     _feedbacksSubscription?.cancel();
-    _routesSubscription?.cancel();
     _postsSubscription = null;
     _usersSubscription = null;
     _feedbacksSubscription = null;
-    _routesSubscription = null;
 
     if (clearData) {
       postsNotifier.value = [];
@@ -254,61 +175,32 @@ class ModerationService {
 
   // Route moderation
 
-  static Future<void> approveRoute(String routeId) async {
-    try {
-      await RouteService.approveRoute(routeId);
+  // A real failure reaches the screen, so the moderator knows it didn't save
+  // and the route stays in the list. A decision someone else already made isn't
+  // a failure. RouteService ignores it, and the refresh shows the new state.
 
-      // Remove from local pending list immediately
-      pendingRoutesNotifier.value =
-          pendingRoutesNotifier.value.where((r) => r.id != routeId).toList();
-    } catch (_) {}
+  static Future<void> _afterDecision(String routeId) async {
+    pendingRoutesNotifier.value =
+        pendingRoutesNotifier.value.where((r) => r.id != routeId).toList();
+    await refreshPendingRoutes();
   }
 
-  static Future<void> rejectRoute(String routeId) async {
-    try {
-      String? contributorId;
-      String routeTitle = 'your submitted route';
+  static Future<void> approveRoute(String routeId) async {
+    await RouteService.approveRoute(routeId);
+    await _afterDecision(routeId);
+  }
 
-      final routeSnapshot =
-          await _firestore.collection('routes').doc(routeId).get();
-      if (routeSnapshot.exists) {
-        final routeData = routeSnapshot.data();
-        contributorId = (routeData?['contributorId'] as String?)?.trim();
-        final start = routeData?['startLocation'] as String?;
-        final end = routeData?['endLocation'] as String?;
-        if (start != null && end != null) {
-          routeTitle = '$start to $end';
-        }
-      }
-
-      final recipientId = await _resolveNotificationRecipientId(contributorId);
-      if (recipientId != null && recipientId.isNotEmpty) {
-        try {
-          await NotificationsService.addNotification(
-            NotificationModel(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              userId: recipientId,
-              type: 'route_rejected',
-              routeId: routeId,
-              timestamp: DateTime.now(),
-              message:
-                  'Your submitted route ($routeTitle) was rejected by moderators.',
-            ),
-          );
-        } catch (_) {}
-      }
-
-      await _firestore.collection('routes').doc(routeId).delete();
-
-      await _writeRouteAuditLog(
-        routeId: routeId,
-        action: 'moderator_rejected_deleted',
-      );
-
-      // Remove from local pending list immediately
-      pendingRoutesNotifier.value =
-          pendingRoutesNotifier.value.where((r) => r.id != routeId).toList();
-    } catch (_) {}
+  static Future<void> rejectRoute(
+    String routeId, {
+    required List<String> reasonCodes,
+    String? note,
+  }) async {
+    await RouteService.rejectRoute(
+      routeId,
+      reasonCodes: reasonCodes,
+      note: note,
+    );
+    await _afterDecision(routeId);
   }
 
   // Post moderation
