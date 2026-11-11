@@ -982,8 +982,7 @@ class RoutingService {
     String profile,
   ) async {
     final path =
-        await _osrmMatch(points, profile) ??
-        await _osrmRoute(points, profile);
+        await _osrmMatch(points, profile) ?? await _osrmRoute(points, profile);
     return path == null ? null : RidePathCleanup.removeSpurs(path);
   }
 
@@ -1238,6 +1237,7 @@ class RoutingService {
       final distKm = _polylineDistanceKm(polyline);
       final distM = distKm * 1000;
       final routeLabel = _routeLabelForLeg(leg);
+      final reportTarget = reportTargetOf(leg);
       var communityLabel = leg.communityLabel?.replaceAll(
         leg.alightStopName,
         alightName,
@@ -1266,6 +1266,8 @@ class RoutingService {
           toName: alightName,
           wayPointStart: vehicleStartIdx,
           wayPointEnd: vehicleEndIdx,
+          routeKey: reportTarget?.key,
+          routeStepIndex: reportTarget?.step,
         ),
       );
 
@@ -1686,6 +1688,22 @@ class RoutingService {
       if (long.contains('ferry') || long.contains('pier')) return true;
     }
     return false;
+  }
+
+  /// Which route a ride is on, so riders can report it and search can warn
+  /// about it. Rider and OpenStreetMap rides have trip ids like
+  /// `community|<route id>|<step>` (with `|rev` when ridden backwards). The
+  /// rest are GTFS feed lines.
+  @visibleForTesting
+  static ({String key, int? step})? reportTargetOf(TransitLeg leg) {
+    final community = RegExp(
+      r'^community\|(.+)\|(\d+)(\|rev)?$',
+    ).firstMatch(leg.tripId);
+    if (community != null) {
+      return (key: community.group(1)!, step: int.parse(community.group(2)!));
+    }
+    if (leg.routeId.isEmpty || leg.routeId == 'COMMUNITY') return null;
+    return (key: 'gtfs:${leg.routeId}', step: null);
   }
 
   static String? _routeLabelForLeg(TransitLeg leg) {

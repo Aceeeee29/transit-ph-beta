@@ -1,6 +1,7 @@
 import { engagement } from "./actions/engagement.ts";
 import type { Handler } from "./actions/handler.ts";
 import { lifecycle } from "./actions/lifecycle.ts";
+import { reports } from "./actions/reports.ts";
 import { googleKeys, verifyFirebaseToken } from "./auth.ts";
 import { fetchCaller } from "./caller.ts";
 import { corsHeaders, HttpError, json } from "./http.ts";
@@ -18,6 +19,7 @@ const handlers: Record<string, Handler> = {
     }),
   ...lifecycle,
   ...engagement,
+  ...reports,
 };
 
 function requireEnv(name: string): string {

@@ -81,7 +81,7 @@ class _SignupScreenState extends State<SignupScreen> {
     if (!PasswordRules.isValid(password)) {
       setState(() {
         _errorMessage =
-            'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character. Spaces are not allowed.';
+            'Password must be 8 to 16 characters with an uppercase letter, a lowercase letter, a number and a symbol like ! @ # \$ _ -. No spaces.';
       });
       return;
     }
@@ -154,14 +154,21 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String _getErrorMessage(String code) {
     switch (code) {
+      // Firebase's password policy refused it. The checklist should catch
+      // this first, so it means the policy changed and the app is behind.
       case 'weak-password':
-        return 'The password provided is too weak.';
+      case 'password-does-not-meet-requirements':
+        return 'That password isn\'t allowed. Use 8 to 16 characters with an uppercase letter, a lowercase letter, a number and a symbol like ! @ # \$ _ -.';
       case 'email-already-in-use':
         return 'An account already exists for that email.';
       case 'invalid-email':
         return 'The email address is not valid.';
+      case 'network-request-failed':
+        return 'No internet connection. Check it and try again.';
+      case 'too-many-requests':
+        return 'Too many tries. Wait a bit, then try again.';
       default:
-        return 'An error occurred. Please try again.';
+        return 'Could not sign up ($code). Please try again.';
     }
   }
 

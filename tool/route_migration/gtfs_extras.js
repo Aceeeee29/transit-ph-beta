@@ -11,6 +11,18 @@ const LIVE_SUPABASE_REF = 'rruijvorkljjpfkbamls';
 const ZIP = path.join(os.homedir(), 'Downloads', 'gtfs-master-sakay.ph.zip');
 const CHUNK_SIZE = 500;
 
+// PowerShell has tar but not unzip, and Git Bash has unzip but its tar can't
+// read zip files. So try both.
+function readFromZip(entry) {
+  const options = { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] };
+  try {
+    return execFileSync('unzip', ['-p', ZIP, entry], options);
+  } catch (unzipError) {
+    if (unzipError.code !== 'ENOENT') throw unzipError;
+    return execFileSync('tar', ['-xOf', ZIP, entry], options);
+  }
+}
+
 const TABLES = [
   { name: 'agency', key: 'agency_id', numbers: [] },
   {
@@ -96,11 +108,7 @@ function supabaseTarget(args) {
 async function main(args) {
   const { url, key } = supabaseTarget(args);
   for (const { name, key: conflict, numbers } of TABLES) {
-    const text = execFileSync('unzip', ['-p', ZIP, `gtfs-master/${name}.txt`], {
-      encoding: 'utf8',
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    const records = toRecords(text, numbers);
+    const records = toRecords(readFromZip(`gtfs-master/${name}.txt`), numbers);
     for (let start = 0; start < records.length; start += CHUNK_SIZE) {
       const response = await fetch(`${url}/rest/v1/${name}?on_conflict=${conflict}`, {
         method: 'POST',

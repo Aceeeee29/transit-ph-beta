@@ -6,6 +6,7 @@ import '../data/camanava_places.dart';
 import '../models/route.dart' as route_model;
 import 'fare_matrix.dart';
 import 'route_follow_engine.dart';
+import 'route_issue_service.dart';
 import 'transport_mode_inference.dart';
 import 'walk_distances.dart';
 
@@ -113,15 +114,34 @@ class CommunityRoute {
   final String endLocation;
   final List<CommunityRouteStep> steps;
 
+  /// A person or riders' confirmations vouched for it. Unverified routes
+  /// were only checked automatically.
+  final bool verified;
+
+  /// Riders say it may have changed ("Possibly outdated").
+  final bool outdated;
+
   const CommunityRoute({
     required this.id,
     required this.startLocation,
     required this.endLocation,
     required this.steps,
+    this.verified = true,
+    this.outdated = false,
   });
 
   /// See [route_model.Route.isFromOpenStreetMap].
   bool get isFromOpenStreetMap => id.startsWith('osm-');
+
+  /// How much longer a ride on this route counts as in search, so trusted
+  /// routes win a close call. GTFS feed and OpenStreetMap routes count as
+  /// they are, like verified rider routes. Unverified rider routes count a
+  /// bit more, and routes riders say may have changed count a lot more.
+  double get weightFactor {
+    if (outdated) return SupabaseRouteService.outdatedWeightFactor;
+    if (verified || isFromOpenStreetMap) return 1.0;
+    return 1.15;
+  }
 
   /// Splits the drawn path into per-step geometry using [stepBoundaries]
   /// (the path index where each step ends). Returns null when the route
@@ -168,6 +188,8 @@ class CommunityRoute {
       startLocation: route.startLocation,
       endLocation: route.endLocation,
       steps: steps,
+      verified: !route.isUnverified,
+      outdated: RouteIssueService.isOutdated(route.id),
     );
   }
 }
@@ -1177,6 +1199,11 @@ class SupabaseRouteService {
         for (final row in seq) row['stop_id'].toString(),
       ];
       final fallbackSpeedKmh = _fallbackSpeedForMode(inferredMode);
+      // Riders say this line may have changed, so prefer other ways.
+      final gtfsWeight =
+          routeId != null && RouteIssueService.isOutdated('gtfs:$routeId')
+              ? outdatedWeightFactor
+              : 1.0;
 
       final segmentSeconds = <double>[];
       final segmentMeters = <double>[];
@@ -1259,6 +1286,7 @@ class SupabaseRouteService {
               routeLongName: route?['route_long_name'] as String?,
               routeColor: route?['route_color'] as String?,
               routeType: routeType,
+              weightFactor: gtfsWeight,
             ),
           );
         }
@@ -1272,8 +1300,15 @@ class SupabaseRouteService {
   /// different pickup points), so it's allowed but discouraged and labelled.
   static const allowReversedCommunityLegs = true;
   static const _communityNodeSpacingKm = 0.3;
-  static const _communityWeightFactor = 0.8;
-  static const _reversedCommunityWeightFactor = 1.3;
+
+  /// How much longer a ride counts as when riders say its route may have
+  /// changed ("Possibly outdated"), from any source. See
+  /// [CommunityRoute.weightFactor] for the others.
+  static const outdatedWeightFactor = 1.5;
+
+  /// Riding a rider route backwards counts this much more than forwards.
+  /// Before Phase 3 it was 1.3 against 0.8 forwards, and this keeps that gap.
+  static const _reversedCommunityPenalty = 1.625;
 
   /// Turns each riding step of an approved route into boardable nodes every
   /// ~300 m along the contributor's path (stations only at the ends for
@@ -1413,9 +1448,7 @@ class SupabaseRouteService {
                 );
 
             if (canRide(a, b)) {
-              addEdge(
-                ride(nodeIds[a], nodeIds[b], tripId, _communityWeightFactor),
-              );
+              addEdge(ride(nodeIds[a], nodeIds[b], tripId, route.weightFactor));
             }
             if (allowReversedCommunityLegs && canRide(b, a)) {
               addEdge(
@@ -1423,7 +1456,7 @@ class SupabaseRouteService {
                   nodeIds[b],
                   nodeIds[a],
                   reverseTripId,
-                  _reversedCommunityWeightFactor,
+                  route.weightFactor * _reversedCommunityPenalty,
                 ),
               );
             }
@@ -1498,7 +1531,7 @@ class SupabaseRouteService {
           routeId: 'COMMUNITY',
           routeShortName: step.mode,
           routeType: routeType,
-          weightFactor: _communityWeightFactor,
+          weightFactor: route.weightFactor,
         ),
       );
       ridesAdded++;

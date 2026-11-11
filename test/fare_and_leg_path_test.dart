@@ -8,19 +8,19 @@ void main() {
   group('fare matrix', () {
     test('base fares cover the first kilometres', () {
       expect(PhFareCalculator.compute('Jeepney', 3000), 14);
-      expect(PhFareCalculator.compute('Bus', 4000), 18);
+      expect(PhFareCalculator.compute('Bus', 4000), 15);
       expect(PhFareCalculator.compute('Tricycle', 1500), 16);
       expect(PhFareCalculator.compute('FX/Van', 5000), 40);
       expect(PhFareCalculator.compute('Walk', 5000), 0);
     });
 
     test('per-km rate applies after the base distance', () {
-      // 6 km jeepney: ₱14 + 2 km × ₱1.94.
-      expect(PhFareCalculator.compute('Jeepney', 6000), closeTo(17.88, 0.001));
+      // 6 km jeepney: ₱14 + 2 km × ₱2.00, the LTFRB guide's ₱18.
+      expect(PhFareCalculator.compute('Jeepney', 6000), closeTo(18, 0.001));
       // Buses over 10 km switch to the aircon rate.
       expect(
         PhFareCalculator.compute('Bus', 12000),
-        closeTo(18 + 7 * 3.18, 0.001),
+        closeTo(18 + 7 * 2.98, 0.001),
       );
     });
 

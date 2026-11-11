@@ -27,7 +27,7 @@ void main() {
         home: StatefulBuilder(
           builder:
               (context, setState) => ContributeScreen(
-                onRouteSubmitted: (_) async {},
+                onRouteSubmitted: (_) async => null,
                 mapMode: mode,
                 onMapModeChanged: (m) => setState(() => mode = m),
               ),

@@ -17,7 +17,7 @@ void main() {
     }
 
     await tester.pumpWidget(
-      MaterialApp(home: ContributeScreen(onRouteSubmitted: (_) async {})),
+      MaterialApp(home: ContributeScreen(onRouteSubmitted: (_) async => null)),
     );
     await frames();
 

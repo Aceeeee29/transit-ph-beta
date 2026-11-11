@@ -5,10 +5,10 @@
 // generation, the route map, the contribute screen, the Fare Matrix dialog
 // and the search help sheet all read from here. Change fares in this file only.
 //
-// Base fares: jeepney ₱14, bus ₱18, tricycle ₱16, FX/UV ₱40. Each mode's
-// per-km rate was scaled by the same percentage as its base fare change from
-// the previous LTFRB rates (like jeepney ₱13 → ₱14 is +7.7%, so ₱1.80/km →
-// ₱1.94/km). LRT/MRT fares are unchanged.
+// Jeepney (traditional) and Metro Manila buses, ordinary and aircon, use the
+// LTFRB fare guides effective September 28, 2026. FX/UV and tricycle are still
+// our own estimates: LTFRB gives UV Express only a per-km rate, and tricycle
+// fares are set by each city. LRT/MRT fares are unchanged.
 // =============================================================================
 import '../models/ors_route_result.dart';
 
@@ -84,36 +84,68 @@ class PhFareCalculator {
     return '₱${(fare * 0.9).round()}–${(fare * 1.15).round()}';
   }
 
-  static const jeepney = FareRule(
+  // These numbers are the offline fallback. FareRuleService replaces them with
+  // the current rates from the server when it can reach it.
+  static FareRule jeepney = const FareRule(
     base: 14.0,
     baseKm: 4,
-    perKm: 1.94,
+    perKm: 2.00,
     typicalKm: 10,
   );
-  static const busOrdinary = FareRule(
-    base: 18.0,
+  static FareRule busOrdinary = const FareRule(
+    base: 15.0,
     baseKm: 5,
-    perKm: 2.22,
+    perKm: 2.49,
     typicalKm: 10,
   );
-  static const busAircon = FareRule(
+  static FareRule busAircon = const FareRule(
     base: 18.0,
     baseKm: 5,
-    perKm: 3.18,
+    perKm: 2.98,
     typicalKm: 15,
   );
-  static const fxVan = FareRule(
+  static FareRule fxVan = const FareRule(
     base: 40.0,
     baseKm: 5,
     perKm: 4.57,
     typicalKm: 15,
   );
-  static const tricycle = FareRule(
+  static FareRule tricycle = const FareRule(
     base: 16.0,
     baseKm: 2,
     perKm: 5.33,
     typicalKm: 5,
   );
+
+  /// Uses rates from the server's `fare_rules` table. [rows] is newest first,
+  /// so the first row seen for a mode wins. Unknown modes and rows with bad
+  /// numbers are skipped, which keeps the rate that was already in use.
+  static void applyRules(List<Map<String, dynamic>> rows) {
+    FareRule? replaced(String mode, FareRule current) {
+      for (final row in rows) {
+        if (row['mode'] != mode) continue;
+        final base = (row['base'] as num?)?.toDouble();
+        final baseKm = (row['base_km'] as num?)?.toDouble();
+        final perKm = (row['per_km'] as num?)?.toDouble();
+        if (base == null || baseKm == null || perKm == null || base <= 0) {
+          return null;
+        }
+        return FareRule(
+          base: base,
+          baseKm: baseKm,
+          perKm: perKm,
+          typicalKm: current.typicalKm,
+        );
+      }
+      return null;
+    }
+
+    jeepney = replaced('jeepney', jeepney) ?? jeepney;
+    busOrdinary = replaced('bus', busOrdinary) ?? busOrdinary;
+    busAircon = replaced('bus_aircon', busAircon) ?? busAircon;
+    fxVan = replaced('fx_van', fxVan) ?? fxVan;
+    tricycle = replaced('tricycle', tricycle) ?? tricycle;
+  }
 
   /// Bus rides longer than this are priced as aircon.
   static const busAirconAboveKm = 10.0;
@@ -162,7 +194,7 @@ class PhFareCalculator {
     return '₱${(fare * 0.9).round()}-₱${(fare * 1.1).round()}';
   }
 
-  /// "₱14" or "₱1.94". Whole pesos drop the decimals.
+  /// "₱14" or "₱2.98". Whole pesos drop the decimals.
   static String peso(double amount) =>
       amount == amount.roundToDouble()
           ? '₱${amount.toStringAsFixed(0)}'

@@ -5,6 +5,7 @@ import '../../screens/contribute_screen.dart';
 import '../../services/route_service.dart';
 import '../../services/route_metrics_service.dart';
 import '../../services/route_trust_service.dart';
+import '../unverified_badge.dart';
 import 'profile_colors.dart';
 
 class RouteContributionCard extends StatelessWidget {
@@ -75,7 +76,30 @@ class RouteContributionCard extends StatelessWidget {
           children: [
             _CardHeader(route: route, userEmail: userEmail, onEdited: onEdited),
             const SizedBox(height: 10),
-            _StatusChip(status: route.approvalStatus),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _StatusChip(status: route.approvalStatus),
+                if (route.isUnverified) const UnverifiedBadge(),
+                PossiblyOutdatedBadge(routeKey: route.id),
+              ],
+            ),
+            // Why a moderator needs to look, so a wait isn't a mystery.
+            if (route.approvalStatus == route_model.RouteApprovalStatus.pending)
+              for (final check in route.flaggedChecks)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    check.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: ProfileColors.textSecondary,
+                    ),
+                  ),
+                ),
             if (route.approvalStatus ==
                 route_model.RouteApprovalStatus.rejected)
               _RejectionPanel(
@@ -191,10 +215,14 @@ class _RejectionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final decision = route.latestDecision;
+    // A moderator's reasons have labels. The checks explain themselves below, so
+    // their codes are left out here.
     final reasons = (decision?.reasonCodes ?? const <String>[])
-        .map((code) => RouteRejectionReason.byCode(code)?.label ?? code)
+        .map((code) => RouteRejectionReason.byCode(code)?.label)
+        .whereType<String>()
         .join(', ');
     final note = decision?.note?.trim() ?? '';
+    final failed = route.failedChecks;
 
     return Container(
       width: double.infinity,
@@ -209,14 +237,27 @@ class _RejectionPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Routes rejected before reasons existed have none to show.
-          Text(
-            reasons.isEmpty ? 'No reason was recorded.' : reasons,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: ProfileColors.textPrimary,
+          if (reasons.isNotEmpty || failed.isEmpty)
+            Text(
+              reasons.isEmpty ? 'No reason was recorded.' : reasons,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: ProfileColors.textPrimary,
+              ),
             ),
-          ),
+          for (final check in failed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                check.message,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: ProfileColors.textPrimary,
+                ),
+              ),
+            ),
           if (note.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(

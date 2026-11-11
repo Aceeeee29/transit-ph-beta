@@ -50,4 +50,51 @@ void main() {
   test('no votes keeps a route at base plus freshness', () {
     expect(score(votes(0, 0), updatedAt: now), 35);
   });
+
+  // The server copies this score to verify routes by itself
+  // (supabase/functions/routes-api/reports.ts). These are the same cases as
+  // its trustScore tests, so the two can't drift apart.
+  group('matches the server', () {
+    test('three riders agreeing on everything, recently', () {
+      final summary = {
+        'fareAccurateYes': 3,
+        'scheduleAccurateYes': 3,
+        'stillOperatingYes': 3,
+      };
+      expect(
+        score(summary, updatedAt: now.subtract(const Duration(days: 1))),
+        74,
+      );
+    });
+
+    test('mixed answers, a month and a half old, waiting for review', () {
+      final summary = {
+        'fareAccurateYes': 1,
+        'fareAccurateNo': 1,
+        'stillOperatingYes': 2,
+        'stillOperatingNo': 3,
+      };
+      final pending = route_model.Route(
+        id: 'r2',
+        startLocation: 'A',
+        endLocation: 'B',
+        shortDescription: '',
+        steps: const [],
+        updatedAt: now.subtract(const Duration(days: 40)),
+      );
+      expect(
+        RouteTrustService.computeConfidence(
+          route: pending,
+          feedbackSummary: summary,
+          now: now,
+        ).total,
+        21,
+      );
+    });
+
+    test('rounds halves away from zero', () {
+      // -2/8 of 22 is -5.5, which rounds to -6.
+      expect(score({'fareAccurateYes': 3, 'fareAccurateNo': 5}), 14);
+    });
+  });
 }

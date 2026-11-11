@@ -25,12 +25,12 @@ extension _HomeScreenSections on _HomeScreenState {
                   borderRadius: BorderRadius.circular(12),
                   child: Image.asset(
                     'assets/icon/app_icon.png',
-                  width: 40,
-                  height: 40,
-                  cacheWidth: 120,
-                  fit: BoxFit.cover,
+                    width: 40,
+                    height: 40,
+                    cacheWidth: 120,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-              ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -336,6 +336,14 @@ extension _HomeScreenSections on _HomeScreenState {
               ],
             ),
             const SizedBox(height: 6),
+            if (route.isUnverified) ...[
+              const UnverifiedBadge(),
+              const SizedBox(height: 6),
+            ],
+            if (RouteIssueService.isOutdated(route.id)) ...[
+              PossiblyOutdatedBadge(routeKey: route.id),
+              const SizedBox(height: 6),
+            ],
             _routeIntegrityChip(route),
             const SizedBox(height: 6),
             TranslatedText(

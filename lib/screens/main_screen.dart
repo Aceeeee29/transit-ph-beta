@@ -338,8 +338,9 @@ class _MainScreenState extends State<MainScreen> {
       _buildMapTab(
         ContributeScreen(
           onRouteSubmitted: (route) async {
-            await RouteService.saveRoute(route);
+            final result = await RouteService.saveRoute(route);
             await _loadData();
+            return result;
           },
           mapMode: _mapTabMode,
           searchableRoutes: routes,

@@ -30,7 +30,7 @@ void main() {
               onPopInvokedWithResult: (didPop, _) {
                 if (!didPop) parentBacks++;
               },
-              child: ContributeScreen(onRouteSubmitted: (_) async {}),
+              child: ContributeScreen(onRouteSubmitted: (_) async => null),
             ),
       ),
     );

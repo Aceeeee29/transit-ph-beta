@@ -12,6 +12,7 @@ import '../models/notification.dart';
 import '../models/route.dart' as route_model;
 import '../models/route_rejection_reason.dart';
 import '../services/notifications_service.dart';
+import 'route_issue_service.dart';
 import 'route_rows.dart';
 import 'routes_api.dart';
 
@@ -24,6 +25,35 @@ class PendingRouteLimitException implements Exception {
   String toString() =>
       'You already have ${RouteService.maxPendingRoutesPerUser} routes '
       'waiting for review. You can send more once a moderator reviews them.';
+}
+
+/// What the automatic checks decided about a route that was just sent.
+class RouteSubmitResult {
+  /// 'published', 'pending', 'rejected', or 'applied' for a fare correction
+  /// that went straight into the route it corrects.
+  final String outcome;
+  final List<route_model.RouteCheck> checks;
+
+  const RouteSubmitResult({required this.outcome, this.checks = const []});
+
+  factory RouteSubmitResult.fromApi(dynamic data) {
+    final map = data is Map ? data : const {};
+    return RouteSubmitResult(
+      // Waiting for a person is the safe thing to say if we can't tell.
+      outcome: map['outcome'] as String? ?? 'pending',
+      checks: route_model.RouteCheck.listFromJson(map['checks']),
+    );
+  }
+
+  bool get isLive => outcome == 'published';
+  bool get isRejected => outcome == 'rejected';
+  bool get isApplied => outcome == 'applied';
+  bool get isWaiting => outcome == 'pending';
+
+  List<route_model.RouteCheck> get failed =>
+      checks.where((c) => c.failed).toList();
+  List<route_model.RouteCheck> get flagged =>
+      checks.where((c) => c.flagged).toList();
 }
 
 typedef PublishedRowsReader =
@@ -170,8 +200,12 @@ class RouteService {
   /// the phone. Without that, a bad connection would empty search's rider
   /// routes.
   static Future<List<route_model.Route>> getAllRoutes() async {
+    // The "Possibly outdated" labels load alongside, so lists and search can
+    // show them. A failure there keeps the last ones and never stops routes.
+    final labels = RouteIssueService.refreshOutdated();
     try {
       final rows = await _readPublished();
+      await labels;
       for (final row in rows) {
         _rememberSummary(row['id'] as String, RouteRows.feedbackSummary(row));
       }
@@ -226,15 +260,40 @@ class RouteService {
 
   // Sending routes
 
-  /// Save a new route. It starts as pending until a moderator approves it.
-  /// Failures reach the screen, which keeps the rider's drawing.
-  static Future<void> saveRoute(route_model.Route route) async {
-    await RoutesApi.call('submit', {'route': route.toJson()});
+  /// Routes the checks rejected while their editor may still be open. The
+  /// server keeps a rejected route, so sending it again must update that one.
+  /// A fresh submit would leave the rejected copy behind in Profile.
+  static final Set<String> _rejectedOnSend = {};
+
+  /// Sends a new route through the automatic checks. Failures reach the screen,
+  /// which keeps the rider's drawing. Sending a route again after the checks
+  /// rejected it updates the same route.
+  static Future<RouteSubmitResult> saveRoute(route_model.Route route) async {
+    final resend = _rejectedOnSend.contains(route.id);
+    final result = RouteSubmitResult.fromApi(
+      await RoutesApi.call(resend ? 'resubmit' : 'submit', {
+        'route': route.toJson(),
+      }),
+    );
+    if (result.isRejected) {
+      _rejectedOnSend.add(route.id);
+    } else {
+      _rejectedOnSend.remove(route.id);
+    }
+    // No moderator is involved when the checks publish it, so the credit a
+    // moderator's approval would have given has to be added here.
+    if (result.isLive) {
+      final uid = _currentUid();
+      if (uid != null) await _addStats(uid);
+    }
+    return result;
   }
 
-  /// Update an existing route. Any edit goes back for review.
-  static Future<void> updateRoute(route_model.Route route) async {
-    await RoutesApi.call('resubmit', {'route': route.toJson()});
+  /// Updates an existing route. Any edit is checked again.
+  static Future<RouteSubmitResult> updateRoute(route_model.Route route) async {
+    return RouteSubmitResult.fromApi(
+      await RoutesApi.call('resubmit', {'route': route.toJson()}),
+    );
   }
 
   static Future<void> deleteRoute(String routeId) async {
@@ -275,9 +334,23 @@ class RouteService {
     }
   }
 
-  /// Approve a route. Only moderators call this, and the server checks.
-  static Future<void> approveRoute(String routeId) async {
-    final result = await _decide({'routeId': routeId, 'decision': 'approve'});
+  /// A person vouching for a live route, or taking that back. It stays live.
+  static Future<void> setVerified(String routeId, bool verified) async {
+    await _decide({
+      'routeId': routeId,
+      'decision': verified ? 'verify' : 'unverify',
+    });
+  }
+
+  /// Approve a route. Only moderators call this, and the server checks. Going
+  /// against a flagged check needs a [note] saying why.
+  static Future<void> approveRoute(String routeId, {String? note}) async {
+    final trimmedNote = note?.trim();
+    final result = await _decide({
+      'routeId': routeId,
+      'decision': 'approve',
+      if (trimmedNote != null && trimmedNote.isNotEmpty) 'note': trimmedNote,
+    });
     if (result == null) return;
 
     final recipientId = await _resolveNotificationRecipientId(

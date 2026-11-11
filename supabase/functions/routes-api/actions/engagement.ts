@@ -1,5 +1,6 @@
 import { HttpError } from "../http.ts";
 import type { RouteStore } from "../store.ts";
+import { refreshVerification } from "./reports.ts";
 import type { Body, Handler } from "./handler.ts";
 
 const invalid = () => new HttpError(400, "invalid");
@@ -60,13 +61,17 @@ export const engagement: Record<string, Handler> = {
 
   quality_feedback: async (caller, body, store) => {
     if (caller.blocked) throw new HttpError(403, "blocked");
+    const routeId = routeIdFrom(body);
     await callDatabase(store, "route_quality_feedback", {
-      p_route: routeIdFrom(body),
+      p_route: routeId,
       p_user: caller.uid,
       p_fare: booleanFrom(body, "fareAccurate"),
       p_schedule: booleanFrom(body, "scheduleAccurate"),
       p_operating: booleanFrom(body, "stillOperating"),
     });
-    return {};
+    // Enough riders saying it's right can verify the route. This never fails
+    // the rider's answer, which is already saved.
+    const verified = await refreshVerification(store, routeId);
+    return { verified };
   },
 };

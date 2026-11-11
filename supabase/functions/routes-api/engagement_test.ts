@@ -4,7 +4,7 @@ import type { Caller } from "./caller.ts";
 import { HttpError } from "./http.ts";
 import { MemoryStore } from "./store_memory.ts";
 
-const rider: Caller = { uid: "rider-1", role: "rider", blocked: false, name: "" };
+const rider: Caller = { uid: "rider-1", role: "rider", blocked: false, name: "", createdAt: null };
 const banned: Caller = { ...rider, blocked: true };
 
 // Answers every database call with one fixed result, and remembers the calls.
@@ -61,7 +61,8 @@ Deno.test("vote: a removed vote comes back as null", async () => {
 
 Deno.test("quality_feedback: sends all three answers", async () => {
   const { store, calls } = storeAnswering(() => null);
-  assertEquals(await engagement.quality_feedback(rider, feedbackBody, store), {});
+  // No such route in the store, so nothing to verify.
+  assertEquals(await engagement.quality_feedback(rider, feedbackBody, store), { verified: false });
   assertEquals(calls[0], {
     name: "route_quality_feedback",
     args: { p_route: "r1", p_user: "rider-1", p_fare: true, p_schedule: false, p_operating: true },

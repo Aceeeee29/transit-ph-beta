@@ -224,160 +224,37 @@ service cloud.firestore {
     }
 
     // Routes
-    // One rider's feedback (routeFeedback, saved in the same transaction)
-    // moves each yes/no pair by exactly one.
-    function feedbackPairStep(before, after, yes, no) {
-      let dYes = after.get(yes, 0) - before.get(yes, 0);
-      let dNo = after.get(no, 0) - before.get(no, 0);
-      return dYes >= 0 && dNo >= 0 && dYes + dNo == 1;
-    }
-
-    function isFeedbackSummaryStep(routeId) {
-      let before = resource.data.get('feedbackSummary', {});
-      let after = request.resource.data.feedbackSummary;
-      let feedbackPath = /databases/$(database)/documents/routes/$(routeId)/routeFeedback/$(request.auth.uid);
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['feedbackSummary', 'updatedAt']) &&
-        after is map &&
-        after.keys().hasOnly([
-          'fareAccurateYes', 'fareAccurateNo',
-          'scheduleAccurateYes', 'scheduleAccurateNo',
-          'stillOperatingYes', 'stillOperatingNo',
-          'lastFeedbackAt'
-        ]) &&
-        existsAfter(feedbackPath) &&
-        getAfter(feedbackPath).data.updatedAt == request.time &&
-        feedbackPairStep(before, after, 'fareAccurateYes', 'fareAccurateNo') &&
-        feedbackPairStep(before, after, 'scheduleAccurateYes', 'scheduleAccurateNo') &&
-        feedbackPairStep(before, after, 'stillOperatingYes', 'stillOperatingNo');
-    }
-
+    // Routes now live in Supabase, and every write goes through the
+    // routes-api server function. This old copy stays readable so older
+    // app versions can still show routes until they update. Nothing may
+    // write here any more, not even staff: a change made here would never
+    // reach Supabase and would be lost.
     match /routes/{routeId} {
       allow read: if isAuth();
-      // Riders add routes as themselves, waiting for review. Only staff
-      // add one that's already approved.
-      allow create: if isAuth() && (
-        isStaff() || (
-          request.resource.data.contributorId == request.auth.uid &&
-          request.resource.data.approvalStatus == 'pending' &&
-          notBanned()
-        )
-      );
-      // The contributor may edit their route, but an edit goes back to
-      // review: they can't approve it or hand it to someone else.
-      allow update: if isAuth() && (
-        (
-          resource.data.contributorId == request.auth.uid &&
-          request.resource.data.contributorId == request.auth.uid &&
-          (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvalStatus']) ||
-            request.resource.data.approvalStatus == 'pending'
-          )
-        ) ||
-        isStaff() ||
-        (
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['views', 'upvotes', 'downvotes', 'updatedAt']) &&
-          request.resource.data.views >= 0 &&
-          request.resource.data.upvotes >= 0 &&
-          request.resource.data.downvotes >= 0 &&
-          (request.resource.data.views - resource.data.views) >= -1 &&
-          (request.resource.data.views - resource.data.views) <= 1 &&
-          (request.resource.data.upvotes - resource.data.upvotes) >= -1 &&
-          (request.resource.data.upvotes - resource.data.upvotes) <= 1 &&
-          (request.resource.data.downvotes - resource.data.downvotes) >= -1 &&
-          (request.resource.data.downvotes - resource.data.downvotes) <= 1
-        ) ||
-        isFeedbackSummaryStep(routeId) ||
-        // Closing their account: the contributor hands the route over as
-        // "Former rider" (only these fields, it stays for everyone).
-        (
-          resource.data.contributorId == request.auth.uid &&
-          request.resource.data.get('contributorId', null) == null &&
-          request.resource.data.get('contributorName', '') == 'Former rider' &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['contributorId', 'contributorName', 'contributorClosed', 'updatedAt'])
-        )
-      );
-      // Staff, or a contributor removing their own route that isn't live
-      // yet (deleting their account).
-      allow delete: if isStaff() || (
-        isAuth() &&
-        resource.data.contributorId == request.auth.uid &&
-        resource.data.get('approvalStatus', 'pending') != 'approved'
-      );
+      allow write: if false;
 
-      // Per-user vote state for one active vote at a time.
+      // Old vote, view and feedback markers. A rider can still read their
+      // own, but new ones are saved in Supabase.
       match /routeVotes/{userId} {
-        allow read, create, update, delete: if isAuth() && isSelf(userId);
+        allow read: if isAuth() && isSelf(userId);
+        allow write: if false;
       }
 
-      // Per-user view markers to avoid recounting the same user repeatedly.
       match /routeViews/{userId} {
-        allow read, create, update, delete: if isAuth() && isSelf(userId);
+        allow read: if isAuth() && isSelf(userId);
+        allow write: if false;
       }
 
-      // Per-user trust feedback answers for route reliability.
       match /routeFeedback/{userId} {
         allow read: if isAuth() && isSelf(userId);
-        allow create: if isAuth() &&
-          isSelf(userId) &&
-          request.resource.data.keys().hasOnly([
-            'routeId',
-            'userId',
-            'fareAccurate',
-            'scheduleAccurate',
-            'stillOperating',
-            'createdAt',
-            'updatedAt'
-          ]) &&
-          request.resource.data.routeId == routeId &&
-          request.resource.data.userId == request.auth.uid &&
-          request.resource.data.fareAccurate is bool &&
-          request.resource.data.scheduleAccurate is bool &&
-          request.resource.data.stillOperating is bool &&
-          request.resource.data.createdAt is timestamp &&
-          request.resource.data.updatedAt is timestamp;
-        allow update: if isAuth() &&
-          isSelf(userId) &&
-          request.resource.data.keys().hasOnly([
-            'routeId',
-            'userId',
-            'fareAccurate',
-            'scheduleAccurate',
-            'stillOperating',
-            'createdAt',
-            'updatedAt'
-          ]) &&
-          request.resource.data.routeId == resource.data.routeId &&
-          request.resource.data.userId == resource.data.userId &&
-          request.resource.data.userId == request.auth.uid &&
-          request.resource.data.fareAccurate is bool &&
-          request.resource.data.scheduleAccurate is bool &&
-          request.resource.data.stillOperating is bool &&
-          request.resource.data.createdAt == resource.data.createdAt &&
-          request.resource.data.updatedAt is timestamp &&
-          (
-            (resource.data.updatedAt is timestamp &&
-              resource.data.updatedAt + duration.value(30, 'd') <= request.time) ||
-            (resource.data.createdAt is timestamp &&
-              resource.data.createdAt + duration.value(30, 'd') <= request.time)
-          );
-        allow delete: if false;
+        allow write: if false;
       }
 
-      // Route audit logs are visible to staff. Regular users can only write
-      // self-authored commuter feedback log entries.
+      // Old moderation history. The dashboard still reads it to count each
+      // moderator's past approvals.
       match /auditLogs/{logId} {
         allow read: if isStaff();
-        allow create: if isAuth() && (
-          isStaff() ||
-          (
-            request.resource.data.action == 'commuter_feedback_submitted' &&
-            request.resource.data.actorId == request.auth.uid
-          )
-        );
-        allow update, delete: if isStaff();
+        allow write: if false;
       }
     }
 

@@ -13,7 +13,10 @@ import '../services/route_metrics_service.dart';
 import '../services/route_report_service.dart';
 import '../services/route_service.dart';
 import '../services/route_trust_service.dart';
+import '../widgets/moderation/approve_note_dialog.dart';
 import '../widgets/moderation/reject_reasons_dialog.dart';
+import '../widgets/moderation/route_checklist.dart';
+import '../widgets/moderation/route_problems_list.dart';
 import '../widgets/route_preview.dart';
 import 'contribute_screen.dart';
 import '../theme/app_colors.dart';
@@ -414,15 +417,18 @@ class _ModeratorScreenState extends State<ModeratorScreen>
             (editorContext) => ContributeScreen(
               routeToEdit: route,
               onRouteSubmitted: (updated) async {
-                await RouteService.updateRoute(updated);
+                final result = await RouteService.updateRoute(updated);
+                // A hard check failed: the editor stays open with the reasons.
+                if (result.isRejected) return result;
                 // Its checks and details changed, so reload the queue.
                 unawaited(ModerationService.refreshPendingRoutes());
-                if (!editorContext.mounted) return;
+                if (!editorContext.mounted) return null;
                 // Back to the review list, past the stale preview.
                 Navigator.of(editorContext)
                   ..pop()
                   ..pop();
                 widget.onRoutesModerated?.call();
+                return null;
               },
             ),
       ),
@@ -524,7 +530,34 @@ class _ModeratorScreenState extends State<ModeratorScreen>
                 '${route.steps.length} steps',
                 _textSecondary,
               ),
+              if (route.isUnverified)
+                _metaChip(Icons.help_outline_rounded, 'Unverified', _warning),
             ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _lockWhileBusy(
+              'route:${route.id}',
+              TextButton.icon(
+                onPressed:
+                    () => _runOnce('route:${route.id}', () async {
+                      await _decideRoute(
+                        () => ModerationService.setVerified(
+                          route.id,
+                          route.isUnverified,
+                        ),
+                      );
+                    }),
+                icon: Icon(
+                  route.isUnverified
+                      ? Icons.verified_outlined
+                      : Icons.remove_circle_outline,
+                  size: 16,
+                ),
+                label: Text(route.isUnverified ? 'Verify' : 'Unverify'),
+              ),
+            ),
           ),
         ],
       ),

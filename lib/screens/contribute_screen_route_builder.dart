@@ -183,7 +183,12 @@ extension _ContributeScreenSections on _ContributeScreenState {
       if (!_validateStepReliability()) {
         return;
       }
-      final route = _buildRoute(existingId: widget.routeToEdit?.id);
+      // After a rejection, the same id again, so the rejected route is updated
+      // instead of a second one being made.
+      final route = _buildRoute(
+        existingId: widget.routeToEdit?.id ?? _rejectedRouteId,
+      );
+      RouteSubmitResult? result;
       try {
         if (_isQuickCreateMode && !forceModeration) {
           final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -196,7 +201,7 @@ extension _ContributeScreenSections on _ContributeScreenState {
             creatorId: userId,
           );
         } else {
-          await widget.onRouteSubmitted(route);
+          result = await widget.onRouteSubmitted(route);
         }
       } catch (e) {
         if (!mounted) return;
@@ -217,16 +222,35 @@ extension _ContributeScreenSections on _ContributeScreenState {
       // An editor its opener already closed (the moderator's) is done.
       if (isEdit && !(ModalRoute.of(context)?.isCurrent ?? true)) return;
 
+      // Rejected by the checks. It's already saved in Profile as rejected, so
+      // say so, and let the rider fix it here or leave it for later.
+      if (result != null && result.isRejected) {
+        if (!isEdit) _rejectedRouteId = route.id;
+        final fixNow = await showDialog<bool>(
+          context: context,
+          builder: (_) => _RouteRejectedDialog(checks: result!.failed),
+        );
+        // Tapping outside counts as "fix it now": the drawing stays.
+        if (fixNow ?? true) return;
+        if (!mounted) return;
+        if (_opensAsPage) {
+          // Plain pop on purpose. maybePop would ask "Discard this route?"
+          // about a route that's already saved.
+          Navigator.of(context).pop();
+        } else {
+          _resetAfterSubmitSuccess();
+        }
+        return;
+      }
+
       await showDialog(
         context: context,
         builder:
-            (_) =>
-                isEdit
-                    ? const _SubmitSuccessDialog(isEdit: true)
-                    : _SubmitSuccessDialog(
-                      isEdit: false,
-                      quickCreateMode: _isQuickCreateMode,
-                    ),
+            (_) => _SubmitSuccessDialog(
+              isEdit: isEdit,
+              quickCreateMode: !isEdit && _isQuickCreateMode,
+              result: result,
+            ),
       );
 
       // An edit is done once it's sent for review: back to where it was
@@ -238,7 +262,8 @@ extension _ContributeScreenSections on _ContributeScreenState {
       }
 
       if (widget.routeToEdit == null) {
-        await _bumpContributionStats();
+        // A fare correction added no new route to count.
+        if (result == null || !result.isApplied) await _bumpContributionStats();
         if (!mounted) return;
         _resetAfterSubmitSuccess();
       }

@@ -5,6 +5,8 @@ export type Caller = {
   role: "rider" | "moderator" | "superadmin";
   blocked: boolean;
   name: string;
+  // When the account was made, if the profile says. S_NEW_CONTRIBUTOR uses it.
+  createdAt: string | null;
 };
 
 // A value as the Firestore REST API sends it, like { stringValue: "x" }.
@@ -42,7 +44,7 @@ export async function fetchCaller(
   // A brand new account may not have its profile doc yet.
   if (response.status === 404) {
     await response.body?.cancel();
-    return { uid, role: "rider", blocked: false, name: "" };
+    return { uid, role: "rider", blocked: false, name: "", createdAt: null };
   }
   if (response.status === 401 || response.status === 403) {
     await response.body?.cancel();
@@ -70,6 +72,7 @@ export async function fetchCaller(
       status === "banned" ||
       isInFuture(fields.restrictedUntil),
     name: fields.name?.stringValue ?? "",
+    createdAt: fields.createdAt?.timestampValue ?? fields.createdAt?.stringValue ?? null,
   };
 }
 

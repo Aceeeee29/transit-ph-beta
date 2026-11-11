@@ -10,6 +10,7 @@ import '../models/ors_route_result.dart';
 import '../models/route_issue_report.dart';
 import '../services/route_report_service.dart';
 import '../widgets/route_map/route_report_banner.dart';
+import '../widgets/route_map/route_problem_sheet.dart';
 import '../widgets/route_map/route_report_dialog.dart';
 import '../services/gamification_service.dart';
 import '../repositories/route_cache_repository.dart';
@@ -22,6 +23,8 @@ import '../services/route_follow_engine.dart';
 import '../services/route_follow_guidance.dart';
 import '../services/route_metrics_service.dart';
 import '../widgets/community_route_badge.dart';
+import '../widgets/unverified_badge.dart';
+import '../services/route_issue_service.dart';
 import '../widgets/fare_discount_toggle.dart';
 import '../widgets/location_permission_notice.dart';
 import '../widgets/route_map/follow_guidance_card.dart';
@@ -145,8 +148,74 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
   /// Riders' reports on the roads this trip rides.
   List<RouteIssueReport> _roadReports = const [];
 
-  void _showReportDialog() {
+  void _showReportDialog() async {
+    // Only rides we can trace to a route can have their details reported.
+    final rides = _reportableRides();
+    final kind =
+        rides.isEmpty ? ReportKind.road : await showReportKindChooser(context);
+    if (kind == null || !mounted) return;
+    if (kind == ReportKind.route) {
+      await _reportRideProblem(rides);
+      return;
+    }
     showRouteReportDialog(context, onSubmit: _submitReport);
+  }
+
+  /// This trip's rides that come from a rider, OpenStreetMap or GTFS route.
+  List<ProblemTarget> _reportableRides() => [
+    for (final (i, step) in widget.result.steps.indexed)
+      if (step.routeKey case final key? when step.suggestedMode != 'Walk')
+        ProblemTarget(
+          routeKey: key,
+          label:
+              'Step ${i + 1}: ${step.instruction.replaceFirst('[Estimated] ', '')}',
+          stepIndex: step.routeStepIndex,
+        ),
+  ];
+
+  /// Something wrong with one of the routes this trip rides. Drawing a fix
+  /// needs the saved route, so here it's a report only.
+  Future<void> _reportRideProblem(List<ProblemTarget> rides) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final choice = await showRouteProblemSheet(
+      context,
+      title: '${widget.originName} → ${widget.destinationName}',
+      targets: rides,
+    );
+    if (choice == null || !mounted) return;
+    try {
+      final result = await RouteIssueService.report(
+        routeKey: choice.target.routeKey,
+        type: choice.type,
+        farePaid: choice.farePaid,
+        stepIndex:
+            choice.type == RouteIssueType.wrongFare
+                ? choice.target.stepIndex
+                : null,
+        note: choice.note,
+      );
+      if (!mounted) return;
+      setState(() {});
+      messenger.showSnackBar(
+        SnackBar(
+          content: TranslatedText(switch (result) {
+            RouteIssueResult(fareChanged: true) =>
+              'Thanks! Enough riders paid the same, so the fare was updated.',
+            RouteIssueResult(outdated: true) =>
+              'Thanks! Enough riders reported this, so the route is now '
+                  'marked Possibly outdated.',
+            _ => 'Thanks! Your report was sent.',
+          }),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[RouteIssues] Report failed: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: TranslatedText(RouteIssueService.messageFor(e))),
+        );
+      }
+    }
   }
 
   /// Same as on a community route: the report is filed on this trip's line,
@@ -1109,6 +1178,12 @@ class _OrsRouteMapScreenState extends State<OrsRouteMapScreen> {
         if (step.isCommunity) ...[
           const SizedBox(height: 4),
           const CommunityRouteBadge(),
+        ],
+        // Riders say this ride may have changed, so check before going.
+        if (step.routeKey case final key?
+            when RouteIssueService.isOutdated(key)) ...[
+          const SizedBox(height: 4),
+          PossiblyOutdatedBadge(routeKey: key),
         ],
       ],
     );

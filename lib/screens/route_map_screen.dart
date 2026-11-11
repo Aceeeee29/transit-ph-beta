@@ -14,6 +14,7 @@ import '../services/fare_matrix.dart';
 import '../services/gamification_service.dart';
 import '../models/route_issue_report.dart';
 import '../services/route_metrics_service.dart';
+import '../services/route_issue_service.dart';
 import '../services/route_report_service.dart';
 import '../services/routing_service.dart';
 import '../services/supabase_route_service.dart' show CommunityRoute;
@@ -28,13 +29,16 @@ import '../widgets/route_map/follow_guidance_card.dart';
 import '../widgets/route_map/follow_route_layers.dart';
 import '../widgets/route_map/follow_simulator_sheet.dart';
 import '../widgets/route_map/ride_correction_flow.dart';
+import '../widgets/unverified_badge.dart';
 import '../services/osm_places.dart';
 import '../services/facing.dart';
 import '../repositories/offline_route_repository.dart';
 import '../widgets/notification_overlay.dart';
 import '../widgets/fare_discount_toggle.dart';
 import '../widgets/route_map/route_report_banner.dart';
+import '../widgets/route_map/route_problem_sheet.dart';
 import '../widgets/route_map/route_report_dialog.dart';
+import 'contribute_screen.dart';
 import '../widgets/translated_text.dart';
 import '../widgets/location_permission_notice.dart';
 import '../data/camanava_places.dart';
@@ -798,11 +802,110 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
   }
 
-  void _showReportDialog() {
+  void _showReportDialog() async {
+    final kind = await showReportKindChooser(context);
+    if (kind == null || !mounted) return;
+    if (kind == ReportKind.route) {
+      await _reportRouteProblem();
+      return;
+    }
     showRouteReportDialog(
       context,
       onSubmit: (type, description) => _submitReport(type, description),
     );
+  }
+
+  /// Something wrong with the route itself. Enough matching reports mark it
+  /// Possibly outdated or fix its fare, on the server.
+  Future<void> _reportRouteProblem() async {
+    final route = widget.route;
+    final messenger = ScaffoldMessenger.of(context);
+    void say(String message) =>
+        messenger.showSnackBar(SnackBar(content: TranslatedText(message)));
+    if (!route.isApproved) {
+      say('Only live routes can be reported.');
+      return;
+    }
+    final rides = [
+      for (var i = 0; i < route.steps.length; i++)
+        if (route.steps[i].mode != 'Walk')
+          ProblemTarget(
+            routeKey: route.id,
+            label: 'Step ${i + 1}: ${route.steps[i].mode}',
+            stepIndex: i,
+          ),
+    ];
+    final choice = await showRouteProblemSheet(
+      context,
+      title: '${route.startLocation} → ${route.endLocation}',
+      targets:
+          rides.isNotEmpty
+              ? rides
+              : [ProblemTarget(routeKey: route.id, label: 'This route')],
+      canDrawFix: true,
+    );
+    if (choice == null || !mounted) return;
+
+    String? correctionId;
+    if (choice.drawFix) {
+      final sent = await _drawCorrection();
+      if (sent == null || !mounted) return;
+      // A fare-only fix went straight into the route, so there's no
+      // correction left to link.
+      correctionId = sent.result.isApplied ? null : sent.id;
+    }
+
+    try {
+      final result = await RouteIssueService.report(
+        routeKey: choice.target.routeKey,
+        type: choice.type,
+        farePaid: choice.farePaid,
+        stepIndex:
+            choice.type == RouteIssueType.wrongFare
+                ? choice.target.stepIndex
+                : null,
+        note: choice.note,
+        correctionId: correctionId,
+      );
+      if (!mounted) return;
+      setState(() {});
+      say(switch (result) {
+        RouteIssueResult(fareChanged: true) =>
+          'Thanks! Enough riders paid the same, so the fare was updated.',
+        RouteIssueResult(outdated: true) =>
+          'Thanks! Enough riders reported this, so the route is now marked '
+              'Possibly outdated.',
+        _ when correctionId != null => 'Thanks! Your fix was sent for review.',
+        _ => 'Thanks! Your report was sent.',
+      });
+    } catch (e) {
+      debugPrint('[RouteIssues] Report failed: $e');
+      if (mounted) say(RouteIssueService.messageFor(e));
+    }
+  }
+
+  /// Opens the editor on this route to draw the right way. It's sent as a
+  /// correction, like one from a ride. Null when the rider backs out.
+  Future<({String id, RouteSubmitResult result})?> _drawCorrection() async {
+    ({String id, RouteSubmitResult result})? sent;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (editorContext) => ContributeScreen(
+              draftRoute: widget.route,
+              correctionOf: widget.route.id,
+              onRouteSubmitted: (submitted) async {
+                final result = await RouteService.saveRoute(submitted);
+                // Rejected: the editor stays open with the reasons.
+                if (result.isRejected) return result;
+                sent = (id: submitted.id, result: result);
+                if (editorContext.mounted) Navigator.of(editorContext).pop();
+                return null;
+              },
+            ),
+      ),
+    );
+    return sent;
   }
 
   /// Shared with every rider: the report shows on all routes on this road,

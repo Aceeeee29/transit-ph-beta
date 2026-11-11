@@ -185,10 +185,13 @@ class ModerationService {
     await refreshPendingRoutes();
   }
 
-  static Future<void> approveRoute(String routeId) async {
-    await RouteService.approveRoute(routeId);
+  static Future<void> approveRoute(String routeId, {String? note}) async {
+    await RouteService.approveRoute(routeId, note: note);
     await _afterDecision(routeId);
   }
+
+  static Future<void> setVerified(String routeId, bool verified) =>
+      RouteService.setVerified(routeId, verified);
 
   static Future<void> rejectRoute(
     String routeId, {

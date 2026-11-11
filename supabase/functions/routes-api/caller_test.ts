@@ -45,7 +45,15 @@ Deno.test("moderator role is read, and the rider isn't blocked", async () => {
     role: "moderator",
     blocked: false,
     name: "Mod",
+    createdAt: null,
   });
+});
+
+Deno.test("the account's age comes from its profile, in either saved form", async () => {
+  const timestamp = await load(200, { createdAt: { timestampValue: "2026-01-01T00:00:00Z" } });
+  assertEquals(timestamp.createdAt, "2026-01-01T00:00:00Z");
+  const text = await load(200, { createdAt: { stringValue: "2026-02-02T00:00:00Z" } });
+  assertEquals(text.createdAt, "2026-02-02T00:00:00Z");
 });
 
 Deno.test("superadmin role is read", async () => {
@@ -125,6 +133,7 @@ Deno.test("only moderators and superadmins are staff", () => {
     role,
     blocked: false,
     name: "",
+    createdAt: null,
   });
   assertEquals(isStaff(as("moderator")), true);
   assertEquals(isStaff(as("superadmin")), true);

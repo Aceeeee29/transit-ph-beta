@@ -21,10 +21,33 @@ extension _RouteMapScreenChrome on _RouteMapScreenState {
       right: 12,
       child:
           legCard ??
-          RouteTopBar(
-            from: widget.route.startLocation,
-            to: widget.route.endLocation,
-            onBack: _closeView,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RouteTopBar(
+                from: widget.route.startLocation,
+                to: widget.route.endLocation,
+                onBack: _closeView,
+              ),
+              if (widget.route.isUnverified) ...[
+                const SizedBox(height: 6),
+                const UnverifiedBadge(),
+              ],
+              if (RouteIssueService.labelFor(widget.route.id)
+                  case final label?) ...[
+                const SizedBox(height: 6),
+                PossiblyOutdatedBadge(routeKey: widget.route.id),
+                const SizedBox(height: 2),
+                TranslatedText(
+                  label.summary,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
           ),
     );
   }

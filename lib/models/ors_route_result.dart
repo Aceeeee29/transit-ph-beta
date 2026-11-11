@@ -121,6 +121,15 @@ class OrsStep {
   /// so the map draws it dashed.
   final bool isEstimatedPath;
 
+  /// The route this ride is on, for reports and warnings: a rider or
+  /// OpenStreetMap route's id, or `gtfs:<route_id>` for the DOTC 2013 feed.
+  /// Null for walks and rides we can't trace back to a route.
+  final String? routeKey;
+
+  /// Which step of that rider route this ride is (0 = its first step). Null
+  /// for GTFS rides, which have one fare for the whole line.
+  final int? routeStepIndex;
+
   const OrsStep({
     required this.instruction,
     required this.distanceMeters,
@@ -134,6 +143,8 @@ class OrsStep {
     this.fromName,
     this.toName,
     this.isEstimatedPath = false,
+    this.routeKey,
+    this.routeStepIndex,
   });
 
   Map<String, dynamic> toJson() => {
@@ -149,6 +160,8 @@ class OrsStep {
     if (fromName != null) 'fromName': fromName,
     if (toName != null) 'toName': toName,
     if (isEstimatedPath) 'isEstimatedPath': true,
+    if (routeKey != null) 'routeKey': routeKey,
+    if (routeStepIndex != null) 'routeStepIndex': routeStepIndex,
   };
 
   factory OrsStep.fromJson(Map<String, dynamic> json) => OrsStep(
@@ -164,5 +177,7 @@ class OrsStep {
     fromName: json['fromName'] as String?,
     toName: json['toName'] as String?,
     isEstimatedPath: json['isEstimatedPath'] as bool? ?? false,
+    routeKey: json['routeKey'] as String?,
+    routeStepIndex: json['routeStepIndex'] as int?,
   );
 }

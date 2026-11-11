@@ -117,18 +117,28 @@ class RideCorrectionFlow {
               draftRoute: draft,
               correctionOf: isCorrection ? route?.id : null,
               onRouteSubmitted: (submitted) async {
-                await RouteService.saveRoute(submitted);
-                if (!editorContext.mounted) return;
+                final result = await RouteService.saveRoute(submitted);
+                // Rejected: the editor stays open with the reasons, so the
+                // rider can fix it.
+                if (result.isRejected) return result;
+                if (!editorContext.mounted) return null;
+                final messenger = ScaffoldMessenger.of(editorContext);
                 Navigator.of(editorContext).pop();
-                ScaffoldMessenger.of(editorContext).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
-                    content: TranslatedText(
-                      isCorrection
-                          ? 'Thanks! Your correction was sent for review.'
-                          : 'Thanks! Your route was sent for review.',
-                    ),
+                    content: TranslatedText(switch (result) {
+                      RouteSubmitResult(isApplied: true) =>
+                        'Thanks! The fare was updated.',
+                      RouteSubmitResult(isLive: true) =>
+                        'Thanks! Your route is live as Unverified.',
+                      _ =>
+                        isCorrection
+                            ? 'Thanks! Your correction was sent for review.'
+                            : 'Thanks! Your route was sent for review.',
+                    }),
                   ),
                 );
+                return null;
               },
             ),
       ),

@@ -12,6 +12,7 @@ import 'screens/main_screen.dart';
 import 'services/ipv4_first_http.dart';
 import 'services/launch_splash.dart';
 import 'services/location_service.dart';
+import 'services/fare_rule_service.dart';
 import 'services/moderation_service.dart';
 import 'services/offline_tile_service.dart';
 import 'services/map_style_service.dart';
@@ -101,6 +102,9 @@ void main() async {
     url: Config.supabaseUrl,
     anonKey: Config.supabaseAnonKey,
   );
+
+  // Not awaited: the bundled fares work until this arrives.
+  unawaited(FareRuleService.load());
 
   // Initialize moderation service listeners
   ModerationService.init();

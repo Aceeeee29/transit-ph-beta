@@ -12,7 +12,37 @@ extension _ModeratorScreenRouteReports on _ModeratorScreenState {
   static const _danger = _ModeratorScreenState._danger;
   static const _warning = _ModeratorScreenState._warning;
 
+  /// Two kinds of report: problems with a route's details (fare, path,
+  /// stops), which add up to automatic results, and today's road reports.
   Widget _buildRouteReportsTabSection() {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          TabBar(
+            labelColor: _accent,
+            unselectedLabelColor: _textSecondary,
+            indicatorColor: _accent,
+            labelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+            tabs: const [
+              Tab(text: 'Route problems'),
+              Tab(text: 'Road reports'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [const RouteProblemsList(), _buildRoadReportsList()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoadReportsList() {
     return StreamBuilder<List<RouteIssueReport>>(
       stream: RouteReportService.watchActive(),
       builder: (context, snapshot) {

@@ -265,6 +265,10 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                             .toList(),
                   ),
                 ],
+                if (route.checks.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  RouteChecklist(checks: route.checks),
+                ],
                 const SizedBox(height: 12),
                 if (route.steps.isNotEmpty) ...[
                   Text(
@@ -422,9 +426,20 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                         child: GestureDetector(
                           onTap:
                               () => _runOnce('route:${route.id}', () async {
+                                // Going against the checklist needs a reason.
+                                String? note;
+                                if (route.flaggedChecks.isNotEmpty) {
+                                  note = await showApproveNoteDialog(
+                                    context,
+                                    flagged: route.flaggedChecks,
+                                  );
+                                  if (note == null) return;
+                                }
                                 await _decideRoute(
-                                  () =>
-                                      ModerationService.approveRoute(route.id),
+                                  () => ModerationService.approveRoute(
+                                    route.id,
+                                    note: note,
+                                  ),
                                 );
                               }),
                           child: Container(

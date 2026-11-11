@@ -388,6 +388,12 @@ extension _SearchScreenSections on _SearchScreenState {
           PhFareCalculator.tripFare(result, discount: _studentFare),
         ),
         result.distanceLabel,
+        if (result.steps.any(
+          (step) =>
+              step.routeKey != null &&
+              RouteIssueService.isOutdated(step.routeKey!),
+        ))
+          'Possibly outdated',
       ].join(' · '),
       modes: collapseModes(result.steps.map((s) => s.suggestedMode)),
       community: result.usesCommunityRoutes,
@@ -403,6 +409,8 @@ extension _SearchScreenSections on _SearchScreenState {
         _SearchScreenState._fareLabel(fare),
         '${_routeEstimatedMinutes(route)} min',
         if (route.upvotes > 0) '▲ ${route.upvotes}',
+        if (route.isUnverified) 'Unverified',
+        if (RouteIssueService.isOutdated(route.id)) 'Possibly outdated',
       ].join(' · '),
       modes: collapseModes(route.steps.map((s) => s.mode)),
       onTap: () => _onRouteTap(route),

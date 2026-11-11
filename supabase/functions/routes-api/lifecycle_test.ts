@@ -10,9 +10,10 @@ const rider = (uid = "rider-1", blocked = false): Caller => ({
   role: "rider",
   blocked,
   name: "Rider One",
+  createdAt: null,
 });
-const moderator: Caller = { uid: "mod-1", role: "moderator", blocked: false, name: "Mod" };
-const superadmin: Caller = { uid: "admin-1", role: "superadmin", blocked: false, name: "Admin" };
+const moderator: Caller = { uid: "mod-1", role: "moderator", blocked: false, name: "Mod", createdAt: null };
+const superadmin: Caller = { uid: "admin-1", role: "superadmin", blocked: false, name: "Admin", createdAt: null };
 
 const route = (id: string, extra: Record<string, unknown> = {}) => ({
   id,
@@ -27,8 +28,14 @@ type Result = RouteRow & { route: RouteRow; mergedInto?: string; contributorId: 
 
 function setup() {
   const store = new MemoryStore();
-  const run = async (action: string, caller: Caller, body: Record<string, unknown> = {}) =>
-    await lifecycle[action](caller, body, store) as Result;
+  // New riders' routes are always flagged, and approving a flag needs a note.
+  // Most tests here are about something else, so they get one by default.
+  const run = async (action: string, caller: Caller, body: Record<string, unknown> = {}) => {
+    const withNote = action === "decide" && body.decision === "approve" && !("note" in body)
+      ? { ...body, note: "Checked it" }
+      : body;
+    return await lifecycle[action](caller, withNote, store) as Result;
+  };
   return { store, run };
 }
 
@@ -47,7 +54,7 @@ Deno.test("submit: saved as pending under the caller, with a logged decision", a
   assertEquals(row.revision, 1);
   assertEquals(row.contributor_id, "rider-1");
   assertEquals(row.contributor_name, "Rider One");
-  assertEquals(store.decisions.map((d) => d.decision), ["submitted"]);
+  assertEquals(store.decisions.map((d) => d.decision), ["submitted", "flagged"]);
 });
 
 Deno.test("submit: the app can't choose the owner or status", async () => {
@@ -76,18 +83,14 @@ Deno.test("submit: a blocked rider is refused", async () => {
   await assertHttp(() => run("submit", rider("r", true), { route: route("r1") }), 403, "blocked");
 });
 
-Deno.test("submit: incomplete routes are refused", async () => {
+Deno.test("submit: a route with no usable id can't be stored", async () => {
   const { run } = setup();
   const bad = [
     undefined,
     "not an object",
-    { startLocation: "A", endLocation: "B", steps: [{}] }, // no id
+    { startLocation: "A", endLocation: "B", steps: [{}] },
     route(""),
     route("x".repeat(129)),
-    route("r1", { steps: [] }),
-    route("r1", { steps: "junk" }),
-    route("r1", { startLocation: "  " }),
-    route("r1", { endLocation: undefined }),
   ];
   for (const candidate of bad) {
     await assertHttp(() => run("submit", rider(), { route: candidate }), 400, "invalid");
@@ -150,8 +153,8 @@ Deno.test("resubmit: a rejected route goes back to pending with a new revision",
   assertEquals(row.revision, 2);
   assertEquals(row.rejected_at, null);
   assertEquals(row.data.startLocation, "Fixed");
-  assertEquals(store.decisions.at(-1)?.decision, "resubmitted");
-  assertEquals(store.decisions.at(-1)?.revision, 2);
+  assertEquals(store.decisions.at(-2)?.decision, "resubmitted");
+  assertEquals(store.decisions.at(-2)?.revision, 2);
 });
 
 Deno.test("resubmit: marks the route as edited, like today's updateRoute", async () => {
@@ -169,9 +172,9 @@ Deno.test("resubmit: rebuilds the map line", async () => {
   const { store, run } = setup();
   await run("submit", rider(), { route: route("r1") });
   await run("resubmit", rider(), {
-    route: route("r1", { pathPoints: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }] }),
+    route: route("r1", { pathPoints: [{ lat: 14.1, lng: 121.2 }, { lat: 14.3, lng: 121.4 }] }),
   });
-  assertEquals((await store.get("r1"))?.geom, "SRID=4326;LINESTRING(2 1,4 3)");
+  assertEquals((await store.get("r1"))?.geom, "SRID=4326;LINESTRING(121.2 14.1,121.4 14.3)");
 });
 
 Deno.test("resubmit: only the contributor or staff can", async () => {
@@ -180,7 +183,7 @@ Deno.test("resubmit: only the contributor or staff can", async () => {
   await assertHttp(() => run("resubmit", rider("other"), { route: route("r1") }), 403, "forbidden");
   const row = await run("resubmit", moderator, { route: route("r1") });
   assertEquals(row.contributor_id, "owner");
-  assertEquals(store.decisions.at(-1)?.actor, "mod-1");
+  assertEquals(store.decisions.at(-2)?.actor, "mod-1");
 });
 
 Deno.test("resubmit: a blocked contributor is refused", async () => {
@@ -254,7 +257,7 @@ Deno.test("queue and staff_list: staff only", async () => {
   await assertHttp(() => run("staff_list", rider()), 403, "forbidden");
   const queue = await run("queue", moderator) as unknown as RouteRow[];
   assertEquals(queue.map((r) => r.id), ["r1"]);
-  assertEquals(queue[0].latest_decision?.decision, "submitted");
+  assertEquals(queue[0].latest_decision?.decision, "flagged");
   const all = await run("staff_list", moderator) as unknown as RouteRow[];
   assertEquals(all.map((r) => r.id).sort(), ["r1", "r2"]);
 });
@@ -311,7 +314,7 @@ Deno.test("decide: two moderators at the same moment, only one wins", async () =
     run("decide", superadmin, { routeId: "r1", decision: "reject", reasonCodes: ["duplicate"] }),
   ]);
   assertEquals(results.filter((r) => r.status === "fulfilled").length, 1);
-  assertEquals(store.decisions.filter((d) => d.decision !== "submitted").length, 1);
+  assertEquals(store.decisions.filter((d) => d.decision === "approved" || d.decision === "rejected").length, 1);
 });
 
 Deno.test("reject: needs at least one known reason", async () => {
@@ -369,7 +372,7 @@ async function correctionSetup() {
       eta: "20 min",
       steps: [{ mode: "Jeepney" }],
       shortDescription: "Don't copy me",
-      pathPoints: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }],
+      pathPoints: [{ lat: 14.1, lng: 121.2 }, { lat: 14.3, lng: 121.4 }],
     }),
   });
   return { store, run };
@@ -383,7 +386,7 @@ Deno.test("approve correction: merged into the target, and the correction is gon
   assertEquals(target?.data.steps, [{ mode: "Jeepney" }]);
   assertEquals(target?.data.eta, "20 min");
   assertEquals(target?.data.editCount, 1);
-  assertEquals(target?.geom, "SRID=4326;LINESTRING(2 1,4 3)");
+  assertEquals(target?.geom, "SRID=4326;LINESTRING(121.2 14.1,121.4 14.3)");
   // Only the listed keys change. The owner, description and votes stay.
   assertEquals(target?.data.shortDescription, "Keep me");
   assertEquals(target?.contributor_id, "owner");
@@ -393,7 +396,7 @@ Deno.test("approve correction: merged into the target, and the correction is gon
   assertEquals(result.contributorId, "fixer");
   const log = store.decisions.at(-1);
   assertEquals(log?.route_id, "target");
-  assertEquals(log?.note, "correction fix by fixer merged");
+  assertEquals(log?.note, "correction fix by fixer merged: Checked it");
 });
 
 Deno.test("approve correction: if the target is gone, it becomes its own route", async () => {
@@ -445,10 +448,10 @@ Deno.test("moderator_approvals: per moderator, with re-approvals counted once", 
   const result = await run("moderator_approvals", superadmin) as unknown as Record<string, string[]>;
 
   // mod-1 approved "target". admin-1 merged a correction and approved r2 twice.
-  assertEquals(result["mod-1"], ["target"]);
+  assertEquals(result["mod-1"], ["target|Checked it"]);
   assertEquals(
     [...result["admin-1"]].sort(),
-    ["r2", "target|correction fix by fixer merged"],
+    ["r2|Checked it", "target|correction fix by fixer merged: Checked it"],
   );
 });
 
@@ -492,4 +495,285 @@ Deno.test("close_account: a banned rider can still close their account", async (
   await run("submit", rider("leaver"), { route: route("waiting") });
   await run("close_account", rider("leaver", true));
   assertEquals(await store.get("waiting"), null);
+});
+
+// The checklist
+
+const OLD_ACCOUNT = new Date(Date.now() - 30 * 86400000).toISOString();
+
+// Close enough points that the line counts as following the road.
+const SHORT_PATH = [{ lat: 14.65, lng: 120.98 }, { lat: 14.652, lng: 120.98 }];
+const cleanRoute = (id: string, extra: Record<string, unknown> = {}) =>
+  route(id, { pathPoints: SHORT_PATH, stepBoundaries: [1], steps: [{ mode: "Jeepney", instruction: "Ride", actualFare: 14 }], ...extra });
+const expensive = [{ mode: "Jeepney", instruction: "Ride", actualFare: 500 }];
+
+// Someone with an old account and a published route, so nothing flags them.
+async function knownRider(harness: ReturnType<typeof setup>) {
+  const caller = { ...rider("known"), createdAt: OLD_ACCOUNT };
+  await harness.run("submit", caller, { route: cleanRoute("first") });
+  await harness.run("decide", moderator, { routeId: "first", decision: "approve" });
+  return caller;
+}
+
+type Outcome = Result & { outcome: string; appliedTo?: string; checks: { code: string; result: string }[] };
+
+Deno.test("checklist: all pass goes live right away, as Unverified", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  const row = await harness.run("submit", caller, { route: cleanRoute("r2") }) as Outcome;
+  assertEquals(row.outcome, "published");
+  assertEquals(row.status, "published");
+  assertEquals(row.verification, "unverified");
+  assert(row.published_at);
+  const log = harness.store.decisions.at(-1);
+  assertEquals(log?.decision, "auto_published");
+  assertEquals(log?.actor, "system");
+});
+
+Deno.test("checklist: a soft fail waits for a moderator, with the flags on record", async () => {
+  const harness = setup();
+  const row = await harness.run("submit", rider(), { route: cleanRoute("r1") }) as Outcome;
+  assertEquals(row.outcome, "pending");
+  assertEquals(row.status, "pending");
+  const log = harness.store.decisions.at(-1);
+  assertEquals(log?.decision, "flagged");
+  assertEquals(log?.actor, "system");
+  assertEquals(log?.reason_codes, ["S_NEW_CONTRIBUTOR"]);
+});
+
+Deno.test("checklist: a hard fail is rejected right away, kept, and says why", async () => {
+  const harness = setup();
+  const row = await harness.run("submit", rider(), { route: cleanRoute("r1", { steps: expensive }) }) as Outcome;
+  assertEquals(row.outcome, "rejected");
+  assertEquals(row.status, "rejected");
+  assert(row.rejected_at);
+  assertEquals(row.data.pathPoints, SHORT_PATH);
+  const log = harness.store.decisions.at(-1);
+  assertEquals(log?.decision, "auto_rejected");
+  assertEquals(log?.actor, "system");
+  assertEquals(log?.reason_codes, ["H_FARE_IMPOSSIBLE"]);
+});
+
+Deno.test("checklist: missing details are a stored rejection, not an error", async () => {
+  const harness = setup();
+  const row = await harness.run("submit", rider(), { route: route("r1", { steps: [] }) }) as Outcome;
+  assertEquals(row.outcome, "rejected");
+  assertEquals(row.checks.find((c) => c.code === "H_REQUIRED")?.result, "fail");
+});
+
+Deno.test("checklist: results come back and show in the lists", async () => {
+  const harness = setup();
+  const row = await harness.run("submit", rider(), { route: cleanRoute("r1") }) as Outcome;
+  assertEquals(row.checks.find((c) => c.code === "S_NEW_CONTRIBUTOR")?.result, "flag");
+  const queue = await harness.run("queue", moderator) as unknown as RouteRow[];
+  assertEquals((queue[0].latest_checks as { code: string }[]).some((c) => c.code === "S_NEW_CONTRIBUTOR"), true);
+  const mine = await harness.run("my_routes", rider()) as unknown as RouteRow[];
+  assertEquals((mine[0].latest_checks ?? []).length > 0, true);
+});
+
+Deno.test("checklist: lists show only the current revision's checks", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1", { steps: expensive }) });
+  await harness.run("resubmit", rider(), { route: cleanRoute("r1") });
+  const mine = await harness.run("my_routes", rider()) as unknown as RouteRow[];
+  const fare = (mine[0].latest_checks as { code: string; result: string }[]).find((c) => c.code === "H_FARE_IMPOSSIBLE");
+  assertEquals(fare?.result, "pass");
+});
+
+Deno.test("checklist: if the map lookup fails, the route waits for a moderator", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  harness.store.factsError = new Error("database down");
+  const row = await harness.run("submit", caller, { route: cleanRoute("r2") }) as Outcome;
+  assertEquals(row.outcome, "pending");
+});
+
+Deno.test("checklist: if the fare table fails, the route waits for a moderator", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  harness.store.rules = new Error("database down");
+  const row = await harness.run("submit", caller, { route: cleanRoute("r2") }) as Outcome;
+  assertEquals(row.outcome, "pending");
+});
+
+Deno.test("checklist: fixing a rejected route can publish it, and clears the edit flag", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  await harness.run("submit", caller, { route: cleanRoute("r2", { steps: expensive }) });
+  const fixed = await harness.run("resubmit", caller, { route: cleanRoute("r2") }) as Outcome;
+  assertEquals(fixed.outcome, "published");
+  assertEquals(fixed.revision, 2);
+  assertEquals(fixed.rejected_at, null);
+  assertEquals(fixed.data.isEdited, false);
+});
+
+Deno.test("checklist: an edit can get a live route rejected, and it stops being live", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  await harness.run("submit", caller, { route: cleanRoute("r2") });
+  const row = await harness.run("resubmit", caller, { route: cleanRoute("r2", { steps: expensive }) }) as Outcome;
+  assertEquals(row.status, "rejected");
+});
+
+Deno.test("checklist: the pending limit only counts routes joining the queue", async () => {
+  const harness = setup();
+  for (const id of ["r1", "r2", "r3"]) await harness.run("submit", rider(), { route: cleanRoute(id) });
+  await assertHttp(() => harness.run("submit", rider(), { route: cleanRoute("r4") }), 409, "pending_limit");
+  // A rejected route doesn't join the queue, so it still gets its reasons.
+  const row = await harness.run("submit", rider(), { route: cleanRoute("r5", { steps: expensive }) }) as Outcome;
+  assertEquals(row.outcome, "rejected");
+});
+
+Deno.test("checklist: the map lookup gets the route's real details", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1", { correctionOf: "t9" }) });
+  const asked = harness.store.lastFactsRequest;
+  assertEquals(asked?.routeId, "r1");
+  assertEquals(asked?.contributorId, "rider-1");
+  assertEquals(asked?.correctionOf, "t9");
+  assert(asked?.geom?.startsWith("SRID=4326;LINESTRING"));
+});
+
+Deno.test("checklist: an edit can't change what the lookup thinks it corrects", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1") });
+  await harness.run("resubmit", rider(), { route: cleanRoute("r1", { correctionOf: "someone-elses" }) });
+  assertEquals(harness.store.lastFactsRequest?.correctionOf, null);
+});
+
+Deno.test("checklist: staff edits and submissions never publish themselves", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  await harness.run("submit", caller, { route: cleanRoute("r2") });
+  const edited = await harness.run("resubmit", moderator, { route: cleanRoute("r2") }) as Outcome;
+  assertEquals(edited.outcome, "pending");
+  const staff = { ...moderator, createdAt: OLD_ACCOUNT };
+  const own = await harness.run("submit", staff, { route: cleanRoute("osm-new") }) as Outcome;
+  assertEquals(own.outcome, "pending");
+});
+
+Deno.test("checklist: staff can't save a route that fails a hard check", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1") });
+  const row = await harness.run("resubmit", moderator, { route: cleanRoute("r1", { steps: expensive }) }) as Outcome;
+  assertEquals(row.status, "rejected");
+});
+
+// Approving over a flag
+
+Deno.test("approve: over a flag needs a note, and it goes on record", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1") });
+  const approve = (extra: Record<string, unknown>) =>
+    harness.run("decide", moderator, { routeId: "r1", decision: "approve", ...extra });
+  await assertHttp(() => approve({ note: "" }), 400, "note_required");
+  await assertHttp(() => approve({ note: "   " }), 400, "note_required");
+  assertEquals((await harness.store.get("r1"))?.status, "pending");
+  await approve({ note: "New rider but the route is real" });
+  assertEquals(harness.store.decisions.at(-1)?.note, "New rider but the route is real");
+});
+
+Deno.test("approve: a route with no flags needs no note", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  await harness.run("submit", caller, { route: cleanRoute("r2") });
+  await harness.run("resubmit", moderator, { route: cleanRoute("r2") });
+  assertEquals((await harness.store.get("r2"))?.status, "pending");
+  await lifecycle.decide(moderator, { routeId: "r2", decision: "approve" }, harness.store);
+  assertEquals((await harness.store.get("r2"))?.verification, "verified");
+});
+
+// Verifying
+
+Deno.test("verify: staff can vouch for a live route, and take it back", async () => {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  await harness.run("submit", caller, { route: cleanRoute("r2") });
+  await harness.run("decide", moderator, { routeId: "r2", decision: "verify" });
+  assertEquals((await harness.store.get("r2"))?.verification, "verified");
+  assertEquals(harness.store.decisions.at(-1)?.decision, "verified");
+  await harness.run("decide", moderator, { routeId: "r2", decision: "unverify" });
+  const row = await harness.store.get("r2");
+  assertEquals(row?.verification, "unverified");
+  assertEquals(row?.status, "published");
+});
+
+Deno.test("verify: only live routes, and only staff", async () => {
+  const harness = setup();
+  await harness.run("submit", rider(), { route: cleanRoute("r1") });
+  await assertHttp(() => harness.run("decide", moderator, { routeId: "r1", decision: "verify" }), 409, "conflict");
+  await assertHttp(() => harness.run("decide", rider(), { routeId: "r1", decision: "verify" }), 403, "forbidden");
+});
+
+// Fare-only corrections
+
+async function fareSetup() {
+  const harness = setup();
+  const caller = await knownRider(harness);
+  harness.store.facts = { ...harness.store.facts, target_exists: true, target_status: "published", correction_kept: 1 };
+  return { ...harness, caller };
+}
+const fareFix = (fare: number, extra: Record<string, unknown> = {}) =>
+  cleanRoute("fix", { correctionOf: "first", price: `PHP ${fare}`, steps: [{ mode: "Jeepney", instruction: "Ride", actualFare: fare }], ...extra });
+
+Deno.test("fare correction: in range is applied to the route by itself", async () => {
+  const { store, run, caller } = await fareSetup();
+  const result = await run("submit", caller, { route: fareFix(15) }) as Outcome;
+  assertEquals(result.outcome, "applied");
+  assertEquals(result.appliedTo, "first");
+  const target = await store.get("first");
+  assertEquals((target?.data.steps as { actualFare: number }[])[0].actualFare, 15);
+  assertEquals(target?.data.price, "PHP 15");
+  assertEquals(target?.data.editCount, 1);
+  assertEquals(await store.get("fix"), null);
+  const log = store.decisions.at(-1);
+  assertEquals(log?.decision, "auto_published");
+  assertEquals(log?.actor, "system");
+  assertEquals(log?.route_id, "first");
+});
+
+Deno.test("fare correction: out of range goes to a moderator instead", async () => {
+  const { store, run, caller } = await fareSetup();
+  const result = await run("submit", caller, { route: fareFix(30) }) as Outcome;
+  assertEquals(result.outcome, "pending");
+  assertEquals((await store.get("first"))?.data.steps, cleanRoute("x").steps);
+});
+
+Deno.test("fare correction: changing anything else isn't automatic", async () => {
+  const { store, run, caller } = await fareSetup();
+  const moved = fareFix(15, { pathPoints: [{ lat: 14.65, lng: 120.98 }, { lat: 14.651, lng: 120.98 }] });
+  const result = await run("submit", caller, { route: moved }) as Outcome;
+  assertEquals(result.outcome === "applied", false);
+  assertEquals((await store.get("first"))?.data.pathPoints, SHORT_PATH);
+});
+
+// Fare rules
+
+Deno.test("fare rules: superadmin only", async () => {
+  const { run } = setup();
+  await assertHttp(() => run("admin_fare_rules", moderator), 403, "forbidden");
+  await assertHttp(
+    () => run("admin_set_fare_rule", moderator, { mode: "jeepney", base: 15, base_km: 4, per_km: 2, source: "MC" }),
+    403,
+    "forbidden",
+  );
+});
+
+Deno.test("fare rules: bad values are refused, good ones saved", async () => {
+  const { run } = setup();
+  const good = { mode: "jeepney", base: 15, base_km: 4, per_km: 2, source: "LTFRB MC 2026-01" };
+  for (const bad of [
+    { ...good, mode: "helicopter" },
+    { ...good, base: 0 },
+    { ...good, base: "15" },
+    { ...good, base_km: -1 },
+    { ...good, per_km: -1 },
+    { ...good, source: " " },
+    { ...good, effective_from: "not a date" },
+  ]) {
+    await assertHttp(() => run("admin_set_fare_rule", superadmin, bad), 400, "invalid");
+  }
+  await run("admin_set_fare_rule", superadmin, good);
+  const rules = await run("admin_fare_rules", superadmin) as unknown as { source: string }[];
+  assertEquals(rules[0].source, "LTFRB MC 2026-01");
 });

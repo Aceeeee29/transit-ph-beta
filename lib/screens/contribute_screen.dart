@@ -11,7 +11,8 @@ import '../models/location_search_result.dart';
 import '../services/routing_service.dart';
 import '../services/route_history_service.dart';
 import '../services/route_metrics_service.dart';
-import '../services/route_service.dart' show PendingRouteLimitException;
+import '../services/route_service.dart'
+    show PendingRouteLimitException, RouteSubmitResult;
 import '../services/gamification_service.dart';
 import '../services/quick_route_link_service.dart';
 import '../services/tutorial_service.dart';
@@ -77,7 +78,9 @@ class _StepEditControls {
 }
 
 class ContributeScreen extends StatefulWidget {
-  final Future<void> Function(route_model.Route) onRouteSubmitted;
+  /// Returns what the automatic checks decided. Null means the caller tells the
+  /// rider itself.
+  final Future<RouteSubmitResult?> Function(route_model.Route) onRouteSubmitted;
   final route_model.Route? routeToEdit;
   final String? contributorId;
   final String? quickRouteToken;
@@ -143,6 +146,10 @@ class _ContributeScreenState extends State<ContributeScreen> {
   /// A submit or quick link is being sent: further taps do nothing, so a
   /// double tap can't send the route twice.
   bool _isSendingRoute = false;
+
+  /// The route the checks just rejected, while its drawing is still here.
+  /// Sending again updates that route instead of making a second one.
+  String? _rejectedRouteId;
   String currentMode = 'Jeepney';
   String selectionMode = 'start';
   String? selectedRegion = 'CAMANAVA';
@@ -378,6 +385,13 @@ class _ContributeScreenState extends State<ContributeScreen> {
   }
 
   bool get _isQuickCreateMode => _activeQuickRouteToken != null;
+
+  /// Opened on top of another screen (an edit, a correction, a recorded ride),
+  /// not the Map tab's own editor. Leaving closes it.
+  bool get _opensAsPage =>
+      widget.routeToEdit != null ||
+      widget.draftRoute != null ||
+      widget.correctionOf != null;
 
   void _loadRouteToEdit() {
     final route = widget.routeToEdit ?? widget.draftRoute;
@@ -1088,6 +1102,8 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   void _onReset() {
     setState(() {
+      // A fresh drawing is a new route, not a fix of the rejected one.
+      _rejectedRouteId = null;
       pathPoints = [];
       steps = [];
       stepBoundaries = [];
@@ -1294,6 +1310,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   void _resetAfterSubmitSuccess() {
     setState(() {
+      _rejectedRouteId = null;
       pathPoints = [];
       steps = [];
       stepBoundaries = [];

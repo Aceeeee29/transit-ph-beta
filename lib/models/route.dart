@@ -51,6 +51,44 @@ class RouteDecision {
   };
 }
 
+/// One rule of the automatic checklist and how a route did on it. The message
+/// comes from the server, so riders and moderators read the same words.
+class RouteCheck {
+  final String code;
+
+  /// 'pass', 'fail', 'flag' or 'skip'.
+  final String result;
+  final String message;
+
+  const RouteCheck({
+    required this.code,
+    required this.result,
+    required this.message,
+  });
+
+  bool get failed => result == 'fail';
+  bool get flagged => result == 'flag';
+  bool get passed => result == 'pass';
+
+  factory RouteCheck.fromJson(Map<String, dynamic> json) => RouteCheck(
+    code: json['code'] as String? ?? '',
+    result: json['result'] as String? ?? '',
+    message: json['message'] as String? ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'code': code,
+    'result': result,
+    'message': message,
+  };
+
+  static List<RouteCheck> listFromJson(dynamic value) => [
+    if (value is List)
+      for (final item in value)
+        if (item is Map) RouteCheck.fromJson(Map<String, dynamic>.from(item)),
+  ];
+}
+
 class Route {
   final String id;
   final String startLocation;
@@ -96,6 +134,10 @@ class Route {
   /// Set for a route whose contributor closed their account ("Former rider").
   final String? contributorName;
 
+  /// The checklist for this version of the route. Only comes back for your own
+  /// routes and for staff. Public lists leave it out.
+  final List<RouteCheck> checks;
+
   Route({
     required this.id,
     required this.startLocation,
@@ -131,9 +173,17 @@ class Route {
     this.latestDecision,
     this.revision = 1,
     this.contributorName,
+    this.checks = const [],
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
+
+  /// Live, but only the automatic checks have looked at it so far.
+  bool get isUnverified =>
+      isApproved && verification == RouteVerification.unverified;
+
+  List<RouteCheck> get failedChecks => checks.where((c) => c.failed).toList();
+  List<RouteCheck> get flaggedChecks => checks.where((c) => c.flagged).toList();
 
   /// Imported from OpenStreetMap (ids "osm-bus-…", "osm-jeep-…"), not drawn
   /// by a rider. Searches still use it like a rider route, but it isn't
@@ -210,6 +260,8 @@ class Route {
       'revision': revision,
       if (latestDecision != null) 'latestDecision': latestDecision!.toJson(),
       if (contributorName != null) 'contributorName': contributorName,
+      if (checks.isNotEmpty)
+        'latestChecks': checks.map((c) => c.toJson()).toList(),
     };
   }
 
@@ -339,6 +391,7 @@ class Route {
               : null,
       revision: (json['revision'] as num?)?.toInt() ?? 1,
       contributorName: json['contributorName'] as String?,
+      checks: RouteCheck.listFromJson(json['latestChecks']),
     );
   }
 }

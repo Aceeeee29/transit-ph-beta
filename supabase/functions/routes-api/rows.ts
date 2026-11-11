@@ -34,6 +34,7 @@ export type RouteRow = {
   published_at: string | null;
   rejected_at: string | null;
   latest_decision?: Decision;
+  latest_checks?: unknown[];
 };
 
 // What a route's JSON decides. Status and verification aren't here on purpose:

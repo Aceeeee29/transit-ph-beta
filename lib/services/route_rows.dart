@@ -26,6 +26,7 @@ class RouteRows {
       'revision': row['revision'],
       'correctionOf': row['correction_of'],
       'latestDecision': row['latest_decision'],
+      'latestChecks': row['latest_checks'],
     });
   }
 

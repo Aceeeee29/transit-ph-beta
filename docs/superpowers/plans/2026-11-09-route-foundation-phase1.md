@@ -505,8 +505,9 @@ request.resource.data.get('routeId', null) is string
 - [ ] **Step 3: Cutover**, in this order. Each step needs a go-ahead.
 
   Before anything touches production, back it up, because the free project has no restore we've tested:
-  - Export the 5 `gtfs` tables. `supabase_datasets/*.csv` isn't enough: its `routes` file has 1,715 rows and the live table had 1,717 (2026-11-09).
-  - The user copies the definition of `find_trip_plan`, plus the `gtfs` RLS policies and grants, from the SQL editor into the repo. None of it is in git today.
+  - Export the 5 `gtfs` tables. `supabase_datasets/*.csv` isn't enough: its contents differ from live (exact counts on 2026-11-09: trips 1,986 live vs 1,988, stops 4,858 vs 4,849, and 2 live routes aren't in it).
+  - Save `find_trip_plan`, the `gtfs` policies and grants. None of it is in git. `npx -y supabase db query --read-only --remote=<ref> -f <file> -o json` reads them without a manual copy.
+  - Done 2026-11-09, in `F:\transitph-backups\2026-11-09-before-cutover`, outside the repo. Repeat right before Step 3 item 1 if much time has passed.
 
   1. `supabase db push` and `functions deploy` to the **production** project.
   2. `node migrate.js --target prod` + `gtfs_extras.js --target prod`.
