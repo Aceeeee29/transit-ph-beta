@@ -39,7 +39,7 @@ Tasks 1 to 5 written, uncommitted, all automated tests pass (server 208, app 288
 
 Task 6 on staging (2026-11-10): migration applied and `routes-api` deployed. Every action passed on real staging tables with seeded rows (fare fix, outdated label, unverify, public reads labels only, GTFS report, queue, settle, auto-verify); the seeded rows were removed. Phone round 1 added two real reports (a wrong fare and a wrong path with a correction), both still open on staging.
 
-Dashboard browser test passed 2026-11-11: Route problems lists both reports, Dismiss closes the wrong fare report, and approving the path correction merged it into its route and settled the `wrong_path` report by itself ("Path corrected"). Live Supabase doesn't have this migration yet.
+Dashboard browser test passed 2026-11-11: Route problems lists both reports, Dismiss closes the wrong fare report, and approving the path correction merged it into its route and settled the `wrong_path` report by itself ("Path corrected"). Live Supabase got this migration on 2026-11-11, with Phase 2's.
 
 Known limit: a planned trip's ride on a rider route whose step lines can't all be split (broken `stepBoundaries`) may send a fare report with the wrong step number. The server still checks it's a real ride of that route.
 

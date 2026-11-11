@@ -44,7 +44,7 @@ Task 6 is half done. Phone round 1 (2026-11-10) was submitted from the moderator
 - Found: after an automatic rejection the editor kept the drawing, but the rejected route was already saved in Profile, and sending again created a second route. Fixed 2026-11-11: `RouteService.saveRoute` re-sends a route the checks just rejected as `resubmit`, and the dialog says it's saved as rejected, with "Fix it now" and "Fix later". Phone retest passed: a ₱100 route fixed to ₱14 stayed one row (revision 2, pending), and "Fix later" left the rejected route in Profile.
 - ~~Dashboard in the browser~~ passed 2026-11-11 on staging: checklist in the preview, flag text in the list, note required to approve over a flag, unverify and verify, fare rates table (no rate saved).
 
-Live Supabase has none of the Phase 2 migrations yet.
+Live Supabase got all three migrations (Phase 2, Phase 3, rule v2) and `routes-api` version 2 on 2026-11-11, run by the user. Checked read-only: LTFRB rates in use for jeepney, modern jeepney, bus and aircon bus; the public can only read `fare_rules` and `route_outdated`; the function refuses bad logins. A real submit against live is still unproven.
 
 ## Review focus
 
