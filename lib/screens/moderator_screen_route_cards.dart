@@ -142,10 +142,23 @@ extension _ModeratorScreenSections on _ModeratorScreenState {
                   ),
                 ],
                 const Spacer(),
-                if (route.createdAt != null)
+                // How long it has waited. The queue is oldest first, so
+                // overdue ones sit at the top.
+                if (route.queuedAt != null)
                   Text(
-                    _formatDate(route.createdAt!),
-                    style: TextStyle(fontSize: 11, color: _textSecondary),
+                    switch (route.daysWaiting()) {
+                      0 => 'New today',
+                      1 => 'Waiting 1 day',
+                      final days when route.isOverdue() =>
+                        'OVERDUE · $days days',
+                      final days => 'Waiting $days days',
+                    },
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight:
+                          route.isOverdue() ? FontWeight.w700 : FontWeight.w400,
+                      color: route.isOverdue() ? _danger : _textSecondary,
+                    ),
                   ),
               ],
             ),

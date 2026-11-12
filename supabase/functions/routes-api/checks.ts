@@ -6,7 +6,7 @@
 // Unverified. If a check can't get its answer, it flags instead of passing,
 // because an unchecked route must never go live on its own.
 
-export const RULE_VERSION = 2;
+export const RULE_VERSION = 3;
 
 export type CheckResult = {
   code: string;
@@ -58,8 +58,30 @@ const OVERLAP_LIMIT = 0.7;
 const REPEAT_LIMIT = 0.9;
 const CORRECTION_KEEP = 0.6;
 const MAX_STRAIGHT_JUMP_M = 1000;
+// No jeepney, bus, tricycle or van road runs this far dead straight.
+const IMPOSSIBLE_STRAIGHT_M = 5000;
 const MIN_ACCOUNT_DAYS = 7;
 const IMPOSSIBLE_FARE_TIMES = 5;
+// A student or senior discount is 20%, so half the lowest fare is never real.
+const IMPOSSIBLE_LOW_FARE_SHARE = 0.5;
+
+// Modes that drive on roads. Trains and boats can fairly go in a straight
+// line, and a walk can cut across a plaza, so the straight-line checks skip them.
+const ROAD_MODES = ["jeepney", "bus", "tricycle", "fx/van"];
+
+// Names that are clearly a test or a placeholder, not a place.
+const PLACEHOLDER_NAMES = new Set([
+  "test", "testing", "test route", "sample", "sample route", "asdf", "asd", "qwerty", "qwe",
+  "abc", "xyz", "xxx", "none", "n/a", "na", "null", "start", "end", "origin", "destination",
+  "point a", "point b", "place", "location",
+]);
+
+// Names that may be real to the rider but don't say where. A moderator asks for a real place.
+const VAGUE_NAMES = new Set([
+  "home", "house", "my house", "my home", "bahay", "bahay namin", "amin", "samin", "sa amin",
+  "work", "office", "trabaho", "school", "eskwela", "paaralan", "here", "dito", "there", "doon",
+  "my place", "somewhere", "kahit saan",
+]);
 
 // A box around the Philippines. Rough on purpose: it catches wrong coordinates,
 // and the area check covers the rest.
@@ -108,6 +130,43 @@ function stepLengthsKm(route: Route, points: Point[]): (number | null)[] {
     return km;
   });
 }
+
+// For each piece of the line (from point i-1 to point i, so index 0 is
+// unused), whether it belongs to a road step. Null when we can't tell which
+// step it belongs to.
+function roadPieces(route: Route, points: Point[]): (boolean | null)[] {
+  const steps = stepsOf(route);
+  const isRoad = (step: Step | undefined) => ROAD_MODES.includes(String(step?.mode ?? "").toLowerCase());
+  const pieces: (boolean | null)[] = points.map(() => null);
+  if (steps.length === 1) return pieces.map(() => isRoad(steps[0]));
+  // If every step is a road step, it doesn't matter where they end.
+  if (steps.length > 0 && steps.every(isRoad)) return pieces.map(() => true);
+  const boundaries = Array.isArray(route.stepBoundaries) ? route.stepBoundaries as unknown[] : [];
+  if (boundaries.length !== steps.length || !boundaries.every((b) => typeof b === "number")) return pieces;
+  let start = 0;
+  (boundaries as number[]).forEach((boundary, k) => {
+    const end = Math.min(boundary, points.length - 1);
+    for (let i = start + 1; i <= end; i++) pieces[i] = isRoad(steps[k]);
+    start = Math.max(start, end);
+  });
+  return pieces;
+}
+
+// The longest straight piece that isn't known to be a train, boat or walk,
+// and whether it's surely on a road step.
+function longestStraight(route: Route, points: Point[]): { meters: number; onRoad: boolean } {
+  const pieces = roadPieces(route, points);
+  let longest = { meters: 0, onRoad: false };
+  for (let i = 1; i < points.length; i++) {
+    if (pieces[i] === false) continue;
+    const meters = metersBetween(points[i - 1], points[i]);
+    if (meters > longest.meters) longest = { meters, onRoad: pieces[i] === true };
+  }
+  return longest;
+}
+
+// "Monumento" → "monumento". Spaces and case don't matter when comparing names.
+const plainName = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 const fareFor = (rule: FareRule, km: number) => (km <= rule.base_km ? rule.base : rule.base + (km - rule.base_km) * rule.per_km);
 const peso = (amount: number) => `₱${Math.round(amount * 100) / 100}`;
@@ -244,6 +303,16 @@ function checkFareImpossible(route: Route, points: Point[], rules: FareRules | n
         { step: i + 1, fare, expected: Math.round(expected.high * 100) / 100 },
       );
     }
+    // Too low only counts for jeepneys and buses, which have official fares.
+    // Tricycle fares are set by each city (some start at ₱7) and van fares are
+    // our own estimates, so a low one is accepted as the rider entered it.
+    if (expected && isOfficialFareMode(step.mode) && fare < expected.low * IMPOSSIBLE_LOW_FARE_SHARE) {
+      return fail(
+        code,
+        `Step ${i + 1}'s fare of ${peso(fare)} is too low for this distance. Even with a discount, it costs at least ${peso(expected.low * 0.8)}. Check the amount.`,
+        { step: i + 1, fare, expected: Math.round(expected.low * 100) / 100 },
+      );
+    }
   }
   return pass(code, "The fares entered are possible.");
 }
@@ -347,14 +416,75 @@ function checkCorrectionSize(route: Route, facts: RouteFacts | null): CheckResul
     : flag(code, `This changes about ${changed}% of the route, so it may be a different route.`, { changedPercent: changed });
 }
 
-function checkDrawnGaps(points: Point[]): CheckResult {
+function checkDrawnGaps(route: Route, points: Point[]): CheckResult {
   const code = "S_DRAWN_GAPS";
-  let longest = 0;
-  for (let i = 1; i < points.length; i++) longest = Math.max(longest, metersBetween(points[i - 1], points[i]));
+  const { meters: longest, onRoad } = longestStraight(route, points);
   const meters = Math.round(longest);
+  // A jump this long is rejected by H_STRAIGHT_LINE, which says what to do.
+  if (longest > IMPOSSIBLE_STRAIGHT_M && onRoad) {
+    return skip(code, "The straight-line check covers this.");
+  }
   return longest > MAX_STRAIGHT_JUMP_M
     ? flag(code, `Part of the line jumps ${meters} m in a straight line, so it may not follow the road.`, { meters })
     : pass(code, "The line follows the road closely.");
+}
+
+function checkStraightLine(route: Route, points: Point[]): CheckResult {
+  const code = "H_STRAIGHT_LINE";
+  const { meters, onRoad } = longestStraight(route, points);
+  // Only a piece we know is a jeepney, bus, tricycle or van step can fail.
+  // If we can't tell which step it is, S_DRAWN_GAPS flags it instead.
+  if (onRoad && meters > IMPOSSIBLE_STRAIGHT_M) {
+    const km = Math.round(meters / 100) / 10;
+    return fail(
+      code,
+      `Part of the line goes ${km} km in a straight line, but jeepneys, buses, tricycles and vans follow roads. Draw it along the roads (turn on Snap to road or add more points), then send it again.`,
+      { meters: Math.round(meters) },
+    );
+  }
+  return pass(code, "No road step cuts straight across the map.");
+}
+
+function checkNames(route: Route): CheckResult {
+  const code = "H_NAMES";
+  const start = plainName(route.startLocation);
+  const end = plainName(route.endLocation);
+  // H_REQUIRED already reports empty names.
+  if (start === "" || end === "") return skip(code, "A name is missing, see above.");
+  for (const [label, name] of [["start", start], ["end", end]] as const) {
+    const letters = name.replace(/[^\p{L}]/gu, "");
+    // Two letters is fine: "SM" and "UP" are real places.
+    if (letters.length < 2) {
+      return fail(code, `The ${label} name "${name}" isn't a place name. Use the name riders know, like a landmark, street or barangay.`, { field: label });
+    }
+    if (PLACEHOLDER_NAMES.has(name)) {
+      return fail(code, `The ${label} name "${name}" looks like a placeholder. Use the real place name.`, { field: label });
+    }
+  }
+  if (start === end) {
+    return fail(code, "The start and end have the same name. Give each end its own place name.");
+  }
+  return pass(code, "The start and end names look like places.");
+}
+
+// Four consonants in a row (y counts as a vowel) rarely happens in Filipino or
+// English place names, but often in keyboard mashing like "alsjdu".
+const looksMashed = (name: string) => /[bcdfghjklmnpqrstvwxz]{4,}/i.test(name) || /(.)\1{3,}/.test(name);
+
+function checkVagueNames(route: Route): CheckResult {
+  const code = "S_NAMES";
+  const start = plainName(route.startLocation);
+  const end = plainName(route.endLocation);
+  if (start === "" || end === "") return skip(code, "A name is missing, see above.");
+  for (const [label, name] of [["start", start], ["end", end]] as const) {
+    if (VAGUE_NAMES.has(name)) {
+      return flag(code, `The ${label} name "${name}" doesn't say where it is.`, { field: label });
+    }
+    if (looksMashed(name)) {
+      return flag(code, `The ${label} name "${name}" may not be a real place.`, { field: label });
+    }
+  }
+  return pass(code, "The names say where the route goes.");
 }
 
 function checkNewContributor(context: CheckContext): CheckResult {
@@ -376,6 +506,8 @@ export function runChecks(route: Route, context: CheckContext): CheckResult[] {
   const { facts, fareRules } = context;
   return [
     checkRequired(route, points),
+    checkNames(route),
+    checkVagueNames(route),
     checkCoords(route, points),
     checkTarget(route, facts),
     checkRepeat(facts),
@@ -384,7 +516,8 @@ export function runChecks(route: Route, context: CheckContext): CheckResult[] {
     checkArea(facts),
     checkOverlap(route, facts),
     checkCorrectionSize(route, facts),
-    checkDrawnGaps(points),
+    checkStraightLine(route, points),
+    checkDrawnGaps(route, points),
     checkNewContributor(context),
   ];
 }

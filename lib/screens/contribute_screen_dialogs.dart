@@ -245,13 +245,31 @@ class _SubmitSuccessDialog extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: TranslatedText(
-                                check.message,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  height: 1.4,
-                                  color: _textPrimary,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TranslatedText(
+                                    check.message,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.4,
+                                      color: _textPrimary,
+                                    ),
+                                  ),
+                                  // Fix it, or just wait: so nobody waits
+                                  // on a problem they could have fixed.
+                                  TranslatedText(
+                                    check.riderNextStep,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.4,
+                                      color:
+                                          check.riderCanFix
+                                              ? _accent
+                                              : _textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],

@@ -60,26 +60,59 @@ class RouteCheck {
   final String result;
   final String message;
 
+  /// The server couldn't get an answer for this check, so it flagged it for a
+  /// moderator. The rider can't fix that.
+  final bool unanswered;
+
   const RouteCheck({
     required this.code,
     required this.result,
     required this.message,
+    this.unanswered = false,
   });
 
   bool get failed => result == 'fail';
   bool get flagged => result == 'flag';
   bool get passed => result == 'pass';
 
-  factory RouteCheck.fromJson(Map<String, dynamic> json) => RouteCheck(
-    code: json['code'] as String? ?? '',
-    result: json['result'] as String? ?? '',
-    message: json['message'] as String? ?? '',
-  );
+  /// Flags the rider can clear by editing the route. The rest are a
+  /// moderator's call (new contributor, service area, overlap with another
+  /// route, size of a correction), so the rider just waits.
+  static const _riderFixable = {'S_NAMES', 'S_DRAWN_GAPS', 'S_FARE_RANGE'};
+
+  bool get riderCanFix =>
+      flagged && !unanswered && _riderFixable.contains(code);
+
+  /// One line telling the rider what to do about this flag.
+  String get riderNextStep {
+    if (!riderCanFix) return 'Nothing to do. A moderator will check this.';
+    return switch (code) {
+      'S_NAMES' =>
+        'You can fix this: edit the route and use the place name riders know.',
+      'S_DRAWN_GAPS' =>
+        'You can fix this: edit the route and draw that part along the road.',
+      // The fare can be right and still be unusual, like a P2P bus.
+      _ =>
+        'You can fix this if the fare is wrong: edit the route. If it\'s right, '
+            'a moderator will confirm it.',
+    };
+  }
+
+  factory RouteCheck.fromJson(Map<String, dynamic> json) {
+    final detail = json['detail'];
+    return RouteCheck(
+      code: json['code'] as String? ?? '',
+      result: json['result'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      unanswered: detail is Map && detail['unanswered'] == true,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'code': code,
     'result': result,
     'message': message,
+    if (unanswered) 'detail': {'unanswered': true},
   };
 
   static List<RouteCheck> listFromJson(dynamic value) => [
@@ -177,6 +210,7 @@ class Route {
   });
 
   bool get isApproved => approvalStatus == RouteApprovalStatus.approved;
+  bool get isPending => approvalStatus == RouteApprovalStatus.pending;
 
   /// Live, but only the automatic checks have looked at it so far.
   bool get isUnverified =>
@@ -184,6 +218,38 @@ class Route {
 
   List<RouteCheck> get failedChecks => checks.where((c) => c.failed).toList();
   List<RouteCheck> get flaggedChecks => checks.where((c) => c.flagged).toList();
+
+  /// Days a route waits for a moderator before it counts as overdue. The
+  /// server's auto_publish_waiting_routes job uses the same 7 days.
+  static const reviewDays = 7;
+
+  /// When this route joined the moderator queue. Its latest decision is the
+  /// "flagged" (or "resubmitted") entry from that moment. Older routes
+  /// without one fall back to their own dates.
+  DateTime? get queuedAt => latestDecision?.createdAt ?? updatedAt ?? createdAt;
+
+  /// Whole days spent waiting for a moderator. 0 while it's not pending.
+  int daysWaiting([DateTime? now]) {
+    final since = queuedAt;
+    if (!isPending || since == null) return 0;
+    final days = (now ?? DateTime.now()).difference(since).inDays;
+    return days < 0 ? 0 : days;
+  }
+
+  /// Waited longer than a moderator should take.
+  bool isOverdue([DateTime? now]) => daysWaiting(now) >= reviewDays;
+
+  /// Only "new contributor" holds it back, so it goes live as Unverified if
+  /// no moderator gets to it in [reviewDays]. Corrections always need a
+  /// moderator, because approving one changes another route.
+  bool get goesLiveWhenWaited {
+    final flags = flaggedChecks;
+    return isPending &&
+        correctionOf == null &&
+        failedChecks.isEmpty &&
+        flags.length == 1 &&
+        flags.single.code == 'S_NEW_CONTRIBUTOR';
+  }
 
   /// Imported from OpenStreetMap (ids "osm-bus-…", "osm-jeep-…"), not drawn
   /// by a rider. Searches still use it like a rider route, but it isn't

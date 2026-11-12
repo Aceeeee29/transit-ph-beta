@@ -49,6 +49,24 @@ class MapDrawer extends StatelessWidget {
     );
   }
 
+  /// At rest, the drawer only has room for the handle and header, so its list
+  /// must be at the top. It could end up at rest with the list still
+  /// scrolled (animated down by code, or its content or the keyboard
+  /// changing after a route was sent), and the rest strip then showed the
+  /// middle of the list with the top cut off until the rider scrolled it
+  /// back. A rider's own drag can't cause this: dragging down scrolls the
+  /// list to the top before the drawer shrinks.
+  void _scrollToTopIfAtRest(ScrollController? Function() listOf, double min) {
+    // After the frame: the sheet is still settling its own scroll position,
+    // and its list exists by then.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final list = listOf();
+      if (list == null || !list.hasClients || !controller.isAttached) return;
+      if (controller.size > min + 0.01) return;
+      if (list.offset > 0) list.jumpTo(0);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -57,68 +75,85 @@ class MapDrawer extends StatelessWidget {
         final max = maxFraction;
         final min = (peekHeight / height).clamp(0.05, max - 0.05).toDouble();
         const mid = 0.45;
-        return DraggableScrollableSheet(
-          controller: controller,
-          initialChildSize: min,
-          minChildSize: min,
-          maxChildSize: max,
-          snap: true,
-          snapSizes: [if (mid > min + 0.05 && mid < max - 0.05) mid],
-          builder: (context, scrollController) {
-            return DecoratedBox(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x22000000),
-                    blurRadius: 16,
-                    offset: Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(22),
+        // The sheet builds its content once, not on every size change, so
+        // size changes are watched here, and every rebuild (new content, the
+        // keyboard opening or closing) checks once too.
+        ScrollController? list;
+        _scrollToTopIfAtRest(() => list, min);
+        return NotificationListener<DraggableScrollableNotification>(
+          onNotification: (size) {
+            _scrollToTopIfAtRest(() => list, min);
+            return false;
+          },
+          child: DraggableScrollableSheet(
+            controller: controller,
+            initialChildSize: min,
+            minChildSize: min,
+            maxChildSize: max,
+            snap: true,
+            snapSizes: [if (mid > min + 0.05 && mid < max - 0.05) mid],
+            builder: (context, scrollController) {
+              list = scrollController;
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 16,
+                      offset: Offset(0, -3),
+                    ),
+                  ],
                 ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: EdgeInsets.zero,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  children: [
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        if (!controller.isAttached) return;
-                        if (controller.size > min + 0.02) {
-                          close(controller, min);
-                        } else {
-                          open(controller);
-                        }
-                      },
-                      child: SizedBox(
-                        height: handleHeight,
-                        child: Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: _handle,
-                              borderRadius: BorderRadius.circular(2),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(22),
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: EdgeInsets.zero,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (!controller.isAttached) return;
+                          if (controller.size > min + 0.02) {
+                            close(controller, min);
+                          } else {
+                            open(controller);
+                          }
+                        },
+                        child: SizedBox(
+                          height: handleHeight,
+                          child: Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: _handle,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(height: peekHeight - handleHeight, child: header),
-                    ...children,
-                    SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
-                  ],
+                      SizedBox(
+                        height: peekHeight - handleHeight,
+                        child: header,
+                      ),
+                      ...children,
+                      SizedBox(
+                        height: MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );

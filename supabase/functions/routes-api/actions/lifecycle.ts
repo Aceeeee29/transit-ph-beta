@@ -314,9 +314,19 @@ const resubmit: Handler = async (caller, body, store) => {
 const myRoutes: Handler = async (caller, _body, store) =>
   await withDetails(await store.listByContributor(caller.uid), store);
 
+// When a pending route joined the queue: its latest decision ("flagged", or
+// "resubmitted" for an edit). Older routes without one fall back to their dates.
+export function waitingSince(row: RouteRow): number {
+  const when = row.latest_decision?.created_at ?? row.updated_at ?? row.created_at;
+  const time = when ? Date.parse(when) : NaN;
+  return Number.isFinite(time) ? time : Date.now();
+}
+
+// Oldest first, so the routes that have waited longest get looked at first.
 const queue: Handler = async (caller, _body, store) => {
   requireStaff(caller);
-  return await withDetails(await store.listByStatus("pending"), store);
+  const rows = await withDetails(await store.listByStatus("pending"), store);
+  return rows.sort((a, b) => waitingSince(a) - waitingSince(b) || a.id.localeCompare(b.id));
 };
 
 const staffList: Handler = async (caller, _body, store) => {
@@ -445,10 +455,26 @@ const decide: Handler = async (caller, body, store) => {
     : await reject(row, caller, reasonCodes, note, store);
 };
 
+// A rider can delete their own route while it's waiting or rejected, so a full
+// queue never locks them out of contributing. Live routes belong to everyone who
+// uses, votes on and reports them, so only a superadmin removes those.
+const RIDER_DELETABLE = ["pending", "rejected"];
+
 const deleteRoute: Handler = async (caller, body, store) => {
-  requireSuperadmin(caller);
   const routeId = routeIdFromBody(body);
   const row = await store.get(routeId);
+  const ownRoute = row !== null && row.contributor_id === caller.uid && caller.role !== "superadmin";
+  if (ownRoute) {
+    if (!RIDER_DELETABLE.includes(row.status)) throw new HttpError(403, "forbidden");
+    // Claim it first, so a moderator deciding at the same moment gets a
+    // conflict instead of approving a route that's being deleted.
+    const claimed = await store.update(routeId, { status: "withdrawn" }, row.status);
+    if (!claimed) throw conflict();
+    await store.remove(routeId);
+    await logDecision(store, row, caller, "withdrawn");
+    return {};
+  }
+  requireSuperadmin(caller);
   if (!row) throw new HttpError(404, "not_found");
   await store.remove(routeId);
   await logDecision(store, row, caller, "deleted");

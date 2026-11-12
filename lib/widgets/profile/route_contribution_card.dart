@@ -47,6 +47,58 @@ class RouteContributionCard extends StatelessWidget {
     ).then((_) => onEdited?.call());
   }
 
+  /// Asks first, then deletes a rider's own pending or rejected route. This is
+  /// how a rider frees a slot when their 3 pending routes are all waiting.
+  static Future<void> confirmAndDelete(
+    BuildContext context, {
+    required route_model.Route route,
+    VoidCallback? onDeleted,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Delete this route?'),
+            content: Text(
+              route.isPending
+                  ? 'It will be taken out of the review queue and deleted. '
+                      'This can\'t be undone.'
+                  : 'It will be deleted. This can\'t be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: TextButton.styleFrom(
+                  foregroundColor: ProfileColors.danger,
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true) return;
+    try {
+      await RouteService.deleteRoute(route.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Route deleted.')));
+    } catch (e) {
+      // Most likely a moderator decided on it a moment ago.
+      debugPrint('[RouteContributionCard] Delete failed: $e');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Couldn\'t delete it. It may have just been reviewed. Pull to refresh and try again.',
+          ),
+        ),
+      );
+    }
+    onDeleted?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final distance = RouteMetricsService.routeDistanceKm(route);
@@ -81,25 +133,19 @@ class RouteContributionCard extends StatelessWidget {
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _StatusChip(status: route.approvalStatus),
+                _StatusChip(route: route),
                 if (route.isUnverified) const UnverifiedBadge(),
                 PossiblyOutdatedBadge(routeKey: route.id),
               ],
             ),
-            // Why a moderator needs to look, so a wait isn't a mystery.
-            if (route.approvalStatus == route_model.RouteApprovalStatus.pending)
-              for (final check in route.flaggedChecks)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    check.message,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: ProfileColors.textSecondary,
-                    ),
-                  ),
-                ),
+            // Why a moderator needs to look and what the rider can do about
+            // it, so a wait isn't a mystery.
+            if (route.isPending)
+              _WaitingPanel(
+                route: route,
+                userEmail: userEmail,
+                onEdited: onEdited,
+              ),
             if (route.approvalStatus ==
                 route_model.RouteApprovalStatus.rejected)
               _RejectionPanel(
@@ -155,20 +201,31 @@ class RouteContributionCard extends StatelessWidget {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  final route_model.RouteApprovalStatus status;
+/// "Waiting for review · 3 days". Kept apart for tests.
+String waitingLabel(route_model.Route route, [DateTime? now]) {
+  final days = route.daysWaiting(now);
+  final since = switch (days) {
+    0 => 'since today',
+    1 => '1 day',
+    _ => '$days days',
+  };
+  return 'Waiting for review · $since';
+}
 
-  const _StatusChip({required this.status});
+class _StatusChip extends StatelessWidget {
+  final route_model.Route route;
+
+  const _StatusChip({required this.route});
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
+    final (label, color) = switch (route.approvalStatus) {
       route_model.RouteApprovalStatus.approved => (
         'Live',
         const Color(0xFF2E9E5B),
       ),
       route_model.RouteApprovalStatus.pending => (
-        'Waiting for review',
+        waitingLabel(route),
         const Color(0xFFB7791F),
       ),
       route_model.RouteApprovalStatus.rejected => (
@@ -194,6 +251,104 @@ class _StatusChip extends StatelessWidget {
           fontWeight: FontWeight.w500,
           color: color,
         ),
+      ),
+    );
+  }
+}
+
+/// What a pending route is waiting on. Each flag says whether the rider can
+/// fix it or only has to wait, and an Edit button shows when there's
+/// something to fix.
+class _WaitingPanel extends StatelessWidget {
+  final route_model.Route route;
+  final String userEmail;
+  final VoidCallback? onEdited;
+
+  const _WaitingPanel({
+    required this.route,
+    required this.userEmail,
+    this.onEdited,
+  });
+
+  static const _wait = Color(0xFFB7791F);
+
+  @override
+  Widget build(BuildContext context) {
+    final flags = route.flaggedChecks;
+    final canFix = flags.any((check) => check.riderCanFix);
+    final daysLeft = route_model.Route.reviewDays - route.daysWaiting();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final check in flags)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    check.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: ProfileColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    check.riderNextStep,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color:
+                          check.riderCanFix
+                              ? ProfileColors.accent
+                              : ProfileColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Only "new contributor" is left, so the wait has an end.
+          if (route.goesLiveWhenWaited)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                daysLeft > 1
+                    ? 'If no moderator gets to it, it goes live as Unverified in $daysLeft days.'
+                    : daysLeft == 1
+                    ? 'If no moderator gets to it, it goes live as Unverified tomorrow.'
+                    : 'No moderator got to it in ${route_model.Route.reviewDays} days, so it goes live as Unverified within the hour.',
+                style: const TextStyle(fontSize: 12, height: 1.4, color: _wait),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (canFix)
+                OutlinedButton.icon(
+                  onPressed:
+                      () => RouteContributionCard.openEditor(
+                        context,
+                        route: route,
+                        userEmail: userEmail,
+                        onEdited: onEdited,
+                      ),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit route'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ProfileColors.accent,
+                    side: const BorderSide(color: ProfileColors.accent),
+                  ),
+                ),
+              _DeleteButton(route: route, onDeleted: onEdited),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -270,20 +425,27 @@ class _RejectionPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed:
-                () => RouteContributionCard.openEditor(
-                  context,
-                  route: route,
-                  userEmail: userEmail,
-                  onEdited: onEdited,
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed:
+                    () => RouteContributionCard.openEditor(
+                      context,
+                      route: route,
+                      userEmail: userEmail,
+                      onEdited: onEdited,
+                    ),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('Edit and resubmit'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: ProfileColors.accent,
+                  side: const BorderSide(color: ProfileColors.accent),
                 ),
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            label: const Text('Edit and resubmit'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: ProfileColors.accent,
-              side: const BorderSide(color: ProfileColors.accent),
-            ),
+              ),
+              _DeleteButton(route: route, onDeleted: onEdited),
+            ],
           ),
         ],
       ),
@@ -488,5 +650,28 @@ class _MetricsGrid extends StatelessWidget {
 
   Widget _vDivider() {
     return Container(width: 1, height: 36, color: ProfileColors.border);
+  }
+}
+
+/// The "Delete" link under a pending or rejected route.
+class _DeleteButton extends StatelessWidget {
+  final route_model.Route route;
+  final VoidCallback? onDeleted;
+
+  const _DeleteButton({required this.route, this.onDeleted});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed:
+          () => RouteContributionCard.confirmAndDelete(
+            context,
+            route: route,
+            onDeleted: onDeleted,
+          ),
+      icon: const Icon(Icons.delete_outline, size: 16),
+      label: const Text('Delete'),
+      style: TextButton.styleFrom(foregroundColor: ProfileColors.danger),
+    );
   }
 }

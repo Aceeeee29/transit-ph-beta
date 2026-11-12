@@ -1,5 +1,41 @@
 # Changelog
 
+## v1.3.1 — November 12, 2026
+
+- You can delete your own route while it's waiting for review or after
+  it was rejected (Profile → Contributions), so a full review queue no
+  longer stops you from sending a new one
+- A route waiting for review now shows how long it has waited, and each
+  reason says whether you can fix it yourself (with an Edit route
+  button) or only have to wait for a moderator
+- If the only reason a route waits is that you're a new contributor,
+  it goes live as Unverified after 7 days without a review
+- Sending a route now also checks the place names, fares that are too
+  low, and long straight lines: names like "a" or "test", a jeepney or
+  bus fare under half the official fare, and a jeepney, bus, tricycle
+  or van line that goes over 5 km straight are rejected with the reason.
+  Boat, train and walking lines may go straight
+- Moderator panel: the routes that have waited longest come first, and
+  routes waiting over 7 days are marked overdue
+- Fixed the map drawer sometimes cutting off its top after sending a
+  route, until you scrolled it back
+
+## v1.3.0 — November 11, 2026
+
+- Routes moved to a new server that checks every route automatically.
+  A route that passes goes live right away as Unverified, one with a
+  clear problem is rejected with the reason, and anything else waits
+  for a moderator with a checklist of what to look at
+- Rejected routes stay in your Profile with the reasons, and you can
+  edit and send them again
+- Report a specific problem with a route: wrong fare, wrong path, wrong
+  stop or schedule. When enough riders report the same thing, the route
+  is marked "Possibly outdated", and matching fare reports fix the fare
+- Riders confirming a route still runs can verify it
+- Jeepney and bus fares follow the LTFRB rates from September 28, 2026
+- Sign-up password rules now match what the server accepts
+- Updated Privacy Policy (routes are now stored on Supabase)
+
 ## v1.2.3 — November 7, 2026
 
 - Reporting a post as "Other" now asks you to say what's wrong

@@ -248,6 +248,17 @@ Deno.test("my_routes: own routes at any status, with the latest reasons", async 
   assertEquals(rejected?.latest_decision?.note, "The fare is ₱13");
 });
 
+Deno.test("queue: the route that has waited longest comes first", async () => {
+  const { store, run } = setup();
+  for (const id of ["new", "old", "middle"]) await run("submit", rider(), { route: route(id, { startLocation: `Start ${id}` }) });
+  // Put each route's queue entry at a different time.
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+  const when: Record<string, string> = { new: daysAgo(1), old: daysAgo(9), middle: daysAgo(4) };
+  for (const decision of store.decisions) decision.created_at = when[decision.route_id];
+  const queue = await run("queue", moderator) as unknown as RouteRow[];
+  assertEquals(queue.map((r) => r.id), ["old", "middle", "new"]);
+});
+
 Deno.test("queue and staff_list: staff only", async () => {
   const { run } = setup();
   await run("submit", rider(), { route: route("r1") });
@@ -372,7 +383,7 @@ async function correctionSetup() {
       eta: "20 min",
       steps: [{ mode: "Jeepney" }],
       shortDescription: "Don't copy me",
-      pathPoints: [{ lat: 14.1, lng: 121.2 }, { lat: 14.3, lng: 121.4 }],
+      pathPoints: [{ lat: 14.1, lng: 121.2 }, { lat: 14.12, lng: 121.22 }],
     }),
   });
   return { store, run };
@@ -386,7 +397,7 @@ Deno.test("approve correction: merged into the target, and the correction is gon
   assertEquals(target?.data.steps, [{ mode: "Jeepney" }]);
   assertEquals(target?.data.eta, "20 min");
   assertEquals(target?.data.editCount, 1);
-  assertEquals(target?.geom, "SRID=4326;LINESTRING(121.2 14.1,121.4 14.3)");
+  assertEquals(target?.geom, "SRID=4326;LINESTRING(121.2 14.1,121.22 14.12)");
   // Only the listed keys change. The owner, description and votes stay.
   assertEquals(target?.data.shortDescription, "Keep me");
   assertEquals(target?.contributor_id, "owner");
@@ -457,7 +468,40 @@ Deno.test("moderator_approvals: per moderator, with re-approvals counted once", 
 
 // delete and close_account
 
-Deno.test("delete: superadmin only", async () => {
+Deno.test("delete: a rider deletes their own pending or rejected route", async () => {
+  const { store, run } = setup();
+  await run("submit", rider(), { route: route("waiting") });
+  await run("submit", rider(), { route: route("turned_down", { startLocation: "Start 2" }) });
+  await run("decide", moderator, { routeId: "turned_down", decision: "reject", reasonCodes: ["duplicate"] });
+  for (const id of ["waiting", "turned_down"]) {
+    await run("delete", rider(), { routeId: id });
+    assertEquals(await store.get(id), null, id);
+    assertEquals(store.decisions.at(-1)?.decision, "withdrawn");
+    assertEquals(store.decisions.at(-1)?.actor, "rider-1");
+  }
+});
+
+Deno.test("delete: a rider can't delete a live route, or anyone else's", async () => {
+  const { store, run } = setup();
+  await run("submit", rider(), { route: route("live") });
+  await run("decide", moderator, { routeId: "live", decision: "approve" });
+  await assertHttp(() => run("delete", rider(), { routeId: "live" }), 403, "forbidden");
+  assertEquals((await store.get("live"))?.status, "published");
+  await run("submit", rider("other"), { route: route("theirs", { startLocation: "Start 3" }) });
+  await assertHttp(() => run("delete", rider(), { routeId: "theirs" }), 403, "forbidden");
+  assert(await store.get("theirs"));
+});
+
+Deno.test("delete: a deleted pending route frees a slot", async () => {
+  const { run } = setup();
+  for (const id of ["p1", "p2", "p3"]) await run("submit", rider(), { route: route(id, { startLocation: `Start ${id}` }) });
+  await assertHttp(() => run("submit", rider(), { route: route("p4", { startLocation: "Start p4" }) }), 409, "pending_limit");
+  await run("delete", rider(), { routeId: "p1" });
+  const row = await run("submit", rider(), { route: route("p4", { startLocation: "Start p4" }) });
+  assertEquals(row.status, "pending");
+});
+
+Deno.test("delete: anyone else's route is superadmin only", async () => {
   const { store, run } = setup();
   await run("submit", rider(), { route: route("r1") });
   await assertHttp(() => run("delete", moderator, { routeId: "r1" }), 403, "forbidden");

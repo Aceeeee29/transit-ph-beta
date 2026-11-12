@@ -364,6 +364,96 @@ Deno.test("S_DRAWN_GAPS: a straight jump over 1 km flags", () => {
   assertEquals(resultOf("S_DRAWN_GAPS", gap(0.0089)), "pass");
 });
 
+// H_STRAIGHT_LINE
+
+// 0.05 degrees of latitude is about 5.6 km. 0.04 is about 4.4 km.
+const straight = (size: number, extra: Record<string, unknown> = {}) =>
+  route({ pathPoints: [{ lat: 14.65, lng: 120.98 }, { lat: 14.65 + size, lng: 120.98 }], ...extra });
+
+Deno.test("H_STRAIGHT_LINE: a road step over 5 km in a straight line is rejected", () => {
+  const long = run(straight(0.05));
+  assertEquals(check(long, "H_STRAIGHT_LINE").result, "fail");
+  assertStringIncludes(check(long, "H_STRAIGHT_LINE").message, "5.6 km");
+  // The softer check steps aside so the rider sees one reason, not two.
+  assertEquals(check(long, "S_DRAWN_GAPS").result, "skip");
+  assertEquals(outcomeOf(long), "rejected");
+  assertEquals(resultOf("H_STRAIGHT_LINE", straight(0.04)), "pass");
+  assertEquals(resultOf("S_DRAWN_GAPS", straight(0.04)), "flag");
+});
+
+Deno.test("H_STRAIGHT_LINE: boats, trains and walks may go straight", () => {
+  for (const mode of ["Boat", "Train", "Walk"]) {
+    const r = straight(0.05, { steps: [{ mode, instruction: "Ride" }] });
+    assertEquals(resultOf("H_STRAIGHT_LINE", r), "pass", mode);
+    assertEquals(resultOf("S_DRAWN_GAPS", r), "pass", mode);
+  }
+});
+
+Deno.test("H_STRAIGHT_LINE: only the boat's part of a mixed route may go straight", () => {
+  // Jeepney along the road, then a boat across the water.
+  const points = [
+    { lat: 14.65, lng: 120.98 },
+    { lat: 14.651, lng: 120.98 },
+    { lat: 14.70, lng: 120.98 },
+  ];
+  const steps = [{ mode: "Jeepney", instruction: "Ride" }, { mode: "Boat", instruction: "Ride" }];
+  const boatLast = route({ pathPoints: points, steps, stepBoundaries: [1, 2] });
+  assertEquals(resultOf("H_STRAIGHT_LINE", boatLast), "pass");
+  // The same long piece on the jeepney step fails.
+  const jeepLast = route({ pathPoints: points, steps: [...steps].reverse(), stepBoundaries: [1, 2] });
+  assertEquals(resultOf("H_STRAIGHT_LINE", jeepLast), "fail");
+  // If we can't tell which step it is, a moderator looks instead.
+  const unknown = route({ pathPoints: points, steps, stepBoundaries: [] });
+  assertEquals(resultOf("H_STRAIGHT_LINE", unknown), "pass");
+  assertEquals(resultOf("S_DRAWN_GAPS", unknown), "flag");
+});
+
+// H_FARE_IMPOSSIBLE (too low)
+
+Deno.test("H_FARE_IMPOSSIBLE: a jeepney or bus fare under half the lowest fare is rejected", () => {
+  // About 1 km, so the lowest jeepney fare is ₱14 and half is ₱7.
+  const fare = (mode: string, actualFare: number) => route({ steps: [{ mode, instruction: "Ride", actualFare }] });
+  assertEquals(resultOf("H_FARE_IMPOSSIBLE", fare("Jeepney", 5)), "fail");
+  assertEquals(resultOf("H_FARE_IMPOSSIBLE", fare("Bus", 5)), "fail");
+  // A student fare (20% off ₱14) is real.
+  assertEquals(resultOf("H_FARE_IMPOSSIBLE", fare("Jeepney", 11)), "pass");
+  // Tricycle fares are set by each city and can start at ₱7, and van fares are
+  // our own estimates, so a low one is neither rejected nor flagged.
+  for (const [mode, amount] of [["Tricycle", 7], ["Tricycle", 5], ["FX/Van", 5]] as const) {
+    assertEquals(resultOf("H_FARE_IMPOSSIBLE", fare(mode, amount)), "pass", `${mode} ${amount}`);
+    assertEquals(resultOf("S_FARE_RANGE", fare(mode, amount)), "skip", `${mode} ${amount}`);
+    assertEquals(outcomeOf(run(fare(mode, amount))), "published", `${mode} ${amount}`);
+  }
+});
+
+// H_NAMES and S_NAMES
+
+const named = (startLocation: string, endLocation = "Malabon") => route({ startLocation, endLocation });
+
+Deno.test("H_NAMES: one letter, numbers only, placeholders and same names are rejected", () => {
+  for (const name of ["a", "c", "123", "1", "Test", "asdf", " point a "]) {
+    assertEquals(resultOf("H_NAMES", named(name)), "fail", name);
+  }
+  assertEquals(resultOf("H_NAMES", named("Malabon")), "fail");
+  assertEquals(resultOf("H_NAMES", named("Malabon ", "malabon")), "fail");
+  assertEquals(outcomeOf(run(named("a", "b"))), "rejected");
+});
+
+Deno.test("H_NAMES: short real names pass", () => {
+  for (const name of ["SM", "UP", "MCU", "Monumento", "SM Grand", "Bagong Silang", "C-3 Road", "Brgy. 176"]) {
+    assertEquals(resultOf("H_NAMES", named(name)), "pass", name);
+  }
+});
+
+Deno.test("S_NAMES: vague names and keyboard mashing go to a moderator", () => {
+  for (const name of ["home", "Bahay", "school", "Dito", "alsjdu", "qwrtyx", "aaaa"]) {
+    assertEquals(resultOf("S_NAMES", named(name)), "flag", name);
+  }
+  for (const name of ["Monumento", "Bagbaguin", "Christ the King", "Kalookan", "SM Grand", "Tinajeros"]) {
+    assertEquals(resultOf("S_NAMES", named(name)), "pass", name);
+  }
+});
+
 // S_NEW_CONTRIBUTOR
 
 Deno.test("S_NEW_CONTRIBUTOR: needs 7 days and one published route", () => {
